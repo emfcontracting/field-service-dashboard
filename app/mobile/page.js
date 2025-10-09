@@ -69,29 +69,35 @@ export default function MobileApp() {
   }
 
   async function fetchTeamMembers() {
-    if (!selectedWO) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('work_order_assignments')
-        .select(`
-          *,
-          users:user_id (
-            user_id,
-            first_name,
-            last_name,
-            hourly_rate_regular,
-            hourly_rate_overtime
-          )
-        `)
-        .eq('wo_id', selectedWO.wo_id);
+  if (!selectedWO) return;
+  
+  console.log('👥 DEBUG: Fetching team members for WO:', selectedWO.wo_id); // DEBUG
+  
+  try {
+    const { data, error } = await supabase
+      .from('work_order_assignments')
+      .select(`
+        *,
+        users:user_id (
+          user_id,
+          first_name,
+          last_name,
+          hourly_rate_regular,
+          hourly_rate_overtime
+        )
+      `)
+      .eq('wo_id', selectedWO.wo_id);
 
-      if (error) throw error;
-      setTeamMembers(data || []);
-    } catch (error) {
-      console.error('Error fetching team members:', error);
-    }
+    console.log('✅ DEBUG: Team members found:', data); // DEBUG
+    console.log('❌ DEBUG: Team member errors?', error); // DEBUG
+
+    if (error) throw error;
+    setTeamMembers(data || []);
+  } catch (error) {
+    console.error('Error fetching team members:', error);
+    alert('Team member error: ' + error.message);
   }
+}
 
   async function fetchWorkOrders() {
   console.log('🔍 DEBUG: Selected Tech ID:', selectedTech); // DEBUG

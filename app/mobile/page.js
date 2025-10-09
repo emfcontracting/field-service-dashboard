@@ -726,36 +726,90 @@ export default function MobileApp() {
         )}
 
         {/* Summary */}
-        <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
-          <h2 className="font-bold mb-3 text-lg">📊 Summary</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-green-200">Total Team Labor:</span>
-              <span className="font-bold">${totals.totalLabor.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-green-200">Total Hours:</span>
-              <span className="font-bold">{totals.totalHours.toFixed(1)} hrs</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-green-200">Total Miles:</span>
-              <span className="font-bold">{totals.totalMiles.toFixed(1)} mi</span>
-            </div>
-            <div className="flex justify-between border-t border-green-700 pt-2 mt-2">
-              <span className="text-green-200">NTE:</span>
-              <span className="font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-green-200">Remaining:</span>
-              <span className={`font-bold ${
-                (selectedWO.nte || 0) - totals.totalLabor >= 0 ? 'text-green-300' : 'text-red-300'
-              }`}>
-                ${((selectedWO.nte || 0) - totals.totalLabor).toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
+<div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
+  <h2 className="font-bold mb-3 text-lg">📊 Cost Summary</h2>
+  <div className="space-y-2 text-sm">
+    {/* Labor Breakdown */}
+    <div className="bg-green-800 bg-opacity-50 rounded p-2 mb-2">
+      <p className="text-xs text-green-200 mb-1">LABOR</p>
+      <div className="flex justify-between">
+        <span className="text-green-100">Team Labor:</span>
+        <span className="font-bold text-white">${totals.totalLabor.toFixed(2)}</span>
+      </div>
+      <p className="text-xs text-green-200 mt-1">
+        {totals.totalHours.toFixed(1)} hrs total ({((selectedWO.hours_regular || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)).toFixed(1)} RT + {((selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)).toFixed(1)} OT)
+      </p>
+    </div>
+
+    {/* Other Costs */}
+    <div className="flex justify-between">
+      <span className="text-green-200">Mileage ({totals.totalMiles.toFixed(1)} mi × $1.00):</span>
+      <span className="font-medium text-white">${(totals.totalMiles * 1.00).toFixed(2)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-green-200">Materials:</span>
+      <span className="font-medium text-white">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-green-200">Equipment:</span>
+      <span className="font-medium text-white">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-green-200">Trailer:</span>
+      <span className="font-medium text-white">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-green-200">Rental:</span>
+      <span className="font-medium text-white">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+    </div>
+
+    {/* Total */}
+    <div className="border-t-2 border-green-700 pt-2 mt-2">
+      <div className="flex justify-between font-bold text-base">
+        <span className="text-white">GRAND TOTAL:</span>
+        <span className="text-white text-lg">
+          ${(
+            totals.totalLabor +
+            (totals.totalMiles * 1.00) +
+            (selectedWO.material_cost || 0) +
+            (selectedWO.emf_equipment_cost || 0) +
+            (selectedWO.trailer_cost || 0) +
+            (selectedWO.rental_cost || 0)
+          ).toFixed(2)}
+        </span>
       </div>
     </div>
-  );
-}
+
+    {/* NTE Comparison */}
+    <div className="border-t border-green-700 pt-2 mt-2">
+      <div className="flex justify-between">
+        <span className="text-green-200">NTE Budget:</span>
+        <span className="font-medium text-white">${(selectedWO.nte || 0).toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-green-200">Remaining:</span>
+        <span className={`font-bold text-base ${
+          (selectedWO.nte || 0) - (
+            totals.totalLabor +
+            (totals.totalMiles * 1.00) +
+            (selectedWO.material_cost || 0) +
+            (selectedWO.emf_equipment_cost || 0) +
+            (selectedWO.trailer_cost || 0) +
+            (selectedWO.rental_cost || 0)
+          ) >= 0 ? 'text-green-300' : 'text-red-300'
+        }`}>
+          ${(
+            (selectedWO.nte || 0) - (
+              totals.totalLabor +
+              (totals.totalMiles * 1.00) +
+              (selectedWO.material_cost || 0) +
+              (selectedWO.emf_equipment_cost || 0) +
+              (selectedWO.trailer_cost || 0) +
+              (selectedWO.rental_cost || 0)
+            )
+          ).toFixed(2)}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>

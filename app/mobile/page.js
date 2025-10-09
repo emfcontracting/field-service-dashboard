@@ -18,6 +18,9 @@ export default function MobileApp() {
   const [saving, setSaving] = useState(false);
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
   const [newTeamMember, setNewTeamMember] = useState({ user_id: '', role: 'helper' });
+  const [newComment, setNewComment] = useState('');
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [checkInTime, setCheckInTime] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -180,6 +183,117 @@ export default function MobileApp() {
       setSaving(false);
     }
   }
+
+async function handleAddComment() {
+  if (!newComment.trim()) {
+    alert('Please enter a comment');
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const updatedComments = selectedWO.comments 
+      ? `${selectedWO.comments}\n\n[${new Date().toLocaleString()}] ${currentUser?.first_name}:\n${newComment}`
+      : `[${new Date().toLocaleString()}] ${currentUser?.first_name}:\n${newComment}`;
+
+    const { error } = await supabase
+      .from('work_orders')
+      .update({ comments: updatedComments })
+      .eq('wo_id', selectedWO.wo_id);
+
+    if (error) throw error;
+
+    setSelectedWO({ ...selectedWO, comments: updatedComments });
+    setNewComment('');
+    alert('✅ Comment added!');
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    alert('❌ Error adding comment');
+  } finally {
+    setSaving(false);
+  }
+}
+
+async function handleCheckIn() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const timestamp = new Date().toLocaleString();
+        const gpsInfo = `${position.coords.latitude}, ${position.coords.longitude}`;
+        
+        setIsCheckedIn(true);
+        setCheckInTime(timestamp);
+        
+        const checkInComment = `[${timestamp}] ${currentUser?.first_name} CHECKED IN\nGPS: ${gpsInfo}`;
+        const updatedComments = selectedWO.comments 
+          ? `${selectedWO.comments}\n\n${checkInComment}`
+          : checkInComment;
+
+        try {
+          const { error } = await supabase
+            .from('work_orders')
+            .update({ comments: updatedComments })
+            .eq('wo_id', selectedWO.wo_id);
+
+          if (error) throw error;
+          setSelectedWO({ ...selectedWO, comments: updatedComments });
+          alert(`✅ Checked in at ${timestamp}`);
+        } catch (error) {
+          console.error('Error checking in:', error);
+          alert('❌ Error checking in');
+        }
+      },
+      (error) => {
+        alert('❌ Could not get GPS location. Check in anyway?');
+        const timestamp = new Date().toLocaleString();
+        setIsCheckedIn(true);
+        setCheckInTime(timestamp);
+      }
+    );
+  } else {
+    alert('GPS not available on this device');
+  }
+}
+
+async function handleCheckOut() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const timestamp = new Date().toLocaleString();
+        const gpsInfo = `${position.coords.latitude}, ${position.coords.longitude}`;
+        
+        const checkOutComment = `[${timestamp}] ${currentUser?.first_name} CHECKED OUT\nGPS: ${gpsInfo}\nDuration: ${checkInTime ? `from ${checkInTime}` : 'N/A'}`;
+        const updatedComments = selectedWO.comments 
+          ? `${selectedWO.comments}\n\n${checkOutComment}`
+          : checkOutComment;
+
+        try {
+          const { error } = await supabase
+            .from('work_orders')
+            .update({ comments: updatedComments })
+            .eq('wo_id', selectedWO.wo_id);
+
+          if (error) throw error;
+          
+          setSelectedWO({ ...selectedWO, comments: updatedComments });
+          setIsCheckedIn(false);
+          setCheckInTime(null);
+          alert(`✅ Checked out at ${timestamp}`);
+        } catch (error) {
+          console.error('Error checking out:', error);
+          alert('❌ Error checking out');
+        }
+      },
+      (error) => {
+        alert('❌ Could not get GPS location. Check out anyway?');
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+      }
+    );
+  } else {
+    alert('GPS not available on this device');
+  }
+}
 
   function getPriorityColor(priority) {
     switch (priority) {
@@ -773,6 +887,64 @@ export default function MobileApp() {
             </div>
           </div>
         )}
+
+{/* Check-In / Check-Out */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📍 Clock In/Out</h2>
+          {!isCheckedIn ? (
+            <button
+              onClick={handleCheckIn}
+              className="w-full bg-green-600 text-white px-4 py-4 rounded-lg text-lg font-bold hover:bg-green-700"
+            >
+              ✅ CHECK IN
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-green-900 rounded p-3">
+                <p className="text-green-200 text-sm">Checked in at:</p>
+                <p className="text-white font-bold">{checkInTime}</p>
+              </div>
+              <button
+                onClick={handleCheckOut}
+                className="w-full bg-red-600 text-white px-4 py-4 rounded-lg text-lg font-bold hover:bg-red-700"
+              >
+                🛑 CHECK OUT
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Comments */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">💬 Comments & Notes</h2>
+          
+          {/* Existing Comments */}
+          {selectedWO.comments && (
+            <div className="mb-4 bg-gray-700 rounded-lg p-3 max-h-60 overflow-y-auto">
+              <p className="text-sm text-gray-200 whitespace-pre-wrap">{selectedWO.comments}</p>
+            </div>
+          )}
+
+          {/* Add New Comment */}
+          <div className="space-y-3">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment or note..."
+              rows="3"
+              className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={!newComment.trim() || saving}
+              className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-500"
+            >
+              {saving ? 'Posting...' : '📝 Add Comment'}
+            </button>
+          </div>
+        </div>
+
+        {/* Summary */}
 
         {/* Summary */}
         <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">

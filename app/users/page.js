@@ -24,6 +24,8 @@ export default function UserManagement() {
     phone: '',
     role: 'lead_tech',
     is_active: true
+hourly_rate_regular: 64.00, 
+  hourly_rate_overtime: 96.00
   });
 
   useEffect(() => {
@@ -60,16 +62,19 @@ export default function UserManagement() {
   }
 
   function openEditModal(user) {
-    setEditingUser(user);
-    setFormData({
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
-      phone: user.phone || '',
-      role: user.role,
-      is_active: user.is_active
-    });
-    setShowModal(true);
+  setEditingUser(user);
+  setFormData({
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    phone: user.phone || '',
+    role: user.role,
+    is_active: user.is_active,
+    hourly_rate_regular: user.hourly_rate_regular || 64.00, 
+    hourly_rate_overtime: user.hourly_rate_overtime || 96.00
+  });
+  setShowModal(true);
+}
   }
 
   async function handleSubmit(e) {
@@ -260,6 +265,7 @@ export default function UserManagement() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+		<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rates (RT/OT)</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -288,7 +294,12 @@ export default function UserManagement() {
                       {user.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                  <td className="px-6 py-4 whitespace-nowrap">
+  <div className="text-sm text-gray-900">
+    ${user.hourly_rate_regular?.toFixed(2) || '64.00'} / ${user.hourly_rate_overtime?.toFixed(2) || '96.00'}
+  </div>
+</td>
+<td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                     <button
                       onClick={() => openEditModal(user)}
                       className="text-blue-600 hover:text-blue-900"
@@ -337,33 +348,37 @@ export default function UserManagement() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({...formData, first_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({...formData, last_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
+               <div className="grid grid-cols-2 gap-4">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      Regular Rate ($/hr) {formData.role === 'lead_tech' && <span className="text-red-500">*</span>}
+    </label>
+    <input
+      type="number"
+      step="0.01"
+      required={formData.role === 'lead_tech'}
+      value={formData.hourly_rate_regular}
+      onChange={(e) => setFormData({...formData, hourly_rate_regular: parseFloat(e.target.value) || 64.00})}
+      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+      placeholder="64.00"
+    />
+    <p className="text-xs text-gray-500 mt-1">RT (up to 8 hrs)</p>
+  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      Overtime Rate ($/hr)
+    </label>
+    <input
+      type="number"
+      step="0.01"
+      value={formData.hourly_rate_overtime}
+      onChange={(e) => setFormData({...formData, hourly_rate_overtime: parseFloat(e.target.value) || 96.00})}
+      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+      placeholder="96.00"
+    />
+    <p className="text-xs text-gray-500 mt-1">OT (over 8 hrs)</p>
+  </div>
+</div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Email <span className="text-red-500">*</span>

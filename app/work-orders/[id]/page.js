@@ -66,6 +66,9 @@ export default function WorkOrderDetail({ params }) {
       
       setWorkOrder({ ...workOrder, ...updates });
       alert('Work order updated successfully!');
+      
+      // Refresh to get calculated values
+      fetchWorkOrder();
     } catch (error) {
       console.error('Error updating work order:', error);
       alert('Error updating work order');
@@ -234,66 +237,85 @@ export default function WorkOrderDetail({ params }) {
               </select>
             </div>
 
-            {/* Field Data */}
+            {/* Field Data - WITH RT/OT */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Field Data</h2>
-             <div className="grid grid-cols-2 gap-4">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours</label>
-    <input
-      type="number"
-      step="0.5"
-      value={workOrder.hours_regular || ''}
-      onChange={(e) => updateWorkOrder({ hours_regular: parseFloat(e.target.value) || null })}
-      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      placeholder="0.0"
-    />
-    <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
-  </div>
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">Overtime Hours</label>
-    <input
-      type="number"
-      step="0.5"
-      value={workOrder.hours_overtime || ''}
-      onChange={(e) => updateWorkOrder({ hours_overtime: parseFloat(e.target.value) || null })}
-      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      placeholder="0.0"
-    />
-    <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
-  </div>
-</div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Miles</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={workOrder.miles || ''}
-                    onChange={(e) => updateWorkOrder({ miles: parseFloat(e.target.value) || null })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.0"
-                  />
+              <div className="space-y-4">
+                {/* RT/OT Hours */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours (RT)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={workOrder.hours_regular || ''}
+                      onChange={(e) => updateWorkOrder({ hours_regular: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Overtime Hours (OT)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={workOrder.hours_overtime || ''}
+                      onChange={(e) => updateWorkOrder({ hours_overtime: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Material Cost ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={workOrder.material_cost || ''}
-                    onChange={(e) => updateWorkOrder({ material_cost: parseFloat(e.target.value) || null })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Cost ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={workOrder.emf_equipment_cost || ''}
-                    onChange={(e) => updateWorkOrder({ emf_equipment_cost: parseFloat(e.target.value) || null })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
+
+                {/* Miles and Costs */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Miles</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={workOrder.miles || ''}
+                      onChange={(e) => updateWorkOrder({ miles: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">@ $1.00 per mile</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Material Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={workOrder.material_cost || ''}
+                      onChange={(e) => updateWorkOrder({ material_cost: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={workOrder.emf_equipment_cost || ''}
+                      onChange={(e) => updateWorkOrder({ emf_equipment_cost: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Trailer Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={workOrder.trailer_cost || ''}
+                      onChange={(e) => updateWorkOrder({ trailer_cost: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,114 +364,114 @@ export default function WorkOrderDetail({ params }) {
               </div>
             </div>
 
-            {/* Cost Summary */}
-<div className="bg-white rounded-lg shadow p-6">
-  <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Summary</h2>
-  <div className="space-y-3">
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Regular Hours ({workOrder.hours_regular || 0}):</span>
-      <span className="font-medium">${((workOrder.hours_regular || 0) * 64).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Overtime Hours ({workOrder.hours_overtime || 0}):</span>
-      <span className="font-medium">${((workOrder.hours_overtime || 0) * 96).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-sm font-semibold border-t pt-2">
-      <span className="text-gray-700">Total Labor:</span>
-      <span>${(workOrder.labor_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Mileage ({workOrder.miles || 0} mi @ $1.00):</span>
-      <span className="font-medium">${((workOrder.miles || 0) * (workOrder.mileage_rate || 1.00)).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Materials:</span>
-      <span className="font-medium">${workOrder.material_cost?.toFixed(2) || '0.00'}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Equipment:</span>
-      <span className="font-medium">${workOrder.emf_equipment_cost?.toFixed(2) || '0.00'}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Trailer:</span>
-      <span className="font-medium">${workOrder.trailer_cost?.toFixed(2) || '0.00'}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Rental:</span>
-      <span className="font-medium">${workOrder.rental_cost?.toFixed(2) || '0.00'}</span>
-    </div>
-    <div className="border-t pt-3 flex justify-between font-bold">
-      <span>Total Cost:</span>
-      <span className="text-lg">
-        ${(
-          (workOrder.labor_cost || 0) +
-          ((workOrder.miles || 0) * (workOrder.mileage_rate || 1.00)) +
-          (workOrder.material_cost || 0) + 
-          (workOrder.emf_equipment_cost || 0) + 
-          (workOrder.trailer_cost || 0) + 
-          (workOrder.rental_cost || 0)
-        ).toFixed(2)}
-      </span>
-    </div>
-    <div className="border-t pt-3 flex justify-between text-sm">
-      <span className="text-gray-600">NTE:</span>
-      <span className="font-medium">${workOrder.nte?.toFixed(2) || '0.00'}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-600">Remaining:</span>
-      <span className={`font-medium ${
-        (workOrder.nte || 0) - (
-          (workOrder.labor_cost || 0) +
-          ((workOrder.miles || 0) * (workOrder.mileage_rate || 1.00)) +
-          (workOrder.material_cost || 0) + 
-          (workOrder.emf_equipment_cost || 0) + 
-          (workOrder.trailer_cost || 0) + 
-          (workOrder.rental_cost || 0)
-        ) >= 0 ? 'text-green-600' : 'text-red-600'
-      }`}>
-        ${(
-          (workOrder.nte || 0) - (
-            (workOrder.labor_cost || 0) +
-            ((workOrder.miles || 0) * (workOrder.mileage_rate || 1.00)) +
-            (workOrder.material_cost || 0) + 
-            (workOrder.emf_equipment_cost || 0) + 
-            (workOrder.trailer_cost || 0) + 
-            (workOrder.rental_cost || 0)
-          )
-        ).toFixed(2)}
-      </span>
-    </div>
-  </div>
-</div>
+            {/* Cost Summary - WITH RT/OT BREAKDOWN */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Summary</h2>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Regular Hours ({workOrder.hours_regular || 0}):</span>
+                  <span className="font-medium">${((workOrder.hours_regular || 0) * 64).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Overtime Hours ({workOrder.hours_overtime || 0}):</span>
+                  <span className="font-medium">${((workOrder.hours_overtime || 0) * 96).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold border-t pt-2 text-blue-900">
+                  <span>Total Labor:</span>
+                  <span>${(workOrder.labor_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Mileage ({workOrder.miles || 0} mi @ $1.00):</span>
+                  <span className="font-medium">${((workOrder.miles || 0) * 1.00).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Materials:</span>
+                  <span className="font-medium">${(workOrder.material_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Equipment:</span>
+                  <span className="font-medium">${(workOrder.emf_equipment_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Trailer:</span>
+                  <span className="font-medium">${(workOrder.trailer_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Rental:</span>
+                  <span className="font-medium">${(workOrder.rental_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="border-t pt-3 flex justify-between font-bold">
+                  <span>Total Cost:</span>
+                  <span className="text-lg">
+                    ${(
+                      (workOrder.labor_cost || 0) +
+                      ((workOrder.miles || 0) * 1.00) +
+                      (workOrder.material_cost || 0) + 
+                      (workOrder.emf_equipment_cost || 0) + 
+                      (workOrder.trailer_cost || 0) + 
+                      (workOrder.rental_cost || 0)
+                    ).toFixed(2)}
+                  </span>
+                </div>
+                <div className="border-t pt-3 flex justify-between text-sm">
+                  <span className="text-gray-600">NTE:</span>
+                  <span className="font-medium">${(workOrder.nte || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Remaining:</span>
+                  <span className={`font-medium ${
+                    (workOrder.nte || 0) - (
+                      (workOrder.labor_cost || 0) +
+                      ((workOrder.miles || 0) * 1.00) +
+                      (workOrder.material_cost || 0) + 
+                      (workOrder.emf_equipment_cost || 0) + 
+                      (workOrder.trailer_cost || 0) + 
+                      (workOrder.rental_cost || 0)
+                    ) >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    ${(
+                      (workOrder.nte || 0) - (
+                        (workOrder.labor_cost || 0) +
+                        ((workOrder.miles || 0) * 1.00) +
+                        (workOrder.material_cost || 0) + 
+                        (workOrder.emf_equipment_cost || 0) + 
+                        (workOrder.trailer_cost || 0) + 
+                        (workOrder.rental_cost || 0)
+                      )
+                    ).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {/* Time Info */}
-<div className="bg-white rounded-lg shadow p-6">
-  <h2 className="text-lg font-bold text-gray-900 mb-4">Time Tracking</h2>
-  <div className="space-y-3 text-sm">
-    <div>
-      <span className="text-gray-600">Regular Hours:</span>
-      <p className="font-medium text-lg">{workOrder.hours_regular || 0} hrs</p>
-    </div>
-    <div>
-      <span className="text-gray-600">Overtime Hours:</span>
-      <p className="font-medium text-lg">{workOrder.hours_overtime || 0} hrs</p>
-    </div>
-    <div className="border-t pt-2">
-      <span className="text-gray-600">Total Hours:</span>
-      <p className="font-medium text-xl">{workOrder.hours || 0} hrs</p>
-    </div>
-    <div>
-      <span className="text-gray-600">Miles Traveled:</span>
-      <p className="font-medium text-lg">{workOrder.miles || 0} mi</p>
-    </div>
-    {workOrder.date_completed && (
-      <div>
-        <span className="text-gray-600">Completed:</span>
-        <p className="font-medium">{new Date(workOrder.date_completed).toLocaleDateString()}</p>
-      </div>
-    )}
-  </div>
-</div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Time Tracking</h2>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <span className="text-gray-600">Regular Hours:</span>
+                  <p className="font-medium text-lg">{workOrder.hours_regular || 0} hrs</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Overtime Hours:</span>
+                  <p className="font-medium text-lg">{workOrder.hours_overtime || 0} hrs</p>
+                </div>
+                <div className="border-t pt-2">
+                  <span className="text-gray-600">Total Hours:</span>
+                  <p className="font-medium text-xl">{workOrder.hours || 0} hrs</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Miles Traveled:</span>
+                  <p className="font-medium text-lg">{workOrder.miles || 0} mi</p>
+                </div>
+                {workOrder.date_completed && (
+                  <div>
+                    <span className="text-gray-600">Completed:</span>
+                    <p className="font-medium">{new Date(workOrder.date_completed).toLocaleDateString()}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </main>

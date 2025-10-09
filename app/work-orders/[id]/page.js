@@ -370,21 +370,18 @@ export default function WorkOrderDetail({ params }) {
           {/* Sidebar */}
           <div className="space-y-6">
             
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
-              <div className="space-y-3">
-                <button className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                  Generate Invoice
-                </button>
-                <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                  Send to Tech
-                </button>
-                <button className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
-                  Print WO
-                </button>
-              </div>
-            </div>
+           {/* Quick Actions */}
+<div className="bg-white rounded-lg shadow p-6">
+  <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
+  <div className="space-y-3">
+    <button className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+      Generate Invoice
+    </button>
+    <button className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+      Print WO
+    </button>
+  </div>
+</div>
 
             {/* Cost Summary - WITH RT/OT BREAKDOWN */}
             <div className="bg-white rounded-lg shadow p-6">

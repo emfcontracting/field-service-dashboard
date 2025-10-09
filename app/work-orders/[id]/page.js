@@ -65,15 +65,27 @@ export default function WorkOrderDetail({ params }) {
       if (error) throw error;
       
       setWorkOrder({ ...workOrder, ...updates });
-            
-      // Refresh to get calculated values
-      fetchWorkOrder();
+      
+      // Refresh to get calculated values from database trigger
+      await fetchWorkOrder();
     } catch (error) {
       console.error('Error updating work order:', error);
       alert('Error updating work order');
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveFieldData() {
+    await updateWorkOrder({
+      hours_regular: workOrder.hours_regular,
+      hours_overtime: workOrder.hours_overtime,
+      miles: workOrder.miles,
+      material_cost: workOrder.material_cost,
+      emf_equipment_cost: workOrder.emf_equipment_cost,
+      trailer_cost: workOrder.trailer_cost
+    });
+    alert('Field data saved successfully!');
   }
 
   async function handleAddComment() {
@@ -85,6 +97,7 @@ export default function WorkOrderDetail({ params }) {
 
     await updateWorkOrder({ comments: updatedComments });
     setNewComment('');
+    alert('Comment added successfully!');
   }
 
   function getPriorityColor(priority) {
@@ -236,111 +249,18 @@ export default function WorkOrderDetail({ params }) {
               </select>
             </div>
 
-{/* Field Data - WITH SAVE BUTTON */}
-<div className="bg-white rounded-lg shadow p-6">
-  <div className="flex justify-between items-center mb-4">
-    <h2 className="text-xl font-bold text-gray-900">Field Data</h2>
-    <button
-      onClick={() => {
-        updateWorkOrder({
-          hours_regular: workOrder.hours_regular,
-          hours_overtime: workOrder.hours_overtime,
-          miles: workOrder.miles,
-          material_cost: workOrder.material_cost,
-          emf_equipment_cost: workOrder.emf_equipment_cost,
-          trailer_cost: workOrder.trailer_cost
-        });
-        alert('Field data saved successfully!');
-      }}
-      disabled={saving}
-      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm"
-    >
-      {saving ? 'Saving...' : '💾 Save Changes'}
-    </button>
-  </div>
-  <div className="space-y-4">
-    {/* RT/OT Hours */}
-    <div className="grid grid-cols-2 gap-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours (RT)</label>
-        <input
-          type="number"
-          step="0.5"
-          value={workOrder.hours_regular || ''}
-          onChange={(e) => setWorkOrder({...workOrder, hours_regular: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.0"
-        />
-        <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Overtime Hours (OT)</label>
-        <input
-          type="number"
-          step="0.5"
-          value={workOrder.hours_overtime || ''}
-          onChange={(e) => setWorkOrder({...workOrder, hours_overtime: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.0"
-        />
-        <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
-      </div>
-    </div>
-
-    {/* Miles and Costs */}
-    <div className="grid grid-cols-2 gap-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Miles</label>
-        <input
-          type="number"
-          step="0.1"
-          value={workOrder.miles || ''}
-          onChange={(e) => setWorkOrder({...workOrder, miles: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.0"
-        />
-        <p className="text-xs text-gray-500 mt-1">@ $1.00 per mile</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Material Cost ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          value={workOrder.material_cost || ''}
-          onChange={(e) => setWorkOrder({...workOrder, material_cost: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.00"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Cost ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          value={workOrder.emf_equipment_cost || ''}
-          onChange={(e) => setWorkOrder({...workOrder, emf_equipment_cost: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.00"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Trailer Cost ($)</label>
-        <input
-          type="number"
-          step="0.01"
-          value={workOrder.trailer_cost || ''}
-          onChange={(e) => setWorkOrder({...workOrder, trailer_cost: parseFloat(e.target.value) || 0})}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="0.00"
-        />
-      </div>
-    </div>
-  </div>
-</div>
-
-            {/* Field Data - WITH RT/OT */}
+            {/* Field Data - WITH SAVE BUTTON */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Field Data</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Field Data</h2>
+                <button
+                  onClick={saveFieldData}
+                  disabled={saving}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm font-medium"
+                >
+                  {saving ? 'Saving...' : '💾 Save Changes'}
+                </button>
+              </div>
               <div className="space-y-4">
                 {/* RT/OT Hours */}
                 <div className="grid grid-cols-2 gap-4">
@@ -350,7 +270,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.5"
                       value={workOrder.hours_regular || ''}
-                      onChange={(e) => updateWorkOrder({ hours_regular: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, hours_regular: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.0"
                     />
@@ -362,7 +282,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.5"
                       value={workOrder.hours_overtime || ''}
-                      onChange={(e) => updateWorkOrder({ hours_overtime: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, hours_overtime: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.0"
                     />
@@ -378,7 +298,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.1"
                       value={workOrder.miles || ''}
-                      onChange={(e) => updateWorkOrder({ miles: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, miles: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.0"
                     />
@@ -390,7 +310,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.01"
                       value={workOrder.material_cost || ''}
-                      onChange={(e) => updateWorkOrder({ material_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, material_cost: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.00"
                     />
@@ -401,7 +321,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.01"
                       value={workOrder.emf_equipment_cost || ''}
-                      onChange={(e) => updateWorkOrder({ emf_equipment_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, emf_equipment_cost: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.00"
                     />
@@ -412,7 +332,7 @@ export default function WorkOrderDetail({ params }) {
                       type="number"
                       step="0.01"
                       value={workOrder.trailer_cost || ''}
-                      onChange={(e) => updateWorkOrder({ trailer_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setWorkOrder({...workOrder, trailer_cost: parseFloat(e.target.value) || 0})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="0.00"
                     />
@@ -470,19 +390,21 @@ export default function WorkOrderDetail({ params }) {
               <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Summary</h2>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Regular Hours ({workOrder.hours_regular || 0}):</span>
+                  <span className="text-gray-600">Regular Hours ({workOrder.hours_regular || 0} hrs):</span>
                   <span className="font-medium">${((workOrder.hours_regular || 0) * 64).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Overtime Hours ({workOrder.hours_overtime || 0}):</span>
+                  <span className="text-gray-600">Overtime Hours ({workOrder.hours_overtime || 0} hrs):</span>
                   <span className="font-medium">${((workOrder.hours_overtime || 0) * 96).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm font-semibold border-t pt-2 text-blue-900">
-                  <span>Total Labor:</span>
-                  <span>${(workOrder.labor_cost || 0).toFixed(2)}</span>
+                <div className="flex justify-between text-sm font-semibold border-t pt-2 bg-blue-50 px-2 py-1 rounded">
+                  <span className="text-blue-900">Total Labor:</span>
+                  <span className="text-blue-900">
+                    ${(((workOrder.hours_regular || 0) * 64) + ((workOrder.hours_overtime || 0) * 96)).toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Mileage ({workOrder.miles || 0} mi @ $1.00):</span>
+                  <span className="text-gray-600">Mileage ({workOrder.miles || 0} mi × $1.00):</span>
                   <span className="font-medium">${((workOrder.miles || 0) * 1.00).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -501,11 +423,12 @@ export default function WorkOrderDetail({ params }) {
                   <span className="text-gray-600">Rental:</span>
                   <span className="font-medium">${(workOrder.rental_cost || 0).toFixed(2)}</span>
                 </div>
-                <div className="border-t pt-3 flex justify-between font-bold">
-                  <span>Total Cost:</span>
-                  <span className="text-lg">
+                <div className="border-t-2 border-gray-300 pt-3 flex justify-between font-bold text-lg">
+                  <span>Grand Total:</span>
+                  <span className="text-green-600">
                     ${(
-                      (workOrder.labor_cost || 0) +
+                      ((workOrder.hours_regular || 0) * 64) + 
+                      ((workOrder.hours_overtime || 0) * 96) +
                       ((workOrder.miles || 0) * 1.00) +
                       (workOrder.material_cost || 0) + 
                       (workOrder.emf_equipment_cost || 0) + 
@@ -515,14 +438,15 @@ export default function WorkOrderDetail({ params }) {
                   </span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-sm">
-                  <span className="text-gray-600">NTE:</span>
+                  <span className="text-gray-600">NTE Budget:</span>
                   <span className="font-medium">${(workOrder.nte || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Remaining:</span>
-                  <span className={`font-medium ${
+                  <span className={`font-bold text-base ${
                     (workOrder.nte || 0) - (
-                      (workOrder.labor_cost || 0) +
+                      ((workOrder.hours_regular || 0) * 64) + 
+                      ((workOrder.hours_overtime || 0) * 96) +
                       ((workOrder.miles || 0) * 1.00) +
                       (workOrder.material_cost || 0) + 
                       (workOrder.emf_equipment_cost || 0) + 
@@ -532,7 +456,8 @@ export default function WorkOrderDetail({ params }) {
                   }`}>
                     ${(
                       (workOrder.nte || 0) - (
-                        (workOrder.labor_cost || 0) +
+                        ((workOrder.hours_regular || 0) * 64) + 
+                        ((workOrder.hours_overtime || 0) * 96) +
                         ((workOrder.miles || 0) * 1.00) +
                         (workOrder.material_cost || 0) + 
                         (workOrder.emf_equipment_cost || 0) + 
@@ -559,7 +484,7 @@ export default function WorkOrderDetail({ params }) {
                 </div>
                 <div className="border-t pt-2">
                   <span className="text-gray-600">Total Hours:</span>
-                  <p className="font-medium text-xl">{workOrder.hours || 0} hrs</p>
+                  <p className="font-medium text-xl">{((workOrder.hours_regular || 0) + (workOrder.hours_overtime || 0)).toFixed(1)} hrs</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Miles Traveled:</span>

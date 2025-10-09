@@ -56,7 +56,7 @@ export default function MobileApp() {
       const { data, error } = await supabase
         .from('work_orders')
         .select('*')
-        .or(`lead_tech_id.eq.${selectedTech},wo_id.in.(select wo_id from work_order_assignments where user_id='${selectedTech}')`)
+        .eq('lead_tech_id', selectedTech)
         .in('status', ['assigned', 'in_progress', 'needs_return'])
         .order('priority', { ascending: false })
         .order('date_entered', { ascending: true });
@@ -69,65 +69,50 @@ export default function MobileApp() {
   }
 
   async function fetchTeamMembers() {
-  if (!selectedWO) return;
-  
-  console.log('👥 DEBUG: Fetching team members for WO:', selectedWO.wo_id); // DEBUG
-  
-  try {
-    const { data, error } = await supabase
-      .from('work_order_assignments')
-      .select(`
-        *,
-        users:user_id (
-          user_id,
-          first_name,
-          last_name,
-          hourly_rate_regular,
-          hourly_rate_overtime
-        )
-      `)
-      .eq('wo_id', selectedWO.wo_id);
-
-    console.log('✅ DEBUG: Team members found:', data); // DEBUG
-    console.log('❌ DEBUG: Team member errors?', error); // DEBUG
-
-    if (error) throw error;
-    setTeamMembers(data || []);
-  } catch (error) {
-    console.error('Error fetching team members:', error);
-    alert('Team member error: ' + error.message);
-  }
-}
-
-  async function fetchWorkOrders() {
-  console.log('🔍 DEBUG: Selected Tech ID:', selectedTech); // DEBUG
-  
-  try {
-    // First, let's see ALL work orders
-    const { data: allWOs, error: allError } = await supabase
-      .from('work_orders')
-      .select('wo_number, building, status, lead_tech_id')
-      .limit(5);
+    if (!selectedWO) return;
     
-    console.log('📋 DEBUG: Sample of ALL work orders:', allWOs); // DEBUG
-    
-    // Now get work orders for this tech
-    const { data, error } = await supabase
-      .from('work_orders')
-      .select('*')
-      .eq('lead_tech_id', selectedTech)
-      .in('status', ['assigned', 'in_progress', 'needs_return']);
+    try {
+      const { data, error } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          *,
+          users:user_id (
+            user_id,
+            first_name,
+            last_name,
+            hourly_rate_regular,
+            hourly_rate_overtime
+          )
+        `)
+        .eq('wo_id', selectedWO.wo_id);
 
-    console.log('✅ DEBUG: Work orders for this tech:', data); // DEBUG
-    console.log('❌ DEBUG: Any errors?', error); // DEBUG
-
-    if (error) throw error;
-    setWorkOrders(data || []);
-  } catch (error) {
-    console.error('Error fetching work orders:', error);
-    alert('Error: ' + error.message);
+      if (error) throw error;
+      setTeamMembers(data || []);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+    }
   }
-}
+
+  async function updateWorkOrder(updates) {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_orders')
+        .update(updates)
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
+      setSelectedWO({ ...selectedWO, ...updates });
+      await fetchWorkOrders();
+      alert('✅ Work order updated!');
+    } catch (error) {
+      console.error('Error updating work order:', error);
+      alert('❌ Error updating work order');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function updateTeamMember(assignmentId, updates) {
     setSaving(true);
@@ -143,6 +128,52 @@ export default function MobileApp() {
     } catch (error) {
       console.error('Error updating team member:', error);
       alert('❌ Error updating');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addTeamMemberMobile(userId) {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: userId,
+          role: 'helper',
+          hours_regular: 0,
+          hours_overtime: 0,
+          miles: 0
+        });
+
+      if (error) throw error;
+
+      await fetchTeamMembers();
+      alert('✅ Team member added!');
+    } catch (error) {
+      console.error('Error adding team member:', error);
+      alert('❌ Error: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeTeamMemberMobile(assignmentId) {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .delete()
+        .eq('assignment_id', assignmentId);
+
+      if (error) throw error;
+
+      await fetchTeamMembers();
+      alert('✅ Team member removed');
+    } catch (error) {
+      console.error('Error removing team member:', error);
+      alert('❌ Error: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -495,149 +526,83 @@ export default function MobileApp() {
           </div>
         ) : null}
 
-        {/* Team Members - ALWAYS VISIBLE */}
-<div className="bg-gray-800 rounded-lg p-4">
-  <h2 className="font-bold mb-3 text-lg">👥 Team Members</h2>
-  
-  {/* Show loading state */}
-  {!teamMembers && (
-    <p className="text-gray-400 text-center py-4">Loading team...</p>
-  )}
-  
-  {/* Show if empty */}
-  {teamMembers && teamMembers.length === 0 && (
-    <div className="text-center py-4">
-      <p className="text-gray-400">No team members on this job</p>
-      <p className="text-xs text-gray-500 mt-2">Add them from the web dashboard</p>
-    </div>
-  )}
-  
-  {/* Team Members - WITH ADD BUTTON */}
-<div className="bg-gray-800 rounded-lg p-4">
-  <div className="flex justify-between items-center mb-3">
-    <h2 className="font-bold text-lg">👥 Team Members</h2>
-    {isLeadTech && (
-      <button
-        onClick={() => {
-          const availableUsers = users.filter(u => 
-            u.user_id !== selectedTech && 
-            !teamMembers.find(tm => tm.user_id === u.user_id)
-          );
-          
-          if (availableUsers.length === 0) {
-            alert('No more users available to add');
-            return;
-          }
-          
-          const userName = prompt('Enter team member name or select:\n\n' + 
-            availableUsers.map((u, i) => `${i+1}. ${u.first_name} ${u.last_name}`).join('\n')
-          );
-          
-          if (!userName) return;
-          
-          const index = parseInt(userName) - 1;
-          const selectedUser = availableUsers[index] || availableUsers.find(u => 
-            `${u.first_name} ${u.last_name}`.toLowerCase().includes(userName.toLowerCase())
-          );
-          
-          if (!selectedUser) {
-            alert('User not found');
-            return;
-          }
-          
-          addTeamMemberMobile(selectedUser.user_id);
-        }}
-        className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-      >
-        + Add
-      </button>
-    )}
-  </div>
-  
-  {teamMembers && teamMembers.length === 0 && (
-    <div className="text-center py-4">
-      <p className="text-gray-400">No team members yet</p>
-      {isLeadTech && (
-        <p className="text-xs text-gray-500 mt-2">Tap + Add to assign helpers</p>
-      )}
-    </div>
-  )}
-  
-  {teamMembers && teamMembers.length > 0 && (
-    <div className="space-y-2">
-      {teamMembers.map(member => (
-        <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
-              <p className="text-xs text-gray-400">
-                {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
-              </p>
-            </div>
+        {/* Team Members - WITH ADD BUTTON */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-bold text-lg">👥 Team Members</h2>
             {isLeadTech && (
               <button
                 onClick={() => {
-                  if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
-                    removeTeamMemberMobile(member.assignment_id);
+                  const availableUsers = users.filter(u => 
+                    u.user_id !== selectedTech && 
+                    !teamMembers.find(tm => tm.user_id === u.user_id)
+                  );
+                  
+                  if (availableUsers.length === 0) {
+                    alert('No more users available to add');
+                    return;
                   }
+                  
+                  const userList = availableUsers.map((u, i) => `${i+1}. ${u.first_name} ${u.last_name}`).join('\n');
+                  const userName = prompt(`Enter number to add team member:\n\n${userList}`);
+                  
+                  if (!userName) return;
+                  
+                  const index = parseInt(userName) - 1;
+                  const selectedUser = availableUsers[index];
+                  
+                  if (!selectedUser) {
+                    alert('Invalid selection');
+                    return;
+                  }
+                  
+                  addTeamMemberMobile(selectedUser.user_id);
                 }}
-                className="text-red-400 text-xs"
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
               >
-                Remove
+                + Add
               </button>
             )}
           </div>
+          
+          {teamMembers && teamMembers.length === 0 && (
+            <div className="text-center py-4">
+              <p className="text-gray-400">No team members yet</p>
+              {isLeadTech && (
+                <p className="text-xs text-gray-500 mt-2">Tap + Add to assign helpers</p>
+              )}
+            </div>
+          )}
+          
+          {teamMembers && teamMembers.length > 0 && (
+            <div className="space-y-2">
+              {teamMembers.map(member => (
+                <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
+                      <p className="text-xs text-gray-400">
+                        {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+                      </p>
+                    </div>
+                    {isLeadTech && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
+                            removeTeamMemberMobile(member.assignment_id);
+                          }
+                        }}
+                        className="text-red-400 text-xs"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      ))}
-    </div>
-  )}
-</div>
-
-async function addTeamMemberMobile(userId) {
-  setSaving(true);
-  try {
-    const { error } = await supabase
-      .from('work_order_assignments')
-      .insert({
-        wo_id: selectedWO.wo_id,
-        user_id: userId,
-        role: 'helper',
-        hours_regular: 0,
-        hours_overtime: 0,
-        miles: 0
-      });
-
-    if (error) throw error;
-
-    await fetchTeamMembers();
-    alert('✅ Team member added!');
-  } catch (error) {
-    console.error('Error adding team member:', error);
-    alert('❌ Error: ' + error.message);
-  } finally {
-    setSaving(false);
-  }
-}
-
-async function removeTeamMemberMobile(assignmentId) {
-  setSaving(true);
-  try {
-    const { error } = await supabase
-      .from('work_order_assignments')
-      .delete()
-      .eq('assignment_id', assignmentId);
-
-    if (error) throw error;
-
-    await fetchTeamMembers();
-    alert('✅ Team member removed');
-  } catch (error) {
-    console.error('Error removing team member:', error);
-    alert('❌ Error: ' + error.message);
-  } finally {
-    setSaving(false);
-  }
-}
 
         {/* Costs (Lead Tech Only) */}
         {isLeadTech && (

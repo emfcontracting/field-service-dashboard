@@ -93,26 +93,35 @@ export default function MobileApp() {
     }
   }
 
-  async function updateWorkOrder(updates) {
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('work_orders')
-        .update(updates)
-        .eq('wo_id', selectedWO.wo_id);
+  async function fetchWorkOrders() {
+  console.log('🔍 DEBUG: Selected Tech ID:', selectedTech); // DEBUG
+  
+  try {
+    // First, let's see ALL work orders
+    const { data: allWOs, error: allError } = await supabase
+      .from('work_orders')
+      .select('wo_number, building, status, lead_tech_id')
+      .limit(5);
+    
+    console.log('📋 DEBUG: Sample of ALL work orders:', allWOs); // DEBUG
+    
+    // Now get work orders for this tech
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select('*')
+      .eq('lead_tech_id', selectedTech)
+      .in('status', ['assigned', 'in_progress', 'needs_return']);
 
-      if (error) throw error;
+    console.log('✅ DEBUG: Work orders for this tech:', data); // DEBUG
+    console.log('❌ DEBUG: Any errors?', error); // DEBUG
 
-      setSelectedWO({ ...selectedWO, ...updates });
-      await fetchWorkOrders();
-      alert('✅ Work order updated!');
-    } catch (error) {
-      console.error('Error updating work order:', error);
-      alert('❌ Error updating work order');
-    } finally {
-      setSaving(false);
-    }
+    if (error) throw error;
+    setWorkOrders(data || []);
+  } catch (error) {
+    console.error('Error fetching work orders:', error);
+    alert('Error: ' + error.message);
   }
+}
 
   async function updateTeamMember(assignmentId, updates) {
     setSaving(true);

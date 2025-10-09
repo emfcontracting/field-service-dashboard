@@ -19,6 +19,68 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
 
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
+
+// ... your supabase client setup
+
+export default function Dashboard() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
+  // ... keep all your existing state variables (workOrders, filteredOrders, etc.)
+
+  // Add this FIRST useEffect before any others
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      router.push('/login');
+      return;
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .single();
+
+    if (!userData) {
+      await supabase.auth.signOut();
+      router.push('/login');
+      return;
+    }
+
+    setCurrentUser(userData);
+    setAuthLoading(false);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ... rest of your existing code continues here
+
   // New work order form state
   const [newOrder, setNewOrder] = useState({
     wo_number: '',
@@ -214,15 +276,23 @@ async function handleImportFromSheet() {
       <header className="bg-white shadow">
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div className="flex justify-between items-center">
-      <div className="flex items-center gap-6">
+      <div>
         <h1 className="text-3xl font-bold text-gray-900">Field Service Dashboard</h1>
-        <a 
-          href="/users" 
-          className="text-gray-600 hover:text-gray-900 font-medium"
-        >
-          Users
-        </a>
+        {currentUser && (
+          <p className="text-sm text-gray-500 mt-1">
+            Welcome, {currentUser.first_name} {currentUser.last_name}
+          </p>
+        )}
       </div>
+      <button
+        onClick={handleLogout}
+        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-medium"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+</header>
       <div className="flex gap-3">
         <button 
           onClick={handleImportFromSheet}

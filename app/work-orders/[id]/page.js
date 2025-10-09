@@ -19,6 +19,8 @@ export default function WorkOrderDetail({ params }) {
   const [newComment, setNewComment] = useState('');
   const [showAddTeamMember, setShowAddTeamMember] = useState(false);
   const [newTeamMember, setNewTeamMember] = useState({ user_id: '', role: 'helper' });
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [checkInTime, setCheckInTime] = useState(null);
 
   useEffect(() => {
     fetchWorkOrder();
@@ -210,6 +212,92 @@ export default function WorkOrderDetail({ params }) {
     setNewComment('');
     alert('Comment added successfully!');
   }
+
+async function handleCheckIn() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const timestamp = new Date().toLocaleString();
+        const gpsInfo = `${position.coords.latitude}, ${position.coords.longitude}`;
+        
+        setIsCheckedIn(true);
+        setCheckInTime(timestamp);
+        
+        const checkInComment = `[${timestamp}] CHECK IN\nGPS: ${gpsInfo}`;
+        const updatedComments = workOrder.comments 
+          ? `${workOrder.comments}\n\n${checkInComment}`
+          : checkInComment;
+
+        try {
+          const { error } = await supabase
+            .from('work_orders')
+            .update({ comments: updatedComments })
+            .eq('wo_id', params.id);
+
+          if (error) throw error;
+          setWorkOrder({ ...workOrder, comments: updatedComments });
+          alert(`✅ Checked in at ${timestamp}`);
+        } catch (error) {
+          console.error('Error checking in:', error);
+          alert('❌ Error checking in');
+        }
+      },
+      (error) => {
+        const timestamp = new Date().toLocaleString();
+        setIsCheckedIn(true);
+        setCheckInTime(timestamp);
+        alert('⚠️ Could not get GPS location, but checked in anyway');
+      }
+    );
+  } else {
+    const timestamp = new Date().toLocaleString();
+    setIsCheckedIn(true);
+    setCheckInTime(timestamp);
+    alert('⚠️ GPS not available on this device');
+  }
+}
+
+async function handleCheckOut() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const timestamp = new Date().toLocaleString();
+        const gpsInfo = `${position.coords.latitude}, ${position.coords.longitude}`;
+        
+        const checkOutComment = `[${timestamp}] CHECK OUT\nGPS: ${gpsInfo}\nDuration: ${checkInTime ? `from ${checkInTime}` : 'N/A'}`;
+        const updatedComments = workOrder.comments 
+          ? `${workOrder.comments}\n\n${checkOutComment}`
+          : checkOutComment;
+
+        try {
+          const { error } = await supabase
+            .from('work_orders')
+            .update({ comments: updatedComments })
+            .eq('wo_id', params.id);
+
+          if (error) throw error;
+          
+          setWorkOrder({ ...workOrder, comments: updatedComments });
+          setIsCheckedIn(false);
+          setCheckInTime(null);
+          alert(`✅ Checked out at ${timestamp}`);
+        } catch (error) {
+          console.error('Error checking out:', error);
+          alert('❌ Error checking out');
+        }
+      },
+      (error) => {
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        alert('⚠️ Could not get GPS location, but checked out anyway');
+      }
+    );
+  } else {
+    setIsCheckedIn(false);
+    setCheckInTime(null);
+    alert('⚠️ GPS not available on this device');
+  }
+}
 
   function calculateTeamTotals() {
     const leadTechRate = users.find(u => u.user_id === workOrder.lead_tech_id);
@@ -679,7 +767,7 @@ export default function WorkOrderDetail({ params }) {
           {/* Sidebar */}
           <div className="space-y-6">
             
-            {/* Quick Actions */}
+           {/* Quick Actions */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
               <div className="space-y-3">
@@ -691,6 +779,34 @@ export default function WorkOrderDetail({ params }) {
                 </button>
               </div>
             </div>
+
+            {/* Check In/Out */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">📍 Check In/Out</h2>
+              {!isCheckedIn ? (
+                <button
+                  onClick={handleCheckIn}
+                  className="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-green-700 transition"
+                >
+                  ✅ CHECK IN
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-sm text-gray-600">Checked in at:</p>
+                    <p className="font-bold text-gray-900">{checkInTime}</p>
+                  </div>
+                  <button
+                    onClick={handleCheckOut}
+                    className="w-full bg-red-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-red-700 transition"
+                  >
+                    🛑 CHECK OUT
+                  </button>
+                </div>
+              )}
+            </div>
+
+
 
             {/* Cost Summary - INCLUDING TEAM TOTALS */}
             <div className="bg-white rounded-lg shadow p-6">

@@ -495,22 +495,37 @@ export default function MobileApp() {
           </div>
         ) : null}
 
-        {/* Team Members (View Only for Non-Lead) */}
-        {teamMembers.length > 0 && (
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h2 className="font-bold mb-3 text-lg">👥 Team Members ({teamMembers.length})</h2>
-            <div className="space-y-2">
-              {teamMembers.map(member => (
-                <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
-                  <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
-                  <p className="text-xs text-gray-400">
-                    {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Team Members - ALWAYS VISIBLE */}
+<div className="bg-gray-800 rounded-lg p-4">
+  <h2 className="font-bold mb-3 text-lg">👥 Team Members</h2>
+  
+  {/* Show loading state */}
+  {!teamMembers && (
+    <p className="text-gray-400 text-center py-4">Loading team...</p>
+  )}
+  
+  {/* Show if empty */}
+  {teamMembers && teamMembers.length === 0 && (
+    <div className="text-center py-4">
+      <p className="text-gray-400">No team members on this job</p>
+      <p className="text-xs text-gray-500 mt-2">Add them from the web dashboard</p>
+    </div>
+  )}
+  
+  {/* Show team members */}
+  {teamMembers && teamMembers.length > 0 && (
+    <div className="space-y-2">
+      {teamMembers.map(member => (
+        <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
+          <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
+          <p className="text-xs text-gray-400">
+            {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+          </p>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
         {/* Costs (Lead Tech Only) */}
         {isLeadTech && (

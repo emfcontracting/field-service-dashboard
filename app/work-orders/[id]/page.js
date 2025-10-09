@@ -65,8 +65,7 @@ export default function WorkOrderDetail({ params }) {
       if (error) throw error;
       
       setWorkOrder({ ...workOrder, ...updates });
-      alert('Work order updated successfully!');
-      
+            
       // Refresh to get calculated values
       fetchWorkOrder();
     } catch (error) {
@@ -236,6 +235,108 @@ export default function WorkOrderDetail({ params }) {
                 <option value="completed">Completed</option>
               </select>
             </div>
+
+{/* Field Data - WITH SAVE BUTTON */}
+<div className="bg-white rounded-lg shadow p-6">
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-xl font-bold text-gray-900">Field Data</h2>
+    <button
+      onClick={() => {
+        updateWorkOrder({
+          hours_regular: workOrder.hours_regular,
+          hours_overtime: workOrder.hours_overtime,
+          miles: workOrder.miles,
+          material_cost: workOrder.material_cost,
+          emf_equipment_cost: workOrder.emf_equipment_cost,
+          trailer_cost: workOrder.trailer_cost
+        });
+        alert('Field data saved successfully!');
+      }}
+      disabled={saving}
+      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm"
+    >
+      {saving ? 'Saving...' : '💾 Save Changes'}
+    </button>
+  </div>
+  <div className="space-y-4">
+    {/* RT/OT Hours */}
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours (RT)</label>
+        <input
+          type="number"
+          step="0.5"
+          value={workOrder.hours_regular || ''}
+          onChange={(e) => setWorkOrder({...workOrder, hours_regular: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.0"
+        />
+        <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Overtime Hours (OT)</label>
+        <input
+          type="number"
+          step="0.5"
+          value={workOrder.hours_overtime || ''}
+          onChange={(e) => setWorkOrder({...workOrder, hours_overtime: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.0"
+        />
+        <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
+      </div>
+    </div>
+
+    {/* Miles and Costs */}
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Miles</label>
+        <input
+          type="number"
+          step="0.1"
+          value={workOrder.miles || ''}
+          onChange={(e) => setWorkOrder({...workOrder, miles: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.0"
+        />
+        <p className="text-xs text-gray-500 mt-1">@ $1.00 per mile</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Material Cost ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={workOrder.material_cost || ''}
+          onChange={(e) => setWorkOrder({...workOrder, material_cost: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.00"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Cost ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={workOrder.emf_equipment_cost || ''}
+          onChange={(e) => setWorkOrder({...workOrder, emf_equipment_cost: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.00"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Trailer Cost ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={workOrder.trailer_cost || ''}
+          onChange={(e) => setWorkOrder({...workOrder, trailer_cost: parseFloat(e.target.value) || 0})}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="0.00"
+        />
+      </div>
+    </div>
+  </div>
+</div>
 
             {/* Field Data - WITH RT/OT */}
             <div className="bg-white rounded-lg shadow p-6">

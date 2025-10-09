@@ -890,7 +890,7 @@ async function handleCheckOut() {
 
 {/* Check-In / Check-Out */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h2 className="font-bold mb-3 text-lg">📍 Clock In/Out</h2>
+          <h2 className="font-bold mb-3 text-lg">📍 Check In/Out at Facility</h2>
           {!isCheckedIn ? (
             <button
               onClick={handleCheckIn}

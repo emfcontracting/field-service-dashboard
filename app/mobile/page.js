@@ -16,6 +16,8 @@ export default function MobileApp() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+  const [newTeamMember, setNewTeamMember] = useState({ user_id: '', role: 'helper' });
 
   useEffect(() => {
     fetchUsers();
@@ -133,7 +135,7 @@ export default function MobileApp() {
     }
   }
 
-  async function addTeamMemberMobile(userId) {
+  async function addTeamMemberMobile(userId, role = 'helper') {
     setSaving(true);
     try {
       const { error } = await supabase
@@ -141,7 +143,7 @@ export default function MobileApp() {
         .insert({
           wo_id: selectedWO.wo_id,
           user_id: userId,
-          role: 'helper',
+          role: role,
           hours_regular: 0,
           hours_overtime: 0,
           miles: 0
@@ -526,171 +528,218 @@ export default function MobileApp() {
           </div>
         ) : null}
 
-        {/* Team Members - IMPROVED VISIBILITY & EDITING */}
-<div className="bg-gray-800 rounded-lg p-4">
-  <div className="flex justify-between items-center mb-3">
-    <h2 className="font-bold text-lg text-white">👥 Team Members</h2>
-    {isLeadTech && (
-      <button
-        onClick={() => {
-          const availableUsers = users.filter(u => 
-            u.user_id !== selectedTech && 
-            !teamMembers.find(tm => tm.user_id === u.user_id)
-          );
-          
-          if (availableUsers.length === 0) {
-            alert('No more users available to add');
-            return;
-          }
-          
-          const userList = availableUsers.map((u, i) => `${i+1}. ${u.first_name} ${u.last_name}`).join('\n');
-          const userName = prompt(`Enter number to add team member:\n\n${userList}`);
-          
-          if (!userName) return;
-          
-          const index = parseInt(userName) - 1;
-          const selectedUser = availableUsers[index];
-          
-          if (!selectedUser) {
-            alert('Invalid selection');
-            return;
-          }
-          
-          addTeamMemberMobile(selectedUser.user_id);
-        }}
-        className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium"
-      >
-        + Add
-      </button>
-    )}
-  </div>
-  
-  {teamMembers && teamMembers.length === 0 && (
-    <div className="text-center py-4">
-      <p className="text-gray-300">No team members yet</p>
-      {isLeadTech && (
-        <p className="text-xs text-gray-400 mt-2">Tap + Add to assign helpers</p>
-      )}
-    </div>
-  )}
-  
-  {teamMembers && teamMembers.length > 0 && (
-    <div className="space-y-3">
-      {teamMembers.map(member => {
-        const isMyself = member.user_id === selectedTech;
-        return (
-          <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-green-700' : 'bg-blue-700'}`}>
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <p className="font-bold text-white text-base">
-                  {member.users?.first_name} {member.users?.last_name}
-                  {isMyself && ' (You)'}
-                </p>
-                <p className="text-xs text-white opacity-75 capitalize">{member.role?.replace('_', ' ')}</p>
-              </div>
-              {isLeadTech && !isMyself && (
-                <button
-                  onClick={() => {
-                    if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
-                      removeTeamMemberMobile(member.assignment_id);
-                    }
-                  }}
-                  className="bg-red-600 text-white px-2 py-1 rounded text-xs"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-
-            {/* Show hours input for lead or if it's the current user */}
-            {(isLeadTech || isMyself) && (
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-xs text-white opacity-90 mb-1">RT Hours</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={member.hours_regular || ''}
-                      onChange={(e) => {
-                        const updated = teamMembers.map(tm => 
-                          tm.assignment_id === member.assignment_id 
-                            ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
-                            : tm
-                        );
-                        setTeamMembers(updated);
-                      }}
-                      onBlur={() => updateTeamMember(member.assignment_id, { 
-                        hours_regular: member.hours_regular 
-                      })}
-                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
-                      placeholder="0.0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white opacity-90 mb-1">OT Hours</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={member.hours_overtime || ''}
-                      onChange={(e) => {
-                        const updated = teamMembers.map(tm => 
-                          tm.assignment_id === member.assignment_id 
-                            ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
-                            : tm
-                        );
-                        setTeamMembers(updated);
-                      }}
-                      onBlur={() => updateTeamMember(member.assignment_id, { 
-                        hours_overtime: member.hours_overtime 
-                      })}
-                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
-                      placeholder="0.0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white opacity-90 mb-1">Miles</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={member.miles || ''}
-                      onChange={(e) => {
-                        const updated = teamMembers.map(tm => 
-                          tm.assignment_id === member.assignment_id 
-                            ? {...tm, miles: parseFloat(e.target.value) || 0}
-                            : tm
-                        );
-                        setTeamMembers(updated);
-                      }}
-                      onBlur={() => updateTeamMember(member.assignment_id, { 
-                        miles: member.miles 
-                      })}
-                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
-                      placeholder="0.0"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-white opacity-75">
-                  Labor: ${(
-                    ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
-                    ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
-                  ).toFixed(2)}
-                </p>
-              </div>
-            )}
-
-            {/* Read-only view for others */}
-            {!isLeadTech && !isMyself && (
-              <p className="text-sm text-white opacity-90">
-                {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
-              </p>
+        {/* Team Members - WITH BETTER ADD MODAL */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-bold text-lg text-white">👥 Team Members</h2>
+            {isLeadTech && (
+              <button
+                onClick={() => setShowAddTeamModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                + Add Member
+              </button>
             )}
           </div>
-        );
-      })}
-    </div>
-  )}
-</div>
+          
+          {teamMembers && teamMembers.length === 0 && (
+            <div className="text-center py-4">
+              <p className="text-gray-300">No team members yet</p>
+              {isLeadTech && (
+                <p className="text-xs text-gray-400 mt-2">Tap + Add Member to assign helpers</p>
+              )}
+            </div>
+          )}
+          
+          {teamMembers && teamMembers.length > 0 && (
+            <div className="space-y-3">
+              {teamMembers.map(member => {
+                const isMyself = member.user_id === selectedTech;
+                return (
+                  <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-green-700' : 'bg-blue-700'}`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-bold text-white text-base">
+                          {member.users?.first_name} {member.users?.last_name}
+                          {isMyself && ' (You)'}
+                        </p>
+                        <p className="text-xs text-white opacity-75 capitalize">{member.role?.replace('_', ' ')}</p>
+                      </div>
+                      {isLeadTech && !isMyself && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
+                              removeTeamMemberMobile(member.assignment_id);
+                            }
+                          }}
+                          className="bg-red-600 text-white px-2 py-1 rounded text-xs"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Show hours input for lead or if it's the current user */}
+                    {(isLeadTech || isMyself) && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">RT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_regular || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                hours_regular: member.hours_regular 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">OT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_overtime || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                hours_overtime: member.hours_overtime 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">Miles</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={member.miles || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, miles: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                miles: member.miles 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-white opacity-75">
+                          Labor: ${(
+                            ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+                            ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
+                          ).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Read-only view for others */}
+                    {!isLeadTech && !isMyself && (
+                      <p className="text-sm text-white opacity-90">
+                        {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Add Team Member Modal */}
+        {showAddTeamModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-white mb-4">Add Team Member</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Select Person</label>
+                  <select
+                    value={newTeamMember.user_id}
+                    onChange={(e) => setNewTeamMember({...newTeamMember, user_id: e.target.value})}
+                    className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+                  >
+                    <option value="">Choose a person...</option>
+                    {users
+                      .filter(u => 
+                        u.user_id !== selectedTech && 
+                        !teamMembers.find(tm => tm.user_id === u.user_id)
+                      )
+                      .map(user => (
+                        <option key={user.user_id} value={user.user_id}>
+                          {user.first_name} {user.last_name} ({user.role?.replace('_', ' ')})
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Role on This Job</label>
+                  <select
+                    value={newTeamMember.role}
+                    onChange={(e) => setNewTeamMember({...newTeamMember, role: e.target.value})}
+                    className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+                  >
+                    <option value="helper">Helper</option>
+                    <option value="lead_tech">Co-Lead Tech</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowAddTeamModal(false);
+                      setNewTeamMember({ user_id: '', role: 'helper' });
+                    }}
+                    className="flex-1 bg-gray-600 text-white px-4 py-3 rounded-lg text-base font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!newTeamMember.user_id) {
+                        alert('Please select a person');
+                        return;
+                      }
+                      addTeamMemberMobile(newTeamMember.user_id, newTeamMember.role);
+                      setShowAddTeamModal(false);
+                      setNewTeamMember({ user_id: '', role: 'helper' });
+                    }}
+                    disabled={saving || !newTeamMember.user_id}
+                    className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg text-base font-medium disabled:bg-gray-500"
+                  >
+                    {saving ? 'Adding...' : 'Add Member'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Costs (Lead Tech Only) */}
         {isLeadTech && (
@@ -726,90 +775,94 @@ export default function MobileApp() {
         )}
 
         {/* Summary */}
-<div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
-  <h2 className="font-bold mb-3 text-lg">📊 Cost Summary</h2>
-  <div className="space-y-2 text-sm">
-    {/* Labor Breakdown */}
-    <div className="bg-green-800 bg-opacity-50 rounded p-2 mb-2">
-      <p className="text-xs text-green-200 mb-1">LABOR</p>
-      <div className="flex justify-between">
-        <span className="text-green-100">Team Labor:</span>
-        <span className="font-bold text-white">${totals.totalLabor.toFixed(2)}</span>
-      </div>
-      <p className="text-xs text-green-200 mt-1">
-        {totals.totalHours.toFixed(1)} hrs total ({((selectedWO.hours_regular || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)).toFixed(1)} RT + {((selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)).toFixed(1)} OT)
-      </p>
-    </div>
+        <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📊 Cost Summary</h2>
+          <div className="space-y-2 text-sm">
+            {/* Labor Breakdown */}
+            <div className="bg-green-800 bg-opacity-50 rounded p-2 mb-2">
+              <p className="text-xs text-green-200 mb-1">LABOR</p>
+              <div className="flex justify-between">
+                <span className="text-green-100">Team Labor:</span>
+                <span className="font-bold text-white">${totals.totalLabor.toFixed(2)}</span>
+              </div>
+              <p className="text-xs text-green-200 mt-1">
+                {totals.totalHours.toFixed(1)} hrs total ({((selectedWO.hours_regular || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)).toFixed(1)} RT + {((selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)).toFixed(1)} OT)
+              </p>
+            </div>
 
-    {/* Other Costs */}
-    <div className="flex justify-between">
-      <span className="text-green-200">Mileage ({totals.totalMiles.toFixed(1)} mi × $1.00):</span>
-      <span className="font-medium text-white">${(totals.totalMiles * 1.00).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-green-200">Materials:</span>
-      <span className="font-medium text-white">${(selectedWO.material_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-green-200">Equipment:</span>
-      <span className="font-medium text-white">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-green-200">Trailer:</span>
-      <span className="font-medium text-white">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-green-200">Rental:</span>
-      <span className="font-medium text-white">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
-    </div>
+            {/* Other Costs */}
+            <div className="flex justify-between">
+              <span className="text-green-200">Mileage ({totals.totalMiles.toFixed(1)} mi × $1.00):</span>
+              <span className="font-medium text-white">${(totals.totalMiles * 1.00).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Materials:</span>
+              <span className="font-medium text-white">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Equipment:</span>
+              <span className="font-medium text-white">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Trailer:</span>
+              <span className="font-medium text-white">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Rental:</span>
+              <span className="font-medium text-white">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+            </div>
 
-    {/* Total */}
-    <div className="border-t-2 border-green-700 pt-2 mt-2">
-      <div className="flex justify-between font-bold text-base">
-        <span className="text-white">GRAND TOTAL:</span>
-        <span className="text-white text-lg">
-          ${(
-            totals.totalLabor +
-            (totals.totalMiles * 1.00) +
-            (selectedWO.material_cost || 0) +
-            (selectedWO.emf_equipment_cost || 0) +
-            (selectedWO.trailer_cost || 0) +
-            (selectedWO.rental_cost || 0)
-          ).toFixed(2)}
-        </span>
-      </div>
-    </div>
+            {/* Total */}
+            <div className="border-t-2 border-green-700 pt-2 mt-2">
+              <div className="flex justify-between font-bold text-base">
+                <span className="text-white">GRAND TOTAL:</span>
+                <span className="text-white text-lg">
+                  ${(
+                    totals.totalLabor +
+                    (totals.totalMiles * 1.00) +
+                    (selectedWO.material_cost || 0) +
+                    (selectedWO.emf_equipment_cost || 0) +
+                    (selectedWO.trailer_cost || 0) +
+                    (selectedWO.rental_cost || 0)
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
 
-    {/* NTE Comparison */}
-    <div className="border-t border-green-700 pt-2 mt-2">
-      <div className="flex justify-between">
-        <span className="text-green-200">NTE Budget:</span>
-        <span className="font-medium text-white">${(selectedWO.nte || 0).toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between mt-1">
-        <span className="text-green-200">Remaining:</span>
-        <span className={`font-bold text-base ${
-          (selectedWO.nte || 0) - (
-            totals.totalLabor +
-            (totals.totalMiles * 1.00) +
-            (selectedWO.material_cost || 0) +
-            (selectedWO.emf_equipment_cost || 0) +
-            (selectedWO.trailer_cost || 0) +
-            (selectedWO.rental_cost || 0)
-          ) >= 0 ? 'text-green-300' : 'text-red-300'
-        }`}>
-          ${(
-            (selectedWO.nte || 0) - (
-              totals.totalLabor +
-              (totals.totalMiles * 1.00) +
-              (selectedWO.material_cost || 0) +
-              (selectedWO.emf_equipment_cost || 0) +
-              (selectedWO.trailer_cost || 0) +
-              (selectedWO.rental_cost || 0)
-            )
-          ).toFixed(2)}
-        </span>
+            {/* NTE Comparison */}
+            <div className="border-t border-green-700 pt-2 mt-2">
+              <div className="flex justify-between">
+                <span className="text-green-200">NTE Budget:</span>
+                <span className="font-medium text-white">${(selectedWO.nte || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-green-200">Remaining:</span>
+                <span className={`font-bold text-base ${
+                  (selectedWO.nte || 0) - (
+                    totals.totalLabor +
+                    (totals.totalMiles * 1.00) +
+                    (selectedWO.material_cost || 0) +
+                    (selectedWO.emf_equipment_cost || 0) +
+                    (selectedWO.trailer_cost || 0) +
+                    (selectedWO.rental_cost || 0)
+                  ) >= 0 ? 'text-green-300' : 'text-red-300'
+                }`}>
+                  ${(
+                    (selectedWO.nte || 0) - (
+                      totals.totalLabor +
+                      (totals.totalMiles * 1.00) +
+                      (selectedWO.material_cost || 0) +
+                      (selectedWO.emf_equipment_cost || 0) +
+                      (selectedWO.trailer_cost || 0) +
+                      (selectedWO.rental_cost || 0)
+                    )
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
+  );
+}

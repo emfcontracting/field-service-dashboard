@@ -178,13 +178,14 @@ async function handleImportFromSheet() {
   }
 
   function getPriorityColor(priority) {
-    switch (priority) {
-      case 'emergency': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  switch (priority) {
+    case 'emergency': return 'bg-red-100 text-red-800';
+    case 'high': return 'bg-orange-100 text-orange-800';
+    case 'medium': return 'bg-yellow-100 text-yellow-800';
+    case 'low': return 'bg-green-100 text-green-800';
+    default: return 'bg-gray-100 text-gray-800';
   }
+}
 
   function getStatusColor(status) {
     switch (status) {
@@ -305,15 +306,16 @@ async function handleImportFromSheet() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
               <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Priorities</option>
-                <option value="emergency">Emergency</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-              </select>
+  value={priorityFilter}
+  onChange={(e) => setPriorityFilter(e.target.value)}
+  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+>
+  <option value="all">All Priorities</option>
+  <option value="emergency">Emergency</option>
+  <option value="high">High</option>
+  <option value="medium">Medium</option>
+  <option value="low">Low</option>
+</select>
             </div>
           </div>
         </div>
@@ -438,21 +440,22 @@ async function handleImportFromSheet() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Priority <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={newOrder.priority}
-                      onChange={(e) => setNewOrder({...newOrder, priority: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="emergency">Emergency</option>
-                    </select>
-                  </div>
+                 <div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Priority <span className="text-red-500">*</span>
+  </label>
+  <select
+    required
+    value={newOrder.priority}
+    onChange={(e) => setNewOrder({...newOrder, priority: e.target.value})}
+    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+  >
+    <option value="low">Low</option>
+    <option value="medium">Medium</option>
+    <option value="high">High</option>
+    <option value="emergency">Emergency</option>
+  </select>
+</div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

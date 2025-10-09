@@ -123,11 +123,11 @@ function mapPriority(priority) {
   if (!priority) return 'medium';
   const p = priority.toLowerCase();
   if (p.includes('p1') || p.includes('emerg')) return 'emergency';
-  if (p.includes('p2') || p.includes('urgent')) return 'high';
+  if (p.includes('p2') || p.includes('urgent') || p.includes('high')) return 'high';
   if (p.includes('p3')) return 'medium';
+  if (p.includes('p4') || p.includes('low')) return 'low';
   return 'medium';
 }
-
 function mapStatus(status) {
   if (!status) return 'pending';
   const s = status.toLowerCase();

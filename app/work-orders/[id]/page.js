@@ -13,13 +13,17 @@ export default function WorkOrderDetail({ params }) {
   const router = useRouter();
   const [workOrder, setWorkOrder] = useState(null);
   const [users, setUsers] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [showAddTeamMember, setShowAddTeamMember] = useState(false);
+  const [newTeamMember, setNewTeamMember] = useState({ user_id: '', role: 'helper' });
 
   useEffect(() => {
     fetchWorkOrder();
     fetchUsers();
+    fetchTeamMembers();
   }, [params.id]);
 
   async function fetchWorkOrder() {
@@ -54,6 +58,115 @@ export default function WorkOrderDetail({ params }) {
     }
   }
 
+  async function fetchTeamMembers() {
+    try {
+      const { data, error } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          *,
+          users:user_id (
+            user_id,
+            first_name,
+            last_name,
+            email,
+            role,
+            hourly_rate_regular,
+            hourly_rate_overtime
+          )
+        `)
+        .eq('wo_id', params.id);
+
+      if (error) throw error;
+      setTeamMembers(data || []);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+    }
+  }
+
+  async function addTeamMember() {
+    if (!newTeamMember.user_id) {
+      alert('Please select a team member');
+      return;
+    }
+
+    // Check if already assigned
+    const existing = teamMembers.find(tm => tm.user_id === newTeamMember.user_id);
+    if (existing) {
+      alert('This person is already on the team');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .insert({
+          wo_id: params.id,
+          user_id: newTeamMember.user_id,
+          role: newTeamMember.role,
+          hours_regular: 0,
+          hours_overtime: 0,
+          miles: 0
+        });
+
+      if (error) throw error;
+
+      await fetchTeamMembers();
+      setShowAddTeamMember(false);
+      setNewTeamMember({ user_id: '', role: 'helper' });
+      alert('Team member added successfully!');
+    } catch (error) {
+      console.error('Error adding team member:', error);
+      alert('Error adding team member');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateTeamMember(assignmentId, updates) {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .update(updates)
+        .eq('assignment_id', assignmentId);
+
+      if (error) throw error;
+
+      await fetchTeamMembers();
+      alert('Team member updated successfully!');
+    } catch (error) {
+      console.error('Error updating team member:', error);
+      alert('Error updating team member');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeTeamMember(assignmentId) {
+    if (!confirm('Remove this team member from the work order?')) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .delete()
+        .eq('assignment_id', assignmentId);
+
+      if (error) throw error;
+
+      await fetchTeamMembers();
+      alert('Team member removed');
+    } catch (error) {
+      console.error('Error removing team member:', error);
+      alert('Error removing team member');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function updateWorkOrder(updates) {
     setSaving(true);
     try {
@@ -65,8 +178,6 @@ export default function WorkOrderDetail({ params }) {
       if (error) throw error;
       
       setWorkOrder({ ...workOrder, ...updates });
-      
-      // Refresh to get calculated values from database trigger
       await fetchWorkOrder();
     } catch (error) {
       console.error('Error updating work order:', error);
@@ -100,15 +211,47 @@ export default function WorkOrderDetail({ params }) {
     alert('Comment added successfully!');
   }
 
-  function getPriorityColor(priority) {
-  switch (priority) {
-    case 'emergency': return 'bg-red-100 text-red-800 border-red-300';
-    case 'high': return 'bg-orange-100 text-orange-800 border-orange-300';
-    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    case 'low': return 'bg-green-100 text-green-800 border-green-300';
-    default: return 'bg-gray-100 text-gray-800 border-gray-300';
+  function calculateTeamTotals() {
+    const leadTechRate = users.find(u => u.user_id === workOrder.lead_tech_id);
+    const leadLabor = 
+      ((workOrder.hours_regular || 0) * (leadTechRate?.hourly_rate_regular || 64)) +
+      ((workOrder.hours_overtime || 0) * (leadTechRate?.hourly_rate_overtime || 96));
+
+    const teamLabor = teamMembers.reduce((sum, member) => {
+      const rate = member.users;
+      return sum + 
+        ((member.hours_regular || 0) * (rate?.hourly_rate_regular || 64)) +
+        ((member.hours_overtime || 0) * (rate?.hourly_rate_overtime || 96));
+    }, 0);
+
+    const totalHoursRegular = (workOrder.hours_regular || 0) + 
+      teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0);
+    
+    const totalHoursOvertime = (workOrder.hours_overtime || 0) + 
+      teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0);
+
+    const totalMiles = (workOrder.miles || 0) + 
+      teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0);
+
+    return {
+      totalLabor: leadLabor + teamLabor,
+      totalHoursRegular,
+      totalHoursOvertime,
+      totalMiles,
+      leadLabor,
+      teamLabor
+    };
   }
-}
+
+  function getPriorityColor(priority) {
+    switch (priority) {
+      case 'emergency': return 'bg-red-100 text-red-800 border-red-300';
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-300';
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'low': return 'bg-green-100 text-green-800 border-green-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  }
 
   function getStatusColor(status) {
     switch (status) {
@@ -146,6 +289,8 @@ export default function WorkOrderDetail({ params }) {
       </div>
     );
   }
+
+  const totals = calculateTeamTotals();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -211,7 +356,7 @@ export default function WorkOrderDetail({ params }) {
 
             {/* Assignment Section */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Assignment</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Primary Assignment</h2>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Lead Technician</label>
                 <select
@@ -233,6 +378,172 @@ export default function WorkOrderDetail({ params }) {
               </div>
             </div>
 
+            {/* Team Members Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Team Members</h2>
+                <button
+                  onClick={() => setShowAddTeamMember(true)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  + Add Helper/Tech
+                </button>
+              </div>
+
+              {teamMembers.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No additional team members assigned</p>
+              ) : (
+                <div className="space-y-4">
+                  {teamMembers.map((member) => (
+                    <div key={member.assignment_id} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            {member.users?.first_name} {member.users?.last_name}
+                          </h3>
+                          <p className="text-sm text-gray-600 capitalize">{member.role?.replace('_', ' ')}</p>
+                        </div>
+                        <button
+                          onClick={() => removeTeamMember(member.assignment_id)}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">RT Hours</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={member.hours_regular || ''}
+                            onChange={(e) => {
+                              const updated = teamMembers.map(tm => 
+                                tm.assignment_id === member.assignment_id 
+                                  ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                                  : tm
+                              );
+                              setTeamMembers(updated);
+                            }}
+                            onBlur={() => updateTeamMember(member.assignment_id, { 
+                              hours_regular: member.hours_regular 
+                            })}
+                            className="w-full px-2 py-1 text-sm border rounded"
+                            placeholder="0.0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">OT Hours</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={member.hours_overtime || ''}
+                            onChange={(e) => {
+                              const updated = teamMembers.map(tm => 
+                                tm.assignment_id === member.assignment_id 
+                                  ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                                  : tm
+                              );
+                              setTeamMembers(updated);
+                            }}
+                            onBlur={() => updateTeamMember(member.assignment_id, { 
+                              hours_overtime: member.hours_overtime 
+                            })}
+                            className="w-full px-2 py-1 text-sm border rounded"
+                            placeholder="0.0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Miles</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={member.miles || ''}
+                            onChange={(e) => {
+                              const updated = teamMembers.map(tm => 
+                                tm.assignment_id === member.assignment_id 
+                                  ? {...tm, miles: parseFloat(e.target.value) || 0}
+                                  : tm
+                              );
+                              setTeamMembers(updated);
+                            }}
+                            onBlur={() => updateTeamMember(member.assignment_id, { 
+                              miles: member.miles 
+                            })}
+                            className="w-full px-2 py-1 text-sm border rounded"
+                            placeholder="0.0"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-gray-600">
+                        Labor: ${(
+                          ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+                          ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
+                        ).toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add Team Member Modal */}
+            {showAddTeamMember && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h3 className="text-xl font-bold mb-4">Add Team Member</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Select Person</label>
+                      <select
+                        value={newTeamMember.user_id}
+                        onChange={(e) => setNewTeamMember({...newTeamMember, user_id: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg"
+                      >
+                        <option value="">Choose...</option>
+                        {users.map(user => (
+                          <option key={user.user_id} value={user.user_id}>
+                            {user.first_name} {user.last_name} ({user.role?.replace('_', ' ')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Role on this Job</label>
+                      <select
+                        value={newTeamMember.role}
+                        onChange={(e) => setNewTeamMember({...newTeamMember, role: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg"
+                      >
+                        <option value="helper">Helper</option>
+                        <option value="lead_tech">Lead Tech (Co-Lead)</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          setShowAddTeamMember(false);
+                          setNewTeamMember({ user_id: '', role: 'helper' });
+                        }}
+                        className="flex-1 bg-gray-200 px-4 py-2 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={addTeamMember}
+                        disabled={saving}
+                        className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                      >
+                        {saving ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Status Update */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Update Status</h2>
@@ -250,10 +561,10 @@ export default function WorkOrderDetail({ params }) {
               </select>
             </div>
 
-            {/* Field Data - WITH SAVE BUTTON */}
+            {/* Primary Tech Field Data */}
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Field Data</h2>
+                <h2 className="text-xl font-bold text-gray-900">Primary Tech Field Data</h2>
                 <button
                   onClick={saveFieldData}
                   disabled={saving}
@@ -263,7 +574,6 @@ export default function WorkOrderDetail({ params }) {
                 </button>
               </div>
               <div className="space-y-4">
-                {/* RT/OT Hours */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Regular Hours (RT)</label>
@@ -291,7 +601,6 @@ export default function WorkOrderDetail({ params }) {
                   </div>
                 </div>
 
-                {/* Miles and Costs */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Miles</label>
@@ -370,40 +679,42 @@ export default function WorkOrderDetail({ params }) {
           {/* Sidebar */}
           <div className="space-y-6">
             
-           {/* Quick Actions */}
-<div className="bg-white rounded-lg shadow p-6">
-  <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
-  <div className="space-y-3">
-    <button className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-      Generate Invoice
-    </button>
-    <button className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
-      Print WO
-    </button>
-  </div>
-</div>
+            {/* Quick Actions */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
+              <div className="space-y-3">
+                <button className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                  Generate Invoice
+                </button>
+                <button className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+                  Print WO
+                </button>
+              </div>
+            </div>
 
-            {/* Cost Summary - WITH RT/OT BREAKDOWN */}
+            {/* Cost Summary - INCLUDING TEAM TOTALS */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Summary</h2>
               <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Regular Hours ({workOrder.hours_regular || 0} hrs):</span>
-                  <span className="font-medium">${((workOrder.hours_regular || 0) * 64).toFixed(2)}</span>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="text-sm font-semibold text-blue-900 mb-2">TEAM LABOR</div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Total RT ({totals.totalHoursRegular} hrs):</span>
+                    <span className="font-medium">${(totals.totalHoursRegular * 64).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Total OT ({totals.totalHoursOvertime} hrs):</span>
+                    <span className="font-medium">${(totals.totalHoursOvertime * 96).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold border-t border-blue-200 pt-2 mt-2">
+                    <span className="text-blue-900">Total Labor:</span>
+                    <span className="text-blue-900">${totals.totalLabor.toFixed(2)}</span>
+                  </div>
                 </div>
+                
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Overtime Hours ({workOrder.hours_overtime || 0} hrs):</span>
-                  <span className="font-medium">${((workOrder.hours_overtime || 0) * 96).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold border-t pt-2 bg-blue-50 px-2 py-1 rounded">
-                  <span className="text-blue-900">Total Labor:</span>
-                  <span className="text-blue-900">
-                    ${(((workOrder.hours_regular || 0) * 64) + ((workOrder.hours_overtime || 0) * 96)).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Mileage ({workOrder.miles || 0} mi × $1.00):</span>
-                  <span className="font-medium">${((workOrder.miles || 0) * 1.00).toFixed(2)}</span>
+                  <span className="text-gray-600">Total Mileage ({totals.totalMiles} mi × $1.00):</span>
+                  <span className="font-medium">${(totals.totalMiles * 1.00).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Materials:</span>
@@ -425,9 +736,8 @@ export default function WorkOrderDetail({ params }) {
                   <span>Grand Total:</span>
                   <span className="text-green-600">
                     ${(
-                      ((workOrder.hours_regular || 0) * 64) + 
-                      ((workOrder.hours_overtime || 0) * 96) +
-                      ((workOrder.miles || 0) * 1.00) +
+                      totals.totalLabor +
+                      (totals.totalMiles * 1.00) +
                       (workOrder.material_cost || 0) + 
                       (workOrder.emf_equipment_cost || 0) + 
                       (workOrder.trailer_cost || 0) + 
@@ -443,9 +753,8 @@ export default function WorkOrderDetail({ params }) {
                   <span className="text-gray-600">Remaining:</span>
                   <span className={`font-bold text-base ${
                     (workOrder.nte || 0) - (
-                      ((workOrder.hours_regular || 0) * 64) + 
-                      ((workOrder.hours_overtime || 0) * 96) +
-                      ((workOrder.miles || 0) * 1.00) +
+                      totals.totalLabor +
+                      (totals.totalMiles * 1.00) +
                       (workOrder.material_cost || 0) + 
                       (workOrder.emf_equipment_cost || 0) + 
                       (workOrder.trailer_cost || 0) + 
@@ -454,9 +763,8 @@ export default function WorkOrderDetail({ params }) {
                   }`}>
                     ${(
                       (workOrder.nte || 0) - (
-                        ((workOrder.hours_regular || 0) * 64) + 
-                        ((workOrder.hours_overtime || 0) * 96) +
-                        ((workOrder.miles || 0) * 1.00) +
+                        totals.totalLabor +
+                        (totals.totalMiles * 1.00) +
                         (workOrder.material_cost || 0) + 
                         (workOrder.emf_equipment_cost || 0) + 
                         (workOrder.trailer_cost || 0) + 
@@ -472,21 +780,18 @@ export default function WorkOrderDetail({ params }) {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Time Tracking</h2>
               <div className="space-y-3 text-sm">
-                <div>
-                  <span className="text-gray-600">Regular Hours:</span>
-                  <p className="font-medium text-lg">{workOrder.hours_regular || 0} hrs</p>
+                <div className="bg-blue-50 p-2 rounded">
+                  <span className="text-gray-600 font-semibold">TEAM TOTALS</span>
+                  <p className="font-medium text-lg text-blue-900 mt-1">
+                    {totals.totalHoursRegular} RT + {totals.totalHoursOvertime} OT
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    = {(totals.totalHoursRegular + totals.totalHoursOvertime).toFixed(1)} total hours
+                  </p>
                 </div>
                 <div>
-                  <span className="text-gray-600">Overtime Hours:</span>
-                  <p className="font-medium text-lg">{workOrder.hours_overtime || 0} hrs</p>
-                </div>
-                <div className="border-t pt-2">
-                  <span className="text-gray-600">Total Hours:</span>
-                  <p className="font-medium text-xl">{((workOrder.hours_regular || 0) + (workOrder.hours_overtime || 0)).toFixed(1)} hrs</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Miles Traveled:</span>
-                  <p className="font-medium text-lg">{workOrder.miles || 0} mi</p>
+                  <span className="text-gray-600">Total Miles Traveled:</span>
+                  <p className="font-medium text-lg">{totals.totalMiles} mi</p>
                 </div>
                 {workOrder.date_completed && (
                   <div>

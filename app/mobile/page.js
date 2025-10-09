@@ -10,37 +10,40 @@ const supabase = createClient(
 
 export default function MobileApp() {
   const [workOrders, setWorkOrders] = useState([]);
-  const [selectedWO, setSelectedWO] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [currentTab, setCurrentTab] = useState('list'); // list, detail, profile
-  const [techId, setTechId] = useState(null);
   const [users, setUsers] = useState([]);
+  const [selectedTech, setSelectedTech] = useState('');
+  const [selectedWO, setSelectedWO] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
   useEffect(() => {
-    if (techId) {
-      fetchMyWorkOrders();
+    if (selectedTech) {
+      fetchWorkOrders();
     }
-  }, [techId]);
+  }, [selectedTech]);
+
+  useEffect(() => {
+    if (selectedWO) {
+      fetchTeamMembers();
+    }
+  }, [selectedWO]);
 
   async function fetchUsers() {
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'lead_tech')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .in('role', ['lead_tech', 'helper'])
+        .order('first_name');
 
       if (error) throw error;
       setUsers(data || []);
-      
-      // Auto-select first tech for demo
-      if (data && data.length > 0) {
-        setTechId(data[0].user_id);
-      }
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -48,14 +51,15 @@ export default function MobileApp() {
     }
   }
 
-  async function fetchMyWorkOrders() {
+  async function fetchWorkOrders() {
     try {
       const { data, error } = await supabase
         .from('work_orders')
         .select('*')
-        .eq('lead_tech_id', techId)
+        .or(`lead_tech_id.eq.${selectedTech},wo_id.in.(select wo_id from work_order_assignments where user_id='${selectedTech}')`)
         .in('status', ['assigned', 'in_progress', 'needs_return'])
-        .order('date_entered', { ascending: false });
+        .order('priority', { ascending: false })
+        .order('date_entered', { ascending: true });
 
       if (error) throw error;
       setWorkOrders(data || []);
@@ -64,183 +68,156 @@ export default function MobileApp() {
     }
   }
 
-  async function updateWorkOrder(woId, updates) {
+  async function fetchTeamMembers() {
+    if (!selectedWO) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          *,
+          users:user_id (
+            user_id,
+            first_name,
+            last_name,
+            hourly_rate_regular,
+            hourly_rate_overtime
+          )
+        `)
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+      setTeamMembers(data || []);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+    }
+  }
+
+  async function updateWorkOrder(updates) {
+    setSaving(true);
     try {
       const { error } = await supabase
         .from('work_orders')
         .update(updates)
-        .eq('wo_id', woId);
+        .eq('wo_id', selectedWO.wo_id);
 
       if (error) throw error;
-      
-      fetchMyWorkOrders();
-      if (selectedWO && selectedWO.wo_id === woId) {
-        setSelectedWO({ ...selectedWO, ...updates });
-      }
+
+      setSelectedWO({ ...selectedWO, ...updates });
+      await fetchWorkOrders();
+      alert('✅ Work order updated!');
     } catch (error) {
       console.error('Error updating work order:', error);
-      alert('Error updating work order');
+      alert('❌ Error updating work order');
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function clockIn(wo) {
-  if (!navigator.geolocation) {
-    alert('GPS not available on this device');
-    return;
-  }
+  async function updateTeamMember(assignmentId, updates) {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .update(updates)
+        .eq('assignment_id', assignmentId);
 
-  // Show loading state
-  const clockInBtn = document.activeElement;
-  if (clockInBtn) clockInBtn.disabled = true;
+      if (error) throw error;
 
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      console.log('GPS Location:', position.coords);
-      
-      const updates = {
-        status: 'in_progress',
-        time_in: new Date().toISOString(),
-        clock_in_latitude: position.coords.latitude,
-        clock_in_longitude: position.coords.longitude
-      };
-      
-      await updateWorkOrder(wo.wo_id, updates);
-      alert(`Clocked in successfully!\nLocation: ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`);
-      
-      if (clockInBtn) clockInBtn.disabled = false;
-    },
-    (error) => {
-      if (clockInBtn) clockInBtn.disabled = false;
-      
-      let errorMsg = 'Could not get GPS location. ';
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMsg += 'Please allow location access in your browser settings.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMsg += 'Location information is unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMsg += 'Location request timed out.';
-          break;
-        default:
-          errorMsg += 'An unknown error occurred.';
-      }
-      
-      alert(errorMsg);
-      console.error('GPS Error:', error);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
+      await fetchTeamMembers();
+    } catch (error) {
+      console.error('Error updating team member:', error);
+      alert('❌ Error updating');
+    } finally {
+      setSaving(false);
     }
-  );
-}
-
- async function clockOut(wo) {
-  if (!navigator.geolocation) {
-    alert('GPS not available on this device');
-    return;
   }
-
-  const clockOutBtn = document.activeElement;
-  if (clockOutBtn) clockOutBtn.disabled = true;
-
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      const timeIn = new Date(wo.time_in);
-      const timeOut = new Date();
-      const hoursWorked = ((timeOut - timeIn) / (1000 * 60 * 60)).toFixed(2);
-
-      const updates = {
-        time_out: timeOut.toISOString(),
-        clock_out_latitude: position.coords.latitude,
-        clock_out_longitude: position.coords.longitude,
-        hours: parseFloat(hoursWorked)
-      };
-      
-      await updateWorkOrder(wo.wo_id, updates);
-      alert(`Clocked out successfully!\nTotal hours: ${hoursWorked}\nLocation: ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`);
-      
-      if (clockOutBtn) clockOutBtn.disabled = false;
-    },
-    (error) => {
-      if (clockOutBtn) clockOutBtn.disabled = false;
-      
-      let errorMsg = 'Could not get GPS location. ';
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          errorMsg += 'Please allow location access in your browser settings.';
-          break;
-        case error.POSITION_UNAVAILABLE:
-          errorMsg += 'Location information is unavailable.';
-          break;
-        case error.TIMEOUT:
-          errorMsg += 'Location request timed out.';
-          break;
-        default:
-          errorMsg += 'An unknown error occurred.';
-      }
-      
-      alert(errorMsg);
-      console.error('GPS Error:', error);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
-}
 
   function getPriorityColor(priority) {
-  switch (priority) {
-    case 'emergency': return 'bg-red-500';
-    case 'high': return 'bg-orange-500';
-    case 'medium': return 'bg-yellow-500';
-    case 'low': return 'bg-green-500';
-    default: return 'bg-gray-500';
-  }
-}
-
-  function getStatusColor(status) {
-    switch (status) {
-      case 'completed': return 'bg-green-500';
-      case 'in_progress': return 'bg-blue-500';
-      case 'assigned': return 'bg-purple-500';
+    switch (priority) {
+      case 'emergency': return 'bg-red-500';
+      case 'high': return 'bg-orange-500';
+      case 'medium': return 'bg-yellow-500';
+      case 'low': return 'bg-green-500';
       default: return 'bg-gray-500';
     }
+  }
+
+  function getPriorityEmoji(priority) {
+    switch (priority) {
+      case 'emergency': return '🚨';
+      case 'high': return '⚠️';
+      case 'medium': return '📋';
+      case 'low': return '✅';
+      default: return '📋';
+    }
+  }
+
+  function calculateTotals() {
+    if (!selectedWO) return { totalLabor: 0, totalHours: 0, totalMiles: 0 };
+
+    const leadTech = users.find(u => u.user_id === selectedWO.lead_tech_id);
+    const leadLabor = 
+      ((selectedWO.hours_regular || 0) * (leadTech?.hourly_rate_regular || 64)) +
+      ((selectedWO.hours_overtime || 0) * (leadTech?.hourly_rate_overtime || 96));
+
+    const teamLabor = teamMembers.reduce((sum, member) => {
+      return sum + 
+        ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+        ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96));
+    }, 0);
+
+    const totalHours = 
+      (selectedWO.hours_regular || 0) + 
+      (selectedWO.hours_overtime || 0) +
+      teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0) + (m.hours_overtime || 0), 0);
+
+    const totalMiles = 
+      (selectedWO.miles || 0) + 
+      teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0);
+
+    return {
+      totalLabor: leadLabor + teamLabor,
+      totalHours: totalHours,
+      totalMiles: totalMiles
+    };
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center">
+        <div className="text-white text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
-          <p className="mt-4 text-white">Loading...</p>
+          <p className="mt-4">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Tech Selector Screen
-  if (!techId) {
+  // Tech Selection Screen
+  if (!selectedTech) {
     return (
-      <div className="min-h-screen bg-gray-900 p-4">
-        <div className="max-w-md mx-auto pt-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Field Service App</h1>
-          <p className="text-gray-400 mb-8">Select your profile to continue</p>
-          
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700 p-4">
+        <div className="max-w-md mx-auto pt-12">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-2">🔧 Field Service</h1>
+            <p className="text-blue-200">Select your name to view work orders</p>
+          </div>
+
           <div className="space-y-3">
             {users.map(user => (
               <button
                 key={user.user_id}
-                onClick={() => setTechId(user.user_id)}
-                className="w-full bg-gray-800 text-white p-4 rounded-lg text-left hover:bg-gray-700 transition"
+                onClick={() => setSelectedTech(user.user_id)}
+                className="w-full bg-white rounded-lg p-4 text-left hover:bg-blue-50 transition shadow-lg"
               >
-                <div className="font-semibold">{user.first_name} {user.last_name}</div>
-                <div className="text-sm text-gray-400">{user.email}</div>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-gray-900">{user.first_name} {user.last_name}</p>
+                    <p className="text-sm text-gray-500 capitalize">{user.role?.replace('_', ' ')}</p>
+                  </div>
+                  <span className="text-2xl">👤</span>
+                </div>
               </button>
             ))}
           </div>
@@ -249,297 +226,341 @@ export default function MobileApp() {
     );
   }
 
-  // Work Order List
-  if (currentTab === 'list' && !selectedWO) {
-    return (
-      <div className="min-h-screen bg-gray-900 pb-20">
-        {/* Header */}
-        <div className="bg-gray-800 p-4 sticky top-0 z-10">
-          <h1 className="text-xl font-bold text-white">My Work Orders</h1>
-          <p className="text-sm text-gray-400">{workOrders.length} active tickets</p>
-        </div>
+  // Work Order List Screen
+  if (!selectedWO) {
+    const currentUser = users.find(u => u.user_id === selectedTech);
 
-        {/* Work Orders List */}
-        <div className="p-4 space-y-3">
+    return (
+      <div className="min-h-screen bg-gray-900 text-white">
+        <header className="bg-blue-600 p-4 sticky top-0 z-10 shadow-lg">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-bold">My Work Orders</h1>
+              <p className="text-sm text-blue-200">{currentUser?.first_name} {currentUser?.last_name}</p>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedTech('');
+                setWorkOrders([]);
+              }}
+              className="bg-blue-700 px-4 py-2 rounded-lg text-sm"
+            >
+              ← Switch User
+            </button>
+          </div>
+        </header>
+
+        <div className="p-4 space-y-4">
           {workOrders.length === 0 ? (
             <div className="text-center py-12">
+              <p className="text-2xl mb-2">🎉</p>
               <p className="text-gray-400">No active work orders</p>
             </div>
           ) : (
-            workOrders.map((wo) => (
+            workOrders.map(wo => (
               <div
                 key={wo.wo_id}
-                onClick={() => {
-                  setSelectedWO(wo);
-                  setCurrentTab('detail');
-                }}
-                className="bg-gray-800 rounded-lg p-4 active:bg-gray-700 transition"
+                onClick={() => setSelectedWO(wo)}
+                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer shadow-lg"
               >
-                {/* Priority & Status Badges */}
-                <div className="flex gap-2 mb-2">
-                  <span className={`${getPriorityColor(wo.priority)} text-white text-xs px-2 py-1 rounded-full`}>
-                    {wo.priority?.toUpperCase()}
-                  </span>
-                  <span className={`${getStatusColor(wo.status)} text-white text-xs px-2 py-1 rounded-full`}>
-                    {wo.status?.replace('_', ' ').toUpperCase()}
-                  </span>
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="text-lg font-bold">WO #{wo.wo_number}</p>
+                    <p className="text-sm text-gray-400">{wo.building}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className={`${getPriorityColor(wo.priority)} text-white px-3 py-1 rounded-full text-xs font-bold`}>
+                      {getPriorityEmoji(wo.priority)} {wo.priority?.toUpperCase()}
+                    </span>
+                  </div>
                 </div>
 
-                {/* WO Details */}
-                <div className="text-white font-semibold mb-1">
-                  WO #{wo.wo_number}
-                </div>
-                <div className="text-sm text-gray-400 mb-2">
-                  {wo.building}
-                </div>
-                <div className="text-sm text-gray-300 line-clamp-2">
-                  {wo.work_order_description}
-                </div>
+                <p className="text-gray-300 text-sm mb-3 line-clamp-2">{wo.work_order_description}</p>
 
-                {/* Quick Info */}
-                <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
-                  <span>NTE: ${wo.nte?.toLocaleString() || 'N/A'}</span>
-                  <span>{new Date(wo.date_entered).toLocaleDateString()}</span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-gray-700 rounded p-2">
+                    <p className="text-gray-400">Hours</p>
+                    <p className="text-white font-bold">{((wo.hours_regular || 0) + (wo.hours_overtime || 0)).toFixed(1)}</p>
+                  </div>
+                  <div className="bg-gray-700 rounded p-2">
+                    <p className="text-gray-400">NTE</p>
+                    <p className="text-white font-bold">${wo.nte?.toLocaleString() || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
             ))
           )}
         </div>
-
-        {/* Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex">
-          <button
-            onClick={() => setCurrentTab('list')}
-            className="flex-1 py-4 text-white font-semibold"
-          >
-            📋 Work Orders
-          </button>
-          <button
-            onClick={() => setCurrentTab('profile')}
-            className="flex-1 py-4 text-gray-400"
-          >
-            👤 Profile
-          </button>
-        </div>
       </div>
     );
   }
 
-  // Work Order Detail
-  if (currentTab === 'detail' && selectedWO) {
-    return (
-      <div className="min-h-screen bg-gray-900 pb-20">
-        {/* Header */}
-        <div className="bg-gray-800 p-4 sticky top-0 z-10">
+  // Work Order Detail Screen
+  const currentUser = users.find(u => u.user_id === selectedTech);
+  const isLeadTech = selectedWO.lead_tech_id === selectedTech;
+  const myAssignment = teamMembers.find(tm => tm.user_id === selectedTech);
+  const totals = calculateTotals();
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white pb-20">
+      <header className="bg-blue-600 p-4 sticky top-0 z-10 shadow-lg">
+        <div className="flex justify-between items-center">
           <button
-            onClick={() => setSelectedWO(null)}
-            className="text-blue-400 mb-2"
+            onClick={() => {
+              setSelectedWO(null);
+              setTeamMembers([]);
+            }}
+            className="text-white text-lg"
           >
             ← Back
           </button>
-          <h1 className="text-xl font-bold text-white">WO #{selectedWO.wo_number}</h1>
-          <div className="flex gap-2 mt-2">
-            <span className={`${getPriorityColor(selectedWO.priority)} text-white text-xs px-2 py-1 rounded-full`}>
-              {selectedWO.priority?.toUpperCase()}
+          <div className="text-center">
+            <p className="font-bold">WO #{selectedWO.wo_number}</p>
+            <span className={`${getPriorityColor(selectedWO.priority)} text-white px-2 py-1 rounded-full text-xs`}>
+              {getPriorityEmoji(selectedWO.priority)} {selectedWO.priority?.toUpperCase()}
             </span>
-            <span className={`${getStatusColor(selectedWO.status)} text-white text-xs px-2 py-1 rounded-full`}>
-              {selectedWO.status?.replace('_', ' ').toUpperCase()}
-            </span>
+          </div>
+          <div className="w-8"></div>
+        </div>
+      </header>
+
+      <div className="p-4 space-y-4">
+        {/* Work Order Info */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📋 Job Details</h2>
+          <div className="space-y-2 text-sm">
+            <div>
+              <p className="text-gray-400">Building</p>
+              <p className="font-medium">{selectedWO.building}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Description</p>
+              <p className="font-medium">{selectedWO.work_order_description}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Requestor</p>
+              <p className="font-medium">{selectedWO.requestor || 'N/A'}</p>
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-4 space-y-4">
-          {/* Clock In/Out Buttons */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-3">Time Tracking</h3>
-            {!selectedWO.time_in ? (
-              <button
-                onClick={() => clockIn(selectedWO)}
-                className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold"
-              >
-                🕐 Clock In
-              </button>
-            ) : !selectedWO.time_out ? (
-              <div className="space-y-3">
-                <div className="text-center">
-                  <p className="text-gray-400 text-sm">Clocked in at</p>
-                  <p className="text-white font-semibold">
-                    {new Date(selectedWO.time_in).toLocaleTimeString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => clockOut(selectedWO)}
-                  className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold"
-                >
-                  🕐 Clock Out
-                </button>
-              </div>
-            ) : (
-              <div className="text-center">
-                <p className="text-gray-400 text-sm">Total Hours</p>
-                <p className="text-white text-2xl font-bold">{selectedWO.hours} hrs</p>
-              </div>
-            )}
-          </div>
+        {/* Status Update */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📊 Status</h2>
+          <select
+            value={selectedWO.status}
+            onChange={(e) => updateWorkOrder({ status: e.target.value })}
+            disabled={saving}
+            className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-lg font-medium"
+          >
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="needs_return">Needs Return</option>
+            <option value="completed">Completed ✅</option>
+          </select>
+        </div>
 
-          {/* Work Details */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-3">Details</h3>
-            <div className="space-y-3">
+        {/* My Hours (Lead Tech or Team Member) */}
+        {isLeadTech ? (
+          <div className="bg-blue-900 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Lead Tech)</h2>
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <p className="text-gray-400 text-sm">Building</p>
-                <p className="text-white">{selectedWO.building}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">Description</p>
-                <p className="text-white text-sm">{selectedWO.work_order_description}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">Requestor</p>
-                <p className="text-white">{selectedWO.requestor || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">NTE</p>
-                <p className="text-white font-semibold">${selectedWO.nte?.toLocaleString() || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Update Status */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-3">Update Status</h3>
-            <select
-              value={selectedWO.status}
-              onChange={(e) => updateWorkOrder(selectedWO.wo_id, { status: e.target.value })}
-              className="w-full bg-gray-700 text-white p-3 rounded-lg"
-            >
-              <option value="assigned">Assigned</option>
-              <option value="in_progress">In Progress</option>
-              <option value="needs_return">Needs Return Visit</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-
-          {/* Field Data */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-3">Field Data</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-gray-400 text-sm block mb-1">Miles</label>
+                <label className="block text-sm text-blue-200 mb-1">Regular (RT)</label>
                 <input
                   type="number"
-                  step="0.1"
-                  value={selectedWO.miles || ''}
-                  onChange={(e) => updateWorkOrder(selectedWO.wo_id, { miles: parseFloat(e.target.value) || null })}
-                  className="w-full bg-gray-700 text-white p-3 rounded-lg"
+                  step="0.5"
+                  value={selectedWO.hours_regular || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, hours_regular: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ hours_regular: selectedWO.hours_regular })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
                   placeholder="0.0"
                 />
+                <p className="text-xs text-blue-300 mt-1">@ $64/hr</p>
               </div>
               <div>
-                <label className="text-gray-400 text-sm block mb-1">Material Cost ($)</label>
+                <label className="block text-sm text-blue-200 mb-1">Overtime (OT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={selectedWO.hours_overtime || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, hours_overtime: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ hours_overtime: selectedWO.hours_overtime })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-blue-300 mt-1">@ $96/hr</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-blue-200 mb-1">Miles</label>
+              <input
+                type="number"
+                step="0.1"
+                value={selectedWO.miles || ''}
+                onChange={(e) => setSelectedWO({...selectedWO, miles: parseFloat(e.target.value) || 0})}
+                onBlur={() => updateWorkOrder({ miles: selectedWO.miles })}
+                className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                placeholder="0.0"
+              />
+              <p className="text-xs text-blue-300 mt-1">@ $1.00/mile</p>
+            </div>
+          </div>
+        ) : myAssignment ? (
+          <div className="bg-green-900 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Team Member)</h2>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm text-green-200 mb-1">Regular (RT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={myAssignment.hours_regular || ''}
+                  onChange={(e) => {
+                    const updated = teamMembers.map(tm => 
+                      tm.assignment_id === myAssignment.assignment_id 
+                        ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                        : tm
+                    );
+                    setTeamMembers(updated);
+                  }}
+                  onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                    hours_regular: myAssignment.hours_regular 
+                  })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-green-300 mt-1">@ $64/hr</p>
+              </div>
+              <div>
+                <label className="block text-sm text-green-200 mb-1">Overtime (OT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={myAssignment.hours_overtime || ''}
+                  onChange={(e) => {
+                    const updated = teamMembers.map(tm => 
+                      tm.assignment_id === myAssignment.assignment_id 
+                        ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                        : tm
+                    );
+                    setTeamMembers(updated);
+                  }}
+                  onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                    hours_overtime: myAssignment.hours_overtime 
+                  })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-green-300 mt-1">@ $96/hr</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-green-200 mb-1">Miles</label>
+              <input
+                type="number"
+                step="0.1"
+                value={myAssignment.miles || ''}
+                onChange={(e) => {
+                  const updated = teamMembers.map(tm => 
+                    tm.assignment_id === myAssignment.assignment_id 
+                      ? {...tm, miles: parseFloat(e.target.value) || 0}
+                      : tm
+                  );
+                  setTeamMembers(updated);
+                }}
+                onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                  miles: myAssignment.miles 
+                })}
+                className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                placeholder="0.0"
+              />
+              <p className="text-xs text-green-300 mt-1">@ $1.00/mile</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Team Members (View Only for Non-Lead) */}
+        {teamMembers.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">👥 Team Members ({teamMembers.length})</h2>
+            <div className="space-y-2">
+              {teamMembers.map(member => (
+                <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
+                  <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
+                  <p className="text-xs text-gray-400">
+                    {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Costs (Lead Tech Only) */}
+        {isLeadTech && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">💰 Costs</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Materials ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.material_cost || ''}
-                  onChange={(e) => updateWorkOrder(selectedWO.wo_id, { material_cost: parseFloat(e.target.value) || null })}
-                  className="w-full bg-gray-700 text-white p-3 rounded-lg"
+                  onChange={(e) => setSelectedWO({...selectedWO, material_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ material_cost: selectedWO.material_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
                   placeholder="0.00"
                 />
               </div>
               <div>
-                <label className="text-gray-400 text-sm block mb-1">Equipment Cost ($)</label>
+                <label className="block text-sm text-gray-400 mb-1">Equipment ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.emf_equipment_cost || ''}
-                  onChange={(e) => updateWorkOrder(selectedWO.wo_id, { emf_equipment_cost: parseFloat(e.target.value) || null })}
-                  className="w-full bg-gray-700 text-white p-3 rounded-lg"
+                  onChange={(e) => setSelectedWO({...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ emf_equipment_cost: selectedWO.emf_equipment_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
                   placeholder="0.00"
                 />
               </div>
             </div>
           </div>
+        )}
 
-          {/* Comments */}
-          {selectedWO.comments && (
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-3">Comments</h3>
-              <p className="text-gray-300 text-sm whitespace-pre-wrap">{selectedWO.comments}</p>
+        {/* Summary */}
+        <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📊 Summary</h2>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-green-200">Total Team Labor:</span>
+              <span className="font-bold">${totals.totalLabor.toFixed(2)}</span>
             </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Profile Tab
-  if (currentTab === 'profile') {
-    const currentUser = users.find(u => u.user_id === techId);
-    
-    return (
-      <div className="min-h-screen bg-gray-900 pb-20">
-        <div className="bg-gray-800 p-4">
-          <h1 className="text-xl font-bold text-white">Profile</h1>
-        </div>
-
-        <div className="p-4 space-y-4">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-semibold mb-3">User Info</h3>
-            <div className="space-y-2">
-              <div>
-                <p className="text-gray-400 text-sm">Name</p>
-                <p className="text-white">{currentUser?.first_name} {currentUser?.last_name}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">Email</p>
-                <p className="text-white">{currentUser?.email}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">Role</p>
-                <p className="text-white capitalize">{currentUser?.role?.replace('_', ' ')}</p>
-              </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Total Hours:</span>
+              <span className="font-bold">{totals.totalHours.toFixed(1)} hrs</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Total Miles:</span>
+              <span className="font-bold">{totals.totalMiles.toFixed(1)} mi</span>
+            </div>
+            <div className="flex justify-between border-t border-green-700 pt-2 mt-2">
+              <span className="text-green-200">NTE:</span>
+              <span className="font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Remaining:</span>
+              <span className={`font-bold ${
+                (selectedWO.nte || 0) - totals.totalLabor >= 0 ? 'text-green-300' : 'text-red-300'
+              }`}>
+                ${((selectedWO.nte || 0) - totals.totalLabor).toFixed(2)}
+              </span>
             </div>
           </div>
-
-          <button
-            onClick={() => {
-              setTechId(null);
-              setWorkOrders([]);
-              setSelectedWO(null);
-              setCurrentTab('list');
-            }}
-            className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold"
-          >
-            Switch User
-          </button>
-
-          <button
-            onClick={() => window.location.href = '/'}
-            className="w-full bg-gray-700 text-white py-3 rounded-lg font-semibold"
-          >
-            Go to Admin Dashboard
-          </button>
-        </div>
-
-        {/* Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex">
-          <button
-            onClick={() => setCurrentTab('list')}
-            className="flex-1 py-4 text-gray-400"
-          >
-            📋 Work Orders
-          </button>
-          <button
-            onClick={() => setCurrentTab('profile')}
-            className="flex-1 py-4 text-white font-semibold"
-          >
-            👤 Profile
-          </button>
         </div>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }

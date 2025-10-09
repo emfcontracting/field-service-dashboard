@@ -18,15 +18,15 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('all');
 
   const [formData, setFormData] = useState({
-  first_name: '',
-  last_name: '',
-  email: '',
-  phone: '',
-  role: 'lead_tech',
-  is_active: true,              
-  hourly_rate_regular: 64.00,
-  hourly_rate_overtime: 96.00
-});
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    role: 'lead_tech',
+    is_active: true,
+    hourly_rate_regular: 64.00,
+    hourly_rate_overtime: 96.00
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -56,25 +56,26 @@ export default function UserManagement() {
       email: '',
       phone: '',
       role: 'lead_tech',
-      is_active: true
+      is_active: true,
+      hourly_rate_regular: 64.00,
+      hourly_rate_overtime: 96.00
     });
     setShowModal(true);
   }
 
-function openEditModal(user) {
-  setEditingUser(user);
-  setFormData({
-    first_name: user.first_name,
-    last_name: user.last_name,
-    email: user.email,
-    phone: user.phone || '',
-    role: user.role,
-    is_active: user.is_active,          // ADD COMMA HERE
-    hourly_rate_regular: user.hourly_rate_regular || 64.00,
-    hourly_rate_overtime: user.hourly_rate_overtime || 96.00
-  });
-  setShowModal(true);
-}
+  function openEditModal(user) {
+    setEditingUser(user);
+    setFormData({
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone || '',
+      role: user.role,
+      is_active: user.is_active,
+      hourly_rate_regular: user.hourly_rate_regular || 64.00,
+      hourly_rate_overtime: user.hourly_rate_overtime || 96.00
+    });
+    setShowModal(true);
   }
 
   async function handleSubmit(e) {
@@ -83,7 +84,6 @@ function openEditModal(user) {
 
     try {
       if (editingUser) {
-        // Update existing user
         const { error } = await supabase
           .from('users')
           .update(formData)
@@ -92,7 +92,6 @@ function openEditModal(user) {
         if (error) throw error;
         alert('User updated successfully!');
       } else {
-        // Create new user
         const { error } = await supabase
           .from('users')
           .insert([formData]);
@@ -174,7 +173,6 @@ function openEditModal(user) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center">
@@ -198,7 +196,6 @@ function openEditModal(user) {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-gray-500 text-sm font-medium">Total Users</p>
@@ -224,7 +221,6 @@ function openEditModal(user) {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -254,7 +250,6 @@ function openEditModal(user) {
           </div>
         </div>
 
-        {/* Users Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -263,9 +258,9 @@ function openEditModal(user) {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rates (RT/OT)</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-		<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rates (RT/OT)</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -288,18 +283,18 @@ function openEditModal(user) {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      ${user.hourly_rate_regular?.toFixed(2) || '64.00'} / ${user.hourly_rate_overtime?.toFixed(2) || '96.00'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
                       {user.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-  <div className="text-sm text-gray-900">
-    ${user.hourly_rate_regular?.toFixed(2) || '64.00'} / ${user.hourly_rate_overtime?.toFixed(2) || '96.00'}
-  </div>
-</td>
-<td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                     <button
                       onClick={() => openEditModal(user)}
                       className="text-blue-600 hover:text-blue-900"
@@ -330,7 +325,6 @@ function openEditModal(user) {
         </div>
       </main>
 
-      {/* Add/Edit User Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -348,37 +342,33 @@ function openEditModal(user) {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-2">
-      Regular Rate ($/hr) {formData.role === 'lead_tech' && <span className="text-red-500">*</span>}
-    </label>
-    <input
-      type="number"
-      step="0.01"
-      required={formData.role === 'lead_tech'}
-      value={formData.hourly_rate_regular}
-      onChange={(e) => setFormData({...formData, hourly_rate_regular: parseFloat(e.target.value) || 64.00})}
-      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      placeholder="64.00"
-    />
-    <p className="text-xs text-gray-500 mt-1">RT (up to 8 hrs)</p>
-  </div>
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-2">
-      Overtime Rate ($/hr)
-    </label>
-    <input
-      type="number"
-      step="0.01"
-      value={formData.hourly_rate_overtime}
-      onChange={(e) => setFormData({...formData, hourly_rate_overtime: parseFloat(e.target.value) || 96.00})}
-      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-      placeholder="96.00"
-    />
-    <p className="text-xs text-gray-500 mt-1">OT (over 8 hrs)</p>
-  </div>
-</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({...formData, first_name: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({...formData, last_name: e.target.value})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Email <span className="text-red-500">*</span>
@@ -420,6 +410,38 @@ function openEditModal(user) {
                     <option value="office_staff">Office Staff</option>
                     <option value="admin">Admin</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Regular Rate ($/hr) {formData.role === 'lead_tech' && <span className="text-red-500">*</span>}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required={formData.role === 'lead_tech'}
+                      value={formData.hourly_rate_regular}
+                      onChange={(e) => setFormData({...formData, hourly_rate_regular: parseFloat(e.target.value) || 64.00})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="64.00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">RT (up to 8 hrs)</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Overtime Rate ($/hr)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.hourly_rate_overtime}
+                      onChange={(e) => setFormData({...formData, hourly_rate_overtime: parseFloat(e.target.value) || 96.00})}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="96.00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">OT (over 8 hrs)</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center">

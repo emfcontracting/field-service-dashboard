@@ -526,83 +526,171 @@ export default function MobileApp() {
           </div>
         ) : null}
 
-        {/* Team Members - WITH ADD BUTTON */}
-        <div className="bg-gray-800 rounded-lg p-4">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="font-bold text-lg">👥 Team Members</h2>
-            {isLeadTech && (
-              <button
-                onClick={() => {
-                  const availableUsers = users.filter(u => 
-                    u.user_id !== selectedTech && 
-                    !teamMembers.find(tm => tm.user_id === u.user_id)
-                  );
-                  
-                  if (availableUsers.length === 0) {
-                    alert('No more users available to add');
-                    return;
-                  }
-                  
-                  const userList = availableUsers.map((u, i) => `${i+1}. ${u.first_name} ${u.last_name}`).join('\n');
-                  const userName = prompt(`Enter number to add team member:\n\n${userList}`);
-                  
-                  if (!userName) return;
-                  
-                  const index = parseInt(userName) - 1;
-                  const selectedUser = availableUsers[index];
-                  
-                  if (!selectedUser) {
-                    alert('Invalid selection');
-                    return;
-                  }
-                  
-                  addTeamMemberMobile(selectedUser.user_id);
-                }}
-                className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-              >
-                + Add
-              </button>
-            )}
-          </div>
+        {/* Team Members - IMPROVED VISIBILITY & EDITING */}
+<div className="bg-gray-800 rounded-lg p-4">
+  <div className="flex justify-between items-center mb-3">
+    <h2 className="font-bold text-lg text-white">👥 Team Members</h2>
+    {isLeadTech && (
+      <button
+        onClick={() => {
+          const availableUsers = users.filter(u => 
+            u.user_id !== selectedTech && 
+            !teamMembers.find(tm => tm.user_id === u.user_id)
+          );
           
-          {teamMembers && teamMembers.length === 0 && (
-            <div className="text-center py-4">
-              <p className="text-gray-400">No team members yet</p>
-              {isLeadTech && (
-                <p className="text-xs text-gray-500 mt-2">Tap + Add to assign helpers</p>
+          if (availableUsers.length === 0) {
+            alert('No more users available to add');
+            return;
+          }
+          
+          const userList = availableUsers.map((u, i) => `${i+1}. ${u.first_name} ${u.last_name}`).join('\n');
+          const userName = prompt(`Enter number to add team member:\n\n${userList}`);
+          
+          if (!userName) return;
+          
+          const index = parseInt(userName) - 1;
+          const selectedUser = availableUsers[index];
+          
+          if (!selectedUser) {
+            alert('Invalid selection');
+            return;
+          }
+          
+          addTeamMemberMobile(selectedUser.user_id);
+        }}
+        className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-medium"
+      >
+        + Add
+      </button>
+    )}
+  </div>
+  
+  {teamMembers && teamMembers.length === 0 && (
+    <div className="text-center py-4">
+      <p className="text-gray-300">No team members yet</p>
+      {isLeadTech && (
+        <p className="text-xs text-gray-400 mt-2">Tap + Add to assign helpers</p>
+      )}
+    </div>
+  )}
+  
+  {teamMembers && teamMembers.length > 0 && (
+    <div className="space-y-3">
+      {teamMembers.map(member => {
+        const isMyself = member.user_id === selectedTech;
+        return (
+          <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-green-700' : 'bg-blue-700'}`}>
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <p className="font-bold text-white text-base">
+                  {member.users?.first_name} {member.users?.last_name}
+                  {isMyself && ' (You)'}
+                </p>
+                <p className="text-xs text-white opacity-75 capitalize">{member.role?.replace('_', ' ')}</p>
+              </div>
+              {isLeadTech && !isMyself && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
+                      removeTeamMemberMobile(member.assignment_id);
+                    }
+                  }}
+                  className="bg-red-600 text-white px-2 py-1 rounded text-xs"
+                >
+                  Remove
+                </button>
               )}
             </div>
-          )}
-          
-          {teamMembers && teamMembers.length > 0 && (
-            <div className="space-y-2">
-              {teamMembers.map(member => (
-                <div key={member.assignment_id} className="bg-gray-700 rounded p-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">{member.users?.first_name} {member.users?.last_name}</p>
-                      <p className="text-xs text-gray-400">
-                        {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
-                      </p>
-                    </div>
-                    {isLeadTech && (
-                      <button
-                        onClick={() => {
-                          if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
-                            removeTeamMemberMobile(member.assignment_id);
-                          }
-                        }}
-                        className="text-red-400 text-xs"
-                      >
-                        Remove
-                      </button>
-                    )}
+
+            {/* Show hours input for lead or if it's the current user */}
+            {(isLeadTech || isMyself) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs text-white opacity-90 mb-1">RT Hours</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={member.hours_regular || ''}
+                      onChange={(e) => {
+                        const updated = teamMembers.map(tm => 
+                          tm.assignment_id === member.assignment_id 
+                            ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                            : tm
+                        );
+                        setTeamMembers(updated);
+                      }}
+                      onBlur={() => updateTeamMember(member.assignment_id, { 
+                        hours_regular: member.hours_regular 
+                      })}
+                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white opacity-90 mb-1">OT Hours</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={member.hours_overtime || ''}
+                      onChange={(e) => {
+                        const updated = teamMembers.map(tm => 
+                          tm.assignment_id === member.assignment_id 
+                            ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                            : tm
+                        );
+                        setTeamMembers(updated);
+                      }}
+                      onBlur={() => updateTeamMember(member.assignment_id, { 
+                        hours_overtime: member.hours_overtime 
+                      })}
+                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white opacity-90 mb-1">Miles</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={member.miles || ''}
+                      onChange={(e) => {
+                        const updated = teamMembers.map(tm => 
+                          tm.assignment_id === member.assignment_id 
+                            ? {...tm, miles: parseFloat(e.target.value) || 0}
+                            : tm
+                        );
+                        setTeamMembers(updated);
+                      }}
+                      onBlur={() => updateTeamMember(member.assignment_id, { 
+                        miles: member.miles 
+                      })}
+                      className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                      placeholder="0.0"
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <p className="text-xs text-white opacity-75">
+                  Labor: ${(
+                    ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+                    ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
+                  ).toFixed(2)}
+                </p>
+              </div>
+            )}
+
+            {/* Read-only view for others */}
+            {!isLeadTech && !isMyself && (
+              <p className="text-sm text-white opacity-90">
+                {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div>
 
         {/* Costs (Lead Tech Only) */}
         {isLeadTech && (

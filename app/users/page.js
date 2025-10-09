@@ -18,15 +18,15 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('all');
 
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    role: 'lead_tech',
-    is_active: true
-hourly_rate_regular: 64.00, 
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  role: 'lead_tech',
+  is_active: true,              
+  hourly_rate_regular: 64.00,
   hourly_rate_overtime: 96.00
-  });
+});
 
   useEffect(() => {
     fetchUsers();
@@ -61,7 +61,7 @@ hourly_rate_regular: 64.00,
     setShowModal(true);
   }
 
-  function openEditModal(user) {
+function openEditModal(user) {
   setEditingUser(user);
   setFormData({
     first_name: user.first_name,
@@ -69,8 +69,8 @@ hourly_rate_regular: 64.00,
     email: user.email,
     phone: user.phone || '',
     role: user.role,
-    is_active: user.is_active,
-    hourly_rate_regular: user.hourly_rate_regular || 64.00, 
+    is_active: user.is_active,          // ADD COMMA HERE
+    hourly_rate_regular: user.hourly_rate_regular || 64.00,
     hourly_rate_overtime: user.hourly_rate_overtime || 96.00
   });
   setShowModal(true);

@@ -84,58 +84,115 @@ export default function MobileApp() {
   }
 
   async function clockIn(wo) {
-    if (!navigator.geolocation) {
-      alert('GPS not available');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const updates = {
-          status: 'in_progress',
-          time_in: new Date().toISOString(),
-          clock_in_latitude: position.coords.latitude,
-          clock_in_longitude: position.coords.longitude
-        };
-        
-        await updateWorkOrder(wo.wo_id, updates);
-        alert('Clocked in successfully!');
-      },
-      (error) => {
-        alert('Could not get GPS location');
-        console.error(error);
-      }
-    );
+  if (!navigator.geolocation) {
+    alert('GPS not available on this device');
+    return;
   }
 
-  async function clockOut(wo) {
-    if (!navigator.geolocation) {
-      alert('GPS not available');
-      return;
-    }
+  // Show loading state
+  const clockInBtn = document.activeElement;
+  if (clockInBtn) clockInBtn.disabled = true;
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const timeIn = new Date(wo.time_in);
-        const timeOut = new Date();
-        const hoursWorked = ((timeOut - timeIn) / (1000 * 60 * 60)).toFixed(2);
-
-        const updates = {
-          time_out: timeOut.toISOString(),
-          clock_out_latitude: position.coords.latitude,
-          clock_out_longitude: position.coords.longitude,
-          hours: parseFloat(hoursWorked)
-        };
-        
-        await updateWorkOrder(wo.wo_id, updates);
-        alert(`Clocked out! Total hours: ${hoursWorked}`);
-      },
-      (error) => {
-        alert('Could not get GPS location');
-        console.error(error);
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      console.log('GPS Location:', position.coords);
+      
+      const updates = {
+        status: 'in_progress',
+        time_in: new Date().toISOString(),
+        clock_in_latitude: position.coords.latitude,
+        clock_in_longitude: position.coords.longitude
+      };
+      
+      await updateWorkOrder(wo.wo_id, updates);
+      alert(`Clocked in successfully!\nLocation: ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`);
+      
+      if (clockInBtn) clockInBtn.disabled = false;
+    },
+    (error) => {
+      if (clockInBtn) clockInBtn.disabled = false;
+      
+      let errorMsg = 'Could not get GPS location. ';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMsg += 'Please allow location access in your browser settings.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMsg += 'Location information is unavailable.';
+          break;
+        case error.TIMEOUT:
+          errorMsg += 'Location request timed out.';
+          break;
+        default:
+          errorMsg += 'An unknown error occurred.';
       }
-    );
+      
+      alert(errorMsg);
+      console.error('GPS Error:', error);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
+ async function clockOut(wo) {
+  if (!navigator.geolocation) {
+    alert('GPS not available on this device');
+    return;
   }
+
+  const clockOutBtn = document.activeElement;
+  if (clockOutBtn) clockOutBtn.disabled = true;
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const timeIn = new Date(wo.time_in);
+      const timeOut = new Date();
+      const hoursWorked = ((timeOut - timeIn) / (1000 * 60 * 60)).toFixed(2);
+
+      const updates = {
+        time_out: timeOut.toISOString(),
+        clock_out_latitude: position.coords.latitude,
+        clock_out_longitude: position.coords.longitude,
+        hours: parseFloat(hoursWorked)
+      };
+      
+      await updateWorkOrder(wo.wo_id, updates);
+      alert(`Clocked out successfully!\nTotal hours: ${hoursWorked}\nLocation: ${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`);
+      
+      if (clockOutBtn) clockOutBtn.disabled = false;
+    },
+    (error) => {
+      if (clockOutBtn) clockOutBtn.disabled = false;
+      
+      let errorMsg = 'Could not get GPS location. ';
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          errorMsg += 'Please allow location access in your browser settings.';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMsg += 'Location information is unavailable.';
+          break;
+        case error.TIMEOUT:
+          errorMsg += 'Location request timed out.';
+          break;
+        default:
+          errorMsg += 'An unknown error occurred.';
+      }
+      
+      alert(errorMsg);
+      console.error('GPS Error:', error);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
 
   function getPriorityColor(priority) {
     switch (priority) {

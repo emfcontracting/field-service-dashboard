@@ -124,24 +124,24 @@ export default function WorkOrderDetail({ params }) {
   }
 
   async function updateTeamMember(assignmentId, updates) {
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('work_order_assignments')
-        .update(updates)
-        .eq('assignment_id', assignmentId);
+  setSaving(true);
+  try {
+    const { error } = await supabase
+      .from('work_order_assignments')
+      .update(updates)
+      .eq('assignment_id', assignmentId);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      await fetchTeamMembers();
-      alert('Team member updated successfully!');
-    } catch (error) {
-      console.error('Error updating team member:', error);
-      alert('Error updating team member');
-    } finally {
-      setSaving(false);
-    }
+    await fetchTeamMembers();
+    // Silent save - no alert needed
+  } catch (error) {
+    console.error('Error updating team member:', error);
+    alert('Error updating team member');
+  } finally {
+    setSaving(false);
   }
+}
 
   async function removeTeamMember(assignmentId) {
     if (!confirm('Remove this team member from the work order?')) {

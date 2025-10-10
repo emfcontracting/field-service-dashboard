@@ -484,7 +484,7 @@ const updateWorkOrder = async (updates) => {
             <div className="bg-gray-800 rounded-lg p-8 text-center">
               <div className="text-4xl mb-4">✅</div>
               <div className="text-xl font-bold mb-2">No Active Work Orders</div>
-              <div className="text-gray-400">You're all caught up!</div>
+<div className="text-gray-400">You&apos;re all caught up!</div>
             </div>
           ) : (
             <div className="space-y-3">

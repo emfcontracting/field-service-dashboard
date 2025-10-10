@@ -59,21 +59,21 @@ export default function Dashboard() {
 
   // Fetch Data on Mount
   useEffect(() => {
-    fetchWorkOrders();
-    fetchUsers();
-  }, []);
+  fetchWorkOrders();
+  fetchUsers();
+}, []); 
 
   // Apply Filters
   useEffect(() => {
-    applyFilters();
-  }, [workOrders, statusFilter, priorityFilter, searchTerm]);
+  applyFilters();
+}, [workOrders, statusFilter, priorityFilter, searchTerm]);
 
   // Check if selected WO can generate invoice
   useEffect(() => {
-    if (selectedWO) {
-      checkCanGenerateInvoice(selectedWO.wo_id);
-    }
-  }, [selectedWO]);
+  if (selectedWO) {
+    checkCanGenerateInvoice(selectedWO.wo_id);
+  }
+}, [selectedWO]);
 
   // Fetch Work Orders
   const fetchWorkOrders = async () => {
@@ -228,8 +228,8 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmText = prompt('Type "DELETE" to confirm deletion:');
-    if (confirmText !== 'DELETE') {
+    const confirmText = prompt('Type DELETE to confirm deletion:');
+if (confirmText !== 'DELETE') {
       alert('Deletion cancelled');
       return;
     }

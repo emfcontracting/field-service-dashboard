@@ -609,8 +609,7 @@ export default function MobileApp() {
       </div>
     );
   }
-
-  // Work Order Detail Screen
+// Work Order Detail Screen
   const isLeadTech = selectedWO.lead_tech_id === currentUser?.user_id;
   const myAssignment = teamMembers.find(tm => tm.user_id === currentUser?.user_id);
   const totals = calculateTotals();
@@ -655,6 +654,16 @@ export default function MobileApp() {
               <p className="text-gray-400">Requestor</p>
               <p className="font-medium">{selectedWO.requestor || 'N/A'}</p>
             </div>
+            <div>
+              <p className="text-gray-400">Main Lead Tech</p>
+              <p className="font-medium">
+                {(() => {
+                  const leadTech = users.find(u => u.user_id === selectedWO.lead_tech_id);
+                  return leadTech ? `${leadTech.first_name} ${leadTech.last_name}` : 'Unassigned';
+                })()}
+                {isLeadTech && ' (You)'}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -677,7 +686,8 @@ export default function MobileApp() {
         {/* My Hours (Lead Tech or Team Member) */}
         {isLeadTech ? (
           <div className="bg-blue-900 rounded-lg p-4">
-            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Lead Tech)</h2>
+            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Main Lead Tech)</h2>
+            <p className="text-xs text-blue-200 mb-3">Enter your hours here as the main lead technician</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm text-blue-200 mb-1">Regular (RT)</label>
@@ -690,7 +700,7 @@ export default function MobileApp() {
                   className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
                   placeholder="0.0"
                 />
-                <p className="text-xs text-blue-300 mt-1">@ $64/hr</p>
+                <p className="text-xs text-blue-300 mt-1">@ ${users.find(u => u.user_id === selectedWO.lead_tech_id)?.hourly_rate_regular || 64}/hr</p>
               </div>
               <div>
                 <label className="block text-sm text-blue-200 mb-1">Overtime (OT)</label>
@@ -703,7 +713,7 @@ export default function MobileApp() {
                   className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
                   placeholder="0.0"
                 />
-                <p className="text-xs text-blue-300 mt-1">@ $96/hr</p>
+                <p className="text-xs text-blue-300 mt-1">@ ${users.find(u => u.user_id === selectedWO.lead_tech_id)?.hourly_rate_overtime || 96}/hr</p>
               </div>
             </div>
             <div>
@@ -722,7 +732,12 @@ export default function MobileApp() {
           </div>
         ) : myAssignment ? (
           <div className="bg-green-900 rounded-lg p-4">
-            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Team Member)</h2>
+            <h2 className="font-bold mb-3 text-lg">
+              ⏱️ My Hours ({myAssignment.role === 'lead_tech' ? 'Co-Lead Tech' : 'Helper'})
+            </h2>
+            <p className="text-xs text-green-200 mb-3">
+              ⚠️ ONLY enter your hours here. Don't update the Team Members section below - it's just for viewing.
+            </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm text-green-200 mb-1">Regular (RT)</label>
@@ -744,7 +759,7 @@ export default function MobileApp() {
                   className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
                   placeholder="0.0"
                 />
-                <p className="text-xs text-green-300 mt-1">@ $64/hr</p>
+                <p className="text-xs text-green-300 mt-1">@ ${myAssignment.users?.hourly_rate_regular || 64}/hr</p>
               </div>
               <div>
                 <label className="block text-sm text-green-200 mb-1">Overtime (OT)</label>
@@ -766,7 +781,7 @@ export default function MobileApp() {
                   className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
                   placeholder="0.0"
                 />
-                <p className="text-xs text-green-300 mt-1">@ $96/hr</p>
+                <p className="text-xs text-green-300 mt-1">@ ${myAssignment.users?.hourly_rate_overtime || 96}/hr</p>
               </div>
             </div>
             <div>
@@ -807,6 +822,14 @@ export default function MobileApp() {
               </button>
             )}
           </div>
+
+          {myAssignment && (
+            <div className="bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded-lg p-3 mb-3">
+              <p className="text-yellow-200 text-xs">
+                ℹ️ You appear in this list as a team member. Update your hours in the "My Hours" section above, NOT here.
+              </p>
+            </div>
+          )}
           
           {teamMembers && teamMembers.length === 0 && (
             <div className="text-center py-4">
@@ -822,12 +845,12 @@ export default function MobileApp() {
               {teamMembers.map(member => {
                 const isMyself = member.user_id === currentUser?.user_id;
                 return (
-                  <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-green-700' : 'bg-blue-700'}`}>
+                  <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-gray-700 border-2 border-yellow-500' : 'bg-blue-700'}`}>
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <p className="font-bold text-white text-base">
                           {member.users?.first_name} {member.users?.last_name}
-                          {isMyself && ' (You)'}
+                          {isMyself && ' (You - View Only)'}
                         </p>
                         <p className="text-xs text-white opacity-75 capitalize">{member.role?.replace('_', ' ')}</p>
                       </div>
@@ -845,7 +868,8 @@ export default function MobileApp() {
                       )}
                     </div>
 
-                    {(isLeadTech || isMyself) && (
+                    {/* Only allow lead tech to edit other team members, or show read-only for yourself */}
+                    {isLeadTech && !isMyself ? (
                       <div className="space-y-2">
                         <div className="grid grid-cols-3 gap-2">
                           <div>
@@ -919,12 +943,23 @@ export default function MobileApp() {
                           ).toFixed(2)}
                         </p>
                       </div>
-                    )}
-
-                    {!isLeadTech && !isMyself && (
-                      <p className="text-sm text-white opacity-90">
-                        {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
-                      </p>
+                    ) : (
+                      <div className="bg-gray-800 bg-opacity-50 rounded p-2">
+                        <p className="text-sm text-white">
+                          {member.hours_regular || 0} RT hrs • {member.hours_overtime || 0} OT hrs • {member.miles || 0} mi
+                        </p>
+                        <p className="text-xs text-gray-300 mt-1">
+                          Labor: ${(
+                            ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+                            ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
+                          ).toFixed(2)}
+                        </p>
+                        {isMyself && (
+                          <p className="text-xs text-yellow-300 mt-1">
+                            ⬆️ Update your hours in "My Hours" section above
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -1204,3 +1239,4 @@ export default function MobileApp() {
     </div>
   );
 }
+ 

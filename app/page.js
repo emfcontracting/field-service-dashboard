@@ -54,88 +54,6 @@ export default function Dashboard() {
       setLoading(false);
     }
   }
-async function handleImport() {
-  if (!importUrl.trim()) {
-    setImportError('Please enter a Google Sheets URL');
-    return;
-  }
-
-  // Convert Google Sheets URL to CSV export URL
-  let csvUrl = importUrl;
-  if (importUrl.includes('docs.google.com/spreadsheets')) {
-    const match = importUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match) {
-      const sheetId = match[1];
-      csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-    }
-  }
-
-  setImporting(true);
-  setImportError('');
-
-  try {
-    // Fetch CSV data
-    const response = await fetch(csvUrl);
-    if (!response.ok) {
-      throw new Error('Failed to fetch data. Make sure the sheet is publicly accessible.');
-    }
-
-    const csvText = await response.text();
-    const lines = csvText.split('\n');
-    
-    if (lines.length < 2) {
-      throw new Error('Sheet is empty or invalid format');
-    }
-
-    // Parse CSV (skip header row)
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    const dataLines = lines.slice(1).filter(line => line.trim());
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const line of dataLines) {
-      if (!line.trim()) continue;
-
-      const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-      
-      // Map CSV columns to work order fields
-      const woData = {
-        wo_number: values[0] || `WO-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        date_entered: values[1] || new Date().toISOString().split('T')[0],
-        building: values[2] || '',
-        work_order_description: values[3] || '',
-        requestor: values[4] || '',
-        priority: (values[5] || 'medium').toLowerCase(),
-        status: (values[6] || 'pending').toLowerCase(),
-        nte: parseFloat(values[7]) || 0,
-        comments: values[8] || ''
-      };
-
-      try {
-        const { error } = await supabase
-          .from('work_orders')
-          .insert(woData);
-
-        if (error) throw error;
-        successCount++;
-      } catch (error) {
-        console.error('Error importing row:', error);
-        errorCount++;
-      }
-    }
-
-    alert(`✅ Import complete!\n${successCount} work orders imported\n${errorCount} errors`);
-    setShowImportModal(false);
-    setImportUrl('');
-    fetchWorkOrders(); // Refresh the list
-  } catch (error) {
-    console.error('Import error:', error);
-    setImportError(error.message);
-  } finally {
-    setImporting(false);
-  }
-}
 
   async function fetchUsers() {
     try {
@@ -149,6 +67,85 @@ async function handleImport() {
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+    }
+  }
+
+  async function handleImport() {
+    if (!importUrl.trim()) {
+      setImportError('Please enter a Google Sheets URL');
+      return;
+    }
+
+    let csvUrl = importUrl;
+    if (importUrl.includes('docs.google.com/spreadsheets')) {
+      const match = importUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (match) {
+        const sheetId = match[1];
+        csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+      }
+    }
+
+    setImporting(true);
+    setImportError('');
+
+    try {
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch data. Make sure the sheet is publicly accessible.');
+      }
+
+      const csvText = await response.text();
+      const lines = csvText.split('\n');
+      
+      if (lines.length < 2) {
+        throw new Error('Sheet is empty or invalid format');
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const dataLines = lines.slice(1).filter(line => line.trim());
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const line of dataLines) {
+        if (!line.trim()) continue;
+
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        
+        const woData = {
+          wo_number: values[0] || `WO-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          date_entered: values[1] || new Date().toISOString().split('T')[0],
+          building: values[2] || '',
+          work_order_description: values[3] || '',
+          requestor: values[4] || '',
+          priority: (values[5] || 'medium').toLowerCase(),
+          status: (values[6] || 'pending').toLowerCase(),
+          nte: parseFloat(values[7]) || 0,
+          comments: values[8] || ''
+        };
+
+        try {
+          const { error } = await supabase
+            .from('work_orders')
+            .insert(woData);
+
+          if (error) throw error;
+          successCount++;
+        } catch (error) {
+          console.error('Error importing row:', error);
+          errorCount++;
+        }
+      }
+
+      alert(`✅ Import complete!\n${successCount} work orders imported\n${errorCount} errors`);
+      setShowImportModal(false);
+      setImportUrl('');
+      fetchWorkOrders();
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportError(error.message);
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -204,13 +201,10 @@ async function handleImport() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <input
                 type="text"
                 value={searchTerm}
@@ -221,9 +215,7 @@ async function handleImport() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -239,9 +231,7 @@ async function handleImport() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priority
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
@@ -255,27 +245,24 @@ async function handleImport() {
               </select>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-  {/* ... existing search, status, priority filters ... */}
+            <div className="flex items-end gap-2">
+              <button
+                onClick={() => router.push('/work-orders/new')}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
+              >
+                + New Work Order
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium"
+                title="Import from Google Sheets"
+              >
+                📥 Import
+              </button>
+            </div>
+          </div>
+        </div>
 
-  <div className="flex items-end gap-2">
-    <button
-      onClick={() => router.push('/work-orders/new')}
-      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
-    >
-      + New Work Order
-    </button>
-    <button
-      onClick={() => setShowImportModal(true)}
-      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium"
-      title="Import from Google Sheets"
-    >
-      📥 Import
-    </button>
-  </div>
-</div>
-
-        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-sm font-medium text-gray-500">Total Work Orders</div>
@@ -301,33 +288,18 @@ async function handleImport() {
           </div>
         </div>
 
-        {/* Work Orders Table */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    WO #
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Building
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lead Tech
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WO #</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Building</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead Tech</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -341,22 +313,14 @@ async function handleImport() {
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                      No work orders found
-                    </td>
+                    <td colSpan="7" className="px-6 py-4 text-center text-gray-500">No work orders found</td>
                   </tr>
                 ) : (
                   filteredOrders.map((wo) => (
                     <tr key={wo.wo_id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {wo.wo_number}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {wo.building}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
-                        {wo.work_order_description}
-                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{wo.wo_number}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{wo.building}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{wo.work_order_description}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'Unassigned'}
                       </td>
@@ -371,10 +335,7 @@ async function handleImport() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => router.push(`/work-orders/${wo.wo_id}`)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
+                        <button onClick={() => router.push(`/work-orders/${wo.wo_id}`)} className="text-blue-600 hover:text-blue-900">
                           View
                         </button>
                       </td>
@@ -386,117 +347,22 @@ async function handleImport() {
           </div>
         </div>
 
-        {/* Quick Links */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <button
-            onClick={() => router.push('/users')}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left"
-          >
+          <button onClick={() => router.push('/users')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left">
             <h3 className="text-lg font-semibold text-gray-900">👥 Manage Users</h3>
             <p className="mt-2 text-sm text-gray-500">Add, edit, or deactivate technicians</p>
           </button>
-          <button
-            onClick={() => router.push('/mobile')}
-            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left"
-          >
+          <button onClick={() => router.push('/mobile')} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left">
             <h3 className="text-lg font-semibold text-gray-900">📱 Mobile View</h3>
             <p className="mt-2 text-sm text-gray-500">Field technician mobile interface</p>
           </button>
-          <button
-            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left"
-          >
+          <button className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition text-left">
             <h3 className="text-lg font-semibold text-gray-900">📊 Reports</h3>
             <p className="mt-2 text-sm text-gray-500">View analytics and generate reports</p>
           </button>
         </div>
       </main>
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">📥 Import from Google Sheets</h2>
-              <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportUrl('');
-                  setImportError('');
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Google Sheets URL
-                </label>
-                <input
-                  type="text"
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {importError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                  {importError}
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-gray-700 font-medium mb-2">📋 Required Sheet Format:</p>
-                <div className="text-xs text-gray-600 space-y-1">
-                  <p><strong>Column A:</strong> WO Number</p>
-                  <p><strong>Column B:</strong> Date Entered (YYYY-MM-DD)</p>
-                  <p><strong>Column C:</strong> Building</p>
-                  <p><strong>Column D:</strong> Description</p>
-                  <p><strong>Column E:</strong> Requestor</p>
-                  <p><strong>Column F:</strong> Priority (emergency/high/medium/low)</p>
-                  <p><strong>Column G:</strong> Status (pending/assigned/in_progress/completed)</p>
-                  <p><strong>Column H:</strong> NTE Amount (number)</p>
-                  <p><strong>Column I:</strong> Comments (optional)</p>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                  <strong>⚠️ Important:</strong> Make sure your Google Sheet is set to "Anyone with the link can view"
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowImportModal(false);
-                    setImportUrl('');
-                    setImportError('');
-                  }}
-                  className="flex-1 bg-gray-200 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-300 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleImport}
-                  disabled={importing || !importUrl.trim()}
-                  className="flex-1 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-400"
-                >
-                  {importing ? 'Importing...' : '📥 Import Work Orders'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-      </main>
-
-      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
@@ -516,9 +382,7 @@ async function handleImport() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Google Sheets URL
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Google Sheets URL</label>
                 <input
                   type="text"
                   value={importUrl}

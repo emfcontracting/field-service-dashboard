@@ -671,7 +671,7 @@ export default function WorkOrderDetail({ params }) {
 
                 {remaining < 0 && (
                   <div className="mt-4 bg-red-100 border border-red-300 rounded p-3">
-                    <p className="text-red-800 text-xs font-medium">⚠️ Over budget by ${Math.abs(remaining).toFixed(2)}</p>
+                    <p className="text-red-800 text-xs font-medium"⚠️ Over budget by ${Math.abs(remaining).toFixed(2)}</p>
                   </div>
                 )}
               </div>

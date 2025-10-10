@@ -31,9 +31,9 @@ export default function MobileApp() {
 
   // Check for existing session on page load
   useEffect(() => {
-  checkExistingSession();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    checkExistingSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function checkExistingSession() {
     try {
@@ -124,11 +124,21 @@ export default function MobileApp() {
   }, [currentUser, isLoggedIn]);
 
   useEffect(() => {
-  if (selectedWO) {
-    fetchTeamMembers();
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [selectedWO]);
+    if (selectedWO) {
+      fetchTeamMembers();
+      // Load saved check-in state
+      const savedCheckIn = localStorage.getItem(`checkin_${selectedWO.wo_id}`);
+      if (savedCheckIn) {
+        const checkInData = JSON.parse(savedCheckIn);
+        setIsCheckedIn(true);
+        setCheckInTime(checkInData.time);
+      } else {
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWO]);
 
   async function fetchUsers() {
     try {
@@ -339,6 +349,12 @@ export default function MobileApp() {
           setIsCheckedIn(true);
           setCheckInTime(timestamp);
           
+          // Save to localStorage
+          localStorage.setItem(`checkin_${selectedWO.wo_id}`, JSON.stringify({
+            time: timestamp,
+            gps: gpsInfo
+          }));
+          
           const checkInComment = `[${timestamp}] ${currentUser?.first_name} CHECKED IN\nGPS: ${gpsInfo}`;
           const updatedComments = selectedWO.comments 
             ? `${selectedWO.comments}\n\n${checkInComment}`
@@ -362,6 +378,13 @@ export default function MobileApp() {
           const timestamp = new Date().toLocaleString();
           setIsCheckedIn(true);
           setCheckInTime(timestamp);
+          
+          // Save to localStorage even without GPS
+          localStorage.setItem(`checkin_${selectedWO.wo_id}`, JSON.stringify({
+            time: timestamp,
+            gps: null
+          }));
+          
           alert('⚠️ Could not get GPS location, but checked in anyway');
         }
       );
@@ -369,6 +392,13 @@ export default function MobileApp() {
       const timestamp = new Date().toLocaleString();
       setIsCheckedIn(true);
       setCheckInTime(timestamp);
+      
+      // Save to localStorage
+      localStorage.setItem(`checkin_${selectedWO.wo_id}`, JSON.stringify({
+        time: timestamp,
+        gps: null
+      }));
+      
       alert('⚠️ GPS not available on this device');
     }
   }
@@ -396,6 +426,10 @@ export default function MobileApp() {
             setSelectedWO({ ...selectedWO, comments: updatedComments });
             setIsCheckedIn(false);
             setCheckInTime(null);
+            
+            // Clear localStorage
+            localStorage.removeItem(`checkin_${selectedWO.wo_id}`);
+            
             alert(`✅ Checked out at ${timestamp}`);
           } catch (error) {
             console.error('Error checking out:', error);
@@ -405,12 +439,20 @@ export default function MobileApp() {
         (error) => {
           setIsCheckedIn(false);
           setCheckInTime(null);
+          
+          // Clear localStorage
+          localStorage.removeItem(`checkin_${selectedWO.wo_id}`);
+          
           alert('⚠️ Could not get GPS location, but checked out anyway');
         }
       );
     } else {
       setIsCheckedIn(false);
       setCheckInTime(null);
+      
+      // Clear localStorage
+      localStorage.removeItem(`checkin_${selectedWO.wo_id}`);
+      
       alert('⚠️ GPS not available on this device');
     }
   }
@@ -611,7 +653,8 @@ export default function MobileApp() {
       </div>
     );
   }
-// Work Order Detail Screen
+
+  // Work Order Detail Screen
   const isLeadTech = selectedWO.lead_tech_id === currentUser?.user_id;
   const myAssignment = teamMembers.find(tm => tm.user_id === currentUser?.user_id);
   const totals = calculateTotals();
@@ -624,6 +667,8 @@ export default function MobileApp() {
             onClick={() => {
               setSelectedWO(null);
               setTeamMembers([]);
+              setIsCheckedIn(false);
+              setCheckInTime(null);
             }}
             className="text-white text-lg"
           >
@@ -737,9 +782,9 @@ export default function MobileApp() {
             <h2 className="font-bold mb-3 text-lg">
               ⏱️ My Hours ({myAssignment.role === 'lead_tech' ? 'Co-Lead Tech' : 'Helper'})
             </h2>
-           <p className="text-xs text-green-200 mb-3">
-  ⚠️ ONLY enter your hours here. Don&apos;t update the Team Members section below - it&apos;s just for viewing.
-</p>
+            <p className="text-xs text-green-200 mb-3">
+              ⚠️ ONLY enter your hours here. Don&apos;t update the Team Members section below - it&apos;s just for viewing.
+            </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm text-green-200 mb-1">Regular (RT)</label>
@@ -826,12 +871,12 @@ export default function MobileApp() {
           </div>
 
           {myAssignment && (
-  <div className="bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded-lg p-3 mb-3">
-    <p className="text-yellow-200 text-xs">
-      ℹ️ You appear in this list as a team member. Update your hours in the &quot;My Hours&quot; section above, NOT here.
-    </p>
-  </div>
-)}
+            <div className="bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded-lg p-3 mb-3">
+              <p className="text-yellow-200 text-xs">
+                ℹ️ You appear in this list as a team member. Update your hours in the &quot;My Hours&quot; section above, NOT here.
+              </p>
+            </div>
+          )}
           
           {teamMembers && teamMembers.length === 0 && (
             <div className="text-center py-4">
@@ -957,10 +1002,9 @@ export default function MobileApp() {
                           ).toFixed(2)}
                         </p>
                         {isMyself && (
-                          <p className="font-bold text-white text-base">
-  {member.users?.first_name} {member.users?.last_name}
-  {isMyself && ' (You - View Only)'}
-</p>
+                          <p className="text-xs text-yellow-300 mt-1">
+                            ⬆️ Update your hours in &quot;My Hours&quot; section above
+                          </p>
                         )}
                       </div>
                     )}
@@ -1242,4 +1286,3 @@ export default function MobileApp() {
     </div>
   );
 }
- 

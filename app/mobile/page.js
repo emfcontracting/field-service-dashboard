@@ -389,27 +389,28 @@ async function handleCheckOut() {
   }
 
   // Work Order List Screen
-  if (!selectedWO) {
-    const currentUser = users.find(u => u.user_id === selectedTech);
-
-    return (
-      <div className="min-h-screen bg-gray-900 text-white">
-        <header className="bg-blue-600 p-4 sticky top-0 z-10 shadow-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-bold">My Work Orders</h1>
-              <p className="text-sm text-blue-200">{currentUser?.first_name} {currentUser?.last_name}</p>
-            </div>
-            <button
-              onClick={() => {
-                setSelectedTech('');
-                setWorkOrders([]);
-              }}
-              className="bg-blue-700 px-4 py-2 rounded-lg text-sm"
-            >
-              ← Switch User
-            </button>
+  // Work Order List Screen
+if (!selectedWO) {
+  return (
+    <div className="min-h-screen bg-gray-900 text-white">
+      <header className="bg-blue-600 p-4 sticky top-0 z-10 shadow-lg">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold">My Work Orders</h1>
+            {currentUser && (
+              <p className="text-sm text-blue-200">
+                {currentUser.first_name} {currentUser.last_name}
+              </p>
+            )}
           </div>
+          <button
+            onClick={handleLogout}
+            className="bg-red-600 px-3 py-2 rounded-lg text-sm font-medium"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
         </header>
 
         <div className="p-4 space-y-4">

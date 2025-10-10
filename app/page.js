@@ -95,19 +95,22 @@ export default function MobileApp() {
   }
 
   async function fetchWorkOrders() {
-    try {
-      const { data: leadOrders, error: leadError } = await supabase
-        .from('work_orders')
-        .select('*')
-        .eq('lead_tech_id', selectedTech)
-        .in('status', ['assigned', 'in_progress', 'needs_return'])
-        .order('priority', { ascending: false })
-        .order('date_entered', { ascending: true });
+  try {
+    // Only get work orders where user is lead tech OR on the team
+    const { data: leadOrders, error: leadError } = await supabase
+      .from('work_orders')
+      .select('*')
+      .eq('lead_tech_id', selectedTech)  // selectedTech is currentUser.user_id
+      .in('status', ['assigned', 'in_progress', 'needs_return'])
+      .order('priority', { ascending: false })
+      .order('date_entered', { ascending: true });
 
-      const { data: teamOrders, error: teamError } = await supabase
-        .from('work_order_assignments')
-        .select('wo_id')
-        .eq('user_id', selectedTech);
+    const { data: teamOrders, error: teamError } = await supabase
+      .from('work_order_assignments')
+      .select('wo_id')
+      .eq('user_id', selectedTech);  // selectedTech is currentUser.user_id
+
+    // ... rest of code
 
       if (leadError) throw leadError;
 

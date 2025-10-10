@@ -937,38 +937,62 @@ export default function MobileApp() {
           </div>
         </div>
 
-        {/* Costs (Lead Tech Only) */}
-        {isLeadTech && (
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h2 className="font-bold mb-3 text-lg">💰 Costs</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Materials ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.material_cost || ''}
-                  onChange={(e) => setSelectedWO({...selectedWO, material_cost: parseFloat(e.target.value) || 0})}
-                  onBlur={() => updateWorkOrder({ material_cost: selectedWO.material_cost })}
-                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Equipment ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.emf_equipment_cost || ''}
-                  onChange={(e) => setSelectedWO({...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0})}
-                  onBlur={() => updateWorkOrder({ emf_equipment_cost: selectedWO.emf_equipment_cost })}
-                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-          </div>
-        )}
+       {/* Costs (Lead Tech Only) */}
+{isLeadTech && (
+  <div className="bg-gray-800 rounded-lg p-4">
+    <h2 className="font-bold mb-3 text-lg">💰 Costs</h2>
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Materials ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={selectedWO.material_cost || ''}
+          onChange={(e) => setSelectedWO({...selectedWO, material_cost: parseFloat(e.target.value) || 0})}
+          onBlur={() => updateWorkOrder({ material_cost: selectedWO.material_cost })}
+          className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+          placeholder="0.00"
+        />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Equipment ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={selectedWO.emf_equipment_cost || ''}
+          onChange={(e) => setSelectedWO({...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0})}
+          onBlur={() => updateWorkOrder({ emf_equipment_cost: selectedWO.emf_equipment_cost })}
+          className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+          placeholder="0.00"
+        />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Trailer ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={selectedWO.trailer_cost || ''}
+          onChange={(e) => setSelectedWO({...selectedWO, trailer_cost: parseFloat(e.target.value) || 0})}
+          onBlur={() => updateWorkOrder({ trailer_cost: selectedWO.trailer_cost })}
+          className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+          placeholder="0.00"
+        />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Rental ($)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={selectedWO.rental_cost || ''}
+          onChange={(e) => setSelectedWO({...selectedWO, rental_cost: parseFloat(e.target.value) || 0})}
+          onBlur={() => updateWorkOrder({ rental_cost: selectedWO.rental_cost })}
+          className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+          placeholder="0.00"
+        />
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Summary */}
         <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">

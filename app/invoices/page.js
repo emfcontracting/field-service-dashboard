@@ -217,12 +217,12 @@ export default function InvoicesPage() {
 <div className="flex justify-between items-center mb-6">
   <h1 className="text-3xl font-bold">💰 Invoice Management</h1>
   <div className="flex gap-3">
-    
-      href="/"
+    <button
+      onClick={() => window.location.href = '/'}
       className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition"
     >
-      &larr; Dashboard
-    </a>
+      ← Dashboard
+    </button>
   </div>
 </div>
 

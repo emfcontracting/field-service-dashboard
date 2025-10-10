@@ -406,24 +406,24 @@ export default function Dashboard() {
 <div className="flex justify-between items-center mb-6">
   <h1 className="text-3xl font-bold">🔧 Field Service Dashboard</h1>
   <div className="flex gap-3">
-    
-      href="/invoices"
+    <button
+      onClick={() => window.location.href = '/invoices'}
       className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition"
     >
       💰 Invoicing
-    </a>
-    
-      href="/users"
+    </button>
+    <button
+      onClick={() => window.location.href = '/users'}
       className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition"
     >
       👥 Users
-    </a>
-    
-      href="/mobile"
+    </button>
+    <button
+      onClick={() => window.location.href = '/mobile'}
       className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"
     >
       📱 Mobile App
-    </a>
+    </button>
   </div>
 </div>
 

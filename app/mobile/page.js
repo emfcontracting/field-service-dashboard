@@ -163,31 +163,32 @@ export default function MobileApp() {
     }
   };
 
-  // Update Work Order
-  const updateWorkOrder = async (updates) => {
-    if (!selectedWO) return;
+ // Update Work Order
+const updateWorkOrder = async (updates) => {
+  if (!selectedWO) return;
 
-    // Check if locked
-    if (selectedWO.is_locked && currentUser?.role !== 'admin') {
-      alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
-      return;
-    }
+  // Check if locked
+  if (selectedWO.is_locked && currentUser?.role !== 'admin') {
+    alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
+    return;
+  }
 
-    const { error } = await supabase
-      .from('work_orders')
-      .update(updates)
-      .eq('wo_id', selectedWO.wo_id);
+  const { error } = await supabase
+    .from('work_orders')
+    .update(updates)
+    .eq('wo_id', selectedWO.wo_id);
 
-    if (error) {
-      console.error('Error updating work order:', error);
-      alert('Failed to update');
-    } else {
-      // Update local state
-      setSelectedWO({ ...selectedWO, ...updates });
-      // Refresh work orders list
-      fetchWorkOrders(currentUser.user_id);
-    }
-  };
+  if (error) {
+    console.error('Error updating work order:', error);
+    // Only show alert on error, not on success
+    alert('Failed to update');
+  } else {
+    // Update local state silently
+    setSelectedWO({ ...selectedWO, ...updates });
+    // Refresh work orders list silently
+    fetchWorkOrders(currentUser.user_id);
+  }
+};
 
   // Check In
   const handleCheckIn = async () => {
@@ -851,26 +852,32 @@ export default function MobileApp() {
           </div>
         )}
 
-        {/* Status Update */}
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h2 className="font-bold mb-3 text-lg">🔄 Status</h2>
-          <select
-            value={selectedWO.status}
-            onChange={(e) => {
-              setSelectedWO({ ...selectedWO, status: e.target.value });
-              updateWorkOrder({ status: e.target.value });
-            }}
-            disabled={isLocked}
-            className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
-              isLocked ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            <option value="assigned">Assigned</option>
-            <option value="in_progress">In Progress</option>
-            <option value="needs_return">Needs Return Visit</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
+       {/* Status Update */}
+<div className="bg-gray-800 rounded-lg p-4">
+  <h2 className="font-bold mb-3 text-lg">🔄 Status</h2>
+  <select
+    value={selectedWO.status}
+    onChange={(e) => {
+      const newStatus = e.target.value;
+      setSelectedWO({ ...selectedWO, status: newStatus });
+      updateWorkOrder({ status: newStatus });
+      
+      // Only show alert when completing
+      if (newStatus === 'completed') {
+        alert('✅ Work order marked as Completed!');
+      }
+    }}
+    disabled={isLocked}
+    className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
+      isLocked ? 'opacity-50 cursor-not-allowed' : ''
+    }`}
+  >
+    <option value="assigned">Assigned</option>
+    <option value="in_progress">In Progress</option>
+    <option value="needs_return">Needs Return Visit</option>
+    <option value="completed">Completed</option>
+  </select>
+</div>
 
         {/* Comments */}
         <div className="bg-gray-800 rounded-lg p-4">

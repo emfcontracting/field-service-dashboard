@@ -15,6 +15,7 @@ export default function MobileApp() {
   const [loginPin, setLoginPin] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
@@ -27,6 +28,39 @@ export default function MobileApp() {
   const [newComment, setNewComment] = useState('');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
+
+  // Check for existing session on page load
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  async function checkExistingSession() {
+    try {
+      const savedUserId = localStorage.getItem('mobile_user_id');
+      if (savedUserId) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('user_id', savedUserId)
+          .eq('is_active', true)
+          .single();
+
+        if (data && !error) {
+          setCurrentUser(data);
+          setIsLoggedIn(true);
+          fetchUsers();
+          fetchWorkOrders(data.user_id);
+        } else {
+          localStorage.removeItem('mobile_user_id');
+        }
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+      localStorage.removeItem('mobile_user_id');
+    } finally {
+      setCheckingSession(false);
+    }
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -46,10 +80,12 @@ export default function MobileApp() {
         throw new Error('Invalid email or PIN');
       }
 
-      // Check if user is a field tech
       if (data.role !== 'lead_tech' && data.role !== 'helper') {
         throw new Error('Access denied. Mobile app is for field technicians only.');
       }
+
+      // Save session
+      localStorage.setItem('mobile_user_id', data.user_id);
 
       setCurrentUser(data);
       setIsLoggedIn(true);
@@ -64,6 +100,7 @@ export default function MobileApp() {
   }
 
   function handleLogout() {
+    localStorage.removeItem('mobile_user_id');
     setIsLoggedIn(false);
     setCurrentUser(null);
     setLoginEmail('');
@@ -426,6 +463,18 @@ export default function MobileApp() {
     };
   }
 
+  // Checking session
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="mt-4">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Login Screen
   if (!isLoggedIn) {
     return (
@@ -561,15 +610,13 @@ export default function MobileApp() {
     );
   }
 
-  // Work Order Detail Screen - keeping all the existing detail screen code
+  // Work Order Detail Screen
   const isLeadTech = selectedWO.lead_tech_id === currentUser?.user_id;
   const myAssignment = teamMembers.find(tm => tm.user_id === currentUser?.user_id);
   const totals = calculateTotals();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-20">
-      {/* All your existing detail screen code stays exactly the same */}
-      {/* I'll include just the header for brevity, but keep all the rest */}
       <header className="bg-blue-600 p-4 sticky top-0 z-10 shadow-lg">
         <div className="flex justify-between items-center">
           <button
@@ -591,16 +638,569 @@ export default function MobileApp() {
         </div>
       </header>
 
-      {/* Copy all the detail screen content from the previous complete mobile code here */}
-      {/* Due to character limits, I'll note that you should keep all sections: */}
-      {/* - Job Details */}
-      {/* - Status */}
-      {/* - My Hours */}
-      {/* - Team Members */}
-      {/* - Check In/Out */}
-      {/* - Comments */}
-      {/* - Costs */}
-      {/* - Summary */}
+      <div className="p-4 space-y-4">
+        {/* Work Order Info */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📋 Job Details</h2>
+          <div className="space-y-2 text-sm">
+            <div>
+              <p className="text-gray-400">Building</p>
+              <p className="font-medium">{selectedWO.building}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Description</p>
+              <p className="font-medium">{selectedWO.work_order_description}</p>
+            </div>
+            <div>
+              <p className="text-gray-400">Requestor</p>
+              <p className="font-medium">{selectedWO.requestor || 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Status Update */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📊 Status</h2>
+          <select
+            value={selectedWO.status}
+            onChange={(e) => updateWorkOrder({ status: e.target.value })}
+            disabled={saving}
+            className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-lg font-medium"
+          >
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="needs_return">Needs Return</option>
+            <option value="completed">Completed ✅</option>
+          </select>
+        </div>
+
+        {/* My Hours (Lead Tech or Team Member) */}
+        {isLeadTech ? (
+          <div className="bg-blue-900 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Lead Tech)</h2>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm text-blue-200 mb-1">Regular (RT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={selectedWO.hours_regular || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, hours_regular: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ hours_regular: selectedWO.hours_regular })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-blue-300 mt-1">@ $64/hr</p>
+              </div>
+              <div>
+                <label className="block text-sm text-blue-200 mb-1">Overtime (OT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={selectedWO.hours_overtime || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, hours_overtime: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ hours_overtime: selectedWO.hours_overtime })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-blue-300 mt-1">@ $96/hr</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-blue-200 mb-1">Miles</label>
+              <input
+                type="number"
+                step="0.1"
+                value={selectedWO.miles || ''}
+                onChange={(e) => setSelectedWO({...selectedWO, miles: parseFloat(e.target.value) || 0})}
+                onBlur={() => updateWorkOrder({ miles: selectedWO.miles })}
+                className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                placeholder="0.0"
+              />
+              <p className="text-xs text-blue-300 mt-1">@ $1.00/mile</p>
+            </div>
+          </div>
+        ) : myAssignment ? (
+          <div className="bg-green-900 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">⏱️ My Hours (Team Member)</h2>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm text-green-200 mb-1">Regular (RT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={myAssignment.hours_regular || ''}
+                  onChange={(e) => {
+                    const updated = teamMembers.map(tm => 
+                      tm.assignment_id === myAssignment.assignment_id 
+                        ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                        : tm
+                    );
+                    setTeamMembers(updated);
+                  }}
+                  onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                    hours_regular: myAssignment.hours_regular 
+                  })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-green-300 mt-1">@ $64/hr</p>
+              </div>
+              <div>
+                <label className="block text-sm text-green-200 mb-1">Overtime (OT)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={myAssignment.hours_overtime || ''}
+                  onChange={(e) => {
+                    const updated = teamMembers.map(tm => 
+                      tm.assignment_id === myAssignment.assignment_id 
+                        ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                        : tm
+                    );
+                    setTeamMembers(updated);
+                  }}
+                  onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                    hours_overtime: myAssignment.hours_overtime 
+                  })}
+                  className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                  placeholder="0.0"
+                />
+                <p className="text-xs text-green-300 mt-1">@ $96/hr</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-green-200 mb-1">Miles</label>
+              <input
+                type="number"
+                step="0.1"
+                value={myAssignment.miles || ''}
+                onChange={(e) => {
+                  const updated = teamMembers.map(tm => 
+                    tm.assignment_id === myAssignment.assignment_id 
+                      ? {...tm, miles: parseFloat(e.target.value) || 0}
+                      : tm
+                  );
+                  setTeamMembers(updated);
+                }}
+                onBlur={() => updateTeamMember(myAssignment.assignment_id, { 
+                  miles: myAssignment.miles 
+                })}
+                className="w-full bg-gray-800 text-white px-4 py-3 rounded-lg text-lg"
+                placeholder="0.0"
+              />
+              <p className="text-xs text-green-300 mt-1">@ $1.00/mile</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Team Members */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-bold text-lg text-white">👥 Team Members</h2>
+            {isLeadTech && (
+              <button
+                onClick={() => setShowAddTeamModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                + Add Member
+              </button>
+            )}
+          </div>
+          
+          {teamMembers && teamMembers.length === 0 && (
+            <div className="text-center py-4">
+              <p className="text-gray-300">No team members yet</p>
+              {isLeadTech && (
+                <p className="text-xs text-gray-400 mt-2">Tap + Add Member to assign helpers</p>
+              )}
+            </div>
+          )}
+          
+          {teamMembers && teamMembers.length > 0 && (
+            <div className="space-y-3">
+              {teamMembers.map(member => {
+                const isMyself = member.user_id === currentUser?.user_id;
+                return (
+                  <div key={member.assignment_id} className={`rounded-lg p-3 ${isMyself ? 'bg-green-700' : 'bg-blue-700'}`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-bold text-white text-base">
+                          {member.users?.first_name} {member.users?.last_name}
+                          {isMyself && ' (You)'}
+                        </p>
+                        <p className="text-xs text-white opacity-75 capitalize">{member.role?.replace('_', ' ')}</p>
+                      </div>
+                      {isLeadTech && !isMyself && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Remove ${member.users?.first_name} from this job?`)) {
+                              removeTeamMemberMobile(member.assignment_id);
+                            }
+                          }}
+                          className="bg-red-600 text-white px-2 py-1 rounded text-xs"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {(isLeadTech || isMyself) && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">RT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_regular || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, hours_regular: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                hours_regular: member.hours_regular 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">OT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_overtime || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, hours_overtime: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                hours_overtime: member.hours_overtime 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white opacity-90 mb-1">Miles</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={member.miles || ''}
+                              onChange={(e) => {
+                                const updated = teamMembers.map(tm => 
+                                  tm.assignment_id === member.assignment_id 
+                                    ? {...tm, miles: parseFloat(e.target.value) || 0}
+                                    : tm
+                                );
+                                setTeamMembers(updated);
+                              }}
+                              onBlur={() => updateTeamMember(member.assignment_id, { 
+                                miles: member.miles 
+                              })}
+                              className="w-full bg-gray-900 text-white px-2 py-2 rounded text-sm"
+                              placeholder="0.0"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-white opacity-75">
+                          Labor: ${(
+                            ((member.hours_regular || 0) * (member.users?.hourly_rate_regular || 64)) +
+                            ((member.hours_overtime || 0) * (member.users?.hourly_rate_overtime || 96))
+                          ).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
+
+                    {!isLeadTech && !isMyself && (
+                      <p className="text-sm text-white opacity-90">
+                        {member.hours_regular || 0} RT + {member.hours_overtime || 0} OT • {member.miles || 0} mi
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Add Team Member Modal */}
+        {showAddTeamModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-white mb-4">Add Team Member</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Select Person</label>
+                  <select
+                    value={newTeamMember.user_id}
+                    onChange={(e) => setNewTeamMember({...newTeamMember, user_id: e.target.value})}
+                    className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+                  >
+                    <option value="">Choose a person...</option>
+                    {users
+                      .filter(u => 
+                        u.user_id !== currentUser?.user_id && 
+                        !teamMembers.find(tm => tm.user_id === u.user_id)
+                      )
+                      .map(user => (
+                        <option key={user.user_id} value={user.user_id}>
+                          {user.first_name} {user.last_name} ({user.role?.replace('_', ' ')})
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Role on This Job</label>
+                  <select
+                    value={newTeamMember.role}
+                    onChange={(e) => setNewTeamMember({...newTeamMember, role: e.target.value})}
+                    className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+                  >
+                    <option value="helper">Helper</option>
+                    <option value="lead_tech">Co-Lead Tech</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowAddTeamModal(false);
+                      setNewTeamMember({ user_id: '', role: 'helper' });
+                    }}
+                    className="flex-1 bg-gray-600 text-white px-4 py-3 rounded-lg text-base font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!newTeamMember.user_id) {
+                        alert('Please select a person');
+                        return;
+                      }
+                      addTeamMemberMobile(newTeamMember.user_id, newTeamMember.role);
+                      setShowAddTeamModal(false);
+                      setNewTeamMember({ user_id: '', role: 'helper' });
+                    }}
+                    disabled={saving || !newTeamMember.user_id}
+                    className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg text-base font-medium disabled:bg-gray-500"
+                  >
+                    {saving ? 'Adding...' : 'Add Member'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Check In/Out */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📍 Check In/Out</h2>
+          {!isCheckedIn ? (
+            <button
+              onClick={handleCheckIn}
+              className="w-full bg-green-600 text-white px-4 py-4 rounded-lg text-lg font-bold hover:bg-green-700"
+            >
+              ✅ CHECK IN
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-green-900 rounded p-3">
+                <p className="text-green-200 text-sm">Checked in at:</p>
+                <p className="text-white font-bold">{checkInTime}</p>
+              </div>
+              <button
+                onClick={handleCheckOut}
+                className="w-full bg-red-600 text-white px-4 py-4 rounded-lg text-lg font-bold hover:bg-red-700"
+              >
+                🛑 CHECK OUT
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Comments */}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">💬 Comments & Notes</h2>
+          
+          {selectedWO.comments && (
+            <div className="mb-4 bg-gray-700 rounded-lg p-3 max-h-60 overflow-y-auto">
+              <p className="text-sm text-gray-200 whitespace-pre-wrap">{selectedWO.comments}</p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment or note..."
+              rows="3"
+              className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-base border-2 border-gray-600 focus:border-blue-500"
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={!newComment.trim() || saving}
+              className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-500"
+            >
+              {saving ? 'Posting...' : '📝 Add Comment'}
+            </button>
+          </div>
+        </div>
+
+        {/* Costs (Lead Tech Only) */}
+        {isLeadTech && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">💰 Costs</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Materials ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={selectedWO.material_cost || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, material_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ material_cost: selectedWO.material_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Equipment ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={selectedWO.emf_equipment_cost || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ emf_equipment_cost: selectedWO.emf_equipment_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Trailer ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={selectedWO.trailer_cost || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, trailer_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ trailer_cost: selectedWO.trailer_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Rental ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={selectedWO.rental_cost || ''}
+                  onChange={(e) => setSelectedWO({...selectedWO, rental_cost: parseFloat(e.target.value) || 0})}
+                  onBlur={() => updateWorkOrder({ rental_cost: selectedWO.rental_cost })}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="bg-gradient-to-br from-green-900 to-green-800 rounded-lg p-4">
+          <h2 className="font-bold mb-3 text-lg">📊 Cost Summary</h2>
+          <div className="space-y-2 text-sm">
+            <div className="bg-green-800 bg-opacity-50 rounded p-2 mb-2">
+              <p className="text-xs text-green-200 mb-1">LABOR</p>
+              <div className="flex justify-between">
+                <span className="text-green-100">Team Labor:</span>
+                <span className="font-bold text-white">${totals.totalLabor.toFixed(2)}</span>
+              </div>
+              <p className="text-xs text-green-200 mt-1">
+                {totals.totalHours.toFixed(1)} hrs total ({((selectedWO.hours_regular || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)).toFixed(1)} RT + {((selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)).toFixed(1)} OT)
+              </p>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-green-200">Mileage ({totals.totalMiles.toFixed(1)} mi × $1.00):</span>
+              <span className="font-medium text-white">${(totals.totalMiles * 1.00).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Materials:</span>
+              <span className="font-medium text-white">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Equipment:</span>
+              <span className="font-medium text-white">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Trailer:</span>
+              <span className="font-medium text-white">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-green-200">Rental:</span>
+              <span className="font-medium text-white">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+            </div>
+
+            <div className="border-t-2 border-green-700 pt-2 mt-2">
+              <div className="flex justify-between font-bold text-base">
+                <span className="text-white">GRAND TOTAL:</span>
+                <span className="text-white text-lg">
+                  ${(
+                    totals.totalLabor +
+                    (totals.totalMiles * 1.00) +
+                    (selectedWO.material_cost || 0) +
+                    (selectedWO.emf_equipment_cost || 0) +
+                    (selectedWO.trailer_cost || 0) +
+                    (selectedWO.rental_cost || 0)
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="border-t border-green-700 pt-2 mt-2">
+              <div className="flex justify-between">
+                <span className="text-green-200">NTE Budget:</span>
+                <span className="font-medium text-white">${(selectedWO.nte || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-green-200">Remaining:</span>
+                <span className={`font-bold text-base ${
+                  (selectedWO.nte || 0) - (
+                    totals.totalLabor +
+                    (totals.totalMiles * 1.00) +
+                    (selectedWO.material_cost || 0) +
+                    (selectedWO.emf_equipment_cost || 0) +
+                    (selectedWO.trailer_cost || 0) +
+                    (selectedWO.rental_cost || 0)
+                  ) >= 0 ? 'text-green-300' : 'text-red-300'
+                }`}>
+                  ${(
+                    (selectedWO.nte || 0) - (
+                      totals.totalLabor +
+                      (totals.totalMiles * 1.00) +
+                      (selectedWO.material_cost || 0) +
+                      (selectedWO.emf_equipment_cost || 0) +
+                      (selectedWO.trailer_cost || 0) +
+                      (selectedWO.rental_cost || 0)
+                    )
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

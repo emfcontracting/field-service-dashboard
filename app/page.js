@@ -222,17 +222,17 @@ export default function Dashboard() {
 
   // Delete Work Order
   const deleteWorkOrder = async (woId) => {
-    const password = prompt('Enter admin password to delete:');
-    if (password !== adminPassword) {
-      alert('❌ Incorrect password');
-      return;
-    }
+  const password = prompt('Enter admin password to delete:');
+  if (password !== adminPassword) {
+    alert('❌ Incorrect password');
+    return;
+  }
 
-    const confirmText = prompt('Type DELETE to confirm deletion:');
-if (confirmText !== 'DELETE') {
-      alert('Deletion cancelled');
-      return;
-    }
+  const confirmText = prompt('Type DELETE to confirm deletion:');
+  if (confirmText !== 'DELETE') {
+    alert('Deletion cancelled');
+    return;
+  }
 
     const { error } = await supabase
       .from('work_orders')

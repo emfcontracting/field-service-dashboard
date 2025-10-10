@@ -59,21 +59,21 @@ export default function Dashboard() {
 
   // Fetch Data on Mount
   useEffect(() => {
-  fetchWorkOrders();
-  fetchUsers();
-}, []); 
+    fetchWorkOrders();
+    fetchUsers();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply Filters
   useEffect(() => {
-  applyFilters();
-}, [workOrders, statusFilter, priorityFilter, searchTerm]);
+    applyFilters();
+  }, [workOrders, statusFilter, priorityFilter, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check if selected WO can generate invoice
   useEffect(() => {
-  if (selectedWO) {
-    checkCanGenerateInvoice(selectedWO.wo_id);
-  }
-}, [selectedWO]);
+    if (selectedWO) {
+      checkCanGenerateInvoice(selectedWO.wo_id);
+    }
+  }, [selectedWO]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch Work Orders
   const fetchWorkOrders = async () => {
@@ -222,17 +222,17 @@ export default function Dashboard() {
 
   // Delete Work Order
   const deleteWorkOrder = async (woId) => {
-  const password = prompt('Enter admin password to delete:');
-  if (password !== adminPassword) {
-    alert('❌ Incorrect password');
-    return;
-  }
+    const password = prompt('Enter admin password to delete:');
+    if (password !== adminPassword) {
+      alert('❌ Incorrect password');
+      return;
+    }
 
-  const confirmText = prompt('Type DELETE to confirm deletion:');
-  if (confirmText !== 'DELETE') {
-    alert('Deletion cancelled');
-    return;
-  }
+    const confirmText = prompt('Type DELETE to confirm deletion:');
+    if (confirmText !== 'DELETE') {
+      alert('Deletion cancelled');
+      return;
+    }
 
     const { error } = await supabase
       .from('work_orders')
@@ -403,29 +403,29 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-<div className="flex justify-between items-center mb-6">
-  <h1 className="text-3xl font-bold">🔧 Field Service Dashboard</h1>
-  <div className="flex gap-3">
-    <button
-      onClick={() => window.location.href = '/invoices'}
-      className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition"
-    >
-      💰 Invoicing
-    </button>
-    <button
-      onClick={() => window.location.href = '/users'}
-      className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition"
-    >
-      👥 Users
-    </button>
-    <button
-      onClick={() => window.location.href = '/mobile'}
-      className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"
-    >
-      📱 Mobile App
-    </button>
-  </div>
-</div>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">🔧 Field Service Dashboard</h1>
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.location.href = '/invoices'}
+              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              💰 Invoicing
+            </button>
+            <button
+              onClick={() => window.location.href = '/users'}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              👥 Users
+            </button>
+            <button
+              onClick={() => window.location.href = '/mobile'}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              📱 Mobile App
+            </button>
+          </div>
+        </div>
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
@@ -543,7 +543,7 @@ export default function Dashboard() {
                 <tbody>
                   {filteredWorkOrders.map(wo => {
                     const totalCost = calculateTotalCost(wo);
-                    const overBudget = totalCost > wo.nte && wo.nte > 0;
+                    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
 
                     return (
                       <tr
@@ -583,11 +583,11 @@ export default function Dashboard() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold">
-                          ${wo.nte.toFixed(2)}
+                          ${(wo.nte || 0).toFixed(2)}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={overBudget ? 'text-red-400 font-bold' : ''}>
-                            ${totalCost.toFixed(2)}
+                            ${(totalCost || 0).toFixed(2)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -779,7 +779,7 @@ export default function Dashboard() {
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Estimated Total Cost</label>
                     <div className="bg-gray-600 px-4 py-2 rounded-lg font-bold text-lg">
-                      ${calculateTotalCost(selectedWO).toFixed(2)}
+                      ${(calculateTotalCost(selectedWO) || 0).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -821,9 +821,9 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {calculateTotalCost(selectedWO) > selectedWO.nte && selectedWO.nte > 0 && (
+                {calculateTotalCost(selectedWO) > (selectedWO.nte || 0) && (selectedWO.nte || 0) > 0 && (
                   <div className="bg-red-900 text-red-200 p-3 rounded-lg mt-3 text-sm">
-                    ⚠️ Over budget by ${(calculateTotalCost(selectedWO) - selectedWO.nte).toFixed(2)}
+                    ⚠️ Over budget by ${(calculateTotalCost(selectedWO) - (selectedWO.nte || 0)).toFixed(2)}
                   </div>
                 )}
               </div>
@@ -859,9 +859,12 @@ export default function Dashboard() {
                   <div className="flex-1 bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
                     <div className="font-bold">✅ Invoice Generated</div>
                     <div className="text-sm mt-1">
-                      <a href="/invoices" className="underline hover:text-blue-100">
+                      <button 
+                        onClick={() => window.location.href = '/invoices'}
+                        className="underline hover:text-blue-100"
+                      >
                         View in Invoicing →
-                      </a>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1058,7 +1061,7 @@ export default function Dashboard() {
 
               <div>
                 <label className="block text-sm text-gray-400 mb-1">
-                  Google Sheets URL (must be set to "Anyone with link can view")
+                  Google Sheets URL (must be set to &quot;Anyone with link can view&quot;)
                 </label>
                 <input
                   type="text"

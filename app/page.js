@@ -1005,6 +1005,119 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+{/* New Work Order Modal */}
+      {showNewWOModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">+ New Work Order</h2>
+              <button
+                onClick={() => setShowNewWOModal(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Work Order # *</label>
+                  <input
+                    type="text"
+                    value={newWO.wo_number}
+                    onChange={(e) => setNewWO({ ...newWO, wo_number: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                    placeholder="WO-2025-001"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Building *</label>
+                  <input
+                    type="text"
+                    value={newWO.building}
+                    onChange={(e) => setNewWO({ ...newWO, building: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                    placeholder="Building A"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description *</label>
+                <textarea
+                  value={newWO.work_order_description}
+                  onChange={(e) => setNewWO({ ...newWO, work_order_description: e.target.value })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  rows="3"
+                  placeholder="Describe the work to be done..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+                <input
+                  type="text"
+                  value={newWO.requestor}
+                  onChange={(e) => setNewWO({ ...newWO, requestor: e.target.value })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  placeholder="John Manager"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Priority</label>
+                  <select
+                    value={newWO.priority}
+                    onChange={(e) => setNewWO({ ...newWO, priority: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Status</label>
+                  <select
+                    value={newWO.status}
+                    onChange={(e) => setNewWO({ ...newWO, status: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="in_progress">In Progress</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">NTE Budget</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newWO.nte || ''}
+                    onChange={(e) => setNewWO({ ...newWO, nte: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                    placeholder="5000.00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Assign to Lead Tech</label>
+                <select
+                  value={newWO.lead_tech_id}
+                  onChange={(e) => setNewWO({ ...newWO, lead_tech_id: e.target.value })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                >
+                  <option value="">Unassigned</option>
+                  {users.map(user => (
+                    <option key={user.user_id} value={user.user_id}>
+                      {user.first_name} {user.last_name}
+                    </option>
           </div>
         </div>
       </div>

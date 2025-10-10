@@ -494,8 +494,90 @@ async function handleImport() {
         </div>
       )}
     </div>
-  );
-}
+      </main>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">📥 Import from Google Sheets</h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportUrl('');
+                  setImportError('');
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Google Sheets URL
+                </label>
+                <input
+                  type="text"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {importError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {importError}
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 font-medium mb-2">📋 Required Sheet Format:</p>
+                <div className="text-xs text-gray-600 space-y-1">
+                  <p><strong>Column A:</strong> WO Number</p>
+                  <p><strong>Column B:</strong> Date Entered (YYYY-MM-DD)</p>
+                  <p><strong>Column C:</strong> Building</p>
+                  <p><strong>Column D:</strong> Description</p>
+                  <p><strong>Column E:</strong> Requestor</p>
+                  <p><strong>Column F:</strong> Priority (emergency/high/medium/low)</p>
+                  <p><strong>Column G:</strong> Status (pending/assigned/in_progress/completed)</p>
+                  <p><strong>Column H:</strong> NTE Amount (number)</p>
+                  <p><strong>Column I:</strong> Comments (optional)</p>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  <strong>⚠️ Important:</strong> Make sure your Google Sheet is set to &quot;Anyone with the link can view&quot;
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportUrl('');
+                    setImportError('');
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-300 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing || !importUrl.trim()}
+                  className="flex-1 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-400"
+                >
+                  {importing ? 'Importing...' : '📥 Import Work Orders'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

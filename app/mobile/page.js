@@ -31,8 +31,9 @@ export default function MobileApp() {
 
   // Check for existing session on page load
   useEffect(() => {
-    checkExistingSession();
-  }, []);
+  checkExistingSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   async function checkExistingSession() {
     try {
@@ -123,10 +124,11 @@ export default function MobileApp() {
   }, [currentUser, isLoggedIn]);
 
   useEffect(() => {
-    if (selectedWO) {
-      fetchTeamMembers();
-    }
-  }, [selectedWO]);
+  if (selectedWO) {
+    fetchTeamMembers();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedWO]);
 
   async function fetchUsers() {
     try {
@@ -735,9 +737,9 @@ export default function MobileApp() {
             <h2 className="font-bold mb-3 text-lg">
               ⏱️ My Hours ({myAssignment.role === 'lead_tech' ? 'Co-Lead Tech' : 'Helper'})
             </h2>
-            <p className="text-xs text-green-200 mb-3">
-              ⚠️ ONLY enter your hours here. Don't update the Team Members section below - it's just for viewing.
-            </p>
+           <p className="text-xs text-green-200 mb-3">
+  ⚠️ ONLY enter your hours here. Don&apos;t update the Team Members section below - it&apos;s just for viewing.
+</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm text-green-200 mb-1">Regular (RT)</label>
@@ -824,12 +826,12 @@ export default function MobileApp() {
           </div>
 
           {myAssignment && (
-            <div className="bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded-lg p-3 mb-3">
-              <p className="text-yellow-200 text-xs">
-                ℹ️ You appear in this list as a team member. Update your hours in the "My Hours" section above, NOT here.
-              </p>
-            </div>
-          )}
+  <div className="bg-yellow-900 bg-opacity-50 border border-yellow-600 rounded-lg p-3 mb-3">
+    <p className="text-yellow-200 text-xs">
+      ℹ️ You appear in this list as a team member. Update your hours in the &quot;My Hours&quot; section above, NOT here.
+    </p>
+  </div>
+)}
           
           {teamMembers && teamMembers.length === 0 && (
             <div className="text-center py-4">
@@ -955,9 +957,10 @@ export default function MobileApp() {
                           ).toFixed(2)}
                         </p>
                         {isMyself && (
-                          <p className="text-xs text-yellow-300 mt-1">
-                            ⬆️ Update your hours in "My Hours" section above
-                          </p>
+                          <p className="font-bold text-white text-base">
+  {member.users?.first_name} {member.users?.last_name}
+  {isMyself && ' (You - View Only)'}
+</p>
                         )}
                       </div>
                     )}

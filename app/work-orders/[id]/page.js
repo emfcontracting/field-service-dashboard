@@ -23,10 +23,12 @@ export default function WorkOrderDetail({ params }) {
   const [checkInTime, setCheckInTime] = useState(null);
 
   useEffect(() => {
+  if (id) {
     fetchWorkOrder();
-    fetchUsers();
     fetchTeamMembers();
-  }, [params.id]);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [id]);
 
   async function fetchWorkOrder() {
     try {

@@ -29,9 +29,9 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    filterWorkOrders();
-  }, [workOrders, statusFilter, priorityFilter, searchTerm]);
-
+  filterWorkOrders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [workOrders, statusFilter, priorityFilter, searchTerm]);
   async function fetchWorkOrders() {
     try {
       const { data, error } = await supabase

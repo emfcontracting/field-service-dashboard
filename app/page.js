@@ -525,77 +525,81 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredWorkOrders.map(wo => {
-                    const totalCost = calculateTotalCost(wo);
-                    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
+  {filteredWorkOrders.map(wo => {
+    const totalCost = calculateTotalCost(wo);
+    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
 
-                    return (
-                      <tr
-                        key={wo.wo_id}
-                        className="border-t border-gray-700 hover:bg-gray-750 transition"
-                      >
-                        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-400">
-                          {new Date(wo.date_entered).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">{wo.building}</td>
-                        <td className="px-4 py-3">
-                          <div className="max-w-xs truncate">
-                            {wo.work_order_description}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
-                            {wo.status.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-                            {wo.priority.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {wo.lead_tech ? (
-                            <div>
-                              <div className="font-semibold">
-                                {wo.lead_tech.first_name} {wo.lead_tech.last_name}
-                              </div>
-                              <div className="text-xs text-gray-400">{wo.lead_tech.email}</div>
-                            </div>
-                          ) : (
-                            <span className="text-gray-500">Unassigned</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold">
-                          ${(wo.nte || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={overBudget ? 'text-red-400 font-bold' : ''}>
-                            ${(totalCost || 0).toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {wo.is_locked && (
-                            <span
-                              title={`Locked by ${wo.locked_by_user?.first_name} ${wo.locked_by_user?.last_name} on ${new Date(wo.locked_at).toLocaleDateString()}`}
-                              className="cursor-help"
-                            >
-                              🔒
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => setSelectedWO(wo)}
-                            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+    return (
+      <tr
+        key={wo.wo_id}
+        onClick={() => setSelectedWO(wo)}
+        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+      >
+        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
+        <td className="px-4 py-3 text-sm text-gray-400">
+          {new Date(wo.date_entered).toLocaleDateString()}
+        </td>
+        <td className="px-4 py-3">{wo.building}</td>
+        <td className="px-4 py-3">
+          <div className="max-w-xs truncate">
+            {wo.work_order_description}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
+            {wo.status.replace('_', ' ').toUpperCase()}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
+            {wo.priority.toUpperCase()}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          {wo.lead_tech ? (
+            <div>
+              <div className="font-semibold">
+                {wo.lead_tech.first_name} {wo.lead_tech.last_name}
+              </div>
+              <div className="text-xs text-gray-400">{wo.lead_tech.email}</div>
+            </div>
+          ) : (
+            <span className="text-gray-500">Unassigned</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-right font-semibold">
+          ${(wo.nte || 0).toFixed(2)}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <span className={overBudget ? 'text-red-400 font-bold' : ''}>
+            ${(totalCost || 0).toFixed(2)}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-center">
+          {wo.is_locked && (
+            <span
+              title={`Locked by ${wo.locked_by_user?.first_name} ${wo.locked_by_user?.last_name} on ${new Date(wo.locked_at).toLocaleDateString()}`}
+              className="cursor-help"
+            >
+              🔒
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-center">
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row click when clicking button
+              setSelectedWO(wo);
+            }}
+            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
+          >
+            View
+          </button>
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
               </table>
             </div>
           )}

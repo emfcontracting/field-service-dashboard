@@ -19,6 +19,8 @@ export default function MobileApp() {
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [userRole, setUserRole] = useState(null); // 'lead' or 'member'
+  const [userAssignment, setUserAssignment] = useState(null); // For team members
 
   // Team Members
   const [availableUsers, setAvailableUsers] = useState([]);
@@ -52,14 +54,15 @@ export default function MobileApp() {
     }
   }, [currentUser]);
 
-  // Fetch team members when WO is selected
+  // Fetch team members and determine role when WO is selected
   useEffect(() => {
-    if (selectedWO) {
+    if (selectedWO && currentUser) {
+      determineUserRole();
       fetchTeamMembers(selectedWO.wo_id);
       loadCheckInStatus(selectedWO.wo_id);
       fetchComments(selectedWO.wo_id);
     }
-  }, [selectedWO]);
+  }, [selectedWO, currentUser]);
 
   // Login Function
   const handleLogin = async () => {
@@ -109,11 +112,12 @@ export default function MobileApp() {
     }
   };
 
-  // Fetch Work Orders
+  // Fetch Work Orders (both as lead tech and as team member)
   const fetchWorkOrders = async (userId) => {
     setLoading(true);
 
-    const { data, error } = await supabase
+    // Fetch work orders where user is lead tech
+    const { data: leadWOs, error: leadError } = await supabase
       .from('work_orders')
       .select('*')
       .eq('lead_tech_id', userId)
@@ -121,12 +125,60 @@ export default function MobileApp() {
       .order('priority', { ascending: false })
       .order('date_entered', { ascending: true });
 
-    setLoading(false);
+    // Fetch work orders where user is a team member
+    const { data: assignments, error: assignError } = await supabase
+      .from('work_order_assignments')
+      .select('wo_id')
+      .eq('user_id', userId);
 
-    if (error) {
-      console.error('Error fetching work orders:', error);
+    const assignedWOIds = assignments?.map(a => a.wo_id) || [];
+
+    let memberWOs = [];
+    if (assignedWOIds.length > 0) {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('*')
+        .in('wo_id', assignedWOIds)
+        .in('status', ['assigned', 'in_progress', 'needs_return'])
+        .order('priority', { ascending: false })
+        .order('date_entered', { ascending: true });
+
+      if (!error) memberWOs = data || [];
+    }
+
+    // Combine and deduplicate
+    const allWOs = [...(leadWOs || []), ...memberWOs];
+    const uniqueWOs = Array.from(new Map(allWOs.map(wo => [wo.wo_id, wo])).values());
+
+    setWorkOrders(uniqueWOs);
+    setLoading(false);
+  };
+
+  // Determine if user is lead tech or team member for this WO
+  const determineUserRole = async () => {
+    if (!selectedWO || !currentUser) return;
+
+    // Check if user is lead tech
+    if (selectedWO.lead_tech_id === currentUser.user_id) {
+      setUserRole('lead');
+      setUserAssignment(null);
+      return;
+    }
+
+    // Check if user is a team member
+    const { data, error } = await supabase
+      .from('work_order_assignments')
+      .select('*')
+      .eq('wo_id', selectedWO.wo_id)
+      .eq('user_id', currentUser.user_id)
+      .single();
+
+    if (!error && data) {
+      setUserRole('member');
+      setUserAssignment(data);
     } else {
-      setWorkOrders(data || []);
+      setUserRole(null);
+      setUserAssignment(null);
     }
   };
 
@@ -163,32 +215,61 @@ export default function MobileApp() {
     }
   };
 
- // Update Work Order
-const updateWorkOrder = async (updates) => {
-  if (!selectedWO) return;
+  // Update Work Order (Lead Tech Only)
+  const updateWorkOrder = async (updates) => {
+    if (!selectedWO) return;
 
-  // Check if locked
-  if (selectedWO.is_locked && currentUser?.role !== 'admin') {
-    alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
-    return;
-  }
+    // Check if locked
+    if (selectedWO.is_locked && currentUser?.role !== 'admin') {
+      alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
+      return;
+    }
 
-  const { error } = await supabase
-    .from('work_orders')
-    .update(updates)
-    .eq('wo_id', selectedWO.wo_id);
+    // Check if user is lead tech
+    if (userRole !== 'lead') {
+      alert('❌ Only the lead tech can modify work order details.');
+      return;
+    }
 
-  if (error) {
-    console.error('Error updating work order:', error);
-    // Only show alert on error, not on success
-    alert('Failed to update');
-  } else {
-    // Update local state silently
-    setSelectedWO({ ...selectedWO, ...updates });
-    // Refresh work orders list silently
-    fetchWorkOrders(currentUser.user_id);
-  }
-};
+    const { error } = await supabase
+      .from('work_orders')
+      .update(updates)
+      .eq('wo_id', selectedWO.wo_id);
+
+    if (error) {
+      console.error('Error updating work order:', error);
+      alert('Failed to update');
+    } else {
+      // Update local state
+      setSelectedWO({ ...selectedWO, ...updates });
+      // Refresh work orders list
+      fetchWorkOrders(currentUser.user_id);
+    }
+  };
+
+  // Update Team Member Assignment (for their own hours/miles)
+  const updateMyAssignment = async (updates) => {
+    if (!userAssignment) return;
+
+    // Check if locked
+    if (selectedWO.is_locked && currentUser?.role !== 'admin') {
+      alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('work_order_assignments')
+      .update(updates)
+      .eq('assignment_id', userAssignment.assignment_id);
+
+    if (error) {
+      console.error('Error updating assignment:', error);
+      alert('Failed to update');
+    } else {
+      // Update local state
+      setUserAssignment({ ...userAssignment, ...updates });
+    }
+  };
 
   // Check In
   const handleCheckIn = async () => {
@@ -212,8 +293,8 @@ const updateWorkOrder = async (updates) => {
           setCheckInTime(checkIn.time);
           setCheckInLocation(location);
 
-          // Update WO status to in_progress if not already
-          if (selectedWO.status === 'assigned') {
+          // Update WO status to in_progress if not already (lead tech only)
+          if (selectedWO.status === 'assigned' && userRole === 'lead') {
             await updateWorkOrder({ status: 'in_progress' });
           }
 
@@ -264,8 +345,13 @@ const updateWorkOrder = async (updates) => {
     }
   };
 
-  // Add Team Member
+  // Add Team Member (Lead Tech Only)
   const addTeamMember = async () => {
+    if (userRole !== 'lead') {
+      alert('❌ Only the lead tech can add team members.');
+      return;
+    }
+
     if (!newTeamMember.user_id) {
       alert('Please select a team member');
       return;
@@ -299,8 +385,10 @@ const updateWorkOrder = async (updates) => {
     }
   };
 
-  // Update Team Member Hours
+  // Update Team Member Hours (Lead Tech Only)
   const updateTeamMemberHours = async (assignmentId, field, value) => {
+    if (userRole !== 'lead') return;
+
     const { error } = await supabase
       .from('work_order_assignments')
       .update({ [field]: value })
@@ -311,8 +399,13 @@ const updateWorkOrder = async (updates) => {
     }
   };
 
-  // Remove Team Member
+  // Remove Team Member (Lead Tech Only)
   const removeTeamMember = async (assignmentId) => {
+    if (userRole !== 'lead') {
+      alert('❌ Only the lead tech can remove team members.');
+      return;
+    }
+
     if (!confirm('Remove this team member?')) return;
 
     const { error } = await supabase
@@ -373,7 +466,6 @@ const updateWorkOrder = async (updates) => {
     } else {
       setComments(updatedComments);
       setNewComment('');
-      alert('✅ Comment added!');
     }
   };
 
@@ -484,38 +576,48 @@ const updateWorkOrder = async (updates) => {
             <div className="bg-gray-800 rounded-lg p-8 text-center">
               <div className="text-4xl mb-4">✅</div>
               <div className="text-xl font-bold mb-2">No Active Work Orders</div>
-<div className="text-gray-400">You&apos;re all caught up!</div>
+              <div className="text-gray-400">You&apos;re all caught up!</div>
             </div>
           ) : (
             <div className="space-y-3">
-              {workOrders.map(wo => (
-                <div
-                  key={wo.wo_id}
-                  onClick={() => setSelectedWO(wo)}
-                  className="bg-gray-800 rounded-lg p-4 active:bg-gray-700 transition"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="font-bold text-lg">{wo.wo_number}</div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-                      {wo.priority.toUpperCase()}
-                    </span>
-                  </div>
+              {workOrders.map(wo => {
+                const isLead = wo.lead_tech_id === currentUser.user_id;
+                return (
+                  <div
+                    key={wo.wo_id}
+                    onClick={() => setSelectedWO(wo)}
+                    className="bg-gray-800 rounded-lg p-4 active:bg-gray-700 transition"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="font-bold text-lg">{wo.wo_number}</div>
+                      <div className="flex gap-2 items-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
+                          {wo.priority.toUpperCase()}
+                        </span>
+                        {!isLead && (
+                          <span className="text-xs bg-purple-600 px-2 py-1 rounded-full">
+                            TEAM MEMBER
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="text-gray-300 mb-2">{wo.building}</div>
-                  <div className="text-sm text-gray-400 mb-3 line-clamp-2">
-                    {wo.work_order_description}
-                  </div>
+                    <div className="text-gray-300 mb-2">{wo.building}</div>
+                    <div className="text-sm text-gray-400 mb-3 line-clamp-2">
+                      {wo.work_order_description}
+                    </div>
 
-                  <div className="flex justify-between items-center">
-                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(wo.status)}`}>
-                      {wo.status.replace('_', ' ').toUpperCase()}
-                    </span>
-                    {wo.is_locked && (
-                      <span className="text-yellow-500 text-sm">🔒 Locked</span>
-                    )}
+                    <div className="flex justify-between items-center">
+                      <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(wo.status)}`}>
+                        {wo.status.replace('_', ' ').toUpperCase()}
+                      </span>
+                      {wo.is_locked && (
+                        <span className="text-yellow-500 text-sm">🔒 Locked</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -525,7 +627,7 @@ const updateWorkOrder = async (updates) => {
 
   // Work Order Detail View
   const isLocked = selectedWO.is_locked && currentUser?.role !== 'admin';
-  const isLeadTech = currentUser?.role === 'lead_tech' || currentUser?.role === 'admin';
+  const isLeadTech = userRole === 'lead';
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-20">
@@ -542,6 +644,11 @@ const updateWorkOrder = async (updates) => {
             <h1 className="text-lg font-bold">{selectedWO.wo_number}</h1>
             <p className="text-sm text-gray-400">{selectedWO.building}</p>
           </div>
+          {!isLeadTech && (
+            <div className="text-xs bg-purple-600 px-3 py-1 rounded-full">
+              TEAM MEMBER
+            </div>
+          )}
         </div>
       </div>
 
@@ -571,7 +678,7 @@ const updateWorkOrder = async (updates) => {
               <span className="text-gray-400">Date Entered:</span> {new Date(selectedWO.date_entered).toLocaleDateString()}
             </div>
             <div>
-              <span className="text-gray-400">NTE Budget:</span> ${selectedWO.nte.toFixed(2)}
+              <span className="text-gray-400">NTE Budget:</span> ${(selectedWO.nte || 0).toFixed(2)}
             </div>
           </div>
         </div>
@@ -609,10 +716,10 @@ const updateWorkOrder = async (updates) => {
           )}
         </div>
 
-        {/* My Hours (Lead Tech) */}
+        {/* My Hours - For Lead Tech */}
         {isLeadTech && (
           <div className={`rounded-lg p-4 ${isLocked ? 'bg-gray-700 opacity-60' : 'bg-blue-900'}`}>
-            <h2 className="font-bold mb-3 text-lg">⏰ My Hours</h2>
+            <h2 className="font-bold mb-3 text-lg">⏰ My Hours (Lead Tech)</h2>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm text-gray-300 mb-1">Regular Time (hrs)</label>
@@ -657,7 +764,58 @@ const updateWorkOrder = async (updates) => {
           </div>
         )}
 
-        {/* Team Members */}
+        {/* My Hours - For Team Member */}
+        {userRole === 'member' && userAssignment && (
+          <div className={`rounded-lg p-4 ${isLocked ? 'bg-gray-700 opacity-60' : 'bg-green-900'}`}>
+            <h2 className="font-bold mb-3 text-lg">⏰ My Hours (Team Member)</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Regular Time (hrs)</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  value={userAssignment.hours_regular || ''}
+                  onChange={(e) => setUserAssignment({ ...userAssignment, hours_regular: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => updateMyAssignment({ hours_regular: userAssignment.hours_regular })}
+                  disabled={isLocked}
+                  className={`w-full bg-gray-700 text-white px-4 py-3 rounded-lg ${isLocked ? 'cursor-not-allowed opacity-50' : ''}`}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Overtime (hrs)</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  value={userAssignment.hours_overtime || ''}
+                  onChange={(e) => setUserAssignment({ ...userAssignment, hours_overtime: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => updateMyAssignment({ hours_overtime: userAssignment.hours_overtime })}
+                  disabled={isLocked}
+                  className={`w-full bg-gray-700 text-white px-4 py-3 rounded-lg ${isLocked ? 'cursor-not-allowed opacity-50' : ''}`}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Miles</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={userAssignment.miles || ''}
+                  onChange={(e) => setUserAssignment({ ...userAssignment, miles: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => updateMyAssignment({ miles: userAssignment.miles })}
+                  disabled={isLocked}
+                  className={`w-full bg-gray-700 text-white px-4 py-3 rounded-lg ${isLocked ? 'cursor-not-allowed opacity-50' : ''}`}
+                  placeholder="0.0"
+                />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-gray-300 bg-gray-800 p-3 rounded">
+              💡 You can only edit your own hours and mileage. Contact the lead tech for other changes.
+            </div>
+          </div>
+        )}
+
+        {/* Team Members - Lead Tech Only */}
         {isLeadTech && (
           <div className="bg-gray-800 rounded-lg p-4">
             <h2 className="font-bold mb-3 text-lg">👥 Team Members</h2>
@@ -789,7 +947,7 @@ const updateWorkOrder = async (updates) => {
         {/* Costs (Lead Tech Only) */}
         {isLeadTech && (
           <div className={`rounded-lg p-4 ${isLocked ? 'bg-gray-700 opacity-60' : 'bg-gray-800'}`}>
-            <h2 className="font-bold mb-3 text-lg">💰 Costs</h2>
+            <h2 className="font-bold mb-3 text-lg">💰 Costs (Lead Tech Only)</h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Materials ($)</label>
@@ -852,32 +1010,33 @@ const updateWorkOrder = async (updates) => {
           </div>
         )}
 
-       {/* Status Update */}
-<div className="bg-gray-800 rounded-lg p-4">
-  <h2 className="font-bold mb-3 text-lg">🔄 Status</h2>
-  <select
-    value={selectedWO.status}
-    onChange={(e) => {
-      const newStatus = e.target.value;
-      setSelectedWO({ ...selectedWO, status: newStatus });
-      updateWorkOrder({ status: newStatus });
-      
-      // Only show alert when completing
-      if (newStatus === 'completed') {
-        alert('✅ Work order marked as Completed!');
-      }
-    }}
-    disabled={isLocked}
-    className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
-      isLocked ? 'opacity-50 cursor-not-allowed' : ''
-    }`}
-  >
-    <option value="assigned">Assigned</option>
-    <option value="in_progress">In Progress</option>
-    <option value="needs_return">Needs Return Visit</option>
-    <option value="completed">Completed</option>
-  </select>
-</div>
+        {/* Status Update (Lead Tech Only) */}
+        {isLeadTech && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h2 className="font-bold mb-3 text-lg">🔄 Status</h2>
+            <select
+              value={selectedWO.status}
+              onChange={(e) => {
+                const newStatus = e.target.value;
+                setSelectedWO({ ...selectedWO, status: newStatus });
+                updateWorkOrder({ status: newStatus });
+                
+                if (newStatus === 'completed') {
+                  alert('✅ Work order marked as Completed!');
+                }
+              }}
+              disabled={isLocked}
+              className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
+                isLocked ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="needs_return">Needs Return Visit</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        )}
 
         {/* Comments */}
         <div className="bg-gray-800 rounded-lg p-4">

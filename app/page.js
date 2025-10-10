@@ -76,6 +76,43 @@ export default function Dashboard() {
       return;
     }
 
+async function handleDeleteWorkOrder(woId, woNumber) {
+  if (!confirm(`⚠️ Are you sure you want to DELETE work order ${woNumber}?\n\nThis action CANNOT be undone!`)) {
+    return;
+  }
+
+  // Second confirmation for safety
+  const confirmText = prompt(`Type "DELETE" to confirm deletion of WO ${woNumber}:`);
+  if (confirmText !== 'DELETE') {
+    alert('Deletion cancelled');
+    return;
+  }
+
+  try {
+    // Delete team member assignments first (foreign key constraint)
+    const { error: assignmentError } = await supabase
+      .from('work_order_assignments')
+      .delete()
+      .eq('wo_id', woId);
+
+    if (assignmentError) throw assignmentError;
+
+    // Then delete the work order
+    const { error: woError } = await supabase
+      .from('work_orders')
+      .delete()
+      .eq('wo_id', woId);
+
+    if (woError) throw woError;
+
+    alert(`✅ Work order ${woNumber} has been deleted`);
+    fetchWorkOrders(); // Refresh the list
+  } catch (error) {
+    console.error('Error deleting work order:', error);
+    alert(`❌ Error deleting work order: ${error.message}`);
+  }
+}
+
     let csvUrl = importUrl;
     if (importUrl.includes('docs.google.com/spreadsheets')) {
       const match = importUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -335,10 +372,24 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onClick={() => router.push(`/work-orders/${wo.wo_id}`)} className="text-blue-600 hover:text-blue-900">
-                          View
-                        </button>
-                      </td>
+  <div className="flex gap-3">
+    <button
+      onClick={() => router.push(`/work-orders/${wo.wo_id}`)}
+      className="text-blue-600 hover:text-blue-900"
+    >
+      View
+    </button>
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        handleDeleteWorkOrder(wo.wo_id, wo.wo_number);
+      }}
+      className="text-red-600 hover:text-red-900"
+    >
+      Delete
+    </button>
+  </div>
+</td>
                     </tr>
                   ))
                 )}

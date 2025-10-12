@@ -728,6 +728,7 @@ return (
       {selectedWO && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-900 rounded-lg max-w-7xl w-full my-8">
+
             {/* Header */}
             <div className="bg-gray-800 border-b border-gray-700 p-6">
               <div className="flex justify-between items-start">
@@ -1078,7 +1079,7 @@ return (
                 </div>
               </div>
 
-{/* Right Sidebar */}
+              {/* Right Sidebar */}
               <div className="w-80 bg-gray-800 border-l border-gray-700 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
                 
                 {/* Quick Actions */}
@@ -1111,66 +1112,83 @@ return (
                   </div>
                 </div>
 
-{/* Cost Summary */}
+                {/* Cost Summary */}
                 <div className="bg-gray-700 rounded-lg p-4">
                   <h3 className="text-lg font-bold mb-4">Cost Summary</h3>
                   
                   {/* Team Labor */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
-                  
-                  {/* Primary Tech */}
-                  <div className="space-y-1 text-sm mb-2">
-                    <div className="text-xs text-gray-500 font-semibold">Primary Tech</div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">RT ({selectedWO.hours_regular || 0} hrs)</span>
-                      <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
+                    
+                    {/* Primary Tech */}
+                    <div className="space-y-1 text-sm mb-2">
+                      <div className="text-xs text-gray-500 font-semibold">Primary Tech</div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">RT ({selectedWO.hours_regular || 0} hrs)</span>
+                        <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">OT ({selectedWO.hours_overtime || 0} hrs)</span>
+                        <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">OT ({selectedWO.hours_overtime || 0} hrs)</span>
-                      <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
+
+                    {/* Team Members */}
+                    {teamMembers.length > 0 && (
+                      <div className="space-y-1 text-sm mb-2 border-t border-gray-600 pt-2">
+                        <div className="text-xs text-gray-500 font-semibold">Team Members</div>
+                        {teamMembers.map(member => (
+                          <div key={member.assignment_id}>
+                            <div className="text-xs text-gray-400">{member.user.first_name} {member.user.last_name}</div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400 text-xs">RT ({member.hours_regular || 0}) + OT ({member.hours_overtime || 0})</span>
+                              <span className="font-semibold text-xs">${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border-t border-gray-600 mt-2 pt-2">
+                      <div className="flex justify-between font-bold">
+                        <span>Total Labor:</span>
+                        <span>${(
+                          ((selectedWO.hours_regular || 0) * 64) + 
+                          ((selectedWO.hours_overtime || 0) * 96) +
+                          teamMembers.reduce((sum, m) => sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0)
+                        ).toFixed(2)}</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Team Members */}
-                  {teamMembers.length > 0 && (
-                    <div className="space-y-1 text-sm mb-2 border-t border-gray-600 pt-2">
-                      <div className="text-xs text-gray-500 font-semibold">Team Members</div>
-                      {teamMembers.map(member => (
-                        <div key={member.assignment_id}>
-                          <div className="text-xs text-gray-400">{member.user.first_name} {member.user.last_name}</div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400 text-xs">RT ({member.hours_regular || 0}) + OT ({member.hours_overtime || 0})</span>
-                            <span className="font-semibold text-xs">${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-600 mt-2 pt-2">
-                    <div className="flex justify-between font-bold">
-                      <span>Total Labor:</span>
-                      <span>${(
-                        ((selectedWO.hours_regular || 0) * 64) + 
-                        ((selectedWO.hours_overtime || 0) * 96) +
-                        teamMembers.reduce((sum, m) => sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0)
+                  {/* Other Costs */}
+                  <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Mileage ({
+                        (selectedWO.miles || 0) + 
+                        teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)
+                      } mi × $1.00)</span>
+                      <span className="font-semibold">${(
+                        ((selectedWO.miles || 0) * 1.00) + 
+                        (teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0) * 1.00)
                       ).toFixed(2)}</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Other Costs */}
-                <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Mileage ({
-                      (selectedWO.miles || 0) + 
-                      teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)
-                    } mi × $1.00)</span>
-                    <span className="font-semibold">${(
-                      ((selectedWO.miles || 0) * 1.00) + 
-                      (teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0) * 1.00)
-                    ).toFixed(2)}</span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Materials</span>
+                      <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Equipment</span>
+                      <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Trailer</span>
+                      <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Rental</span>
+                      <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                    </div>
                   </div>
 
                   {/* Grand Total */}
@@ -1196,7 +1214,7 @@ return (
                   </div>
                 </div>
 
-{/* Time Tracking */}
+                {/* Time Tracking */}
                 <div className="bg-gray-700 rounded-lg p-4">
                   <h3 className="text-lg font-bold mb-3">Time Tracking</h3>
                   <div>
@@ -1217,13 +1235,13 @@ return (
                     </div>
                   </div>
                 </div>
-               </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-{/* New Work Order Modal */}
+      {/* New Work Order Modal */}
       {showNewWOModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">

@@ -995,7 +995,7 @@ const handleCheckOut = async () => {
               </div>
             </div>
 
-            {/* Comments & Notes */}
+           {/* Comments & Notes */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
 

@@ -9,7 +9,8 @@ const supabase = createClient(
 );
 
 export default function Dashboard() {
-  // State Management
+
+// State Management
   const [workOrders, setWorkOrders] = useState([]);
   const [filteredWorkOrders, setFilteredWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
@@ -57,7 +58,7 @@ export default function Dashboard() {
   // Admin Password for Delete
   const adminPassword = 'admin123';
 
-  // Fetch Data on Mount
+// Fetch Data on Mount
   useEffect(() => {
     fetchWorkOrders();
     fetchUsers();
@@ -75,7 +76,7 @@ export default function Dashboard() {
     }
   }, [selectedWO]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch Work Orders
+// Fetch Work Orders
   const fetchWorkOrders = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -112,7 +113,7 @@ export default function Dashboard() {
     }
   };
 
-  // Calculate Statistics
+// Calculate Statistics
   const calculateStats = (orders) => {
     const stats = {
       total: orders.length,
@@ -150,7 +151,19 @@ export default function Dashboard() {
     setFilteredWorkOrders(filtered);
   };
 
-  // Create New Work Order
+  // Calculate Total Costs for a WO
+  const calculateTotalCost = (wo) => {
+    const labor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
+    const materials = wo.material_cost || 0;
+    const equipment = wo.emf_equipment_cost || 0;
+    const trailer = wo.trailer_cost || 0;
+    const rental = wo.rental_cost || 0;
+    const mileage = (wo.miles || 0) * 1.00;
+    
+    return labor + materials + equipment + trailer + rental + mileage;
+  };
+
+// Create New Work Order
   const createWorkOrder = async () => {
     if (!newWO.wo_number || !newWO.building || !newWO.work_order_description) {
       alert('Please fill in WO#, Building, and Description');
@@ -245,7 +258,7 @@ export default function Dashboard() {
     }
   };
 
-  // Check if Invoice Can Be Generated
+// Check if Invoice Can Be Generated
   const checkCanGenerateInvoice = async (woId) => {
     const { data: invoice } = await supabase
       .from('invoices')
@@ -353,19 +366,7 @@ export default function Dashboard() {
     }
   };
 
-  // Calculate Total Costs for a WO
-  const calculateTotalCost = (wo) => {
-    const labor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
-    const materials = wo.material_cost || 0;
-    const equipment = wo.emf_equipment_cost || 0;
-    const trailer = wo.trailer_cost || 0;
-    const rental = wo.rental_cost || 0;
-    const mileage = (wo.miles || 0) * 1.00;
-    
-    return labor + materials + equipment + trailer + rental + mileage;
-  };
-
-  // Get Status Color
+// Get Status Color
   const getStatusColor = (status) => {
     const colors = {
       pending: 'bg-gray-600',
@@ -388,7 +389,7 @@ export default function Dashboard() {
     return colors[priority] || 'bg-gray-600';
   };
 
-  return (
+return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -416,7 +417,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Statistics Cards */}
+{/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="text-gray-400 text-sm">Total</div>
@@ -444,7 +445,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Filters and Actions */}
+{/* Filters and Actions */}
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <div className="flex flex-wrap gap-3 items-center">
             <input
@@ -496,7 +497,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Work Orders Table */}
+{/* Work Orders Table */}
         <div className="bg-gray-800 rounded-lg overflow-hidden">
           {loading ? (
             <div className="p-8 text-center text-gray-400">Loading work orders...</div>
@@ -524,487 +525,467 @@ export default function Dashboard() {
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-  {filteredWorkOrders.map(wo => {
-    const totalCost = calculateTotalCost(wo);
-    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
 
-    return (
-      <tr
-        key={wo.wo_id}
-        onClick={() => setSelectedWO(wo)}
-        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
-      >
-        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
-        <td className="px-4 py-3 text-sm text-gray-400">
-          {new Date(wo.date_entered).toLocaleDateString()}
-        </td>
-        <td className="px-4 py-3">{wo.building}</td>
-        <td className="px-4 py-3">
-          <div className="max-w-xs truncate">
-            {wo.work_order_description}
-          </div>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
-            {wo.status.replace('_', ' ').toUpperCase()}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-            {wo.priority.toUpperCase()}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          {wo.lead_tech ? (
-            <div>
-              <div className="font-semibold">
-                {wo.lead_tech.first_name} {wo.lead_tech.last_name}
-              </div>
-              <div className="text-xs text-gray-400">{wo.lead_tech.email}</div>
-            </div>
-          ) : (
-            <span className="text-gray-500">Unassigned</span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-right font-semibold">
-          ${(wo.nte || 0).toFixed(2)}
-        </td>
-        <td className="px-4 py-3 text-right">
-          <span className={overBudget ? 'text-red-400 font-bold' : ''}>
-            ${(totalCost || 0).toFixed(2)}
-          </span>
-        </td>
-        <td className="px-4 py-3 text-center">
-          {wo.is_locked && (
-            <span
-              title={`Locked by ${wo.locked_by_user?.first_name} ${wo.locked_by_user?.last_name} on ${new Date(wo.locked_at).toLocaleDateString()}`}
-              className="cursor-help"
-            >
-              🔒
-            </span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // Prevent row click when clicking button
-              setSelectedWO(wo);
-            }}
-            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
-          >
-            View
-          </button>
-        </td>
-      </tr>
-    );
-  })}
-</tbody>
+<tbody>
+                  {filteredWorkOrders.map(wo => {
+                    const totalCost = calculateTotalCost(wo);
+                    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
+
+                    return (
+                      <tr
+                        key={wo.wo_id}
+                        onClick={() => setSelectedWO(wo)}
+                        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+                      >
+                        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
+                        <td className="px-4 py-3 text-sm text-gray-400">
+                          {new Date(wo.date_entered).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3">{wo.building}</td>
+                        <td className="px-4 py-3">
+                          <div className="max-w-xs truncate">
+                            {wo.work_order_description}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
+                            {wo.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
+                            {wo.priority.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {wo.lead_tech ? (
+                            <div>
+                              <div className="font-semibold">
+                                {wo.lead_tech.first_name} {wo.lead_tech.last_name}
+                              </div>
+                              <div className="text-xs text-gray-400">{wo.lead_tech.email}</div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-500">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">
+                          ${(wo.nte || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={overBudget ? 'text-red-400 font-bold' : ''}>
+                            ${(totalCost || 0).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {wo.is_locked && (
+                            <span
+                              title={`Locked by ${wo.locked_by_user?.first_name} ${wo.locked_by_user?.last_name} on ${new Date(wo.locked_at).toLocaleDateString()}`}
+                              className="cursor-help"
+                            >
+                              🔒
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedWO(wo);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
           )}
         </div>
       </div>
 
-      {/* Work Order Detail Modal - COMPREHENSIVE VIEW */}
-{selectedWO && (
-  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-    <div className="bg-gray-900 rounded-lg max-w-7xl w-full my-8">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-3xl font-bold mb-2">Work Order #{selectedWO.wo_number}</h2>
-            <p className="text-gray-400">Created on {new Date(selectedWO.date_entered).toLocaleDateString()}</p>
-          </div>
-          <div className="flex gap-3 items-center">
-            <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getPriorityColor(selectedWO.priority)}`}>
-              {selectedWO.priority.toUpperCase()}
-            </span>
-            <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getStatusColor(selectedWO.status)}`}>
-              {selectedWO.status.replace('_', ' ').toUpperCase()}
-            </span>
-            <button
-              onClick={() => {
-                setSelectedWO(null);
-                setShowInvoiceButton(false);
-              }}
-              className="text-gray-400 hover:text-white text-3xl leading-none ml-4"
-            >
-              ×
-            </button>
+{/* Work Order Detail Modal */}
+      {selectedWO && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-900 rounded-lg max-w-7xl w-full my-8">
+            {/* Header */}
+            <div className="bg-gray-800 border-b border-gray-700 p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-3xl font-bold mb-2">Work Order #{selectedWO.wo_number}</h2>
+                  <p className="text-gray-400">Created on {new Date(selectedWO.date_entered).toLocaleDateString()}</p>
+                </div>
+                <div className="flex gap-3 items-center">
+                  <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getPriorityColor(selectedWO.priority)}`}>
+                    {selectedWO.priority.toUpperCase()}
+                  </span>
+                  <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getStatusColor(selectedWO.status)}`}>
+                    {selectedWO.status.replace('_', ' ').toUpperCase()}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedWO(null);
+                      setShowInvoiceButton(false);
+                    }}
+                    className="text-gray-400 hover:text-white text-3xl leading-none ml-4"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex">
+              {/* Main Content Area */}
+              <div className="flex-1 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+
+{/* Work Order Details */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <h3 className="text-xl font-bold mb-4">Work Order Details</h3>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Building</label>
+                      <input
+                        type="text"
+                        value={selectedWO.building}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { building: selectedWO.building })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+                      <input
+                        type="text"
+                        value={selectedWO.requestor || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { requestor: selectedWO.requestor })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-400 mb-1">Description</label>
+                    <textarea
+                      value={selectedWO.work_order_description}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, work_order_description: e.target.value })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { work_order_description: selectedWO.work_order_description })}
+                      className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      rows="3"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-6 mt-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={selectedWO.nte || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { nte: selectedWO.nte })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Age</label>
+                      <div className="bg-gray-700 px-4 py-2 rounded-lg text-white">
+                        {Math.floor((new Date() - new Date(selectedWO.date_entered)) / (1000 * 60 * 60 * 24))} days
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+{/* Primary Assignment */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <h3 className="text-xl font-bold mb-4">Primary Assignment</h3>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Lead Technician</label>
+                    <select
+                      value={selectedWO.lead_tech_id || ''}
+                      onChange={(e) => {
+                        setSelectedWO({ ...selectedWO, lead_tech_id: e.target.value });
+                        updateWorkOrder(selectedWO.wo_id, { lead_tech_id: e.target.value || null });
+                      }}
+                      className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(user => (
+                        <option key={user.user_id} value={user.user_id}>
+                          {user.first_name} {user.last_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Update Status */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <h3 className="text-xl font-bold mb-4">Update Status</h3>
+                  <select
+                    value={selectedWO.status}
+                    onChange={(e) => {
+                      setSelectedWO({ ...selectedWO, status: e.target.value });
+                      updateWorkOrderStatus(selectedWO.wo_id, e.target.value);
+                    }}
+                    disabled={selectedWO.is_locked}
+                    className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
+                      selectedWO.is_locked ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="needs_return">Needs Return</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+
+{/* Primary Tech Field Data */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold">Primary Tech Field Data</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Regular Hours (RT)</label>
+                      <input
+                        type="number"
+                        step="0.25"
+                        value={selectedWO.hours_regular || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, hours_regular: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_regular: selectedWO.hours_regular })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Overtime Hours (OT)</label>
+                      <input
+                        type="number"
+                        step="0.25"
+                        value={selectedWO.hours_overtime || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, hours_overtime: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_overtime: selectedWO.hours_overtime })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6 mt-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Miles</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={selectedWO.miles || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, miles: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { miles: selectedWO.miles })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">@ $1.00 per mile</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Material Cost ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={selectedWO.material_cost || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, material_cost: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { material_cost: selectedWO.material_cost })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6 mt-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Equipment Cost ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={selectedWO.emf_equipment_cost || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { emf_equipment_cost: selectedWO.emf_equipment_cost })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Trailer Cost ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={selectedWO.trailer_cost || ''}
+                        onChange={(e) => setSelectedWO({ ...selectedWO, trailer_cost: parseFloat(e.target.value) || 0 })}
+                        onBlur={() => updateWorkOrder(selectedWO.wo_id, { trailer_cost: selectedWO.trailer_cost })}
+                        className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+{/* Comments & Notes */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <h3 className="text-xl font-bold mb-4">Comments & Notes</h3>
+                  
+                  <div className="bg-gray-700 rounded-lg p-4 mb-4 max-h-60 overflow-y-auto">
+                    {selectedWO.comments ? (
+                      <div className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {selectedWO.comments}
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">No comments yet</div>
+                    )}
+                  </div>
+
+                  <div>
+                    <textarea
+                      value={selectedWO.comments || ''}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { comments: selectedWO.comments })}
+                      placeholder="Add a new comment..."
+                      className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                      rows="3"
+                    />
+                  </div>
+                </div>
+              </div>
+
+{/* Right Sidebar */}
+              <div className="w-80 bg-gray-800 border-l border-gray-700 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+                
+                {/* Quick Actions */}
+                <div>
+                  <h3 className="text-lg font-bold mb-3">Quick Actions</h3>
+                  <div className="space-y-2">
+                    {showInvoiceButton && selectedWO.status === 'completed' && !selectedWO.is_locked && (
+                      <button
+                        onClick={() => generateInvoice(selectedWO.wo_id)}
+                        disabled={generatingInvoice}
+                        className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-3 rounded-lg font-bold transition"
+                      >
+                        {generatingInvoice ? '⏳ Generating...' : 'Generate Invoice'}
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={() => window.print()}
+                      className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg font-semibold transition"
+                    >
+                      Print WO
+                    </button>
+
+                    <button
+                      className="w-full bg-red-600 hover:bg-red-700 px-4 py-3 rounded-lg font-semibold transition"
+                      onClick={() => deleteWorkOrder(selectedWO.wo_id)}
+                    >
+                      🗑️ Delete WO
+                    </button>
+                  </div>
+                </div>
+
+{/* Cost Summary */}
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <h3 className="text-lg font-bold mb-4">Cost Summary</h3>
+                  
+                  {/* Team Labor */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Total RT ({selectedWO.hours_regular || 0} hrs)</span>
+                        <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Total OT ({selectedWO.hours_overtime || 0} hrs)</span>
+                        <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-600 mt-2 pt-2">
+                      <div className="flex justify-between font-bold">
+                        <span>Total Labor:</span>
+                        <span>${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Other Costs */}
+                  <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Mileage ({selectedWO.miles || 0} mi × $1.00)</span>
+                      <span className="font-semibold">${((selectedWO.miles || 0) * 1.00).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Materials</span>
+                      <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Equipment</span>
+                      <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Trailer</span>
+                      <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Rental</span>
+                      <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Grand Total */}
+                  <div className="border-t-2 border-gray-600 mt-4 pt-4">
+                    <div className="flex justify-between text-lg font-bold mb-3">
+                      <span>Grand Total:</span>
+                      <span className="text-green-400">${calculateTotalCost(selectedWO).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">NTE Budget:</span>
+                      <span className="font-semibold">${(selectedWO.nte || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Remaining:</span>
+                      <span className={`font-bold ${
+                        (selectedWO.nte || 0) - calculateTotalCost(selectedWO) >= 0 
+                          ? 'text-green-400' 
+                          : 'text-red-400'
+                      }`}>
+                        ${((selectedWO.nte || 0) - calculateTotalCost(selectedWO)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+{/* Time Tracking */}
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <h3 className="text-lg font-bold mb-3">Time Tracking</h3>
+                  <div>
+                    <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM TOTALS</h4>
+                    <div className="text-2xl font-bold mb-1">
+                      {selectedWO.hours_regular || 0} RT + {selectedWO.hours_overtime || 0} OT
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      = {(selectedWO.hours_regular || 0) + (selectedWO.hours_overtime || 0)} total hours
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-gray-600">
+                      <div className="text-sm">
+                        <span className="text-gray-400">Total Miles Traveled:</span>
+                        <div className="text-xl font-bold">{selectedWO.miles || 0} mi</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex">
-        {/* Main Content Area */}
-        <div className="flex-1 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
-          
-          {/* Work Order Details */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold mb-4">Work Order Details</h3>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Building</label>
-                <input
-                  type="text"
-                  value={selectedWO.building}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { building: selectedWO.building })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Requestor</label>
-                <input
-                  type="text"
-                  value={selectedWO.requestor || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { requestor: selectedWO.requestor })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="block text-sm text-gray-400 mb-1">Description</label>
-              <textarea
-                value={selectedWO.work_order_description}
-                onChange={(e) => setSelectedWO({ ...selectedWO, work_order_description: e.target.value })}
-                onBlur={() => updateWorkOrder(selectedWO.wo_id, { work_order_description: selectedWO.work_order_description })}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                rows="3"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-6 mt-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.nte || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { nte: selectedWO.nte })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Age</label>
-                <div className="bg-gray-700 px-4 py-2 rounded-lg text-white">
-                  {Math.floor((new Date() - new Date(selectedWO.date_entered)) / (1000 * 60 * 60 * 24))} days
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Primary Assignment */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold mb-4">Primary Assignment</h3>
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Lead Technician</label>
-              <select
-                value={selectedWO.lead_tech_id || ''}
-                onChange={(e) => {
-                  setSelectedWO({ ...selectedWO, lead_tech_id: e.target.value });
-                  updateWorkOrder(selectedWO.wo_id, { lead_tech_id: e.target.value || null });
-                }}
-                className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
-              >
-                <option value="">Unassigned</option>
-                {users.map(user => (
-                  <option key={user.user_id} value={user.user_id}>
-                    {user.first_name} {user.last_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Team Members - You'll need to fetch this from work_order_assignments table */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Team Members</h3>
-              <button className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-semibold">
-                + Add Helper/Tech
-              </button>
-            </div>
-            <div className="text-gray-400 text-sm">
-              Team member management coming soon...
-            </div>
-          </div>
-
-          {/* Update Status */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold mb-4">Update Status</h3>
-            <select
-              value={selectedWO.status}
-              onChange={(e) => {
-                setSelectedWO({ ...selectedWO, status: e.target.value });
-                updateWorkOrderStatus(selectedWO.wo_id, e.target.value);
-              }}
-              disabled={selectedWO.is_locked}
-              className={`w-full px-4 py-3 rounded-lg font-semibold text-white ${getStatusColor(selectedWO.status)} ${
-                selectedWO.is_locked ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              <option value="pending">Pending</option>
-              <option value="assigned">Assigned</option>
-              <option value="in_progress">In Progress</option>
-              <option value="needs_return">Needs Return</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-
-          {/* Primary Tech Field Data */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Primary Tech Field Data</h3>
-              <button className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold">
-                💾 Save Changes
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Regular Hours (RT)</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  value={selectedWO.hours_regular || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, hours_regular: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_regular: selectedWO.hours_regular })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-                <p className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</p>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Overtime Hours (OT)</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  value={selectedWO.hours_overtime || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, hours_overtime: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_overtime: selectedWO.hours_overtime })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-                <p className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mt-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Miles</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={selectedWO.miles || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, miles: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { miles: selectedWO.miles })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-                <p className="text-xs text-gray-500 mt-1">@ $1.00 per mile</p>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Material Cost ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.material_cost || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, material_cost: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { material_cost: selectedWO.material_cost })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mt-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Equipment Cost ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.emf_equipment_cost || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { emf_equipment_cost: selectedWO.emf_equipment_cost })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Trailer Cost ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedWO.trailer_cost || ''}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, trailer_cost: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { trailer_cost: selectedWO.trailer_cost })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Comments & Notes */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="text-xl font-bold mb-4">Comments & Notes</h3>
-            
-            {/* Comment History */}
-            <div className="bg-gray-700 rounded-lg p-4 mb-4 max-h-60 overflow-y-auto">
-              {selectedWO.comments ? (
-                <div className="text-sm text-gray-300 whitespace-pre-wrap">
-                  {selectedWO.comments}
-                </div>
-              ) : (
-                <div className="text-gray-500 text-sm">No comments yet</div>
-              )}
-            </div>
-
-            {/* Add Comment */}
-            <div>
-              <textarea
-                placeholder="Add a new comment..."
-                className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg mb-2"
-                rows="3"
-              />
-              <button className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-semibold">
-                Add Comment
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="w-80 bg-gray-800 border-l border-gray-700 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
-          
-          {/* Quick Actions */}
-          <div>
-            <h3 className="text-lg font-bold mb-3">Quick Actions</h3>
-            <div className="space-y-2">
-              {showInvoiceButton && selectedWO.status === 'completed' && !selectedWO.is_locked && (
-                <button
-                  onClick={() => generateInvoice(selectedWO.wo_id)}
-                  disabled={generatingInvoice}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-3 rounded-lg font-bold transition"
-                >
-                  {generatingInvoice ? '⏳ Generating...' : 'Generate Invoice'}
-                </button>
-              )}
-              
-              <button
-                onClick={() => window.print()}
-                className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg font-semibold transition"
-              >
-                Print WO
-              </button>
-
-              <button
-                className="w-full bg-red-600 hover:bg-red-700 px-4 py-3 rounded-lg font-semibold transition"
-                onClick={() => deleteWorkOrder(selectedWO.wo_id)}
-              >
-                🗑️ Delete WO
-              </button>
-            </div>
-          </div>
-
-          {/* Check In/Out */}
-          <div>
-            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
-              📍 Check In/Out
-            </h3>
-            <button className="w-full bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-bold">
-              ✓ CHECK IN
-            </button>
-          </div>
-
-          {/* Cost Summary */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <h3 className="text-lg font-bold mb-4">Cost Summary</h3>
-            
-            {/* Team Labor */}
-            <div className="mb-4">
-              <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total RT ({selectedWO.hours_regular || 0} hrs)</span>
-                  <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total OT ({selectedWO.hours_overtime || 0} hrs)</span>
-                  <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
-                </div>
-              </div>
-              <div className="border-t border-gray-600 mt-2 pt-2">
-                <div className="flex justify-between font-bold">
-                  <span>Total Labor:</span>
-                  <span>${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)).toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Other Costs */}
-            <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Total Mileage ({selectedWO.miles || 0} mi × $1.00)</span>
-                <span className="font-semibold">${((selectedWO.miles || 0) * 1.00).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Materials</span>
-                <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Equipment</span>
-                <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Trailer</span>
-                <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Rental</span>
-                <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Grand Total */}
-            <div className="border-t-2 border-gray-600 mt-4 pt-4">
-              <div className="flex justify-between text-lg font-bold mb-3">
-                <span>Grand Total:</span>
-                <span className="text-green-400">${calculateTotalCost(selectedWO).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">NTE Budget:</span>
-                <span className="font-semibold">${(selectedWO.nte || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Remaining:</span>
-                <span className={`font-bold ${
-                  (selectedWO.nte || 0) - calculateTotalCost(selectedWO) >= 0 
-                    ? 'text-green-400' 
-                    : 'text-red-400'
-                }`}>
-                  ${((selectedWO.nte || 0) - calculateTotalCost(selectedWO)).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Time Tracking */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <h3 className="text-lg font-bold mb-3">Time Tracking</h3>
-            <div>
-              <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM TOTALS</h4>
-              <div className="text-2xl font-bold mb-1">
-                {selectedWO.hours_regular || 0} RT + {selectedWO.hours_overtime || 0} OT
-              </div>
-              <div className="text-sm text-gray-400">
-                = {(selectedWO.hours_regular || 0) + (selectedWO.hours_overtime || 0)} total hours
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-600">
-                <div className="text-sm">
-                  <span className="text-gray-400">Total Miles Traveled:</span>
-                  <div className="text-xl font-bold">{selectedWO.miles || 0} mi</div>
-                </div>
-              </div>
-            </div>
 {/* New Work Order Modal */}
       {showNewWOModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -1065,7 +1046,7 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+<div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Priority</label>
                   <select
@@ -1118,9 +1099,103 @@ export default function Dashboard() {
                     <option key={user.user_id} value={user.user_id}>
                       {user.first_name} {user.last_name}
                     </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Comments / Notes</label>
+                <textarea
+                  value={newWO.comments}
+                  onChange={(e) => setNewWO({ ...newWO, comments: e.target.value })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  rows="3"
+                  placeholder="Add any initial notes..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={createWorkOrder}
+                  className="flex-1 bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold transition"
+                >
+                  Create Work Order
+                </button>
+                <button
+                  onClick={() => setShowNewWOModal(false)}
+                  className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
+
+{/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
+            <div className="border-b border-gray-700 p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">📥 Import from Google Sheets</h2>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-sm">
+                <div className="font-bold mb-2">📋 Required Column Format:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Column A: WO Number</li>
+                  <li>Column B: Date Entered (YYYY-MM-DD)</li>
+                  <li>Column C: Building</li>
+                  <li>Column D: Description</li>
+                  <li>Column E: Requestor</li>
+                  <li>Column F: Priority (low/medium/high/emergency)</li>
+                  <li>Column G: Status (pending/assigned/in_progress/completed)</li>
+                  <li>Column H: NTE Amount</li>
+                  <li>Column I: Comments (optional)</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Google Sheets URL (must be set to &quot;Anyone with link can view&quot;)
+                </label>
+                <input
+                  type="text"
+                  value={sheetsUrl}
+                  onChange={(e) => setSheetsUrl(e.target.value)}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={importFromSheets}
+                  disabled={importing}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold transition"
+                >
+                  {importing ? '⏳ Importing...' : 'Import Work Orders'}
+                </button>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+</div>
+  );
+}

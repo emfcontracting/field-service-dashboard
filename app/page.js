@@ -758,9 +758,9 @@ return (
       </div>
 
 {/* Work Order Detail Modal */}
-{selectedWO && (
-  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-    <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      {selectedWO && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
       
       {/* Header */}
       <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10">
@@ -1369,39 +1369,6 @@ return (
                   </div>
                 </div>
               </div>
-
-              {/* Right Sidebar */}
-              <div className="w-80 bg-gray-800 border-l border-gray-700 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
-                
-                {/* Quick Actions */}
-                <div>
-                  <h3 className="text-lg font-bold mb-3">Quick Actions</h3>
-                  <div className="space-y-2">
-                    {showInvoiceButton && selectedWO.status === 'completed' && !selectedWO.is_locked && (
-                      <button
-                        onClick={() => generateInvoice(selectedWO.wo_id)}
-                        disabled={generatingInvoice}
-                        className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-4 py-3 rounded-lg font-bold transition"
-                      >
-                        {generatingInvoice ? '⏳ Generating...' : 'Generate Invoice'}
-                      </button>
-                    )}
-                    
-                    <button
-                      onClick={() => window.print()}
-                      className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg font-semibold transition"
-                    >
-                      Print WO
-                    </button>
-
-                    <button
-                      className="w-full bg-red-600 hover:bg-red-700 px-4 py-3 rounded-lg font-semibold transition"
-                      onClick={() => deleteWorkOrder(selectedWO.wo_id)}
-                    >
-                      🗑️ Delete WO
-                    </button>
-                  </div>
-                </div>
 
                 {/* Cost Summary */}
                 <div className="bg-gray-700 rounded-lg p-4">

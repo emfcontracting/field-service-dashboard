@@ -229,7 +229,7 @@ export async function POST(request) {
         hours_overtime: workOrder.hours_overtime || 0,
         miles: totalMiles,
         material_cost: materialCost,
-        emf_equipment_cost: equipmentCost,
+        equipment_cost: equipmentCost,
         trailer_cost: trailerCost,
         rental_cost: rentalCost,
         

@@ -88,8 +88,8 @@ export async function POST(request) {
           description: `${workOrder.lead_tech.first_name} ${workOrder.lead_tech.last_name} - Regular Hours`,
           quantity: regularHours,
           unit_price: regularRate,
-          amount: regularCost,
-          category: 'labor'
+          line_total: regularCost,
+          item_type: 'labor'
         });
       }
 
@@ -98,8 +98,8 @@ export async function POST(request) {
           description: `${workOrder.lead_tech.first_name} ${workOrder.lead_tech.last_name} - Overtime Hours`,
           quantity: overtimeHours,
           unit_price: overtimeRate,
-          amount: overtimeCost,
-          category: 'labor'
+          line_total: overtimeCost,
+          item_type: 'labor'
         });
       }
     }
@@ -123,8 +123,8 @@ export async function POST(request) {
             description: `${assignment.user.first_name} ${assignment.user.last_name} - Regular Hours (${assignment.role})`,
             quantity: regularHours,
             unit_price: regularRate,
-            amount: regularCost,
-            category: 'labor'
+            line_total: regularCost,
+            item_type: 'labor'
           });
         }
 
@@ -133,8 +133,8 @@ export async function POST(request) {
             description: `${assignment.user.first_name} ${assignment.user.last_name} - Overtime Hours (${assignment.role})`,
             quantity: overtimeHours,
             unit_price: overtimeRate,
-            amount: overtimeCost,
-            category: 'labor'
+            line_total: overtimeCost,
+            item_type: 'labor'
           });
         }
       }
@@ -147,8 +147,8 @@ export async function POST(request) {
         description: 'Materials',
         quantity: 1,
         unit_price: materialCost,
-        amount: materialCost,
-        category: 'materials'
+        line_total: materialCost,
+        item_type: 'materials'
       });
     }
 
@@ -159,8 +159,8 @@ export async function POST(request) {
         description: 'Equipment',
         quantity: 1,
         unit_price: equipmentCost,
-        amount: equipmentCost,
-        category: 'equipment'
+        line_total: equipmentCost,
+        item_type: 'equipment'
       });
     }
 
@@ -171,8 +171,8 @@ export async function POST(request) {
         description: 'Trailer',
         quantity: 1,
         unit_price: trailerCost,
-        amount: trailerCost,
-        category: 'trailer'
+        line_total: trailerCost,
+        item_type: 'trailer'
       });
     }
 
@@ -183,8 +183,8 @@ export async function POST(request) {
         description: 'Equipment Rental',
         quantity: 1,
         unit_price: rentalCost,
-        amount: rentalCost,
-        category: 'rental'
+        line_total: rentalCost,
+        item_type: 'rental'
       });
     }
 
@@ -201,16 +201,16 @@ export async function POST(request) {
         description: `Mileage (${totalMiles} miles)`,
         quantity: totalMiles,
         unit_price: mileageRate,
-        amount: mileageCost,
-        category: 'mileage'
+        line_total: mileageCost,
+        item_type: 'mileage'
       });
     }
 
     // 9. Calculate totals
     const subtotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
     const taxRate = 0.0; // Set your tax rate here (e.g., 0.07 for 7%)
-    const taxAmount = subtotal * taxRate;
-    const total = subtotal + taxAmount;
+    const taxline_total = subtotal * taxRate;
+    const total = subtotal + taxline_total;
 
     // 10. Generate invoice number
     const invoiceNumber = `INV-${workOrder.wo_number}`;
@@ -224,14 +224,14 @@ export async function POST(request) {
         invoice_date: new Date().toISOString().split('T')[0],
         status: 'draft',
         
-        // Amounts using correct column names
-        labor_amount: laborCost,
-        materials_amount: materialCost,
-        equipment_amount: equipmentCost,
-        mileage_amount: mileageCost,
+        // line_totals using correct column names
+        labor_line_total: laborCost,
+        materials_line_total: materialCost,
+        equipment_line_total: equipmentCost,
+        mileage_line_total: mileageCost,
         subtotal: subtotal,
-        tax_amount: taxAmount,
-        total_amount: total
+        tax_line_total: taxline_total,
+        total_line_total: total
       }])
       .select()
       .single();

@@ -55,8 +55,14 @@ export default function Dashboard() {
   const [showInvoiceButton, setShowInvoiceButton] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
+  // Team Members
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [showAddTeamMemberModal, setShowAddTeamMemberModal] = useState(false);
+  const [selectedTeamMember, setSelectedTeamMember] = useState('');
+
   // Admin Password for Delete
   const adminPassword = 'admin123';
+
 
 // Fetch Data on Mount
   useEffect(() => {
@@ -69,10 +75,11 @@ export default function Dashboard() {
     applyFilters();
   }, [workOrders, statusFilter, priorityFilter, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check if selected WO can generate invoice
+  // Check if selected WO can generate invoice and fetch team members
   useEffect(() => {
     if (selectedWO) {
       checkCanGenerateInvoice(selectedWO.wo_id);
+      fetchTeamMembers(selectedWO.wo_id);
     }
   }, [selectedWO]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -365,6 +372,104 @@ export default function Dashboard() {
       setImporting(false);
     }
   };
+
+// Fetch Team Members for a Work Order
+  const fetchTeamMembers = async (woId) => {
+    const { data, error } = await supabase
+      .from('work_order_assignments')
+      .select(`
+        *,
+        user:users!user_id(first_name, last_name, email, role)
+      `)
+      .eq('wo_id', woId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching team members:', error);
+    } else {
+      setTeamMembers(data || []);
+    }
+  };
+
+  // Add Team Member
+  const addTeamMember = async () => {
+    if (!selectedTeamMember) {
+      alert('Please select a team member');
+      return;
+    }
+
+    // Check if already added
+    const alreadyAdded = teamMembers.find(tm => tm.user_id === selectedTeamMember);
+    if (alreadyAdded) {
+      alert('This team member is already assigned to this work order');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('work_order_assignments')
+      .insert([{
+        wo_id: selectedWO.wo_id,
+        user_id: selectedTeamMember,
+        role: 'helper',
+        hours_regular: 0,
+        hours_overtime: 0,
+        miles: 0
+      }])
+      .select(`
+        *,
+        user:users!user_id(first_name, last_name, email, role)
+      `);
+
+    if (error) {
+      console.error('Error adding team member:', error);
+      alert('Failed to add team member');
+    } else {
+      setTeamMembers([...teamMembers, ...data]);
+      setShowAddTeamMemberModal(false);
+      setSelectedTeamMember('');
+      alert('✅ Team member added successfully!');
+      fetchWorkOrders(); // Refresh to update totals
+    }
+  };
+
+  // Update Team Member
+  const updateTeamMember = async (assignmentId, updates) => {
+    const { error } = await supabase
+      .from('work_order_assignments')
+      .update(updates)
+      .eq('assignment_id', assignmentId);
+
+    if (error) {
+      console.error('Error updating team member:', error);
+      alert('Failed to update team member');
+    } else {
+      fetchTeamMembers(selectedWO.wo_id);
+      fetchWorkOrders(); // Refresh to update totals
+    }
+  };
+
+  // Remove Team Member
+  const removeTeamMember = async (assignmentId) => {
+    if (!confirm('Remove this team member from the work order?')) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('work_order_assignments')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (error) {
+      console.error('Error removing team member:', error);
+      alert('Failed to remove team member');
+    } else {
+      setTeamMembers(teamMembers.filter(tm => tm.assignment_id !== assignmentId));
+      fetchWorkOrders(); // Refresh to update totals
+    }
+  };
+
+  // Get Status Color
+  const getStatusColor = (status) => {
 
 // Get Status Color
   const getStatusColor = (status) => {
@@ -721,6 +826,112 @@ return (
                     </select>
                   </div>
                 </div>
+
+                {/* Team Members */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold">Team Members</h3>
+                    <button
+                      onClick={() => setShowAddTeamMemberModal(true)}
+                      className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      + Add Helper/Tech
+                    </button>
+                  </div>
+
+                  {teamMembers.length === 0 ? (
+                    <div className="text-gray-400 text-sm text-center py-4">
+                      No team members assigned yet. Click the button above to add helpers or co-leads.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {teamMembers.map(member => (
+                        <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <div className="font-bold text-lg">
+                                {member.user.first_name} {member.user.last_name}
+                              </div>
+                              <div className="text-sm text-gray-400">{member.user.email}</div>
+                              <div className="text-xs text-blue-400 mt-1">
+                                {member.role === 'helper' ? '👷 Helper' : '🔧 Co-Lead'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeTeamMember(member.assignment_id)}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">RT Hours</label>
+                              <input
+                                type="number"
+                                step="0.25"
+                                value={member.hours_regular || ''}
+                                onChange={(e) => {
+                                  const newMembers = teamMembers.map(tm =>
+                                    tm.assignment_id === member.assignment_id
+                                      ? { ...tm, hours_regular: parseFloat(e.target.value) || 0 }
+                                      : tm
+                                  );
+                                  setTeamMembers(newMembers);
+                                }}
+                                onBlur={() => updateTeamMember(member.assignment_id, { hours_regular: member.hours_regular })}
+                                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">OT Hours</label>
+                              <input
+                                type="number"
+                                step="0.25"
+                                value={member.hours_overtime || ''}
+                                onChange={(e) => {
+                                  const newMembers = teamMembers.map(tm =>
+                                    tm.assignment_id === member.assignment_id
+                                      ? { ...tm, hours_overtime: parseFloat(e.target.value) || 0 }
+                                      : tm
+                                  );
+                                  setTeamMembers(newMembers);
+                                }}
+                                onBlur={() => updateTeamMember(member.assignment_id, { hours_overtime: member.hours_overtime })}
+                                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Miles</label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={member.miles || ''}
+                                onChange={(e) => {
+                                  const newMembers = teamMembers.map(tm =>
+                                    tm.assignment_id === member.assignment_id
+                                      ? { ...tm, miles: parseFloat(e.target.value) || 0 }
+                                      : tm
+                                  );
+                                  setTeamMembers(newMembers);
+                                }}
+                                onBlur={() => updateTeamMember(member.assignment_id, { miles: member.miles })}
+                                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-sm text-gray-400">
+                            Labor: ${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Update Status */}
 
                 {/* Update Status */}
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -1195,6 +1406,76 @@ return (
           </div>
         </div>
       )}
+
+{/* Import Modal */}
+      {showImportModal && (
+        ...existing import modal code stays here...
+      )}
+
+      {/* Add Team Member Modal */}
+      {showAddTeamMemberModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-md w-full">
+            <div className="border-b border-gray-700 p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">+ Add Team Member</h2>
+              <button
+                onClick={() => {
+                  setShowAddTeamMemberModal(false);
+                  setSelectedTeamMember('');
+                }}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Select User</label>
+                <select
+                  value={selectedTeamMember}
+                  onChange={(e) => setSelectedTeamMember(e.target.value)}
+                  className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
+                >
+                  <option value="">-- Select a team member --</option>
+                  {users
+                    .filter(user => user.user_id !== selectedWO?.lead_tech_id)
+                    .map(user => (
+                      <option key={user.user_id} value={user.user_id}>
+                        {user.first_name} {user.last_name} ({user.role})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="bg-blue-900 text-blue-200 p-3 rounded text-sm">
+                💡 Team members will be added as helpers. You can assign their hours and track their work separately.
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={addTeamMember}
+                  className="flex-1 bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold transition"
+                >
+                  Add Team Member
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddTeamMemberModal(false);
+                    setSelectedTeamMember('');
+                  }}
+                  className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 </div>
   );

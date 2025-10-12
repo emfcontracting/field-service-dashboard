@@ -16,6 +16,8 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
+  const adminPassword = 'admin123'; // ⚠️ Change this in production!
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -46,14 +48,12 @@ export default function InvoicesPage() {
   };
 
   const fetchCompletedWorkOrders = async () => {
-    // Get all work order IDs that already have invoices
     const { data: allInvoices } = await supabase
       .from('invoices')
       .select('wo_id');
 
     const invoicedWOIds = allInvoices?.map(inv => inv.wo_id) || [];
 
-    // Build query for completed WOs without invoices
     let query = supabase
       .from('work_orders')
       .select(`
@@ -61,9 +61,9 @@ export default function InvoicesPage() {
         lead_tech:users!lead_tech_id(first_name, last_name)
       `)
       .eq('status', 'completed')
+      .eq('acknowledged', true)
       .order('date_entered', { ascending: false });
 
-    // Only add NOT IN if there are invoiced WOs
     if (invoicedWOIds.length > 0) {
       query = query.not('wo_id', 'in', `(${invoicedWOIds.join(',')})`);
     }
@@ -94,7 +94,7 @@ export default function InvoicesPage() {
 
       if (result.success) {
         alert('✅ Invoice generated successfully!');
-        await fetchData(); // Refresh both lists
+        await fetchData();
       } else {
         alert('❌ Error: ' + result.error);
       }
@@ -139,8 +139,196 @@ export default function InvoicesPage() {
       alert('✅ Invoice approved!');
       fetchInvoices();
       if (selectedInvoice?.invoice_id === invoiceId) {
-        setSelectedInvoice({ ...selectedInvoice, status: 'approved' });
+        setSelectedInvoice({ ...selectedInvoice, status: 'approved', approved_at: new Date().toISOString() });
       }
+    }
+  };
+
+  const reopenInvoice = async (invoiceId) => {
+    const password = prompt('Enter admin password to reopen invoice:');
+    if (password !== adminPassword) {
+      alert('❌ Incorrect password');
+      return;
+    }
+
+    if (!confirm('⚠️ WARNING: This will reopen the invoice and set it back to DRAFT status.\n\nContinue?')) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        status: 'draft',
+        approved_at: null,
+        approved_by: null
+      })
+      .eq('invoice_id', invoiceId);
+
+    if (error) {
+      alert('❌ Error reopening invoice: ' + error.message);
+    } else {
+      alert('✅ Invoice reopened! Status set to DRAFT.');
+      fetchInvoices();
+      if (selectedInvoice?.invoice_id === invoiceId) {
+        setSelectedInvoice({ 
+          ...selectedInvoice, 
+          status: 'draft', 
+          approved_at: null, 
+          approved_by: null 
+        });
+      }
+    }
+  };
+
+  const printInvoice = () => {
+    if (!selectedInvoice) return;
+
+    const printWindow = window.open('', '_blank');
+    const invoiceHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${selectedInvoice.invoice_number}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 40px;
+              color: #333;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              border-bottom: 2px solid #333;
+              padding-bottom: 20px;
+            }
+            .company-name {
+              font-size: 24px;
+              font-weight: bold;
+              margin-bottom: 5px;
+            }
+            .invoice-number {
+              font-size: 18px;
+              color: #666;
+            }
+            .info-section {
+              margin: 20px 0;
+            }
+            .info-label {
+              font-weight: bold;
+              display: inline-block;
+              width: 150px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 20px 0;
+            }
+            th, td {
+              border: 1px solid #ddd;
+              padding: 12px;
+              text-align: left;
+            }
+            th {
+              background-color: #f2f2f2;
+              font-weight: bold;
+            }
+            .totals {
+              margin-top: 20px;
+              text-align: right;
+            }
+            .totals div {
+              margin: 5px 0;
+            }
+            .grand-total {
+              font-size: 20px;
+              font-weight: bold;
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 2px solid #333;
+            }
+            @media print {
+              body {
+                padding: 20px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-name">EMF Contracting</div>
+            <div class="invoice-number">Invoice: ${selectedInvoice.invoice_number}</div>
+          </div>
+
+          <div class="info-section">
+            <div><span class="info-label">Work Order:</span> ${selectedInvoice.work_order?.wo_number}</div>
+            <div><span class="info-label">Building:</span> ${selectedInvoice.work_order?.building}</div>
+            <div><span class="info-label">Date Generated:</span> ${new Date(selectedInvoice.generated_at).toLocaleDateString()}</div>
+            <div><span class="info-label">Status:</span> ${selectedInvoice.status.toUpperCase()}</div>
+            ${selectedInvoice.approved_at ? `<div><span class="info-label">Approved Date:</span> ${new Date(selectedInvoice.approved_at).toLocaleDateString()}</div>` : ''}
+          </div>
+
+          <div class="info-section">
+            <div><strong>Description:</strong></div>
+            <div>${selectedInvoice.work_order?.work_order_description}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lineItems.map(item => `
+                <tr>
+                  <td>${item.description}</td>
+                  <td>${item.quantity}</td>
+                  <td>$${item.unit_price.toFixed(2)}</td>
+                  <td>$${item.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div><strong>Labor:</strong> $${selectedInvoice.labor_cost.toFixed(2)}</div>
+            <div><strong>Materials:</strong> $${selectedInvoice.material_cost.toFixed(2)}</div>
+            <div><strong>Equipment:</strong> $${selectedInvoice.equipment_cost.toFixed(2)}</div>
+            <div><strong>Trailer:</strong> $${selectedInvoice.trailer_cost.toFixed(2)}</div>
+            <div><strong>Rental:</strong> $${selectedInvoice.rental_cost.toFixed(2)}</div>
+            <div><strong>Mileage:</strong> $${selectedInvoice.mileage_cost.toFixed(2)}</div>
+            <div style="margin-top: 10px;"><strong>Subtotal:</strong> $${selectedInvoice.subtotal.toFixed(2)}</div>
+            ${selectedInvoice.tax_amount > 0 ? `<div><strong>Tax:</strong> $${selectedInvoice.tax_amount.toFixed(2)}</div>` : ''}
+            <div class="grand-total">TOTAL: $${selectedInvoice.total.toFixed(2)}</div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(invoiceHTML);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const shareInvoice = () => {
+    if (!selectedInvoice) return;
+
+    const shareText = `Invoice ${selectedInvoice.invoice_number}\nWork Order: ${selectedInvoice.work_order?.wo_number}\nBuilding: ${selectedInvoice.work_order?.building}\nTotal: $${selectedInvoice.total.toFixed(2)}\nStatus: ${selectedInvoice.status.toUpperCase()}`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: `Invoice ${selectedInvoice.invoice_number}`,
+        text: shareText
+      }).catch(err => console.log('Error sharing:', err));
+    } else {
+      navigator.clipboard.writeText(shareText).then(() => {
+        alert('✅ Invoice details copied to clipboard!');
+      }).catch(() => {
+        alert('❌ Unable to copy to clipboard');
+      });
     }
   };
 
@@ -157,7 +345,6 @@ export default function InvoicesPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">💰 Invoice Management</h1>
           <button
@@ -174,10 +361,8 @@ export default function InvoicesPage() {
 
         {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Work Orders & Invoices */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Completed Work Orders Ready for Invoice */}
               {completedWOs.length > 0 && (
                 <div className="bg-gray-800 rounded-lg p-4">
                   <h2 className="text-xl font-bold mb-4">
@@ -216,7 +401,6 @@ export default function InvoicesPage() {
                 </div>
               )}
 
-              {/* Existing Invoices */}
               <div className="bg-gray-800 rounded-lg p-4">
                 <h2 className="text-xl font-bold mb-4">📋 All Invoices ({invoices.length})</h2>
 
@@ -260,7 +444,6 @@ export default function InvoicesPage() {
               </div>
             </div>
 
-            {/* Right: Invoice Details */}
             <div className="lg:col-span-1">
               {selectedInvoice ? (
                 <div className="bg-gray-800 rounded-lg p-4 sticky top-6">
@@ -294,14 +477,20 @@ export default function InvoicesPage() {
                       <div className="text-sm text-gray-400">Generated</div>
                       <div className="text-sm">{new Date(selectedInvoice.generated_at).toLocaleString()}</div>
                     </div>
+
+                    {selectedInvoice.approved_at && (
+                      <div>
+                        <div className="text-sm text-gray-400">Approved</div>
+                        <div className="text-sm">{new Date(selectedInvoice.approved_at).toLocaleString()}</div>
+                      </div>
+                    )}
                   </div>
 
                   <hr className="border-gray-700 my-4" />
 
-                  {/* Line Items */}
                   <div className="mb-4">
                     <div className="font-bold mb-2">Line Items</div>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {lineItems.length === 0 ? (
                         <div className="text-sm text-gray-400">No line items</div>
                       ) : (
@@ -322,7 +511,6 @@ export default function InvoicesPage() {
 
                   <hr className="border-gray-700 my-4" />
 
-                  {/* Cost Breakdown */}
                   <div className="space-y-2 text-sm mb-4">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Labor</span>
@@ -367,21 +555,50 @@ export default function InvoicesPage() {
 
                   <hr className="border-gray-700 my-4" />
 
-                  {/* Actions */}
-                  {selectedInvoice.status === 'draft' && (
-                    <button
-                      onClick={() => approveInvoice(selectedInvoice.invoice_id)}
-                      className="w-full bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-bold transition"
-                    >
-                      ✅ Approve Invoice
-                    </button>
-                  )}
-
-                  {selectedInvoice.status === 'approved' && (
-                    <div className="bg-green-900 text-green-200 p-3 rounded-lg text-center font-semibold">
-                      ✅ Invoice Approved
+                  <div className="space-y-2">
+                    {/* Print & Share Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={printInvoice}
+                        className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold text-sm transition"
+                      >
+                        🖨️ Print
+                      </button>
+                      <button
+                        onClick={shareInvoice}
+                        className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold text-sm transition"
+                      >
+                        📤 Share
+                      </button>
                     </div>
-                  )}
+
+                    {/* Approve Button */}
+                    {selectedInvoice.status === 'draft' && (
+                      <button
+                        onClick={() => approveInvoice(selectedInvoice.invoice_id)}
+                        className="w-full bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-bold transition"
+                      >
+                        ✅ Approve Invoice
+                      </button>
+                    )}
+
+                    {/* Approved Status */}
+                    {selectedInvoice.status === 'approved' && (
+                      <div className="bg-green-900 text-green-200 p-3 rounded-lg text-center font-semibold">
+                        ✅ Invoice Approved
+                      </div>
+                    )}
+
+                    {/* Reopen Button (Admin Only) */}
+                    {selectedInvoice.status === 'approved' && (
+                      <button
+                        onClick={() => reopenInvoice(selectedInvoice.invoice_id)}
+                        className="w-full bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg font-semibold text-sm transition"
+                      >
+                        🔄 Reopen Invoice (Admin)
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400 sticky top-6">

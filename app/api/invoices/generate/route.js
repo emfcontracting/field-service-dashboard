@@ -224,22 +224,14 @@ export async function POST(request) {
         invoice_date: new Date().toISOString().split('T')[0],
         status: 'draft',
         
-        // Copy costs from work order
-        hours_regular: workOrder.hours_regular || 0,
-        hours_overtime: workOrder.hours_overtime || 0,
-        miles: totalMiles,
-        material_cost: materialCost,
-        equipment_cost: equipmentCost,
-        trailer_cost: trailerCost,
-        rental_cost: rentalCost,
-        
-        // Calculated totals
-        labor_cost: laborCost,
-        mileage_cost: mileageCost,
+        // Amounts using correct column names
+        labor_amount: laborCost,
+        materials_amount: materialCost,
+        equipment_amount: equipmentCost,
+        mileage_amount: mileageCost,
         subtotal: subtotal,
-        tax_rate: taxRate,
         tax_amount: taxAmount,
-        total: total
+        total_amount: total
       }])
       .select()
       .single();

@@ -994,11 +994,11 @@ const handleCheckOut = async () => {
                 </div>
               </div>
             </div>
-{/* Comments & Notes */}
+
+            {/* Comments & Notes */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
 
-              {/* Comments List */}
               <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
                 {comments.length === 0 ? (
                   <div className="text-center text-gray-400 py-4 text-sm">
@@ -1016,7 +1016,6 @@ const handleCheckOut = async () => {
                 )}
               </div>
 
-              {/* Add Comment */}
               <div>
                 <textarea
                   value={newComment}
@@ -1038,8 +1037,6 @@ const handleCheckOut = async () => {
           </div>
         </div>
       )}
-
-      {/* Add Team Member Modal */}
       {showAddMemberModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg w-full max-w-md">
@@ -1080,4 +1077,3 @@ const handleCheckOut = async () => {
     </div>
   );
 }
-          

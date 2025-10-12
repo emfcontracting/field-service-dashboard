@@ -218,16 +218,20 @@ export async function POST(request) {
     // 11. Create invoice record
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
-      .insert({
-        wo_id,
+      .insert([{
+        wo_id: wo_id,
         invoice_number: invoiceNumber,
+        invoice_date: new Date().toISOString().split('T')[0],
         status: 'draft',
-        labor_cost: laborCost,
-        material_cost: materialCost,
-        equipment_cost: equipmentCost,
-        trailer_cost: trailerCost,
-        rental_cost: rentalCost,
-        mileage_cost: mileageCost,
+        
+        // Copy costs from work order
+        hours_regular: workOrder.hours_regular || 0,
+        hours_overtime: workOrder.hours_overtime || 0,
+        miles: workOrder.miles || 0,
+        material_cost: workOrder.material_cost || 0,
+        emf_equipment_cost: workOrder.emf_equipment_cost || 0,  // ← CORRECT COLUMN NAME
+        trailer_cost: workOrder.trailer_cost || 0,
+        rental_cost: workOrder.rental_cost || 0,
         subtotal,
         tax_rate: taxRate,
         tax_amount: taxAmount,

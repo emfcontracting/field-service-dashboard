@@ -259,6 +259,41 @@ export default function Dashboard() {
       return;
     }
 
+// Acknowledge Work Order (Office/Admin only)
+const acknowledgeWorkOrder = async (woId) => {
+  if (!confirm('Acknowledge this completed work order?\n\nThis will lock the work order and prevent the technician from making further changes.')) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('work_orders')
+    .update({
+      acknowledged: true,
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: null,
+      is_locked: true,
+      locked_at: new Date().toISOString(),
+      locked_by: null
+    })
+    .eq('wo_id', woId);
+
+  if (error) {
+    console.error('Error acknowledging work order:', error);
+    alert('Failed to acknowledge work order');
+  } else {
+    alert('✅ Work order acknowledged and locked!');
+    fetchWorkOrders();
+    if (selectedWO?.wo_id === woId) {
+      setSelectedWO({
+        ...selectedWO,
+        acknowledged: true,
+        is_locked: true,
+        acknowledged_at: new Date().toISOString()
+      });
+    }
+  }
+};
+
     const confirmText = prompt('Type DELETE to confirm deletion:');
     if (confirmText !== 'DELETE') {
       alert('Deletion cancelled');
@@ -281,16 +316,17 @@ export default function Dashboard() {
   };
 
 // Check if Invoice Can Be Generated
-  const checkCanGenerateInvoice = async (woId) => {
-    const { data: invoice } = await supabase
-      .from('invoices')
-      .select('invoice_id, status')
-      .eq('wo_id', woId)
-      .single();
+const checkCanGenerateInvoice = async (woId) => {
+  const { data: invoice } = await supabase
+    .from('invoices')
+    .select('invoice_id, status')
+    .eq('wo_id', woId)
+    .single();
 
-    const wo = workOrders.find(w => w.wo_id === woId);
-    setShowInvoiceButton(wo?.status === 'completed' && !invoice && !wo?.is_locked);
-  };
+  const wo = workOrders.find(w => w.wo_id === woId);
+  // Only show invoice button if acknowledged and no invoice exists yet
+  setShowInvoiceButton(wo?.acknowledged && !invoice && !wo?.is_locked);
+};
 
   // Generate Invoice
   const generateInvoice = async (woId) => {
@@ -704,16 +740,13 @@ return (
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedWO(wo);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
-                          >
-                            View
-                          </button>
-                        </td>
+  <button
+    onClick={() => setSelectedWO(wo)}
+    className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition"
+  >
+    View
+  </button>
+</td>
                       </tr>
                     );
                   })}
@@ -725,40 +758,298 @@ return (
       </div>
 
 {/* Work Order Detail Modal */}
-      {selectedWO && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-900 rounded-lg max-w-7xl w-full my-8">
+{selectedWO && (
+  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      
+      {/* Header */}
+      <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10">
+        <div>
+          <h2 className="text-2xl font-bold">{selectedWO.wo_number}</h2>
+          {selectedWO.acknowledged && (
+            <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm mt-2 inline-block">
+              ✅ Acknowledged
+            </div>
+          )}
+          {selectedWO.is_locked && (
+            <div className="bg-red-900 text-red-200 px-3 py-1 rounded-lg text-sm mt-2 inline-block ml-2">
+              🔒 Locked
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => {
+            setSelectedWO(null);
+            setShowInvoiceButton(false);
+          }}
+          className="text-gray-400 hover:text-white text-3xl leading-none"
+        >
+          ×
+        </button>
+      </div>
 
-            {/* Header */}
-            <div className="bg-gray-800 border-b border-gray-700 p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-3xl font-bold mb-2">Work Order #{selectedWO.wo_number}</h2>
-                  <p className="text-gray-400">Created on {new Date(selectedWO.date_entered).toLocaleDateString()}</p>
-                </div>
-                <div className="flex gap-3 items-center">
-                  <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getPriorityColor(selectedWO.priority)}`}>
-                    {selectedWO.priority.toUpperCase()}
-                  </span>
-                  <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getStatusColor(selectedWO.status)}`}>
-                    {selectedWO.status.replace('_', ' ').toUpperCase()}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedWO(null);
-                      setShowInvoiceButton(false);
-                    }}
-                    className="text-gray-400 hover:text-white text-3xl leading-none ml-4"
-                  >
-                    ×
-                  </button>
-                </div>
+      <div className="p-6 space-y-6">
+        
+        {/* Basic Information */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Work Order #</label>
+            <input
+              type="text"
+              value={selectedWO.wo_number}
+              onChange={(e) => setSelectedWO({ ...selectedWO, wo_number: e.target.value })}
+              onBlur={() => updateWorkOrder(selectedWO.wo_id, { wo_number: selectedWO.wo_number })}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Date Entered</label>
+            <input
+              type="date"
+              value={selectedWO.date_entered}
+              onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: e.target.value })}
+              onBlur={() => updateWorkOrder(selectedWO.wo_id, { date_entered: selectedWO.date_entered })}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Building</label>
+          <input
+            type="text"
+            value={selectedWO.building}
+            onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
+            onBlur={() => updateWorkOrder(selectedWO.wo_id, { building: selectedWO.building })}
+            className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Description</label>
+          <textarea
+            value={selectedWO.work_order_description}
+            onChange={(e) => setSelectedWO({ ...selectedWO, work_order_description: e.target.value })}
+            onBlur={() => updateWorkOrder(selectedWO.wo_id, { work_order_description: selectedWO.work_order_description })}
+            className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+            rows="3"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+          <input
+            type="text"
+            value={selectedWO.requestor || ''}
+            onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
+            onBlur={() => updateWorkOrder(selectedWO.wo_id, { requestor: selectedWO.requestor })}
+            className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+          />
+        </div>
+
+        {/* Status, Priority, Lead Tech */}
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Status</label>
+            <select
+              value={selectedWO.status}
+              onChange={(e) => {
+                setSelectedWO({ ...selectedWO, status: e.target.value });
+                updateWorkOrderStatus(selectedWO.wo_id, e.target.value);
+              }}
+              disabled={selectedWO.is_locked || selectedWO.acknowledged}
+              className={`w-full px-4 py-2 rounded-lg font-semibold ${getStatusColor(selectedWO.status)} ${
+                (selectedWO.is_locked || selectedWO.acknowledged) ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              <option value="pending">Pending</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="needs_return">Needs Return</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Priority</label>
+            <select
+              value={selectedWO.priority}
+              onChange={(e) => {
+                setSelectedWO({ ...selectedWO, priority: e.target.value });
+                updateWorkOrder(selectedWO.wo_id, { priority: e.target.value });
+              }}
+              className={`w-full px-4 py-2 rounded-lg font-semibold ${getPriorityColor(selectedWO.priority)}`}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="emergency">Emergency</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Lead Tech</label>
+            <select
+              value={selectedWO.lead_tech_id || ''}
+              onChange={(e) => {
+                setSelectedWO({ ...selectedWO, lead_tech_id: e.target.value });
+                updateWorkOrder(selectedWO.wo_id, { lead_tech_id: e.target.value || null });
+              }}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+            >
+              <option value="">Unassigned</option>
+              {users.map(user => (
+                <option key={user.user_id} value={user.user_id}>
+                  {user.first_name} {user.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Budget and Costs */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h3 className="font-bold mb-3 text-lg">💰 Budget & Costs</h3>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={selectedWO.nte || ''}
+                onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
+                onBlur={() => updateWorkOrder(selectedWO.wo_id, { nte: selectedWO.nte })}
+                className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Estimated Total Cost</label>
+              <div className="bg-gray-600 px-4 py-2 rounded-lg font-bold text-lg">
+                ${(calculateTotalCost(selectedWO) || 0).toFixed(2)}
               </div>
             </div>
+          </div>
 
-            <div className="flex">
-              {/* Main Content Area */}
-              <div className="flex-1 p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Materials:</span>
+              <span>${(selectedWO.material_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Equipment:</span>
+              <span>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Trailer:</span>
+              <span>${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Rental:</span>
+              <span>${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Regular Hours:</span>
+              <span>{selectedWO.hours_regular || 0} hrs @ $64/hr</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Overtime Hours:</span>
+              <span>{selectedWO.hours_overtime || 0} hrs @ $96/hr</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Mileage:</span>
+              <span>{selectedWO.miles || 0} miles @ $1.00/mi</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Est. Labor Cost:</span>
+              <span>
+                ${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {calculateTotalCost(selectedWO) > (selectedWO.nte || 0) && (selectedWO.nte || 0) > 0 && (
+            <div className="bg-red-900 text-red-200 p-3 rounded-lg mt-3 text-sm">
+              ⚠️ Over budget by ${(calculateTotalCost(selectedWO) - (selectedWO.nte || 0)).toFixed(2)}
+            </div>
+          )}
+        </div>
+
+        {/* Comments */}
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Comments / Notes</label>
+          <textarea
+            value={selectedWO.comments || ''}
+            onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
+            onBlur={() => updateWorkOrder(selectedWO.wo_id, { comments: selectedWO.comments })}
+            className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+            rows="4"
+            placeholder="Add any notes or comments..."
+          />
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
+          
+          {/* Acknowledge Button (for completed but not acknowledged WOs) */}
+          {selectedWO.status === 'completed' && !selectedWO.acknowledged && !selectedWO.is_locked && (
+            <button
+              onClick={() => acknowledgeWorkOrder(selectedWO.wo_id)}
+              className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+            >
+              ✅ Acknowledge Completion & Lock
+            </button>
+          )}
+
+          {/* Acknowledged Message */}
+          {selectedWO.acknowledged && !selectedWO.is_locked && (
+            <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
+              <div className="font-bold">✅ Acknowledged - Ready for Invoice</div>
+              <div className="text-sm mt-1">
+                Acknowledged on {new Date(selectedWO.acknowledged_at).toLocaleString()}
+              </div>
+            </div>
+          )}
+
+          {/* Generate Invoice Button (only shows after acknowledgment) */}
+          {selectedWO.acknowledged && !selectedWO.is_locked && showInvoiceButton && (
+            <button
+              onClick={() => generateInvoice(selectedWO.wo_id)}
+              disabled={generatingInvoice}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
+            >
+              {generatingInvoice ? '⏳ Generating...' : '📄 Generate Invoice'}
+            </button>
+          )}
+
+          {/* Locked Message (after invoice generated) */}
+          {selectedWO.is_locked && selectedWO.acknowledged && (
+            <div className="bg-purple-900 text-purple-200 p-4 rounded-lg text-center">
+              <div className="font-bold">🔒 Invoice Generated</div>
+              <div className="text-sm mt-1">
+                <button 
+                  onClick={() => window.location.href = '/invoices'}
+                  className="underline hover:text-purple-100"
+                >
+                  View in Invoicing →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Button */}
+          <button
+            onClick={() => deleteWorkOrder(selectedWO.wo_id)}
+            className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
+          >
+            🗑️ Delete
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+)}
 
 {/* Work Order Details */}
                 <div className="bg-gray-800 rounded-lg p-6">

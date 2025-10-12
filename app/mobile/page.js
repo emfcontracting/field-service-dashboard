@@ -216,36 +216,36 @@ export default function MobileApp() {
   };
 
   // Update Work Order (Lead Tech Only)
-  const updateWorkOrder = async (updates) => {
-    if (!selectedWO) return;
+const updateWorkOrder = async (updates) => {
+  if (!selectedWO) return;
 
-    // Check if locked
-    if (selectedWO.is_locked && currentUser?.role !== 'admin') {
-      alert('❌ This work order is locked. Invoice has been generated. Contact admin for changes.');
-      return;
-    }
+  // Check if acknowledged/locked
+  if ((selectedWO.is_locked || selectedWO.acknowledged) && currentUser?.role !== 'admin') {
+    alert('❌ This work order has been acknowledged and locked. Contact admin for changes.');
+    return;
+  }
 
-    // Check if user is lead tech
-    if (userRole !== 'lead') {
-      alert('❌ Only the lead tech can modify work order details.');
-      return;
-    }
+  // Check if user is lead tech
+  if (userRole !== 'lead') {
+    alert('❌ Only the lead tech can modify work order details.');
+    return;
+  }
 
-    const { error } = await supabase
-      .from('work_orders')
-      .update(updates)
-      .eq('wo_id', selectedWO.wo_id);
+  const { error } = await supabase
+    .from('work_orders')
+    .update(updates)
+    .eq('wo_id', selectedWO.wo_id);
 
-    if (error) {
-      console.error('Error updating work order:', error);
-      alert('Failed to update');
-    } else {
-      // Update local state
-      setSelectedWO({ ...selectedWO, ...updates });
-      // Refresh work orders list
-      fetchWorkOrders(currentUser.user_id);
-    }
-  };
+  if (error) {
+    console.error('Error updating work order:', error);
+    alert('Failed to update');
+  } else {
+    // Update local state
+    setSelectedWO({ ...selectedWO, ...updates });
+    // Refresh work orders list
+    fetchWorkOrders(currentUser.user_id);
+  }
+};
 
   // Update Team Member Assignment (for their own hours/miles)
   const updateMyAssignment = async (updates) => {
@@ -550,21 +550,30 @@ export default function MobileApp() {
   if (!selectedWO) {
     return (
       <div className="min-h-screen bg-gray-900 text-white pb-20">
+
         {/* Header */}
-        <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-bold">👋 {currentUser.first_name}</h1>
-              <p className="text-sm text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
+<div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
+  <div className="flex justify-between items-center">
+    <div>
+      <h1 className="text-xl font-bold">👋 {currentUser.first_name}</h1>
+      <p className="text-sm text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+    </div>
+    <div className="flex gap-2">
+      <button
+        onClick={() => window.location.href = '/completed'}
+        className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
+      >
+        ✅ Completed
+      </button>
+      <button
+        onClick={handleLogout}
+        className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm font-semibold"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+</div>
 
         {/* Work Orders List */}
         <div className="p-4">
@@ -653,15 +662,22 @@ export default function MobileApp() {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Locked Warning */}
-        {isLocked && (
-          <div className="bg-red-900 text-red-200 p-4 rounded-lg">
-            <div className="font-bold text-lg">🔒 Work Order Locked</div>
-            <div className="text-sm mt-1">
-              Invoice has been generated. This work order is read-only for technicians.
-            </div>
-          </div>
-        )}
+
+        {/* Locked Warning Banner */}
+{(isLocked || selectedWO.acknowledged) && (
+  <div className="bg-red-900 text-red-200 p-4 rounded-lg mb-4 sticky top-0 z-10">
+    <div className="font-bold text-lg">🔒 Work Order Locked</div>
+    <div className="text-sm mt-1">
+      {selectedWO.acknowledged && !selectedWO.is_locked && (
+        'This work order has been acknowledged by the office and is locked for editing.'
+      )}
+      {selectedWO.is_locked && (
+        'Invoice has been generated. This work order is read-only for technicians.'
+      )}
+      {currentUser?.role === 'admin' && ' (You have admin override access)'}
+    </div>
+  </div>
+)}
 
         {/* Work Order Info */}
         <div className="bg-gray-800 rounded-lg p-4">

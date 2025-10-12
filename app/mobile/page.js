@@ -50,24 +50,32 @@ export default function MobileApp() {
   }, []);
 
   const fetchWorkOrders = async (userId) => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name)
-      `)
-      .eq('lead_tech_id', userId)
-      .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-      .order('created_at', { ascending: false });
+  setLoading(true);
+  const { data, error } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      lead_tech:users!lead_tech_id(first_name, last_name)
+    `)
+    .eq('lead_tech_id', userId)
+    .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
+    .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching work orders:', error);
-    } else {
-      setWorkOrders(data || []);
-    }
+  if (error) {
+    console.error('Error fetching work orders:', error);
     setLoading(false);
-  };
+    return;
+  }
+
+  // Show completed WOs only if they're not locked/acknowledged yet
+  const filteredData = (data || []).filter(wo => {
+    if (wo.status !== 'completed') return true; // Show all non-completed
+    return !wo.is_locked && !wo.acknowledged; // Show completed only if not locked
+  });
+
+  setWorkOrders(filteredData);
+  setLoading(false);
+};
 
   const fetchAvailableUsers = async () => {
     const { data } = await supabase
@@ -159,55 +167,71 @@ export default function MobileApp() {
   };
 
   const handleCheckIn = async () => {
-    if (!selectedWO) return;
+  if (!selectedWO) return;
 
+  try {
     const now = new Date().toISOString();
     const location = await getLocation();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('work_order_comments')
       .insert({
         wo_id: selectedWO.wo_id,
         user_id: currentUser.user_id,
         comment: `CHECKED IN\nGPS: ${location.lat}, ${location.lng}`,
         comment_type: 'check_in'
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
-      alert('Failed to check in');
+      console.error('Check-in error:', error);
+      alert('Failed to check in: ' + error.message);
     } else {
       setIsCheckedIn(true);
       setCheckInTime(now);
-      fetchComments(selectedWO.wo_id);
+      await fetchComments(selectedWO.wo_id);
       alert('✅ Checked In!');
     }
-  };
+  } catch (err) {
+    console.error('Check-in exception:', err);
+    alert('Failed to check in: ' + err.message);
+  }
+};
 
-  const handleCheckOut = async () => {
-    if (!selectedWO || !checkInTime) return;
+const handleCheckOut = async () => {
+  if (!selectedWO || !checkInTime) return;
 
+  try {
     const now = new Date().toISOString();
     const location = await getLocation();
     const duration = calculateDuration(checkInTime, now);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('work_order_comments')
       .insert({
         wo_id: selectedWO.wo_id,
         user_id: currentUser.user_id,
         comment: `CHECKED OUT\nGPS: ${location.lat}, ${location.lng}\nDuration: ${duration}`,
         comment_type: 'check_out'
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
-      alert('Failed to check out');
+      console.error('Check-out error:', error);
+      alert('Failed to check out: ' + error.message);
     } else {
       setIsCheckedIn(false);
       setCheckInTime(null);
-      fetchComments(selectedWO.wo_id);
+      await fetchComments(selectedWO.wo_id);
       alert('✅ Checked Out!');
     }
-  };
+  } catch (err) {
+    console.error('Check-out exception:', err);
+    alert('Failed to check out: ' + err.message);
+  }
+};
 
   const getLocation = () => {
     return new Promise((resolve) => {
@@ -538,6 +562,22 @@ export default function MobileApp() {
               </div>
             </div>
           </div>
+
+<div className="p-4 space-y-6">
+
+  {/* Locked/Acknowledged Warning */}
+  {(selectedWO.is_locked || selectedWO.acknowledged) && (
+    <div className="bg-red-900 text-red-200 p-4 rounded-lg">
+      <div className="font-bold text-lg">🔒 Work Order Locked</div>
+      <div className="text-sm mt-1">
+        {selectedWO.acknowledged && 'This work order has been acknowledged by the office. '}
+        {selectedWO.is_locked && 'Invoice has been generated. '}
+        You can view details but cannot make changes.
+      </div>
+    </div>
+  )}
+  
+  {/* Work Order Details */}
 
           <div className="p-4 space-y-6">
             

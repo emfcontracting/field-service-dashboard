@@ -398,7 +398,6 @@ export default function Dashboard() {
       return;
     }
 
-    // Check if already added
     const alreadyAdded = teamMembers.find(tm => tm.user_id === selectedTeamMember);
     if (alreadyAdded) {
       alert('This team member is already assigned to this work order');
@@ -428,7 +427,7 @@ export default function Dashboard() {
       setShowAddTeamMemberModal(false);
       setSelectedTeamMember('');
       alert('✅ Team member added successfully!');
-      fetchWorkOrders(); // Refresh to update totals
+      fetchWorkOrders();
     }
   };
 
@@ -444,7 +443,7 @@ export default function Dashboard() {
       alert('Failed to update team member');
     } else {
       fetchTeamMembers(selectedWO.wo_id);
-      fetchWorkOrders(); // Refresh to update totals
+      fetchWorkOrders();
     }
   };
 
@@ -464,14 +463,11 @@ export default function Dashboard() {
       alert('Failed to remove team member');
     } else {
       setTeamMembers(teamMembers.filter(tm => tm.assignment_id !== assignmentId));
-      fetchWorkOrders(); // Refresh to update totals
+      fetchWorkOrders();
     }
   };
 
   // Get Status Color
-  const getStatusColor = (status) => {
-
-// Get Status Color
   const getStatusColor = (status) => {
     const colors = {
       pending: 'bg-gray-600',
@@ -1407,11 +1403,6 @@ return (
         </div>
       )}
 
-{/* Import Modal */}
-      {showImportModal && (
-        ...existing import modal code stays here...
-      )}
-
       {/* Add Team Member Modal */}
       {showAddTeamMemberModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -1474,9 +1465,5 @@ return (
         </div>
       )}
     </div>
-  );
-}
-
-</div>
   );
 }

@@ -158,16 +158,31 @@ export default function Dashboard() {
     setFilteredWorkOrders(filtered);
   };
 
-  // Calculate Total Costs for a WO
+  // Calculate Total Costs for a WO (including team members)
   const calculateTotalCost = (wo) => {
-    const labor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
+    // Primary tech labor
+    const primaryLabor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
+    
+    // Team members labor
+    const teamLabor = teamMembers.reduce((total, member) => {
+      return total + ((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96);
+    }, 0);
+    
+    // Primary tech mileage
+    const primaryMileage = (wo.miles || 0) * 1.00;
+    
+    // Team members mileage
+    const teamMileage = teamMembers.reduce((total, member) => {
+      return total + ((member.miles || 0) * 1.00);
+    }, 0);
+    
+    // Other costs
     const materials = wo.material_cost || 0;
     const equipment = wo.emf_equipment_cost || 0;
     const trailer = wo.trailer_cost || 0;
     const rental = wo.rental_cost || 0;
-    const mileage = (wo.miles || 0) * 1.00;
     
-    return labor + materials + equipment + trailer + rental + mileage;
+    return primaryLabor + teamLabor + primaryMileage + teamMileage + materials + equipment + trailer + rental;
   };
 
 // Create New Work Order
@@ -1101,48 +1116,61 @@ return (
                   <h3 className="text-lg font-bold mb-4">Cost Summary</h3>
                   
                   {/* Team Labor */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Total RT ({selectedWO.hours_regular || 0} hrs)</span>
-                        <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Total OT ({selectedWO.hours_overtime || 0} hrs)</span>
-                        <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
-                      </div>
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM LABOR</h4>
+                  
+                  {/* Primary Tech */}
+                  <div className="space-y-1 text-sm mb-2">
+                    <div className="text-xs text-gray-500 font-semibold">Primary Tech</div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">RT ({selectedWO.hours_regular || 0} hrs)</span>
+                      <span className="font-semibold">${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
                     </div>
-                    <div className="border-t border-gray-600 mt-2 pt-2">
-                      <div className="flex justify-between font-bold">
-                        <span>Total Labor:</span>
-                        <span>${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)).toFixed(2)}</span>
-                      </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">OT ({selectedWO.hours_overtime || 0} hrs)</span>
+                      <span className="font-semibold">${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
                     </div>
                   </div>
 
-                  {/* Other Costs */}
-                  <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Total Mileage ({selectedWO.miles || 0} mi × $1.00)</span>
-                      <span className="font-semibold">${((selectedWO.miles || 0) * 1.00).toFixed(2)}</span>
+                  {/* Team Members */}
+                  {teamMembers.length > 0 && (
+                    <div className="space-y-1 text-sm mb-2 border-t border-gray-600 pt-2">
+                      <div className="text-xs text-gray-500 font-semibold">Team Members</div>
+                      {teamMembers.map(member => (
+                        <div key={member.assignment_id}>
+                          <div className="text-xs text-gray-400">{member.user.first_name} {member.user.last_name}</div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400 text-xs">RT ({member.hours_regular || 0}) + OT ({member.hours_overtime || 0})</span>
+                            <span className="font-semibold text-xs">${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Materials</span>
-                      <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                  )}
+
+                  <div className="border-t border-gray-600 mt-2 pt-2">
+                    <div className="flex justify-between font-bold">
+                      <span>Total Labor:</span>
+                      <span>${(
+                        ((selectedWO.hours_regular || 0) * 64) + 
+                        ((selectedWO.hours_overtime || 0) * 96) +
+                        teamMembers.reduce((sum, m) => sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0)
+                      ).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Equipment</span>
-                      <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Trailer</span>
-                      <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Rental</span>
-                      <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
-                    </div>
+                  </div>
+                </div>
+
+                {/* Other Costs */}
+                <div className="space-y-2 text-sm border-t border-gray-600 pt-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Mileage ({
+                      (selectedWO.miles || 0) + 
+                      teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)
+                    } mi × $1.00)</span>
+                    <span className="font-semibold">${(
+                      ((selectedWO.miles || 0) * 1.00) + 
+                      (teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0) * 1.00)
+                    ).toFixed(2)}</span>
                   </div>
 
                   {/* Grand Total */}
@@ -1174,20 +1202,21 @@ return (
                   <div>
                     <h4 className="text-sm font-semibold text-blue-400 mb-2">TEAM TOTALS</h4>
                     <div className="text-2xl font-bold mb-1">
-                      {selectedWO.hours_regular || 0} RT + {selectedWO.hours_overtime || 0} OT
+                      {(selectedWO.hours_regular || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} RT + {(selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} OT
                     </div>
                     <div className="text-sm text-gray-400">
-                      = {(selectedWO.hours_regular || 0) + (selectedWO.hours_overtime || 0)} total hours
+                      = {(selectedWO.hours_regular || 0) + (selectedWO.hours_overtime || 0) + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0) + (m.hours_overtime || 0), 0)} total hours
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-600">
                       <div className="text-sm">
                         <span className="text-gray-400">Total Miles Traveled:</span>
-                        <div className="text-xl font-bold">{selectedWO.miles || 0} mi</div>
+                        <div className="text-xl font-bold">
+                          {(selectedWO.miles || 0) + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
             </div>
           </div>
         </div>

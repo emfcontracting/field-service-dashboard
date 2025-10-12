@@ -1037,7 +1037,7 @@ return (
             </div>
           )}
 
-          {/* Delete Button */}
+              {/* Delete Button */}
           <button
             onClick={() => deleteWorkOrder(selectedWO.wo_id)}
             className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"

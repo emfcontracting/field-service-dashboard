@@ -18,11 +18,9 @@ export default function MobileApp() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('');
 
-  // Check In/Out
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
 
-  // Field Data
   const [fieldData, setFieldData] = useState({
     hours_regular: 0,
     hours_overtime: 0,
@@ -33,7 +31,6 @@ export default function MobileApp() {
     rental_cost: 0
   });
 
-  // Comments
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
 
@@ -50,32 +47,31 @@ export default function MobileApp() {
   }, []);
 
   const fetchWorkOrders = async (userId) => {
-  setLoading(true);
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select(`
-      *,
-      lead_tech:users!lead_tech_id(first_name, last_name)
-    `)
-    .eq('lead_tech_id', userId)
-    .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-    .order('created_at', { ascending: false });
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select(`
+        *,
+        lead_tech:users!lead_tech_id(first_name, last_name)
+      `)
+      .eq('lead_tech_id', userId)
+      .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching work orders:', error);
+    if (error) {
+      console.error('Error fetching work orders:', error);
+      setLoading(false);
+      return;
+    }
+
+    const filteredData = (data || []).filter(wo => {
+      if (wo.status !== 'completed') return true;
+      return !wo.is_locked && !wo.acknowledged;
+    });
+
+    setWorkOrders(filteredData);
     setLoading(false);
-    return;
-  }
-
-  // Show completed WOs only if they're not locked/acknowledged yet
-  const filteredData = (data || []).filter(wo => {
-    if (wo.status !== 'completed') return true; // Show all non-completed
-    return !wo.is_locked && !wo.acknowledged; // Show completed only if not locked
-  });
-
-  setWorkOrders(filteredData);
-  setLoading(false);
-};
+  };
 
   const fetchAvailableUsers = async () => {
     const { data } = await supabase
@@ -92,7 +88,6 @@ export default function MobileApp() {
     setSelectedWO(wo);
     setUserRole(wo.lead_tech_id === currentUser?.user_id ? 'lead' : 'helper');
 
-    // Load field data
     setFieldData({
       hours_regular: wo.hours_regular || 0,
       hours_overtime: wo.hours_overtime || 0,
@@ -103,13 +98,8 @@ export default function MobileApp() {
       rental_cost: wo.rental_cost || 0
     });
 
-    // Fetch team members
     await fetchTeamMembers(wo.wo_id);
-
-    // Fetch comments
     await fetchComments(wo.wo_id);
-
-    // Check if already checked in
     checkIfCheckedIn(wo.wo_id);
   };
 
@@ -167,71 +157,71 @@ export default function MobileApp() {
   };
 
   const handleCheckIn = async () => {
-  if (!selectedWO) return;
+    if (!selectedWO) return;
 
-  try {
-    const now = new Date().toISOString();
-    const location = await getLocation();
+    try {
+      const now = new Date().toISOString();
+      const location = await getLocation();
 
-    const { data, error } = await supabase
-      .from('work_order_comments')
-      .insert({
-        wo_id: selectedWO.wo_id,
-        user_id: currentUser.user_id,
-        comment: `CHECKED IN\nGPS: ${location.lat}, ${location.lng}`,
-        comment_type: 'check_in'
-      })
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from('work_order_comments')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: currentUser.user_id,
+          comment: `CHECKED IN\nGPS: ${location.lat}, ${location.lng}`,
+          comment_type: 'check_in'
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Check-in error:', error);
-      alert('Failed to check in: ' + error.message);
-    } else {
-      setIsCheckedIn(true);
-      setCheckInTime(now);
-      await fetchComments(selectedWO.wo_id);
-      alert('✅ Checked In!');
+      if (error) {
+        console.error('Check-in error:', error);
+        alert('Failed to check in: ' + error.message);
+      } else {
+        setIsCheckedIn(true);
+        setCheckInTime(now);
+        await fetchComments(selectedWO.wo_id);
+        alert('✅ Checked In!');
+      }
+    } catch (err) {
+      console.error('Check-in exception:', err);
+      alert('Failed to check in: ' + err.message);
     }
-  } catch (err) {
-    console.error('Check-in exception:', err);
-    alert('Failed to check in: ' + err.message);
-  }
-};
+  };
 
-const handleCheckOut = async () => {
-  if (!selectedWO || !checkInTime) return;
+  const handleCheckOut = async () => {
+    if (!selectedWO || !checkInTime) return;
 
-  try {
-    const now = new Date().toISOString();
-    const location = await getLocation();
-    const duration = calculateDuration(checkInTime, now);
+    try {
+      const now = new Date().toISOString();
+      const location = await getLocation();
+      const duration = calculateDuration(checkInTime, now);
 
-    const { data, error } = await supabase
-      .from('work_order_comments')
-      .insert({
-        wo_id: selectedWO.wo_id,
-        user_id: currentUser.user_id,
-        comment: `CHECKED OUT\nGPS: ${location.lat}, ${location.lng}\nDuration: ${duration}`,
-        comment_type: 'check_out'
-      })
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from('work_order_comments')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: currentUser.user_id,
+          comment: `CHECKED OUT\nGPS: ${location.lat}, ${location.lng}\nDuration: ${duration}`,
+          comment_type: 'check_out'
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Check-out error:', error);
-      alert('Failed to check out: ' + error.message);
-    } else {
-      setIsCheckedIn(false);
-      setCheckInTime(null);
-      await fetchComments(selectedWO.wo_id);
-      alert('✅ Checked Out!');
+      if (error) {
+        console.error('Check-out error:', error);
+        alert('Failed to check out: ' + error.message);
+      } else {
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        await fetchComments(selectedWO.wo_id);
+        alert('✅ Checked Out!');
+      }
+    } catch (err) {
+      console.error('Check-out exception:', err);
+      alert('Failed to check out: ' + err.message);
     }
-  } catch (err) {
-    console.error('Check-out exception:', err);
-    alert('Failed to check out: ' + err.message);
-  }
-};
+  };
 
   const getLocation = () => {
     return new Promise((resolve) => {
@@ -331,7 +321,6 @@ const handleCheckOut = async () => {
 
   const removeTeamMember = async (assignmentId) => {
     if (!selectedWO || userRole !== 'lead') return;
-
     if (!confirm('Remove this team member?')) return;
 
     const { error } = await supabase
@@ -393,9 +382,7 @@ const handleCheckOut = async () => {
     };
     return colors[status] || 'bg-gray-600';
   };
-
-// Login Component
-  const LoginScreen = () => {
+const LoginScreen = () => {
     const [users, setUsers] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState('');
 
@@ -465,10 +452,8 @@ const handleCheckOut = async () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       
-      {/* Work Order List View */}
       {!selectedWO && (
         <div>
-          {/* Header */}
           <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
             <div className="flex justify-between items-center">
               <div>
@@ -492,7 +477,6 @@ const handleCheckOut = async () => {
             </div>
           </div>
 
-          {/* Work Orders List */}
           <div className="p-4 space-y-3">
             <h2 className="text-lg font-bold mb-3">My Work Orders ({workOrders.length})</h2>
             
@@ -532,10 +516,8 @@ const handleCheckOut = async () => {
         </div>
       )}
 
-      {/* Work Order Detail View */}
       {selectedWO && (
         <div className="pb-20">
-          {/* Header */}
           <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
             <button
               onClick={() => {
@@ -563,25 +545,19 @@ const handleCheckOut = async () => {
             </div>
           </div>
 
-<div className="p-4 space-y-6">
-
-  {/* Locked/Acknowledged Warning */}
-  {(selectedWO.is_locked || selectedWO.acknowledged) && (
-    <div className="bg-red-900 text-red-200 p-4 rounded-lg">
-      <div className="font-bold text-lg">🔒 Work Order Locked</div>
-      <div className="text-sm mt-1">
-        {selectedWO.acknowledged && 'This work order has been acknowledged by the office. '}
-        {selectedWO.is_locked && 'Invoice has been generated. '}
-        You can view details but cannot make changes.
-      </div>
-    </div>
-  )}
-  
-  {/* Work Order Details */}
-
           <div className="p-4 space-y-6">
             
-            {/* Work Order Details */}
+            {(selectedWO.is_locked || selectedWO.acknowledged) && (
+              <div className="bg-red-900 text-red-200 p-4 rounded-lg">
+                <div className="font-bold text-lg">🔒 Work Order Locked</div>
+                <div className="text-sm mt-1">
+                  {selectedWO.acknowledged && 'This work order has been acknowledged by the office. '}
+                  {selectedWO.is_locked && 'Invoice has been generated. '}
+                  You can view details but cannot make changes.
+                </div>
+              </div>
+            )}
+            
             <div className="bg-gray-800 rounded-lg p-4">
               <h2 className="text-lg font-bold mb-3">Work Order Details</h2>
               
@@ -615,16 +591,15 @@ const handleCheckOut = async () => {
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Quick Actions</h3>
               <div className="space-y-2">
                 {selectedWO.acknowledged && selectedWO.is_locked && (
                   <button
-                    onClick={() => alert('Invoice feature - redirect to invoicing page')}
+                    onClick={() => window.location.href = '/invoices'}
                     className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold"
                   >
-                    Generate Invoice
+                    View Invoice
                   </button>
                 )}
                 <button
@@ -636,7 +611,6 @@ const handleCheckOut = async () => {
               </div>
             </div>
 
-            {/* Check In/Out */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3 flex items-center gap-2">
                 <span className="text-pink-500">●</span> Check In/Out
@@ -667,7 +641,6 @@ const handleCheckOut = async () => {
               )}
             </div>
 
-            {/* Primary Assignment */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Primary Assignment</h3>
               <div className="text-sm text-gray-400 mb-1">Lead Technician</div>
@@ -676,7 +649,6 @@ const handleCheckOut = async () => {
               </div>
             </div>
 
-            {/* Team Members */}
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold">Team Members</h3>
@@ -758,9 +730,7 @@ const handleCheckOut = async () => {
                 </div>
               )}
             </div>
-
-{/* Update Status */}
-            {userRole === 'lead' && (
+{userRole === 'lead' && (
               <div className="bg-gray-800 rounded-lg p-4">
                 <h3 className="font-bold mb-3">Update Status</h3>
                 <select
@@ -784,7 +754,6 @@ const handleCheckOut = async () => {
               </div>
             )}
 
-            {/* Primary Tech Field Data */}
             {userRole === 'lead' && (
               <div className="bg-gray-800 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-3">
@@ -802,7 +771,6 @@ const handleCheckOut = async () => {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Hours */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm text-gray-400 mb-1 block">Regular Hours (RT)</label>
@@ -833,7 +801,6 @@ const handleCheckOut = async () => {
                     </div>
                   </div>
 
-                  {/* Miles & Materials */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm text-gray-400 mb-1 block">Miles</label>
@@ -860,7 +827,6 @@ const handleCheckOut = async () => {
                     </div>
                   </div>
 
-                  {/* Equipment & Trailer */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm text-gray-400 mb-1 block">Equipment Cost ($)</label>
@@ -885,7 +851,6 @@ const handleCheckOut = async () => {
                     </div>
                   </div>
 
-                  {/* Rental */}
                   <div>
                     <label className="text-sm text-gray-400 mb-1 block">Rental Cost ($)</label>
                     <input
@@ -900,11 +865,9 @@ const handleCheckOut = async () => {
               </div>
             )}
 
-            {/* Cost Summary */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Cost Summary</h3>
 
-              {/* Team Labor Breakdown */}
               <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
                 <div className="font-bold mb-2">TEAM LABOR</div>
                 <div className="space-y-1 text-sm">
@@ -928,7 +891,6 @@ const handleCheckOut = async () => {
                 </div>
               </div>
 
-              {/* Other Costs */}
               <div className="space-y-2 text-sm mb-3">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Total Mileage ({fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi × $1.00)</span>
@@ -952,7 +914,6 @@ const handleCheckOut = async () => {
                 </div>
               </div>
 
-              {/* Grand Total */}
               <div className="border-t border-gray-700 pt-3 mt-3">
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-bold text-lg">Grand Total:</span>
@@ -973,7 +934,6 @@ const handleCheckOut = async () => {
               </div>
             </div>
 
-            {/* Time Tracking */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Time Tracking</h3>
               
@@ -994,7 +954,7 @@ const handleCheckOut = async () => {
                 </div>
               </div>
             </div>
-{/* Comments & Notes */}
+
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
 

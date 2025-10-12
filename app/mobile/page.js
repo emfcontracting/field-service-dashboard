@@ -994,8 +994,7 @@ const handleCheckOut = async () => {
                 </div>
               </div>
             </div>
-
-            {/* Comments & Notes */}
+{/* Comments & Notes */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
 
@@ -1037,6 +1036,7 @@ const handleCheckOut = async () => {
           </div>
         </div>
       )}
+
       {showAddMemberModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg w-full max-w-md">

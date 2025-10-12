@@ -74,15 +74,16 @@ export default function MobileApp() {
   };
 
   const fetchAvailableUsers = async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('is_active', true)
-      .in('role', ['tech', 'lead_tech'])
-      .order('first_name');
+  const { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('is_active', true)
+    .in('role', ['tech', 'helper', 'lead_tech'])
+    .order('first_name');
 
-    setAvailableUsers(data || []);
-  };
+  console.log('Available users for team:', data);
+  setAvailableUsers(data || []);
+};
 
   const selectWorkOrder = async (wo) => {
     setSelectedWO(wo);
@@ -1019,15 +1020,22 @@ const LoginScreen = () => {
                   )
                   .map(user => (
                     <button
-                      key={user.user_id}
-                      onClick={() => addTeamMember(user.user_id)}
-                      className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
-                    >
-                      <div className="font-semibold">
-                        {user.first_name} {user.last_name}
-                      </div>
-                      <div className="text-xs text-gray-400">{user.email}</div>
-                    </button>
+  key={user.user_id}
+  onClick={() => addTeamMember(user.user_id)}
+  className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
+>
+  <div className="flex justify-between items-center">
+    <div>
+      <div className="font-semibold">
+        {user.first_name} {user.last_name}
+      </div>
+      <div className="text-xs text-gray-400">{user.email}</div>
+    </div>
+    <span className="text-xs px-2 py-1 rounded bg-blue-600">
+      {user.role.replace('_', ' ').toUpperCase()}
+    </span>
+  </div>
+</button>
                   ))}
               </div>
             </div>

@@ -1,662 +1,409 @@
-'use client';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-export default function InvoicingPage() {
-  const [acknowledgedWOs, setAcknowledgedWOs] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [lineItems, setLineItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('ready'); // 'ready' or 'invoiced'
-  const [generatingInvoice, setGeneratingInvoice] = useState(false);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    await Promise.all([
-      fetchAcknowledgedWorkOrders(),
-      fetchInvoices()
-    ]);
-    setLoading(false);
-  };
-
-  // Fetch work orders that are acknowledged but don't have invoices yet
-  const fetchAcknowledgedWorkOrders = async () => {
-  console.log('Fetching acknowledged work orders...');
+export async function POST(request) {
+  const supabase = createRouteHandlerClient({ cookies });
   
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select(`
-      *,
-      lead_tech:users!lead_tech_id(first_name, last_name, email)
-    `)
-    .eq('acknowledged', true)
-    .eq('is_locked', false)
-    .order('acknowledged_at', { ascending: false });
+  try {
+    const { wo_id } = await request.json();
 
-  console.log('Acknowledged WOs query result:', { data, error });
-  console.log('Number of acknowledged WOs:', data?.length || 0);
+    if (!wo_id) {
+      return NextResponse.json(
+        { success: false, error: 'Work order ID is required' },
+        { status: 400 }
+      );
+    }
 
-  if (error) {
-    console.error('Error fetching acknowledged work orders:', error);
-  } else {
-    setAcknowledgedWOs(data || []);
-  }
-};
-
-  // Fetch existing invoices
-  const fetchInvoices = async () => {
-    const { data, error } = await supabase
-      .from('invoices')
+    // Get work order details with team assignments and comments
+    const { data: workOrder, error: woError } = await supabase
+      .from('work_orders')
       .select(`
         *,
-        work_order:work_orders(
-          wo_number,
-          building,
-          work_order_description,
-          lead_tech:users!lead_tech_id(first_name, last_name)
-        )
+        lead_tech:users!lead_tech_id(first_name, last_name, hourly_rate_regular, hourly_rate_overtime)
       `)
-      .order('created_at', { ascending: false });
+      .eq('wo_id', wo_id)
+      .single();
 
-    if (error) {
-      console.error('Error fetching invoices:', error);
-    } else {
-      setInvoices(data || []);
-    }
-  };
-
-  const selectWorkOrder = async (wo) => {
-    setSelectedItem({ type: 'work_order', data: wo });
-  };
-
-  const selectInvoice = async (invoice) => {
-    // Fetch line items
-    const { data, error } = await supabase
-      .from('invoice_line_items')
-      .select('*')
-      .eq('invoice_id', invoice.invoice_id)
-      .order('line_item_id', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching line items:', error);
-    } else {
-      setLineItems(data || []);
-    }
-    
-    setSelectedItem({ type: 'invoice', data: invoice });
-  };
-
-  const generateInvoice = async (woId) => {
-    if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Apply automatic markups\n\nContinue?')) {
-      return;
+    if (woError || !workOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Work order not found' },
+        { status: 404 }
+      );
     }
 
-    setGeneratingInvoice(true);
-
-    try {
-      const response = await fetch('/api/invoices/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wo_id: woId })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        alert('✅ Invoice generated successfully!\n\nMarkups applied:\n' +
-              `- Admin Hours: $${result.markups.admin_hours.toFixed(2)}\n` +
-              `- Material Markup (25%): $${result.markups.material_markup.toFixed(2)}\n` +
-              `- Equipment Markup (15%): $${result.markups.equipment_markup.toFixed(2)}\n` +
-              `- Rental Markup (15%): $${result.markups.rental_markup.toFixed(2)}`);
-        setSelectedItem(null);
-        fetchData();
-      } else {
-        alert('❌ Error generating invoice:\n' + result.error);
-      }
-    } catch (error) {
-      console.error('Error generating invoice:', error);
-      alert('❌ Failed to generate invoice');
-    } finally {
-      setGeneratingInvoice(false);
-    }
-  };
-
-  const returnToTech = async (woId, invoiceId) => {
-    const reason = prompt('Enter reason for returning to tech (optional):');
-    
-    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "needs_return"\n\nThe tech can make changes and mark as completed again.')) {
-      return;
+    // Check if work order is completed and acknowledged
+    if (workOrder.status !== 'completed') {
+      return NextResponse.json(
+        { success: false, error: 'Work order must be completed before generating invoice' },
+        { status: 400 }
+      );
     }
 
-    try {
-      // Delete the draft invoice and its line items
-      const { error: lineItemsError } = await supabase
+    if (!workOrder.acknowledged) {
+      return NextResponse.json(
+        { success: false, error: 'Work order must be acknowledged before generating invoice' },
+        { status: 400 }
+      );
+    }
+
+    // Check if a non-draft invoice already exists (approved/synced invoices should not be regenerated)
+    const { data: existingInvoice } = await supabase
+      .from('invoices')
+      .select('invoice_id, status')
+      .eq('wo_id', wo_id)
+      .single();
+
+    if (existingInvoice && existingInvoice.status !== 'draft') {
+      return NextResponse.json(
+        { success: false, error: `Invoice already exists with status: ${existingInvoice.status}. Only draft invoices can be regenerated.` },
+        { status: 400 }
+      );
+    }
+
+    // If a draft invoice exists, delete it first (this shouldn't happen, but just in case)
+    if (existingInvoice && existingInvoice.status === 'draft') {
+      console.log('Found existing draft invoice, deleting it first...');
+      
+      // Delete line items first
+      await supabase
         .from('invoice_line_items')
         .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (lineItemsError) {
-        alert('Error deleting invoice line items: ' + lineItemsError.message);
-        return;
-      }
-
-      const { error: invoiceError } = await supabase
+        .eq('invoice_id', existingInvoice.invoice_id);
+      
+      // Delete the invoice
+      await supabase
         .from('invoices')
         .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (invoiceError) {
-        alert('Error deleting invoice: ' + invoiceError.message);
-        return;
-      }
-
-      // Add return reason as a comment if provided
-      if (reason && reason.trim()) {
-        await supabase
-          .from('work_order_comments')
-          .insert({
-            wo_id: woId,
-            user_id: null,
-            comment: `RETURNED FROM INVOICING:\n${reason}`,
-            comment_type: 'admin_note'
-          });
-      }
-
-      // Unlock and unacknowledge the work order
-      const { error: updateError } = await supabase
-        .from('work_orders')
-        .update({
-          is_locked: false,
-          locked_at: null,
-          locked_by: null,
-          acknowledged: false,
-          acknowledged_at: null,
-          acknowledged_by: null,
-          status: 'needs_return'
-        })
-        .eq('wo_id', woId);
-
-      if (updateError) {
-        alert('Error updating work order: ' + updateError.message);
-        return;
-      }
-
-      alert('✅ Work order returned to tech for review!\n\nStatus changed to "Needs Return" and will appear in their mobile app.');
-      
-      setSelectedItem(null);
-      fetchData();
-    } catch (err) {
-      console.error('Error returning work order:', err);
-      alert('Failed to return work order: ' + err.message);
-    }
-  };
-
-  const updateInvoiceStatus = async (invoiceId, newStatus) => {
-    if (!confirm(`Change invoice status to "${newStatus.toUpperCase()}"?`)) {
-      return;
+        .eq('invoice_id', existingInvoice.invoice_id);
     }
 
-    const { error } = await supabase
-      .from('invoices')
-      .update({ status: newStatus })
-      .eq('invoice_id', invoiceId);
+    // Get team member assignments
+    const { data: teamAssignments } = await supabase
+      .from('work_order_assignments')
+      .select(`
+        *,
+        user:users(first_name, last_name, hourly_rate_regular, hourly_rate_overtime)
+      `)
+      .eq('wo_id', wo_id);
 
-    if (error) {
-      alert('Failed to update invoice status');
-      console.error(error);
-    } else {
-      alert('✅ Invoice status updated!');
-      fetchData();
-      if (selectedItem?.type === 'invoice' && selectedItem.data.invoice_id === invoiceId) {
-        setSelectedItem({
-          ...selectedItem,
-          data: { ...selectedItem.data, status: newStatus }
-        });
-      }
-    }
-  };
+    // Get comments to include as work performed
+    const { data: comments } = await supabase
+      .from('work_order_comments')
+      .select(`
+        comment,
+        comment_type,
+        created_at,
+        user:users(first_name, last_name)
+      `)
+      .eq('wo_id', wo_id)
+      .eq('comment_type', 'note')
+      .order('created_at', { ascending: true });
 
-  const printInvoice = (invoice) => {
-    window.print();
-  };
-
-  const shareInvoice = (invoice) => {
-    const shareUrl = `${window.location.origin}/invoices/${invoice.invoice_id}`;
+    // Compile work performed description from comments
+    let workPerformedDescription = workOrder.work_order_description;
     
-    if (navigator.share) {
-      navigator.share({
-        title: `Invoice ${invoice.invoice_number}`,
-        text: `Invoice for Work Order ${invoice.work_order?.wo_number}`,
-        url: shareUrl
-      }).catch(err => console.log('Share cancelled'));
-    } else {
-      // Fallback - copy to clipboard
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        alert('📋 Invoice link copied to clipboard!');
+    if (comments && comments.length > 0) {
+      workPerformedDescription += '\n\nWork Notes:\n';
+      comments.forEach(comment => {
+        const timestamp = new Date(comment.created_at).toLocaleString();
+        workPerformedDescription += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
       });
     }
-  };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'bg-yellow-600',
-      approved: 'bg-blue-600',
-      synced: 'bg-green-600',
-      paid: 'bg-green-600',
-      cancelled: 'bg-red-600',
-      rejected: 'bg-red-600'
-    };
-    return colors[status] || 'bg-gray-600';
-  };
+    // Calculate lead tech labor
+    const leadTechRegular = (workOrder.hours_regular || 0) * (workOrder.lead_tech?.hourly_rate_regular || 64);
+    const leadTechOvertime = (workOrder.hours_overtime || 0) * (workOrder.lead_tech?.hourly_rate_overtime || 96);
+    
+    // Calculate team member labor
+    let teamMemberLabor = 0;
+    if (teamAssignments && teamAssignments.length > 0) {
+      teamMemberLabor = teamAssignments.reduce((sum, member) => {
+        const regular = (member.hours_regular || 0) * (member.user?.hourly_rate_regular || 64);
+        const overtime = (member.hours_overtime || 0) * (member.user?.hourly_rate_overtime || 96);
+        return sum + regular + overtime;
+      }, 0);
+    }
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">💰 Invoicing</h1>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition"
-          >
-            ← Back to Dashboard
-          </button>
-        </div>
+    // ADD 2 ADMIN HOURS AT RT RATE
+    const adminHours = 2;
+    const adminRate = 64; // RT rate
+    const adminLaborCost = adminHours * adminRate;
 
-        {/* Tabs */}
-        <div className="bg-gray-800 rounded-lg mb-6">
-          <div className="flex border-b border-gray-700">
-            <button
-              onClick={() => setActiveTab('ready')}
-              className={`flex-1 px-6 py-4 font-semibold transition ${
-                activeTab === 'ready' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Ready for Invoice ({acknowledgedWOs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('invoiced')}
-              className={`flex-1 px-6 py-4 font-semibold transition ${
-                activeTab === 'invoiced' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Generated Invoices ({invoices.length})
-            </button>
-          </div>
-        </div>
+    // Total labor (including admin hours)
+    const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor + adminLaborCost;
 
-        {/* Content */}
-        {loading ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            Loading...
-          </div>
-        ) : activeTab === 'ready' ? (
-          /* Ready for Invoice Tab */
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            {acknowledgedWOs.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                No work orders ready for invoicing.
-                <br />
-                <span className="text-sm">Acknowledged work orders will appear here.</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">WO #</th>
-                      <th className="px-4 py-3 text-left">Building</th>
-                      <th className="px-4 py-3 text-left">Lead Tech</th>
-                      <th className="px-4 py-3 text-left">Acknowledged</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {acknowledgedWOs.map(wo => (
-                      <tr
-                        key={wo.wo_id}
-                        className="border-t border-gray-700 hover:bg-gray-700 transition"
-                      >
-                        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
-                        <td className="px-4 py-3">{wo.building}</td>
-                        <td className="px-4 py-3">
-                          {wo.lead_tech 
-                            ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`
-                            : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {new Date(wo.acknowledged_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-green-600">
-                            READY
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => selectWorkOrder(wo)}
-                            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
-                          >
-                            View & Generate Invoice
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Generated Invoices Tab */
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            {invoices.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                No invoices generated yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Invoice #</th>
-                      <th className="px-4 py-3 text-left">Work Order</th>
-                      <th className="px-4 py-3 text-left">Building</th>
-                      <th className="px-4 py-3 text-left">Invoice Date</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-center">View</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoices.map(invoice => (
-                      <tr
-                        key={invoice.invoice_id}
-                        onClick={() => selectInvoice(invoice)}
-                        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
-                      >
-                        <td className="px-4 py-3 font-semibold">{invoice.invoice_number}</td>
-                        <td className="px-4 py-3">{invoice.work_order?.wo_number}</td>
-                        <td className="px-4 py-3">{invoice.work_order?.building}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {new Date(invoice.invoice_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-green-400">
-                          ${invoice.total.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                            {invoice.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center text-gray-400">
-                          →
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+    // Calculate mileage
+    const leadTechMiles = workOrder.miles || 0;
+    const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
+    const totalMiles = leadTechMiles + teamMemberMiles;
+    const mileageCost = totalMiles * 1.00;
 
-      {/* Work Order Detail Modal (Ready for Invoice) */}
-      {selectedItem?.type === 'work_order' && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            
-            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
-              <div>
-                <h2 className="text-2xl font-bold">Work Order #{selectedItem.data.wo_number}</h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  {selectedItem.data.building} - Ready for Invoice
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
+    // APPLY MARKUPS
+    const materialCost = workOrder.material_cost || 0;
+    const materialMarkup = materialCost * 0.25; // 25% upcharge
+    const materialTotal = materialCost + materialMarkup;
 
-            <div className="p-6 space-y-6">
-              
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold mb-3">Work Order Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-400">Description:</span>
-                    <div className="mt-1">{selectedItem.data.work_order_description}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Lead Tech:</span>
-                    <span className="ml-2 font-semibold">
-                      {selectedItem.data.lead_tech 
-                        ? `${selectedItem.data.lead_tech.first_name} ${selectedItem.data.lead_tech.last_name}`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Acknowledged:</span>
-                    <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
+    const equipmentCost = workOrder.emf_equipment_cost || 0;
+    const equipmentMarkup = equipmentCost * 0.15; // 15% upcharge
+    const equipmentTotal = equipmentCost + equipmentMarkup;
 
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
-                <div className="font-bold mb-2">✓ Ready to Generate Invoice</div>
-                <div className="text-sm">
-                  This work order has been completed and acknowledged. Click below to generate an invoice with automatic markups:
-                  <ul className="list-disc list-inside mt-2 text-xs">
-                    <li>2 Admin Hours will be added</li>
-                    <li>25% markup on materials</li>
-                    <li>15% markup on equipment</li>
-                    <li>15% markup on rentals</li>
-                    <li>Comments will be included as work performed</li>
-                  </ul>
-                </div>
-              </div>
+    const trailerCost = workOrder.trailer_cost || 0;
+    // No markup on trailer
 
-              <button
-                onClick={() => generateInvoice(selectedItem.data.wo_id)}
-                disabled={generatingInvoice}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
-              >
-                {generatingInvoice ? '⏳ Generating Invoice...' : '📄 Generate Invoice'}
-              </button>
+    const rentalCost = workOrder.rental_cost || 0;
+    const rentalMarkup = rentalCost * 0.15; // 15% upcharge
+    const rentalTotal = rentalCost + rentalMarkup;
 
-            </div>
-          </div>
-        </div>
-      )}
+    // Calculate total
+    const subtotal = totalLabor + mileageCost + materialTotal + equipmentTotal + trailerCost + rentalTotal;
+    const tax = 0; // Add tax calculation if needed
+    const total = subtotal + tax;
 
-      {/* Invoice Detail Modal */}
-      {selectedItem?.type === 'invoice' && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            
-            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
-              <div>
-                <h2 className="text-2xl font-bold">Invoice #{selectedItem.data.invoice_number}</h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  WO #{selectedItem.data.work_order?.wo_number} - {selectedItem.data.work_order?.building}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
+    // Generate invoice number (format: INV-YYYY-XXXXX)
+    const year = new Date().getFullYear();
+    const { data: lastInvoice } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .like('invoice_number', `INV-${year}-%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-            <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-              
-              {/* Invoice Info */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Status:</span>
-                    <span className={`ml-2 px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(selectedItem.data.status)}`}>
-                      {selectedItem.data.status.toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Invoice Date:</span>
-                    <span className="ml-2 font-semibold">
-                      {new Date(selectedItem.data.invoice_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Due Date:</span>
-                    <span className="ml-2 font-semibold">
-                      {new Date(selectedItem.data.due_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Lead Tech:</span>
-                    <span className="ml-2 font-semibold">
-                      {selectedItem.data.work_order?.lead_tech 
-                        ? `${selectedItem.data.work_order.lead_tech.first_name} ${selectedItem.data.work_order.lead_tech.last_name}`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+    let invoiceNumber;
+    if (lastInvoice) {
+      const lastNumber = parseInt(lastInvoice.invoice_number.split('-')[2]);
+      invoiceNumber = `INV-${year}-${String(lastNumber + 1).padStart(5, '0')}`;
+    } else {
+      invoiceNumber = `INV-${year}-00001`;
+    }
 
-              {/* Line Items */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold text-lg mb-4">Line Items</h3>
-                <div className="space-y-2">
-                  {lineItems.map(item => (
-                    <div 
-                      key={item.line_item_id} 
-                      className={`p-3 rounded ${item.line_type === 'description' ? 'bg-gray-800' : 'bg-gray-600'}`}
-                    >
-                      {item.line_type === 'description' ? (
-                        <div>
-                          <div className="font-bold mb-2">Work Performed:</div>
-                          <div className="text-sm whitespace-pre-wrap">{item.description}</div>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="font-semibold">{item.description}</div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {item.line_type?.toUpperCase()}
-                            </div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <div className="font-bold">${item.amount.toFixed(2)}</div>
-                            {item.quantity > 0 && item.unit_price > 0 && (
-                              <div className="text-xs text-gray-400">
-                                {item.quantity} × ${item.unit_price.toFixed(2)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+    // Create invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        wo_id: wo_id,
+        invoice_date: new Date().toISOString(),
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        status: 'draft',
+        notes: 'Auto-generated invoice with standard markups applied'
+      })
+      .select()
+      .single();
 
-              {/* Totals */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-400">Subtotal:</span>
-                    <span className="font-semibold">${selectedItem.data.subtotal.toFixed(2)}</span>
-                  </div>
-                  {selectedItem.data.tax > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Tax:</span>
-                      <span className="font-semibold">${selectedItem.data.tax.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="border-t border-gray-600 pt-2 flex justify-between text-2xl">
-                    <span className="font-bold">Total:</span>
-                    <span className="font-bold text-green-400">${selectedItem.data.total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
+    if (invoiceError) {
+      console.error('Error creating invoice:', invoiceError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create invoice: ' + invoiceError.message },
+        { status: 500 }
+      );
+    }
 
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-3">
-                {/* Print & Share - Available for all invoices */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => printInvoice(selectedItem.data)}
-                    className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition"
-                  >
-                    🖨️ Print
-                  </button>
-                  <button
-                    onClick={() => shareInvoice(selectedItem.data)}
-                    className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition"
-                  >
-                    📤 Share
-                  </button>
-                </div>
+    // Create invoice line items
+    const lineItems = [];
 
-                {selectedItem.data.status === 'draft' && (
-                  <>
-                    <button
-                      onClick={() => returnToTech(selectedItem.data.wo_id, selectedItem.data.invoice_id)}
-                      className="w-full bg-orange-600 hover:bg-orange-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      🔄 Return to Tech for Review
-                    </button>
-                    
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'approved')}
-                      className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      ✅ Mark as Approved
-                    </button>
-                  </>
-                )}
+    // Labor line items
+    if (leadTechRegular > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Lead Tech Labor - Regular Time (${workOrder.hours_regular} hrs @ $${workOrder.lead_tech?.hourly_rate_regular || 64}/hr)`,
+        quantity: workOrder.hours_regular,
+        unit_price: workOrder.lead_tech?.hourly_rate_regular || 64,
+        amount: leadTechRegular,
+        line_type: 'labor'
+      });
+    }
 
-                {selectedItem.data.status === 'approved' && (
-                  <button
-                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'synced')}
-                    className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                  >
-                    💰 Mark as Synced/Paid
-                  </button>
-                )}
+    if (leadTechOvertime > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Lead Tech Labor - Overtime (${workOrder.hours_overtime} hrs @ $${workOrder.lead_tech?.hourly_rate_overtime || 96}/hr)`,
+        quantity: workOrder.hours_overtime,
+        unit_price: workOrder.lead_tech?.hourly_rate_overtime || 96,
+        amount: leadTechOvertime,
+        line_type: 'labor'
+      });
+    }
 
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  className="w-full bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
-                >
-                  Close
-                </button>
-              </div>
+    // Team member labor (by title, not name)
+    if (teamAssignments && teamAssignments.length > 0) {
+      // Group by role and sum hours
+      const laborByRole = {};
+      
+      teamAssignments.forEach(member => {
+        const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
+                          member.role === 'tech' ? 'Tech' : 
+                          'Helper';
+        
+        if (!laborByRole[roleTitle]) {
+          laborByRole[roleTitle] = {
+            regular_hours: 0,
+            overtime_hours: 0,
+            regular_rate: member.user?.hourly_rate_regular || 64,
+            overtime_rate: member.user?.hourly_rate_overtime || 96
+          };
+        }
+        
+        laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
+        laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+      });
+      
+      // Create line items for each role
+      Object.entries(laborByRole).forEach(([role, data]) => {
+        if (data.regular_hours > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
+            quantity: data.regular_hours,
+            unit_price: data.regular_rate,
+            amount: data.regular_hours * data.regular_rate,
+            line_type: 'labor'
+          });
+        }
+        if (data.overtime_hours > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
+            quantity: data.overtime_hours,
+            unit_price: data.overtime_rate,
+            amount: data.overtime_hours * data.overtime_rate,
+            line_type: 'labor'
+          });
+        }
+      });
+    }
 
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    // ADMIN HOURS LINE ITEM
+    lineItems.push({
+      invoice_id: invoice.invoice_id,
+      description: `Administrative Hours (${adminHours} hrs @ $${adminRate}/hr)`,
+      quantity: adminHours,
+      unit_price: adminRate,
+      amount: adminLaborCost,
+      line_type: 'labor'
+    });
+
+    // Mileage
+    if (totalMiles > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
+        quantity: totalMiles,
+        unit_price: 1.00,
+        amount: mileageCost,
+        line_type: 'mileage'
+      });
+    }
+
+    // Materials (with 25% markup)
+    if (materialCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Materials (Base: $${materialCost.toFixed(2)} + 25% markup)`,
+        quantity: 1,
+        unit_price: materialTotal,
+        amount: materialTotal,
+        line_type: 'material'
+      });
+    }
+
+    // Equipment (with 15% markup)
+    if (equipmentCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Equipment (Base: $${equipmentCost.toFixed(2)} + 15% markup)`,
+        quantity: 1,
+        unit_price: equipmentTotal,
+        amount: equipmentTotal,
+        line_type: 'equipment'
+      });
+    }
+
+    // Trailer (no markup)
+    if (trailerCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Trailer',
+        quantity: 1,
+        unit_price: trailerCost,
+        amount: trailerCost,
+        line_type: 'equipment'
+      });
+    }
+
+    // Rental (with 15% markup)
+    if (rentalCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Rental (Base: $${rentalCost.toFixed(2)} + 15% markup)`,
+        quantity: 1,
+        unit_price: rentalTotal,
+        amount: rentalTotal,
+        line_type: 'rental'
+      });
+    }
+
+    // Work Performed Description
+    lineItems.push({
+      invoice_id: invoice.invoice_id,
+      description: workPerformedDescription,
+      quantity: 1,
+      unit_price: 0,
+      amount: 0,
+      line_type: 'description'
+    });
+
+    // Insert all line items
+    const { error: lineItemsError } = await supabase
+      .from('invoice_line_items')
+      .insert(lineItems);
+
+    if (lineItemsError) {
+      console.error('Error creating line items:', lineItemsError);
+      // Rollback invoice creation
+      await supabase.from('invoices').delete().eq('invoice_id', invoice.invoice_id);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create invoice line items: ' + lineItemsError.message },
+        { status: 500 }
+      );
+    }
+
+    // Lock the work order
+    const { error: lockError } = await supabase
+      .from('work_orders')
+      .update({
+        is_locked: true,
+        locked_at: new Date().toISOString(),
+        locked_by: 'system'
+      })
+      .eq('wo_id', wo_id);
+
+    if (lockError) {
+      console.error('Error locking work order:', lockError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      invoice_id: invoice.invoice_id,
+      invoice_number: invoiceNumber,
+      total: total,
+      markups: {
+        admin_hours: adminLaborCost,
+        material_markup: materialMarkup,
+        equipment_markup: equipmentMarkup,
+        rental_markup: rentalMarkup
+      }
+    });
+
+  } catch (error) {
+    console.error('Invoice generation error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error: ' + error.message },
+      { status: 500 }
+    );
+  }
 }

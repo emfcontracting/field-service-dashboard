@@ -609,112 +609,112 @@ return (
         </div>
 
         {/* Work Orders Table */}
-        <div className="bg-gray-800 rounded-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-gray-400">Loading work orders...</div>
-          ) : filteredWorkOrders.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              {searchTerm || statusFilter !== 'all' || priorityFilter !== 'all'
-                ? 'No work orders match your filters'
-                : 'No work orders yet. Create your first one!'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left">WO#</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-left">Building</th>
-                    <th className="px-4 py-3 text-left">Description</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left">Priority</th>
-                    <th className="px-4 py-3 text-left">Lead Tech</th>
-                    <th className="px-4 py-3 text-right">NTE</th>
-                    <th className="px-4 py-3 text-right">Est. Cost</th>
-                    <th className="px-4 py-3 text-center">🔒</th>
-                    <th className="px-4 py-3 text-center">View</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredWorkOrders.map(wo => {
-                    const totalCost = calculateTotalCost(wo);
-                    const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
+<div className="bg-gray-800 rounded-lg overflow-hidden">
+  {loading ? (
+    <div className="p-8 text-center text-gray-400">Loading work orders...</div>
+  ) : filteredWorkOrders.length === 0 ? (
+    <div className="p-8 text-center text-gray-400">
+      {searchTerm || statusFilter !== 'all' || priorityFilter !== 'all'
+        ? 'No work orders match your filters'
+        : 'No work orders yet. Create your first one!'}
+    </div>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-max">
+        <thead className="bg-gray-700">
+          <tr>
+            <th className="px-4 py-3 text-left w-32 whitespace-nowrap">WO#</th>
+            <th className="px-4 py-3 text-left w-28 whitespace-nowrap">Date</th>
+            <th className="px-4 py-3 text-left w-32 whitespace-nowrap">Building</th>
+            <th className="px-4 py-3 text-left min-w-[300px]">Description</th>
+            <th className="px-4 py-3 text-left w-40 whitespace-nowrap">Status</th>
+            <th className="px-4 py-3 text-left w-28 whitespace-nowrap">Priority</th>
+            <th className="px-4 py-3 text-left w-48 whitespace-nowrap">Lead Tech</th>
+            <th className="px-4 py-3 text-right w-28 whitespace-nowrap">NTE</th>
+            <th className="px-4 py-3 text-right w-28 whitespace-nowrap">Est. Cost</th>
+            <th className="px-4 py-3 text-center w-12 whitespace-nowrap">🔒</th>
+            <th className="px-4 py-3 text-center w-20 whitespace-nowrap">View</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredWorkOrders.map(wo => {
+            const totalCost = calculateTotalCost(wo);
+            const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
 
-                    return (
-                      <tr
-                        key={wo.wo_id}
-                        onClick={() => selectWorkOrderEnhanced(wo)}
-                        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
-                      >
-                        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-400">
-                          {new Date(wo.date_entered).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">{wo.building}</td>
-                        <td className="px-4 py-3">
-                          <div className="max-w-xs truncate">
-                            {wo.work_order_description}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-  <div className="flex gap-2 items-center">
-    <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
-      {wo.status.replace('_', ' ').toUpperCase()}
-    </span>
-    {wo.assigned_to_field && (
-      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
-        📱 FIELD
-      </span>
-    )}
-  </div>
-</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-                            {wo.priority.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {wo.lead_tech ? (
-                            <div>
-                              <div className="font-semibold">
-                                {wo.lead_tech.first_name} {wo.lead_tech.last_name}
-                              </div>
-                              <div className="text-xs text-gray-400">{wo.lead_tech.email}</div>
-                            </div>
-                          ) : (
-                            <span className="text-gray-500">Unassigned</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold">
-                          ${(wo.nte || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={overBudget ? 'text-red-400 font-bold' : ''}>
-                            ${(totalCost || 0).toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {wo.is_locked && (
-                            <span
-                              title={`Locked on ${new Date(wo.locked_at).toLocaleDateString()}`}
-                              className="cursor-help"
-                            >
-                              🔒
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center text-gray-400">
-                          →
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            return (
+              <tr
+                key={wo.wo_id}
+                onClick={() => selectWorkOrderEnhanced(wo)}
+                className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+              >
+                <td className="px-4 py-3 font-semibold whitespace-nowrap">{wo.wo_number}</td>
+                <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
+                  {wo.date_entered ? new Date(wo.date_entered).toLocaleDateString() : wo.created_at ? new Date(wo.created_at).toLocaleDateString() : 'N/A'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">{wo.building}</td>
+                <td className="px-4 py-3">
+                  <div className="max-w-md truncate" title={wo.work_order_description}>
+                    {wo.work_order_description}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2 items-center">
+                    <span className={`px-3 py-1 rounded-lg text-sm font-semibold whitespace-nowrap ${getStatusColor(wo.status)}`}>
+                      {wo.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                    {wo.assigned_to_field && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold whitespace-nowrap">
+                        📱 FIELD
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
+                    {wo.priority.toUpperCase()}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {wo.lead_tech ? (
+                    <div className="min-w-[150px]">
+                      <div className="font-semibold whitespace-nowrap">
+                        {wo.lead_tech.first_name} {wo.lead_tech.last_name}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate">{wo.lead_tech.email}</div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">Unassigned</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">
+                  ${(wo.nte || 0).toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <span className={overBudget ? 'text-red-400 font-bold' : ''}>
+                    ${(totalCost || 0).toFixed(2)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {wo.is_locked && (
+                    <span
+                      title={`Locked on ${new Date(wo.locked_at).toLocaleDateString()}`}
+                      className="cursor-help"
+                    >
+                      🔒
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center text-gray-400 text-xl">
+                  →
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
       </div>
 
       {/* Work Order Detail Modal */}

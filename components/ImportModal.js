@@ -91,6 +91,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
         const exists = existingWONumbers.has(woNumber);
         const workOrder = {
           wo_number: woNumber,
+          date_entered: row['Date entered'] ? new Date(row['Date entered']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           building: row['Building'] || '',
           priority: mapPriority(row['Priority']),
           work_order_description: row['Work Order Description'] || '',
@@ -201,7 +202,8 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
         .insert(woData);
 
       if (error) {
-        addLog(`❌ Error: ${woData.wo_number}`, 'error');
+        addLog(`❌ Error: ${woData.wo_number} - ${error.message}`, 'error');
+        console.error('Import error details:', error);
         errors++;
       } else {
         addLog(`✅ Imported: ${woData.wo_number}`, 'success');

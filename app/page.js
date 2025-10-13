@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import ImportModal from '../components/ImportModal';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -1488,67 +1489,11 @@ return (
       )}
 
       {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
-            <div className="border-b border-gray-700 p-6 flex justify-between items-center">
-              <h2 className="text-2xl font-bold">📥 Import from Google Sheets</h2>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-sm">
-                <div className="font-bold mb-2">📋 Required Column Format:</div>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Column A: WO Number</li>
-                  <li>Column B: Date Entered (YYYY-MM-DD)</li>
-                  <li>Column C: Building</li>
-                  <li>Column D: Description</li>
-                  <li>Column E: Requestor</li>
-                  <li>Column F: Priority (low/medium/high/emergency)</li>
-                  <li>Column G: Status (pending/assigned/in_progress/completed)</li>
-                  <li>Column H: NTE Amount</li>
-                  <li>Column I: Comments (optional)</li>
-                </ul>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Google Sheets URL (must be set to &quot;Anyone with link can view&quot;)
-                </label>
-                <input
-                  type="text"
-                  value={sheetsUrl}
-                  onChange={(e) => setSheetsUrl(e.target.value)}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={importFromSheets}
-                  disabled={importing}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold transition"
-                >
-                  {importing ? '⏳ Importing...' : 'Import Work Orders'}
-                </button>
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={() => fetchWorkOrders()}
+      />
     </div>
   );
 }

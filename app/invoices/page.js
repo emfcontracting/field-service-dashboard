@@ -251,9 +251,11 @@ export default function InvoicingPage() {
   const getStatusColor = (status) => {
     const colors = {
       draft: 'bg-yellow-600',
-      sent: 'bg-blue-600',
+      approved: 'bg-blue-600',
+      synced: 'bg-green-600',
       paid: 'bg-green-600',
-      cancelled: 'bg-red-600'
+      cancelled: 'bg-red-600',
+      rejected: 'bg-red-600'
     };
     return colors[status] || 'bg-gray-600';
   };
@@ -626,20 +628,20 @@ export default function InvoicingPage() {
                     </button>
                     
                     <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'sent')}
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'approved')}
                       className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
                     >
-                      📧 Mark as Sent
+                      ✅ Mark as Approved
                     </button>
                   </>
                 )}
 
-                {selectedItem.data.status === 'sent' && (
+                {selectedItem.data.status === 'approved' && (
                   <button
-                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'paid')}
+                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'synced')}
                     className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
                   >
-                    ✅ Mark as Paid
+                    💰 Mark as Synced/Paid
                   </button>
                 )}
 

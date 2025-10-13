@@ -391,7 +391,7 @@ const assignToField = async (woId) => {
       .from('work_orders')
       .update({
         assigned_to_field: true,
-        assigned_to_field_by: user?.email || 'admin',
+        assigned_to_field_by: 'admin',  // <-- FIXED
         assigned_to_field_at: new Date().toISOString()
       })
       .eq('wo_id', woId);

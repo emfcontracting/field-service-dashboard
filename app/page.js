@@ -458,82 +458,28 @@ const importFromSheets = async () => {
     const spreadsheetId = match[1];
     const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
 
+    console.log('Fetching CSV from:', csvUrl);
+
     const response = await fetch(csvUrl);
     const csvText = await response.text();
+    
+    console.log('CSV first 500 chars:', csvText.substring(0, 500));
 
-    // Use a proper CSV parser to handle commas in fields
-    const Papa = await import('papaparse');
-    const parsed = Papa.default.parse(csvText, {
-      header: false,
-      skipEmptyLines: true,
-      dynamicTyping: false
+    // Simple split - just for testing
+    const lines = csvText.split('\n');
+    console.log('Total lines:', lines.length);
+    console.log('Header line:', lines[0]);
+    console.log('First data line:', lines[1]);
+    
+    // Check which column the date is in
+    const firstDataCells = lines[1].split(',');
+    console.log('First data row split by comma:');
+    firstDataCells.forEach((cell, index) => {
+      console.log(`  Column ${index}: "${cell}"`);
     });
 
-    const rows = parsed.data;
-    const dataRows = rows.slice(1).filter(row => row[0]); // Skip header, filter empty
-
-    console.log('First row columns:', rows[0]); // Show headers
-    console.log('First data row:', dataRows[0]); // Show first data row
-
-    const workOrdersToImport = dataRows.map(row => {
-      // Parse date - it's in column index 3 (Date entered)
-      let dateEntered;
-      if (row[3] && String(row[3]).trim()) {
-        const dateStr = String(row[3]).trim();
-        const parsedDate = new Date(dateStr);
-        
-        if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 2000) {
-          dateEntered = parsedDate.toISOString();
-          console.log(`Parsed date for ${row[0]}: ${dateStr} -> ${dateEntered}`);
-        } else {
-          console.warn(`Invalid date for WO ${row[0]}: ${dateStr}`);
-          dateEntered = new Date().toISOString();
-        }
-      } else {
-        console.warn(`No date for WO ${row[0]}`);
-        dateEntered = new Date().toISOString();
-      }
-
-      // Parse priority
-      let priority = 'medium';
-      const priorityStr = (row[2] || '').toLowerCase();
-      if (priorityStr.includes('emergency') || priorityStr.includes('p1')) {
-        priority = 'emergency';
-      } else if (priorityStr.includes('urgent') || priorityStr.includes('p2')) {
-        priority = 'high';
-      } else if (priorityStr.includes('p3') || priorityStr.includes('p4')) {
-        priority = 'medium';
-      }
-
-      return {
-        wo_number: String(row[0] || '').trim(),           // Column A: WO#
-        building: String(row[1] || '').trim(),            // Column B: Building
-        date_entered: dateEntered,                        // Column D: Date entered
-        work_order_description: String(row[4] || '').trim(), // Column E: Description
-        requestor: String(row[6] || '').trim(),           // Column G: CONTACT
-        priority: priority,                                // Column C: Priority
-        status: 'pending',                                 // Default to pending
-        nte: parseFloat(row[5]) || 0,                     // Column F: NTE
-        comments: String(row[10] || '').trim()            // Column K: COMMENTS
-      };
-    });
-
-    console.log('First work order to import:', workOrdersToImport[0]);
-
-    const { data, error } = await supabase
-      .from('work_orders')
-      .insert(workOrdersToImport)
-      .select();
-
-    if (error) {
-      console.error('Error importing:', error);
-      alert('❌ Import error: ' + error.message);
-    } else {
-      alert(`✅ Successfully imported ${data.length} work orders!`);
-      setShowImportModal(false);
-      setSheetsUrl('');
-      fetchWorkOrders();
-    }
+    alert('Check the console (F12) to see the CSV structure!');
+    
   } catch (error) {
     console.error('Import error:', error);
     alert('❌ Failed to import: ' + error.message);

@@ -576,12 +576,16 @@ export default function MobileApp() {
         <div className="w-full max-w-md">
           {/* Logo/Header */}
           <div className="text-center mb-8">
-            <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-4xl">🔧</span>
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2">FSM Mobile</h1>
-            <p className="text-blue-100">Field Service Management</p>
-          </div>
+  <div className="bg-white w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+    <img 
+      src="/emf-logo.png" 
+      alt="EMF Contracting LLC" 
+      className="w-full h-full object-contain"
+    />
+  </div>
+  <h1 className="text-2xl font-bold text-white mb-2">EMF Contracting LLC</h1>
+  <p className="text-blue-100">Field Service Mobile</p>
+</div>
 
           {/* Login Form */}
           <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -696,9 +700,18 @@ export default function MobileApp() {
         <div>
           <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
             <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-xl font-bold">👋 {currentUser.first_name}</h1>
-                <p className="text-sm text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+  <div className="flex items-center gap-3">
+    <img 
+      src="/emf-logo.png" 
+      alt="EMF Contracting LLC" 
+      className="h-10 w-auto"
+    />
+    <div>
+      <h1 className="text-lg font-bold">👋 {currentUser.first_name}</h1>
+      <p className="text-xs text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+    </div>
+  </div>
+  <div className="flex gap-2">
                 {/* Notification indicator */}
                 {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
                   <p className="text-xs text-green-400 mt-1">🔔 Notifications enabled</p>

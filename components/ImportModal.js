@@ -6,8 +6,12 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://vbhkdoouhnaevbvuslup.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiaGtkb291aG5hZXZidnVzbHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NTUwNDEsImV4cCI6MjA3NTUzMTA0MX0.qoC8tyZXNEMPN_S1NwdzrMV6uax15D1TmLNT_LBmVlo';
 
+// Google Sheet configuration
+const GOOGLE_SHEET_ID = '1sm7HjR4PdZLCNbaCQkswktGKEZX61fiVdTUaA5Rg6IE';
+const GOOGLE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
+
 export default function ImportModal({ isOpen, onClose, onImportComplete }) {
-  const [mode, setMode] = useState(null);
+  const [mode, setMode] = useState(null); // 'manual' or 'auto'
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState([]);
@@ -44,6 +48,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     addLog('📂 Reading Excel file...', 'info');
 
     try {
+      // Dynamically import xlsx
       const XLSX = await import('xlsx');
       
       const data = await fileToRead.arrayBuffer();
@@ -62,6 +67,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
       addLog(`📋 Found ${jsonData.length} rows in OPEN WO sheet`, 'info');
 
+      // Get existing work orders
       addLog('🔍 Checking existing work orders...', 'info');
       const { data: existingWOs, error: fetchError } = await supabase
         .from('work_orders')
@@ -76,6 +82,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       const existingWONumbers = new Set(existingWOs.map(wo => wo.wo_number));
       addLog(`Found ${existingWONumbers.size} existing work orders`, 'info');
 
+      // Process data
       const processed = [];
       let newCount = 0;
       let existingCount = 0;
@@ -140,6 +147,38 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   };
 
   const handleAutoImport = async () => {
+    setLoading(true);
+    setLog([]);
+    addLog('⚡ Fetching data from Google Sheet...', 'info');
+
+    try {
+      // Fetch the Excel file from Google Sheets
+      const response = await fetch(GOOGLE_SHEET_URL);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch Google Sheet. Make sure it is set to "Anyone with the link can view".');
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer]);
+      const file = new File([blob], 'google-sheet-export.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      addLog('✅ Successfully fetched Google Sheet', 'success');
+      
+      // Parse the file
+      await parseExcel(file);
+    } catch (error) {
+      addLog(`❌ Error fetching Google Sheet: ${error.message}`, 'error');
+      console.error(error);
+      setLoading(false);
+    }
+  };
+
+  const handleAutoImport = async () => {
+    // For auto-import, you could:
+    // 1. Fetch from a known Google Sheets URL
+    // 2. Or prompt for a file path
+    // For now, let's just prompt for file upload
     addLog('📥 Auto-import: Please select your Excel file', 'info');
     document.getElementById('autoFileInput').click();
   };
@@ -220,6 +259,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+        {/* Header */}
         <div className="bg-gray-700 px-6 py-4 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-white">📥 Import Work Orders</h2>
           <button
@@ -230,8 +270,10 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
           </button>
         </div>
 
+        {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
           {!mode ? (
+            /* Mode Selection */
             <div className="space-y-4">
               <p className="text-gray-300 mb-6">Choose how you want to import work orders:</p>
               
@@ -254,18 +296,19 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-2">⚡ Auto-Parse Known Document</h3>
-                    <p className="text-green-200">Automatically parse from your standard Excel template</p>
+                    <h3 className="text-xl font-bold text-white mb-2">⚡ Auto-Fetch from Google Sheets</h3>
+                    <p className="text-green-200">Automatically fetch and parse from your configured Google Sheet</p>
                   </div>
                   <span className="text-3xl group-hover:translate-x-2 transition-transform">→</span>
                 </div>
               </button>
             </div>
           ) : (
+            /* Import Interface */
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-white">
-                  {mode === 'manual' ? '📁 Manual Upload' : '⚡ Auto-Parse'}
+                  {mode === 'manual' ? '📁 Manual Upload' : '⚡ Auto-Fetch from Google Sheets'}
                 </h3>
                 <button
                   onClick={() => setMode(null)}
@@ -298,26 +341,26 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
               {mode === 'auto' && (
                 <div className="bg-gray-700 p-4 rounded-lg">
+                  <div className="bg-green-900 bg-opacity-50 border border-green-600 rounded-lg p-4 mb-4">
+                    <p className="text-green-200 text-sm">
+                      <strong>📊 Connected to:</strong><br />
+                      Google Sheet ID: {GOOGLE_SHEET_ID.substring(0, 20)}...
+                    </p>
+                  </div>
                   <p className="text-gray-300 mb-4">
-                    Click below to select your standard Excel template for automatic parsing.
+                    Click below to automatically fetch and parse work orders from your Google Sheet.
                   </p>
-                  <input
-                    id="autoFileInput"
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleAutoFileSelect}
-                    className="hidden"
-                  />
                   <button
                     onClick={handleAutoImport}
                     disabled={loading}
                     className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold transition"
                   >
-                    {loading ? '⏳ Processing...' : '⚡ Select & Auto-Parse'}
+                    {loading ? '⏳ Fetching & Processing...' : '⚡ Fetch & Auto-Parse from Google Sheets'}
                   </button>
                 </div>
               )}
 
+              {/* Preview */}
               {preview && (
                 <div className="bg-blue-900 bg-opacity-30 border border-blue-600 rounded-lg p-4">
                   <h4 className="text-lg font-bold text-white mb-3">📊 Preview</h4>
@@ -345,6 +388,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 </div>
               )}
 
+              {/* Log */}
               {log.length > 0 && (
                 <div className="bg-gray-900 rounded-lg p-4 max-h-60 overflow-y-auto">
                   <h4 className="text-white font-bold mb-2">📋 Log</h4>

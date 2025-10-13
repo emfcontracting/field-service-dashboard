@@ -739,7 +739,7 @@ return (
                 date_entered: wo.date_entered,
                 created_at: wo.date_entered,
                 date_entered_type: typeof wo.date_entered,
-                created_at_type: typeof wo.created_at
+                created_at_type: typeof wo.date_entered
               });
             }
 
@@ -753,7 +753,7 @@ return (
                 <td className="px-2 py-2">
                   {(() => {
                     // Try to get a valid date from any available field
-                    const dateValue = wo.created_at || wo.date_entered;
+                    const dateValue = wo.date_entered || wo.date_entered;
                     
                     if (!dateValue) return 'No Date';
                     
@@ -879,8 +879,8 @@ return (
   <input
     type="datetime-local"
     value={(() => {
-      if (!selectedWO.date_entered && !selectedWO.created_at) return '';
-      const date = new Date(selectedWO.date_entered || selectedWO.created_at);
+      if (!selectedWO.date_entered && !selectedWO.date_entered) return '';
+      const date = new Date(selectedWO.date_entered || selectedWO.date_entered);
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
     })()}

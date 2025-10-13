@@ -356,18 +356,27 @@ if (teamAssignments && teamAssignments.length > 0) {
     }
 
     // Lock the work order
-    const { error: lockError } = await supabase
-      .from('work_orders')
-      .update({
-        is_locked: true,
-        locked_at: new Date().toISOString(),
-        locked_by: 'system'
-      })
-      .eq('wo_id', wo_id);
+const { error: lockError } = await supabase
+  .from('work_orders')
+  .update({
+    is_locked: true,
+    locked_at: new Date().toISOString(),
+    locked_by: 'system'
+  })
+  .eq('wo_id', wo_id);
 
-    if (lockError) {
-      console.error('Error locking work order:', lockError);
-    }
+if (lockError) {
+  console.error('Error locking work order:', lockError);
+  
+  // Rollback the invoice if lock fails
+  await supabase.from('invoice_line_items').delete().eq('invoice_id', invoice.invoice_id);
+  await supabase.from('invoices').delete().eq('invoice_id', invoice.invoice_id);
+  
+  return NextResponse.json(
+    { success: false, error: 'Failed to lock work order: ' + lockError.message },
+    { status: 500 }
+  );
+}
 
     return NextResponse.json({
       success: true,

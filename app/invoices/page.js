@@ -32,22 +32,27 @@ export default function InvoicingPage() {
 
   // Fetch work orders that are acknowledged but don't have invoices yet
   const fetchAcknowledgedWorkOrders = async () => {
-    const { data, error } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name, email)
-      `)
-      .eq('acknowledged', true)
-      .eq('is_locked', false)
-      .order('acknowledged_at', { ascending: false });
+  console.log('Fetching acknowledged work orders...');
+  
+  const { data, error } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      lead_tech:users!lead_tech_id(first_name, last_name, email)
+    `)
+    .eq('acknowledged', true)
+    .eq('is_locked', false)
+    .order('acknowledged_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching acknowledged work orders:', error);
-    } else {
-      setAcknowledgedWOs(data || []);
-    }
-  };
+  console.log('Acknowledged WOs query result:', { data, error });
+  console.log('Number of acknowledged WOs:', data?.length || 0);
+
+  if (error) {
+    console.error('Error fetching acknowledged work orders:', error);
+  } else {
+    setAcknowledgedWOs(data || []);
+  }
+};
 
   // Fetch existing invoices
   const fetchInvoices = async () => {

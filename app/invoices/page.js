@@ -293,8 +293,8 @@ export default function InvoicingPage() {
   };
 
   const printInvoice = (invoice) => {
-    window.print();
-  };
+  window.open(`/invoices/${invoice.invoice_id}/print`, '_blank');
+};
 
   const shareInvoice = (invoice) => {
     const shareUrl = `${window.location.origin}/invoices/${invoice.invoice_id}`;

@@ -91,7 +91,20 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
         const exists = existingWONumbers.has(woNumber);
         const workOrder = {
           wo_number: woNumber,
-          date_entered: row['Date entered'] ? new Date(row['Date entered']).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          date_entered: row['Date entered'] ? (() => {
+  const dateValue = row['Date entered'];
+  // Excel stores dates as serial numbers, check if it's a number
+  if (typeof dateValue === 'number') {
+    // Convert Excel serial date to JavaScript date
+    const excelEpoch = new Date(1899, 11, 30); // Excel's epoch
+    const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
+    return jsDate.toISOString();
+  } else {
+    // It's already a date string or Date object
+    const parsed = new Date(dateValue);
+    return !isNaN(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
+  }
+})() : new Date().toISOString(),
           building: row['Building'] || '',
           priority: mapPriority(row['Priority']),
           work_order_description: row['Work Order Description'] || '',

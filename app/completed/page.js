@@ -8,318 +8,377 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export default function CompletedWorkOrdersPage() {
+export default function CompletedWorkOrders() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [completedWOs, setCompletedWOs] = useState([]);
+  const [workOrders, setWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
-  const [invoice, setInvoice] = useState(null);
-  const [lineItems, setLineItems] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('');
+
+  const [fieldData, setFieldData] = useState({
+    hours_regular: 0,
+    hours_overtime: 0,
+    miles: 0,
+    material_cost: 0,
+    emf_equipment_cost: 0,
+    trailer_cost: 0,
+    rental_cost: 0
+  });
 
   useEffect(() => {
-    // Get current user from session
     const savedSession = localStorage.getItem('mobile_session');
     if (savedSession) {
       const user = JSON.parse(savedSession);
       setCurrentUser(user);
       fetchCompletedWorkOrders(user.user_id);
     } else {
-      setLoading(false);
+      window.location.href = '/mobile';
     }
   }, []);
 
   const fetchCompletedWorkOrders = async (userId) => {
     setLoading(true);
-
-    // Get work orders where:
-    // 1. User was lead tech OR
-    // 2. User was a team member
-    // AND invoice is approved
     
-    // Get WOs where user was lead tech
-    const { data: leadWOs } = await supabase
+    // Get completed work orders where user is lead tech
+    const { data: leadTechWOs } = await supabase
       .from('work_orders')
       .select(`
         *,
         lead_tech:users!lead_tech_id(first_name, last_name)
       `)
       .eq('lead_tech_id', userId)
-      .eq('is_locked', true);
+      .eq('status', 'completed')
+      .order('date_completed', { ascending: false });
 
-    // Get WOs where user was team member
+    // Get completed work orders where user is team member
     const { data: assignments } = await supabase
       .from('work_order_assignments')
       .select('wo_id')
       .eq('user_id', userId);
 
-    const assignedWOIds = assignments?.map(a => a.wo_id) || [];
-
-    let memberWOs = [];
-    if (assignedWOIds.length > 0) {
-      const { data } = await supabase
+    let assignedWOs = [];
+    if (assignments && assignments.length > 0) {
+      const woIds = assignments.map(a => a.wo_id);
+      const { data: assignedWOData } = await supabase
         .from('work_orders')
         .select(`
           *,
           lead_tech:users!lead_tech_id(first_name, last_name)
         `)
-        .in('wo_id', assignedWOIds)
-        .eq('is_locked', true);
-      
-      memberWOs = data || [];
+        .in('wo_id', woIds)
+        .eq('status', 'completed')
+        .order('date_completed', { ascending: false });
+
+      assignedWOs = assignedWOData || [];
     }
 
     // Combine and deduplicate
-    const allWOs = [...(leadWOs || []), ...memberWOs];
-    const uniqueWOs = Array.from(new Map(allWOs.map(wo => [wo.wo_id, wo])).values());
+    const allWOs = [...(leadTechWOs || []), ...assignedWOs];
+    const uniqueWOs = Array.from(
+      new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+    );
 
-    // Get invoices for these WOs
-    const woIds = uniqueWOs.map(wo => wo.wo_id);
-    
-    if (woIds.length > 0) {
-      const { data: invoicesData } = await supabase
-        .from('invoices')
-        .select('*')
-        .in('wo_id', woIds)
-        .eq('status', 'approved');
-
-      // Match invoices with work orders
-      const wosWithInvoices = uniqueWOs
-        .map(wo => {
-          const matchingInvoice = invoicesData?.find(inv => inv.wo_id === wo.wo_id);
-          return matchingInvoice ? { ...wo, invoice: matchingInvoice } : null;
-        })
-        .filter(wo => wo !== null)
-        .sort((a, b) => new Date(b.invoice.approved_at) - new Date(a.invoice.approved_at));
-
-      setCompletedWOs(wosWithInvoices);
-    } else {
-      setCompletedWOs([]);
-    }
-
+    setWorkOrders(uniqueWOs);
     setLoading(false);
   };
 
-  const viewWorkOrder = async (wo) => {
+  const selectWorkOrder = async (wo) => {
     setSelectedWO(wo);
-    setInvoice(wo.invoice);
+    setUserRole(wo.lead_tech_id === currentUser?.user_id ? 'lead' : 'helper');
 
-    // Fetch line items
+    setFieldData({
+      hours_regular: wo.hours_regular || 0,
+      hours_overtime: wo.hours_overtime || 0,
+      miles: wo.miles || 0,
+      material_cost: wo.material_cost || 0,
+      emf_equipment_cost: wo.emf_equipment_cost || 0,
+      trailer_cost: wo.trailer_cost || 0,
+      rental_cost: wo.rental_cost || 0
+    });
+
+    await fetchTeamMembers(wo.wo_id);
+  };
+
+  const fetchTeamMembers = async (woId) => {
     const { data } = await supabase
-      .from('invoice_line_items')
-      .select('*')
-      .eq('invoice_id', wo.invoice.invoice_id)
-      .order('category');
+      .from('work_order_assignments')
+      .select(`
+        *,
+        user:users(first_name, last_name, email)
+      `)
+      .eq('wo_id', woId);
 
-    setLineItems(data || []);
+    setTeamMembers(data || []);
+  };
+
+  const getStatusColor = (status) => {
+    return 'bg-green-600'; // Always green for completed
   };
 
   if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg p-8 text-center">
-          <h1 className="text-2xl font-bold mb-4">🔒 Login Required</h1>
-          <p className="text-gray-400 mb-6">Please login to view completed work orders</p>
-          <button
-            onClick={() => window.location.href = '/mobile'}
-            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">✅ Completed Work Orders</h1>
-            <p className="text-gray-400 mt-1">
-              Approved invoices for work orders you participated in
-            </p>
+    <div className="min-h-screen bg-gray-900 text-white">
+      
+      {!selectedWO && (
+        <div>
+          <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
+            <div className="flex justify-between items-center mb-2">
+              <button
+                onClick={() => window.location.href = '/mobile'}
+                className="text-blue-400 hover:text-blue-300"
+              >
+                ← Back to Active Work Orders
+              </button>
+            </div>
+            <h1 className="text-2xl font-bold">✅ Completed Work Orders</h1>
+            <p className="text-sm text-gray-400">Reference past completed jobs</p>
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => window.location.href = '/mobile'}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold"
-            >
-              ← Mobile App
-            </button>
-            <button
-              onClick={() => window.location.href = '/'}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold"
-            >
-              Dashboard
-            </button>
+
+          <div className="p-4 space-y-3">
+            {loading ? (
+              <div className="text-center py-12 text-gray-400">Loading...</div>
+            ) : workOrders.length === 0 ? (
+              <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
+                <div className="text-4xl mb-3">📋</div>
+                <div className="font-semibold mb-2">No completed work orders yet</div>
+                <div className="text-sm">Completed work orders will appear here for reference</div>
+              </div>
+            ) : (
+              workOrders.map(wo => (
+                <div
+                  key={wo.wo_id}
+                  onClick={() => selectWorkOrder(wo)}
+                  className="bg-gray-800 rounded-lg p-4 cursor-pointer active:bg-gray-700"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-bold text-lg">{wo.wo_number}</div>
+                      <div className="text-sm text-gray-400">{wo.building}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-green-600">
+                        COMPLETED
+                      </span>
+                      {wo.is_locked && (
+                        <span className="text-xs text-purple-400">🔒 INVOICED</span>
+                      )}
+                      {wo.acknowledged && !wo.is_locked && (
+                        <span className="text-xs text-blue-400">✅ ACKNOWLEDGED</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-300">
+                    {wo.work_order_description.substring(0, 100)}...
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Completed: {wo.date_completed ? new Date(wo.date_completed).toLocaleDateString() : 'N/A'}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
+      )}
 
-        {loading ? (
-          <div className="text-center py-12 text-gray-400">Loading...</div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Work Orders List */}
-            <div className="lg:col-span-2">
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h2 className="text-xl font-bold mb-4">
-                  Your Completed Work Orders ({completedWOs.length})
-                </h2>
-
-                {completedWOs.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400">
-                    <div className="text-4xl mb-4">📋</div>
-                    <div>No completed work orders with approved invoices yet</div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {completedWOs.map(wo => (
-                      <div
-                        key={wo.wo_id}
-                        onClick={() => viewWorkOrder(wo)}
-                        className={`bg-gray-700 p-4 rounded-lg cursor-pointer hover:bg-gray-600 transition ${
-                          selectedWO?.wo_id === wo.wo_id ? 'ring-2 ring-green-500' : ''
-                        }`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="font-bold text-lg">{wo.wo_number}</div>
-                            <div className="text-sm text-gray-400">{wo.building}</div>
-                            <div className="text-sm text-gray-400 mt-1">
-                              {wo.work_order_description.substring(0, 80)}...
-                            </div>
-                            <div className="text-xs text-gray-500 mt-2">
-                              Lead: {wo.lead_tech?.first_name} {wo.lead_tech?.last_name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Completed: {new Date(wo.invoice.approved_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <div className="text-2xl font-bold text-green-400">
-                              ${wo.invoice.total.toFixed(2)}
-                            </div>
-                            <div className="bg-green-600 text-xs px-2 py-1 rounded-full mt-1">
-                              APPROVED
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+      {selectedWO && (
+        <div className="pb-20">
+          <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
+            <button
+              onClick={() => setSelectedWO(null)}
+              className="text-blue-400 mb-2"
+            >
+              ← Back to Completed List
+            </button>
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-bold">{selectedWO.wo_number}</h1>
+                <p className="text-sm text-gray-400">
+                  {selectedWO.date_completed 
+                    ? `Completed on ${new Date(selectedWO.date_completed).toLocaleDateString()}`
+                    : 'Completed'
+                  }
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <span className="px-3 py-2 rounded-lg text-sm font-semibold bg-green-600">
+                  COMPLETED
+                </span>
+                {selectedWO.is_locked && (
+                  <span className="px-3 py-2 rounded-lg text-sm font-semibold bg-purple-600">
+                    🔒 INVOICED
+                  </span>
                 )}
               </div>
             </div>
+          </div>
 
-            {/* Work Order Details */}
-            <div className="lg:col-span-1">
-              {selectedWO && invoice ? (
-                <div className="bg-gray-800 rounded-lg p-4 sticky top-6">
-                  <h2 className="text-xl font-bold mb-4">Work Order Details</h2>
+          <div className="p-4 space-y-6">
+            
+            {(selectedWO.is_locked || selectedWO.acknowledged) && (
+              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
+                <div className="font-bold text-lg">📋 Read-Only Reference</div>
+                <div className="text-sm mt-1">
+                  This completed work order is for reference purposes only.
+                  {selectedWO.acknowledged && ' It has been acknowledged by the office.'}
+                  {selectedWO.is_locked && ' An invoice has been generated.'}
+                </div>
+              </div>
+            )}
+            
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h2 className="text-lg font-bold mb-3">Work Order Details</h2>
+              
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="text-gray-400">Building:</span>
+                  <div className="font-semibold">{selectedWO.building}</div>
+                </div>
+                
+                <div>
+                  <span className="text-gray-400">Requestor:</span>
+                  <div className="font-semibold">{selectedWO.requestor || 'N/A'}</div>
+                </div>
+                
+                <div>
+                  <span className="text-gray-400">Description:</span>
+                  <div className="mt-1">{selectedWO.work_order_description}</div>
+                </div>
 
-                  <div className="space-y-3 mb-4">
-                    <div>
-                      <div className="text-sm text-gray-400">Work Order #</div>
-                      <div className="font-bold text-lg">{selectedWO.wo_number}</div>
-                    </div>
+                <div>
+                  <span className="text-gray-400">Priority:</span>
+                  <span className={`ml-2 px-2 py-1 rounded text-xs font-bold ${
+                    selectedWO.priority === 'emergency' ? 'bg-red-100 text-red-700' :
+                    selectedWO.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                    selectedWO.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {selectedWO.priority.toUpperCase()}
+                  </span>
+                </div>
+                
+                <div>
+                  <span className="text-gray-400">Date Entered:</span>
+                  <div>{new Date(selectedWO.date_entered).toLocaleDateString()}</div>
+                </div>
 
-                    <div>
-                      <div className="text-sm text-gray-400">Building</div>
-                      <div>{selectedWO.building}</div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-gray-400">Description</div>
-                      <div className="text-sm">{selectedWO.work_order_description}</div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-gray-400">Lead Technician</div>
-                      <div>{selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-gray-400">Invoice #</div>
-                      <div className="font-semibold">{invoice.invoice_number}</div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-gray-400">Approved Date</div>
-                      <div className="text-sm">{new Date(invoice.approved_at).toLocaleString()}</div>
-                    </div>
+                <div>
+                  <span className="text-gray-400">Date Completed:</span>
+                  <div>
+                    {selectedWO.date_completed 
+                      ? new Date(selectedWO.date_completed).toLocaleDateString()
+                      : 'N/A'
+                    }
                   </div>
+                </div>
 
-                  <hr className="border-gray-700 my-4" />
+                <div>
+                  <span className="text-gray-400">Age:</span>
+                  <div>
+                    {Math.floor((new Date(selectedWO.date_completed || new Date()) - new Date(selectedWO.date_entered)) / (1000 * 60 * 60 * 24))} days
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                  {/* Line Items */}
-                  {lineItems && lineItems.length > 0 && (
-                    <>
-                      <div className="mb-4">
-                        <div className="font-bold mb-2">Invoice Line Items</div>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {lineItems.map((item, idx) => (
-                            <div key={idx} className="bg-gray-700 p-2 rounded text-sm">
-                              <div className="flex justify-between">
-                                <span className="flex-1">{item.description}</span>
-                                <span className="font-semibold ml-2">${item.amount.toFixed(2)}</span>
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                {item.quantity} × ${item.unit_price.toFixed(2)}
-                              </div>
-                            </div>
-                          ))}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">Lead Technician</h3>
+              <div className="bg-gray-700 p-3 rounded-lg font-semibold">
+                {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}
+              </div>
+            </div>
+
+            {teamMembers.length > 0 && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="font-bold mb-3">Team Members</h3>
+                <div className="space-y-3">
+                  {teamMembers.map(member => (
+                    <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
+                      <div className="font-bold">
+                        {member.user?.first_name} {member.user?.last_name}
+                      </div>
+                      <div className="text-xs text-gray-400 capitalize mt-1">{member.role}</div>
+                      
+                      <div className="grid grid-cols-3 gap-2 text-sm mt-2">
+                        <div>
+                          <div className="text-xs text-gray-400">RT Hours</div>
+                          <div className="font-semibold">{member.hours_regular || 0}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-400">OT Hours</div>
+                          <div className="font-semibold">{member.hours_overtime || 0}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-400">Miles</div>
+                          <div className="font-semibold">{member.miles || 0}</div>
                         </div>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                      <hr className="border-gray-700 my-4" />
-                    </>
-                  )}
+            {userRole === 'lead' && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="font-bold mb-3">Primary Tech Hours & Costs</h3>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-gray-400">Regular Hours (RT)</div>
+                      <div className="text-xl font-bold">{fieldData.hours_regular}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-400">Overtime Hours (OT)</div>
+                      <div className="text-xl font-bold">{fieldData.hours_overtime}</div>
+                    </div>
+                  </div>
 
-                  {/* Cost Summary */}
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Labor</span>
-                      <span>${invoice.labor_cost.toFixed(2)}</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-gray-400">Miles</div>
+                      <div className="text-xl font-bold">{fieldData.miles}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Materials</span>
-                      <span>${invoice.material_cost.toFixed(2)}</span>
+                    <div>
+                      <div className="text-gray-400">Materials</div>
+                      <div className="text-xl font-bold">${(fieldData.material_cost || 0).toFixed(2)}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Equipment</span>
-                      <span>${invoice.equipment_cost.toFixed(2)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-gray-400">Equipment</div>
+                      <div className="font-bold">${(fieldData.emf_equipment_cost || 0).toFixed(2)}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Trailer</span>
-                      <span>${invoice.trailer_cost.toFixed(2)}</span>
+                    <div>
+                      <div className="text-gray-400">Trailer</div>
+                      <div className="font-bold">${(fieldData.trailer_cost || 0).toFixed(2)}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Rental</span>
-                      <span>${invoice.rental_cost.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Mileage</span>
-                      <span>${invoice.mileage_cost.toFixed(2)}</span>
-                    </div>
-                    <hr className="border-gray-700" />
-                    <div className="flex justify-between font-bold text-xl text-green-400">
-                      <span>Total</span>
-                      <span>${invoice.total.toFixed(2)}</span>
+                    <div>
+                      <div className="text-gray-400">Rental</div>
+                      <div className="font-bold">${(fieldData.rental_cost || 0).toFixed(2)}</div>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400 sticky top-6">
-                  <div className="text-4xl mb-3">📄</div>
-                  <div>Select a work order to view details</div>
+              </div>
+            )}
+
+            {selectedWO.comments && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="font-bold mb-3">Comments</h3>
+                <div className="bg-gray-700 rounded p-3 text-sm whitespace-pre-wrap">
+                  {selectedWO.comments || 'No comments'}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

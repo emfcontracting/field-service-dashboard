@@ -609,6 +609,12 @@ export default function MobileApp() {
               </div>
               <div className="flex gap-2">
                 <button
+                  onClick={() => window.location.href = '/completed'}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
+                >
+                  ✅ Completed
+                </button>
+                <button
                   onClick={handleLogout}
                   className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm font-semibold"
                 >

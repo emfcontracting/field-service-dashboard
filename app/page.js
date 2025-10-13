@@ -77,24 +77,32 @@ export default function Dashboard() {
 
   // Fetch Work Orders
   const fetchWorkOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name, email),
-        locked_by_user:users!locked_by(first_name, last_name)
-      `)
-      .order('created_at', { ascending: false });
+  setLoading(true);
+  const { data, error } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      lead_tech:users!lead_tech_id(first_name, last_name, email),
+      locked_by_user:users!locked_by(first_name, last_name)
+    `)
+    .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching work orders:', error);
-    } else {
-      setWorkOrders(data || []);
-      calculateStats(data || []);
-    }
-    setLoading(false);
-  };
+  if (error) {
+    console.error('Error fetching work orders:', error);
+  } else {
+    // Filter out acknowledged work orders from the dashboard
+    // They will only appear in the Invoicing page
+    const filteredData = (data || []).filter(wo => {
+      // Hide acknowledged work orders (whether invoiced or not)
+      if (wo.acknowledged) return false;
+      return true;
+    });
+    
+    setWorkOrders(filteredData);
+    calculateStats(filteredData);
+  }
+  setLoading(false);
+};
 
   // Fetch Users
   const fetchUsers = async () => {

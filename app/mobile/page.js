@@ -609,12 +609,6 @@ export default function MobileApp() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => window.location.href = '/completed'}
-                  className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
-                >
-                  ✅ Completed
-                </button>
-                <button
                   onClick={handleLogout}
                   className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm font-semibold"
                 >
@@ -738,27 +732,6 @@ export default function MobileApp() {
                 </div>
               </div>
             </div>
-
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                {selectedWO.acknowledged && selectedWO.is_locked && (
-                  <button
-                    onClick={() => window.location.href = '/invoices'}
-                    className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold"
-                  >
-                    View Invoice
-                  </button>
-                )}
-                <button
-                  onClick={() => alert('Print WO feature coming soon')}
-                  className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
-                >
-                  Print WO
-                </button>
-              </div>
-            </div>
-
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3 flex items-center gap-2">
                 <span className="text-pink-500">◉</span> Check In/Out

@@ -96,39 +96,49 @@ export default function InvoicingPage() {
   };
 
   const generateInvoice = async (woId) => {
-    if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Apply automatic markups\n\nContinue?')) {
-      return;
+  if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Apply automatic markups\n\nContinue?')) {
+    return;
+  }
+
+  setGeneratingInvoice(true);
+
+  try {
+    const response = await fetch('/api/invoices/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wo_id: woId })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert('✅ Invoice generated successfully!\n\nMarkups applied:\n' +
+            `- Admin Hours: $${result.markups.admin_hours.toFixed(2)}\n` +
+            `- Material Markup (25%): $${result.markups.material_markup.toFixed(2)}\n` +
+            `- Equipment Markup (15%): $${result.markups.equipment_markup.toFixed(2)}\n` +
+            `- Rental Markup (15%): $${result.markups.rental_markup.toFixed(2)}`);
+      
+      // Remove the work order from acknowledged list immediately
+      setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== woId));
+      
+      // Close modal
+      setSelectedItem(null);
+      
+      // Refresh data to get the new invoice
+      await fetchData();
+      
+      // Switch to invoiced tab to show the new invoice
+      setActiveTab('invoiced');
+    } else {
+      alert('❌ Error generating invoice:\n' + result.error);
     }
-
-    setGeneratingInvoice(true);
-
-    try {
-      const response = await fetch('/api/invoices/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wo_id: woId })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        alert('✅ Invoice generated successfully!\n\nMarkups applied:\n' +
-              `- Admin Hours: $${result.markups.admin_hours.toFixed(2)}\n` +
-              `- Material Markup (25%): $${result.markups.material_markup.toFixed(2)}\n` +
-              `- Equipment Markup (15%): $${result.markups.equipment_markup.toFixed(2)}\n` +
-              `- Rental Markup (15%): $${result.markups.rental_markup.toFixed(2)}`);
-        setSelectedItem(null);
-        fetchData();
-      } else {
-        alert('❌ Error generating invoice:\n' + result.error);
-      }
-    } catch (error) {
-      console.error('Error generating invoice:', error);
-      alert('❌ Failed to generate invoice');
-    } finally {
-      setGeneratingInvoice(false);
-    }
-  };
+  } catch (error) {
+    console.error('Error generating invoice:', error);
+    alert('❌ Failed to generate invoice');
+  } finally {
+    setGeneratingInvoice(false);
+  }
+};
 
   const returnToTech = async (woId, invoiceId) => {
     const reason = prompt('Enter reason for returning to tech (optional):');

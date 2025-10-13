@@ -40,77 +40,153 @@ export default function MobileApp() {
       setCurrentUser(user);
       fetchWorkOrders(user.user_id);
       fetchAvailableUsers();
+      
+      // Request notification permission
+      requestNotificationPermission();
+      
+      // Check for new assignments immediately
+      checkForNewAssignments(user.user_id);
+      
+      // Poll for new assignments every 2 minutes
+      const intervalId = setInterval(() => {
+        checkForNewAssignments(user.user_id);
+      }, 2 * 60 * 1000);
+
+      // Cleanup interval on unmount
+      return () => clearInterval(intervalId);
     } else {
       setLoading(false);
     }
   }, []);
 
+  // Request notification permission
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        console.log('Notification permission granted');
+      }
+    }
+  };
+
+  // Check for new assignments periodically
+  const checkForNewAssignments = async (userId) => {
+    try {
+      // Get the latest assignment check time
+      const lastCheck = localStorage.getItem('last_assignment_check');
+      const checkTime = lastCheck || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      // Check for work orders assigned since last check
+      const { data: newWOs } = await supabase
+        .from('work_orders')
+        .select('wo_number, building, work_order_description')
+        .eq('lead_tech_id', userId)
+        .eq('assigned_to_field', true)
+        .gte('assigned_to_field_at', checkTime)
+        .order('assigned_to_field_at', { ascending: false });
+
+      // Also check for team member assignments
+      const { data: teamAssignments } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          wo_id,
+          created_at,
+          work_order:work_orders(wo_number, building, work_order_description)
+        `)
+        .eq('user_id', userId)
+        .gte('created_at', checkTime);
+
+      const allNewAssignments = [
+        ...(newWOs || []).map(wo => ({ ...wo, type: 'lead' })),
+        ...(teamAssignments || []).map(ta => ({ 
+          wo_number: ta.work_order?.wo_number,
+          building: ta.work_order?.building,
+          work_order_description: ta.work_order?.work_order_description,
+          type: 'helper'
+        }))
+      ];
+
+      // Show notifications for new assignments
+      if (allNewAssignments.length > 0 && Notification.permission === 'granted') {
+        allNewAssignments.forEach(wo => {
+          new Notification('🔔 New Work Order Assigned!', {
+            body: `${wo.wo_number} - ${wo.building}\n${wo.type === 'lead' ? 'Lead Tech' : 'Team Member'}`,
+            tag: wo.wo_number,
+            requireInteraction: true
+          });
+        });
+      }
+
+      // Update last check time
+      localStorage.setItem('last_assignment_check', new Date().toISOString());
+    } catch (err) {
+      console.error('Error checking for new assignments:', err);
+    }
+  };
+
   const fetchWorkOrders = async (userId) => {
-  setLoading(true);
-  
-  // Get work orders where user is lead tech AND assigned to field
-  const { data: leadTechWOs, error: leadError } = await supabase
-    .from('work_orders')
-    .select(`
-      *,
-      lead_tech:users!lead_tech_id(first_name, last_name)
-    `)
-    .eq('lead_tech_id', userId)
-    .eq('assigned_to_field', true)
-    .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-    .order('created_at', { ascending: false });
-
-  if (leadError) {
-    console.error('Error fetching lead tech work orders:', leadError);
-  }
-
-  // Get work orders where user is assigned as team member AND assigned to field
-  const { data: assignments } = await supabase
-    .from('work_order_assignments')
-    .select('wo_id')
-    .eq('user_id', userId);
-
-  let assignedWOs = [];
-  if (assignments && assignments.length > 0) {
-    const woIds = assignments.map(a => a.wo_id);
-    const { data: assignedWOData } = await supabase
+    setLoading(true);
+    
+    // Get work orders where user is lead tech AND assigned to field
+    const { data: leadTechWOs, error: leadError } = await supabase
       .from('work_orders')
       .select(`
         *,
         lead_tech:users!lead_tech_id(first_name, last_name)
       `)
-      .in('wo_id', woIds)
+      .eq('lead_tech_id', userId)
       .eq('assigned_to_field', true)
       .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
       .order('created_at', { ascending: false });
 
-    assignedWOs = assignedWOData || [];
-  }
+    if (leadError) {
+      console.error('Error fetching lead tech work orders:', leadError);
+    }
 
-  // Combine and deduplicate
-  const allWOs = [...(leadTechWOs || []), ...assignedWOs];
-  const uniqueWOs = Array.from(
-    new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
-  );
+    // Get work orders where user is assigned as team member AND assigned to field
+    const { data: assignments } = await supabase
+      .from('work_order_assignments')
+      .select('wo_id')
+      .eq('user_id', userId);
 
-  // Filter out acknowledged work orders that aren't invoiced yet
-  const filteredData = uniqueWOs.filter(wo => {
-    // Keep all non-completed work orders
-    if (wo.status !== 'completed') return true;
-    
-    // If completed but not acknowledged, keep it
-    if (!wo.acknowledged) return true;
-    
-    // If acknowledged but not yet invoiced, hide it
-    if (wo.acknowledged && !wo.is_locked) return false;
-    
-    // If acknowledged AND invoiced, hide it (shows in completed page instead)
-    return false;
-  });
+    let assignedWOs = [];
+    if (assignments && assignments.length > 0) {
+      const woIds = assignments.map(a => a.wo_id);
+      const { data: assignedWOData } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!lead_tech_id(first_name, last_name)
+        `)
+        .in('wo_id', woIds)
+        .eq('assigned_to_field', true)
+        .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
+        .order('created_at', { ascending: false });
 
-  setWorkOrders(filteredData);
-  setLoading(false);
-};
+      assignedWOs = assignedWOData || [];
+    }
+
+    // Combine and deduplicate
+    const allWOs = [...(leadTechWOs || []), ...assignedWOs];
+    const uniqueWOs = Array.from(
+      new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+    );
+
+    // Hide all acknowledged/completed work orders from dashboard
+    const filteredData = uniqueWOs.filter(wo => {
+      // Keep all non-completed work orders
+      if (wo.status !== 'completed') return true;
+      
+      // If completed and acknowledged, hide it
+      if (wo.status === 'completed' && wo.acknowledged) return false;
+      
+      // If completed but NOT acknowledged yet, keep it
+      return true;
+    });
+
+    setWorkOrders(filteredData);
+    setLoading(false);
+  };
 
   const fetchAvailableUsers = async () => {
     const { data } = await supabase
@@ -421,7 +497,7 @@ export default function MobileApp() {
     return colors[status] || 'bg-gray-600';
   };
 
-  // NEW PIN LOGIN SCREEN
+  // LOGIN SCREEN
   const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [pin, setPin] = useState('');
@@ -480,6 +556,14 @@ export default function MobileApp() {
         setCurrentUser(user);
         fetchWorkOrders(user.user_id);
         fetchAvailableUsers();
+        
+        // Request notification permission right after login
+        setTimeout(() => {
+          if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+          }
+        }, 1000);
+        
       } catch (err) {
         setError('Login failed. Please try again.');
         console.error('Login error:', err);
@@ -508,13 +592,13 @@ export default function MobileApp() {
                   Email Address
                 </label>
                 <input
-  type="email"
-  value={email}
-  onChange={(e) => setEmail(e.target.value)}
-  className="w-full px-4 py-4 text-lg text-gray-900 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-  placeholder="your.email@company.com"
-  autoComplete="email"
-/>
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                  placeholder="your.email@company.com"
+                  autoComplete="email"
+                />
               </div>
 
               {/* PIN Input */}
@@ -526,7 +610,7 @@ export default function MobileApp() {
                   {[0, 1, 2, 3].map((i) => (
                     <div
                       key={i}
-                      className="w-14 h-14 border-2 border-gray-300 rounded-xl flex items-center justify-center text-2xl font-bold bg-gray-50"
+                      className="w-14 h-14 border-2 border-gray-300 rounded-xl flex items-center justify-center text-3xl font-bold bg-gray-50 text-gray-900"
                     >
                       {pin[i] ? '•' : ''}
                     </div>
@@ -589,7 +673,7 @@ export default function MobileApp() {
             {/* Help Text */}
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-500">
-                Default PIN: <span className="font-mono font-bold">5678</span>
+                Default PIN: <span className="font-mono font-bold text-gray-700">5678</span>
               </p>
               <p className="text-xs text-gray-400 mt-2">
                 Contact your administrator if you need help
@@ -615,6 +699,13 @@ export default function MobileApp() {
               <div>
                 <h1 className="text-xl font-bold">👋 {currentUser.first_name}</h1>
                 <p className="text-sm text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+                {/* Notification indicator */}
+                {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
+                  <p className="text-xs text-green-400 mt-1">🔔 Notifications enabled</p>
+                )}
+                {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (
+                  <p className="text-xs text-red-400 mt-1">🔕 Notifications disabled</p>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -747,6 +838,7 @@ export default function MobileApp() {
                 </div>
               </div>
             </div>
+
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3 flex items-center gap-2">
                 <span className="text-pink-500">◉</span> Check In/Out
@@ -1018,95 +1110,99 @@ export default function MobileApp() {
               </div>
             )}
 
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Cost Summary</h3>
+            {userRole === 'lead' && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="font-bold mb-3">Cost Summary</h3>
 
-              <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
-                <div className="font-bold mb-2">TEAM LABOR</div>
-                <div className="space-y-1 text-sm">
+                <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
+                  <div className="font-bold mb-2">TEAM LABOR</div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total RT ({fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} hrs)</span>
+                      <span>${((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total OT ({fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} hrs)</span>
+                      <span>${((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96).toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
+                      <span>Total Labor:</span>
+                      <span>
+                        ${(
+                          ((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64) +
+                          ((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96)
+                        ).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm mb-3">
                   <div className="flex justify-between">
-                    <span>Total RT ({fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} hrs)</span>
-                    <span>${((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64).toFixed(2)}</span>
+                    <span className="text-gray-400">Total Mileage ({fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi × $1.00)</span>
+                    <span>${((fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)) * 1.00).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Total OT ({fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} hrs)</span>
-                    <span>${((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96).toFixed(2)}</span>
+                    <span className="text-gray-400">Materials</span>
+                    <span>${(fieldData.material_cost || 0).toFixed(2)}</span>
                   </div>
-                  <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
-                    <span>Total Labor:</span>
-                    <span>
-                      ${(
-                        ((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64) +
-                        ((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96)
-                      ).toFixed(2)}
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Equipment</span>
+                    <span>${(fieldData.emf_equipment_cost || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Trailer</span>
+                    <span>${(fieldData.trailer_cost || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Rental</span>
+                    <span>${(fieldData.rental_cost || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-3 mt-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold text-lg">Grand Total:</span>
+                    <span className="text-2xl font-bold text-green-400">
+                      ${calculateTotalCost().toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">NTE Budget:</span>
+                    <span>${(selectedWO.nte || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Remaining:</span>
+                    <span className={calculateTotalCost() > selectedWO.nte ? 'text-red-400 font-bold' : 'text-green-400'}>
+                      ${((selectedWO.nte || 0) - calculateTotalCost()).toFixed(2)}
                     </span>
                   </div>
                 </div>
               </div>
+            )}
 
-              <div className="space-y-2 text-sm mb-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total Mileage ({fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi × $1.00)</span>
-                  <span>${((fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)) * 1.00).toFixed(2)}</span>
+            {userRole === 'lead' && (
+              <div className="bg-gray-800 rounded-lg p-4">
+                <h3 className="font-bold mb-3">Time Tracking</h3>
+                
+                <div className="bg-gray-700 rounded-lg p-3 mb-3">
+                  <div className="text-sm text-gray-400 mb-1">TEAM TOTALS</div>
+                  <div className="text-2xl font-bold text-blue-400">
+                    {fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} RT + {fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} OT
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    = {fieldData.hours_regular + fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0) + (m.hours_overtime || 0), 0)} total hours
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Materials</span>
-                  <span>${(fieldData.material_cost || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Equipment</span>
-                  <span>${(fieldData.emf_equipment_cost || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Trailer</span>
-                  <span>${(fieldData.trailer_cost || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Rental</span>
-                  <span>${(fieldData.rental_cost || 0).toFixed(2)}</span>
+
+                <div className="text-sm">
+                  <div className="text-gray-400 mb-1">Total Miles Traveled</div>
+                  <div className="text-xl font-bold">
+                    {fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi
+                  </div>
                 </div>
               </div>
-
-              <div className="border-t border-gray-700 pt-3 mt-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-lg">Grand Total:</span>
-                  <span className="text-2xl font-bold text-green-400">
-                    ${calculateTotalCost().toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">NTE Budget:</span>
-                  <span>${(selectedWO.nte || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Remaining:</span>
-                  <span className={calculateTotalCost() > selectedWO.nte ? 'text-red-400 font-bold' : 'text-green-400'}>
-                    ${((selectedWO.nte || 0) - calculateTotalCost()).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Time Tracking</h3>
-              
-              <div className="bg-gray-700 rounded-lg p-3 mb-3">
-                <div className="text-sm text-gray-400 mb-1">TEAM TOTALS</div>
-                <div className="text-2xl font-bold text-blue-400">
-                  {fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} RT + {fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} OT
-                </div>
-                <div className="text-xs text-gray-400">
-                  = {fieldData.hours_regular + fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0) + (m.hours_overtime || 0), 0)} total hours
-                </div>
-              </div>
-
-              <div className="text-sm">
-                <div className="text-gray-400 mb-1">Total Miles Traveled</div>
-                <div className="text-xl font-bold">
-                  {fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi
-                </div>
-              </div>
-            </div>
+            )}
 
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>

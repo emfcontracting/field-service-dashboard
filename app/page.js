@@ -307,38 +307,35 @@ const selectWorkOrderEnhanced = async (wo) => {
 
   // Acknowledge Work Order (Office/Admin only)
   const acknowledgeWorkOrder = async (woId) => {
-    if (!confirm('Acknowledge this completed work order?\n\nThis will lock the work order and prevent the technician from making further changes.')) {
-      return;
-    }
+  if (!confirm('Acknowledge this completed work order?\n\nThis will prepare it for invoicing.')) {
+    return;
+  }
 
-    const { error } = await supabase
-      .from('work_orders')
-      .update({
+  const { error } = await supabase
+    .from('work_orders')
+    .update({
+      acknowledged: true,
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: null
+      // DON'T lock it yet - only lock when invoice is generated
+    })
+    .eq('wo_id', woId);
+
+  if (error) {
+    console.error('Error acknowledging work order:', error);
+    alert('Failed to acknowledge work order');
+  } else {
+    alert('✅ Work order acknowledged and ready for invoicing!');
+    fetchWorkOrders();
+    if (selectedWO?.wo_id === woId) {
+      setSelectedWO({
+        ...selectedWO,
         acknowledged: true,
-        acknowledged_at: new Date().toISOString(),
-        acknowledged_by: null,
-        is_locked: true,
-        locked_at: new Date().toISOString(),
-        locked_by: null
-      })
-      .eq('wo_id', woId);
-
-    if (error) {
-      console.error('Error acknowledging work order:', error);
-      alert('Failed to acknowledge work order');
-    } else {
-      alert('✅ Work order acknowledged and locked!');
-      fetchWorkOrders();
-      if (selectedWO?.wo_id === woId) {
-        setSelectedWO({
-          ...selectedWO,
-          acknowledged: true,
-          is_locked: true,
-          acknowledged_at: new Date().toISOString()
-        });
-      }
+        acknowledged_at: new Date().toISOString()
+      });
     }
-  };
+  }
+};
 
   // Check if Invoice Can Be Generated
   const checkCanGenerateInvoice = async (woId) => {

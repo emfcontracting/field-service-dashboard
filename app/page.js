@@ -90,11 +90,15 @@ export default function Dashboard() {
   if (error) {
     console.error('Error fetching work orders:', error);
   } else {
-    // Filter out acknowledged work orders from the dashboard
+    // Filter out acknowledged and invoiced work orders from the dashboard
     // They will only appear in the Invoicing page
     const filteredData = (data || []).filter(wo => {
-      // Hide acknowledged work orders (whether invoiced or not)
+      // Hide acknowledged work orders
       if (wo.acknowledged) return false;
+      
+      // Hide invoiced work orders (is_locked = true)
+      if (wo.is_locked) return false;
+      
       return true;
     });
     

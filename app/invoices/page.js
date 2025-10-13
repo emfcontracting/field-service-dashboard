@@ -9,7 +9,7 @@ export default function InvoicingPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [lineItems, setLineItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('ready'); // 'ready' or 'invoiced'
+  const [activeTab, setActiveTab] = useState('ready');
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   // Initialize Supabase client inside component
@@ -31,31 +31,29 @@ export default function InvoicingPage() {
     setLoading(false);
   };
 
-  // Fetch work orders that are acknowledged but don't have invoices yet
   const fetchAcknowledgedWorkOrders = async () => {
-  console.log('Fetching acknowledged work orders...');
-  
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select(`
-      *,
-      lead_tech:users!lead_tech_id(first_name, last_name, email)
-    `)
-    .eq('acknowledged', true)
-    .eq('is_locked', false)
-    .order('acknowledged_at', { ascending: false });
+    console.log('Fetching acknowledged work orders...');
+    
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select(`
+        *,
+        lead_tech:users!lead_tech_id(first_name, last_name, email)
+      `)
+      .eq('acknowledged', true)
+      .eq('is_locked', false)
+      .order('acknowledged_at', { ascending: false });
 
-  console.log('Acknowledged WOs query result:', { data, error });
-  console.log('Number of acknowledged WOs:', data?.length || 0);
+    console.log('Acknowledged WOs query result:', { data, error });
+    console.log('Number of acknowledged WOs:', data?.length || 0);
 
-  if (error) {
-    console.error('Error fetching acknowledged work orders:', error);
-  } else {
-    setAcknowledgedWOs(data || []);
-  }
-};
+    if (error) {
+      console.error('Error fetching acknowledged work orders:', error);
+    } else {
+      setAcknowledgedWOs(data || []);
+    }
+  };
 
-  // Fetch existing invoices
   const fetchInvoices = async () => {
     const { data, error } = await supabase
       .from('invoices')
@@ -82,7 +80,6 @@ export default function InvoicingPage() {
   };
 
   const selectInvoice = async (invoice) => {
-    // Fetch line items
     const { data, error } = await supabase
       .from('invoice_line_items')
       .select('*')
@@ -141,7 +138,6 @@ export default function InvoicingPage() {
     }
 
     try {
-      // Delete the draft invoice and its line items
       const { error: lineItemsError } = await supabase
         .from('invoice_line_items')
         .delete()
@@ -162,7 +158,6 @@ export default function InvoicingPage() {
         return;
       }
 
-      // Add return reason as a comment if provided
       if (reason && reason.trim()) {
         await supabase
           .from('work_order_comments')
@@ -174,7 +169,6 @@ export default function InvoicingPage() {
           });
       }
 
-      // Unlock and unacknowledge the work order
       const { error: updateError } = await supabase
         .from('work_orders')
         .update({
@@ -228,6 +222,66 @@ export default function InvoicingPage() {
     }
   };
 
+  const deleteInvoice = async (invoiceId, woId) => {
+    const password = prompt('⚠️ ADMIN ACTION REQUIRED\n\nEnter admin password to delete this invoice:');
+    
+    if (!password) {
+      return;
+    }
+
+    if (password !== 'admin123') {
+      alert('❌ Incorrect password. Invoice deletion cancelled.');
+      return;
+    }
+
+    if (!confirm('🗑️ DELETE INVOICE?\n\nThis will:\n- Permanently delete the invoice\n- Delete all line items\n- Unlock the work order\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) {
+      return;
+    }
+
+    try {
+      const { error: lineItemsError } = await supabase
+        .from('invoice_line_items')
+        .delete()
+        .eq('invoice_id', invoiceId);
+
+      if (lineItemsError) {
+        alert('Error deleting invoice line items: ' + lineItemsError.message);
+        return;
+      }
+
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('invoice_id', invoiceId);
+
+      if (invoiceError) {
+        alert('Error deleting invoice: ' + invoiceError.message);
+        return;
+      }
+
+      const { error: unlockError } = await supabase
+        .from('work_orders')
+        .update({
+          is_locked: false,
+          locked_at: null,
+          locked_by: null
+        })
+        .eq('wo_id', woId);
+
+      if (unlockError) {
+        console.error('Error unlocking work order:', unlockError);
+      }
+
+      alert('✅ Invoice deleted successfully!\n\nThe work order has been unlocked and can be invoiced again.');
+      
+      setSelectedItem(null);
+      fetchData();
+    } catch (err) {
+      console.error('Error deleting invoice:', err);
+      alert('Failed to delete invoice: ' + err.message);
+    }
+  };
+
   const printInvoice = (invoice) => {
     window.print();
   };
@@ -242,7 +296,6 @@ export default function InvoicingPage() {
         url: shareUrl
       }).catch(err => console.log('Share cancelled'));
     } else {
-      // Fallback - copy to clipboard
       navigator.clipboard.writeText(shareUrl).then(() => {
         alert('📋 Invoice link copied to clipboard!');
       });
@@ -264,7 +317,6 @@ export default function InvoicingPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">💰 Invoicing</h1>
           <button
@@ -275,7 +327,6 @@ export default function InvoicingPage() {
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="bg-gray-800 rounded-lg mb-6">
           <div className="flex border-b border-gray-700">
             <button
@@ -301,13 +352,11 @@ export default function InvoicingPage() {
           </div>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
             Loading...
           </div>
         ) : activeTab === 'ready' ? (
-          /* Ready for Invoice Tab */
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             {acknowledgedWOs.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
@@ -365,7 +414,6 @@ export default function InvoicingPage() {
             )}
           </div>
         ) : (
-          /* Generated Invoices Tab */
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             {invoices.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
@@ -419,11 +467,9 @@ export default function InvoicingPage() {
         )}
       </div>
 
-      {/* Work Order Detail Modal (Ready for Invoice) */}
       {selectedItem?.type === 'work_order' && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            
             <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
               <div>
                 <h2 className="text-2xl font-bold">Work Order #{selectedItem.data.wo_number}</h2>
@@ -440,7 +486,6 @@ export default function InvoicingPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              
               <div className="bg-gray-700 rounded-lg p-4">
                 <h3 className="font-bold mb-3">Work Order Details</h3>
                 <div className="space-y-2 text-sm">
@@ -484,17 +529,14 @@ export default function InvoicingPage() {
               >
                 {generatingInvoice ? '⏳ Generating Invoice...' : '📄 Generate Invoice'}
               </button>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* Invoice Detail Modal */}
       {selectedItem?.type === 'invoice' && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            
             <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
               <div>
                 <h2 className="text-2xl font-bold">Invoice #{selectedItem.data.invoice_number}</h2>
@@ -511,8 +553,6 @@ export default function InvoicingPage() {
             </div>
 
             <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-              
-              {/* Invoice Info */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -544,7 +584,6 @@ export default function InvoicingPage() {
                 </div>
               </div>
 
-              {/* Line Items */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <h3 className="font-bold text-lg mb-4">Line Items</h3>
                 <div className="space-y-2">
@@ -581,7 +620,6 @@ export default function InvoicingPage() {
                 </div>
               </div>
 
-              {/* Totals */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="space-y-2">
                   <div className="flex justify-between text-lg">
@@ -601,9 +639,7 @@ export default function InvoicingPage() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-col gap-3">
-                {/* Print & Share - Available for all invoices */}
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => printInvoice(selectedItem.data)}
@@ -646,6 +682,18 @@ export default function InvoicingPage() {
                   </button>
                 )}
 
+                <div className="border-t border-gray-600 pt-3 mt-2">
+                  <button
+                    onClick={() => deleteInvoice(selectedItem.data.invoice_id, selectedItem.data.wo_id)}
+                    className="w-full bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                  >
+                    🗑️ Delete Invoice (Admin)
+                  </button>
+                  <p className="text-xs text-gray-400 text-center mt-2">
+                    ⚠️ Requires admin password. This action cannot be undone.
+                  </p>
+                </div>
+
                 <button
                   onClick={() => setSelectedItem(null)}
                   className="w-full bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
@@ -653,7 +701,6 @@ export default function InvoicingPage() {
                   Close
                 </button>
               </div>
-
             </div>
           </div>
         </div>

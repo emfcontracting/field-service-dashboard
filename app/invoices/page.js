@@ -11,6 +11,14 @@ export default function InvoicingPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ready');
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+  const [previewWO, setPreviewWO] = useState(null);
+  const [previewLineItems, setPreviewLineItems] = useState([]);
+  const [customLineItem, setCustomLineItem] = useState({
+  description: '',
+  quantity: 1,
+  unit_price: 0
+});
 
   // Initialize Supabase client inside component
   const supabase = createClient(
@@ -95,42 +103,294 @@ export default function InvoicingPage() {
     setSelectedItem({ type: 'invoice', data: invoice });
   };
 
-  const generateInvoice = async (woId) => {
-  if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n\nContinue?')) {
+  const generateInvoicePreview = async (woId) => {
+  const wo = acknowledgedWOs.find(w => w.wo_id === woId);
+  if (!wo) return;
+
+  setGeneratingInvoice(true);
+
+  try {
+    // Fetch team members
+    const { data: teamAssignments } = await supabase
+      .from('work_order_assignments')
+      .select(`
+        *,
+        user:users(first_name, last_name, hourly_rate_regular, hourly_rate_overtime)
+      `)
+      .eq('wo_id', woId);
+
+    // Fetch comments
+    const { data: comments } = await supabase
+      .from('work_order_comments')
+      .select(`
+        comment,
+        created_at,
+        user:users(first_name, last_name)
+      `)
+      .eq('wo_id', woId)
+      .eq('comment_type', 'note')
+      .order('created_at', { ascending: true });
+
+    // Build line items preview
+    const items = [];
+
+    // Labor - Lead Tech
+    const leadRegular = (wo.hours_regular || 0) * 64;
+    const leadOvertime = (wo.hours_overtime || 0) * 96;
+
+    if (wo.hours_regular > 0) {
+      items.push({
+        description: `Lead Tech Labor - Regular Time (${wo.hours_regular} hrs @ $64/hr)`,
+        quantity: wo.hours_regular,
+        unit_price: 64,
+        amount: leadRegular,
+        line_type: 'labor',
+        editable: true
+      });
+    }
+
+    if (wo.hours_overtime > 0) {
+      items.push({
+        description: `Lead Tech Labor - Overtime (${wo.hours_overtime} hrs @ $96/hr)`,
+        quantity: wo.hours_overtime,
+        unit_price: 96,
+        amount: leadOvertime,
+        line_type: 'labor',
+        editable: true
+      });
+    }
+
+    // Team member labor
+    if (teamAssignments && teamAssignments.length > 0) {
+      const laborByRole = {};
+      
+      teamAssignments.forEach(member => {
+        const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
+                          member.role === 'tech' ? 'Tech' : 
+                          'Helper';
+        
+        if (!laborByRole[roleTitle]) {
+          laborByRole[roleTitle] = {
+            regular_hours: 0,
+            overtime_hours: 0,
+            regular_rate: member.user?.hourly_rate_regular || 64,
+            overtime_rate: member.user?.hourly_rate_overtime || 96
+          };
+        }
+        
+        laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
+        laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+      });
+      
+      Object.entries(laborByRole).forEach(([role, data]) => {
+        if (data.regular_hours > 0) {
+          items.push({
+            description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
+            quantity: data.regular_hours,
+            unit_price: data.regular_rate,
+            amount: data.regular_hours * data.regular_rate,
+            line_type: 'labor',
+            editable: true
+          });
+        }
+        if (data.overtime_hours > 0) {
+          items.push({
+            description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
+            quantity: data.overtime_hours,
+            unit_price: data.overtime_rate,
+            amount: data.overtime_hours * data.overtime_rate,
+            line_type: 'labor',
+            editable: true
+          });
+        }
+      });
+    }
+
+    // Mileage
+    const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (m.miles || 0), 0);
+    const totalMiles = (wo.miles || 0) + teamMiles;
+    if (totalMiles > 0) {
+      items.push({
+        description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
+        quantity: totalMiles,
+        unit_price: 1.00,
+        amount: totalMiles * 1.00,
+        line_type: 'mileage',
+        editable: true
+      });
+    }
+
+    // Materials
+    if (wo.material_cost > 0) {
+      items.push({
+        description: 'Materials',
+        quantity: 1,
+        unit_price: wo.material_cost,
+        amount: wo.material_cost,
+        line_type: 'material',
+        editable: true
+      });
+    }
+
+    // Equipment
+    if (wo.emf_equipment_cost > 0) {
+      items.push({
+        description: 'Equipment',
+        quantity: 1,
+        unit_price: wo.emf_equipment_cost,
+        amount: wo.emf_equipment_cost,
+        line_type: 'equipment',
+        editable: true
+      });
+    }
+
+    // Trailer
+    if (wo.trailer_cost > 0) {
+      items.push({
+        description: 'Trailer',
+        quantity: 1,
+        unit_price: wo.trailer_cost,
+        amount: wo.trailer_cost,
+        line_type: 'equipment',
+        editable: true
+      });
+    }
+
+    // Rental
+    if (wo.rental_cost > 0) {
+      items.push({
+        description: 'Rental',
+        quantity: 1,
+        unit_price: wo.rental_cost,
+        amount: wo.rental_cost,
+        line_type: 'rental',
+        editable: true
+      });
+    }
+
+    // Work Performed Description
+    let workPerformed = wo.work_order_description;
+    if (comments && comments.length > 0) {
+      workPerformed += '\n\nWork Notes:\n';
+      comments.forEach(comment => {
+        const timestamp = new Date(comment.created_at).toLocaleString();
+        workPerformed += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
+      });
+    }
+
+    items.push({
+      description: workPerformed,
+      quantity: 1,
+      unit_price: 0,
+      amount: 0,
+      line_type: 'description',
+      editable: false
+    });
+
+    setPreviewWO(wo);
+    setPreviewLineItems(items);
+    setShowInvoicePreview(true);
+    setSelectedItem(null);
+  } catch (error) {
+    console.error('Error generating preview:', error);
+    alert('❌ Failed to generate preview');
+  } finally {
+    setGeneratingInvoice(false);
+  }
+};
+
+const finalizeInvoice = async () => {
+  if (!previewWO) return;
+
+  if (!confirm('Finalize and generate this invoice?\n\nThis will lock the work order.')) {
     return;
   }
 
   setGeneratingInvoice(true);
 
   try {
-    const response = await fetch('/api/invoices/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wo_id: woId })
-    });
+    // Calculate totals from preview line items
+    const costItems = previewLineItems.filter(item => item.line_type !== 'description');
+    const subtotal = costItems.reduce((sum, item) => sum + item.amount, 0);
+    const tax = 0;
+    const total = subtotal + tax;
 
-    const result = await response.json();
+    // Generate invoice number
+    const year = new Date().getFullYear();
+    const { data: lastInvoice } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .like('invoice_number', `INV-${year}-%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-    if (result.success) {
-      alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + result.total.toFixed(2));
-      
-      // Remove the work order from acknowledged list immediately
-      setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== woId));
-      
-      // Close modal
-      setSelectedItem(null);
-      
-      // Refresh data to get the new invoice
-      await fetchData();
-      
-      // Switch to invoiced tab to show the new invoice
-      setActiveTab('invoiced');
+    let invoiceNumber;
+    if (lastInvoice) {
+      const lastNumber = parseInt(lastInvoice.invoice_number.split('-')[2]);
+      invoiceNumber = `INV-${year}-${String(lastNumber + 1).padStart(5, '0')}`;
     } else {
-      alert('❌ Error generating invoice:\n' + result.error);
+      invoiceNumber = `INV-${year}-00001`;
     }
+
+    // Create invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        wo_id: previewWO.wo_id,
+        invoice_date: new Date().toISOString(),
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        status: 'draft',
+        notes: 'Invoice generated from preview'
+      })
+      .select()
+      .single();
+
+    if (invoiceError) throw invoiceError;
+
+    // Insert line items
+    const lineItemsToInsert = previewLineItems.map(item => ({
+      invoice_id: invoice.invoice_id,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      amount: item.amount,
+      line_type: item.line_type
+    }));
+
+    const { error: lineItemsError } = await supabase
+      .from('invoice_line_items')
+      .insert(lineItemsToInsert);
+
+    if (lineItemsError) throw lineItemsError;
+
+    // Lock the work order
+    const { error: lockError } = await supabase
+      .from('work_orders')
+      .update({
+        is_locked: true,
+        locked_at: new Date().toISOString(),
+        locked_by: null
+      })
+      .eq('wo_id', previewWO.wo_id);
+
+    if (lockError) throw lockError;
+
+    alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + total.toFixed(2));
+    
+    setShowInvoicePreview(false);
+    setPreviewWO(null);
+    setPreviewLineItems([]);
+    setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== previewWO.wo_id));
+    await fetchData();
+    setActiveTab('invoiced');
   } catch (error) {
-    console.error('Error generating invoice:', error);
-    alert('❌ Failed to generate invoice');
+    console.error('Error finalizing invoice:', error);
+    alert('❌ Failed to generate invoice: ' + error.message);
   } finally {
     setGeneratingInvoice(false);
   }
@@ -526,14 +786,254 @@ export default function InvoicingPage() {
 </div>
 
               <button
-                onClick={() => generateInvoice(selectedItem.data.wo_id)}
-                disabled={generatingInvoice}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
+  onClick={() => generateInvoicePreview(selectedItem.data.wo_id)}
+  disabled={generatingInvoice}
+  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
+>
+  {generatingInvoice ? '⏳ Loading Preview...' : '📄 Preview & Generate Invoice'}
+</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Preview Modal */}
+      {showInvoicePreview && previewWO && (
+  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="bg-gray-800 rounded-lg max-w-5xl w-full my-8">
+      <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
+        <div>
+          <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
+          <p className="text-gray-400 text-sm mt-1">
+            WO #{previewWO.wo_number} - {previewWO.building}
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setShowInvoicePreview(false);
+            setPreviewWO(null);
+            setPreviewLineItems([]);
+          }}
+          className="text-gray-400 hover:text-white text-3xl leading-none"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+        
+        <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
+          <div className="font-bold mb-2">Review & Edit Line Items</div>
+          <div className="text-sm">
+            Review the line items below. You can edit quantities and prices, or add custom line items before finalizing the invoice.
+          </div>
+        </div>
+
+        {/* Line Items */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h3 className="font-bold text-lg mb-4">Line Items</h3>
+          
+          <div className="space-y-3">
+            {previewLineItems.map((item, index) => (
+              <div 
+                key={index}
+                className={`p-4 rounded-lg ${item.line_type === 'description' ? 'bg-blue-900 text-blue-100' : 'bg-gray-600'}`}
               >
-                {generatingInvoice ? '⏳ Generating Invoice...' : '📄 Generate Invoice'}
+                {item.line_type === 'description' ? (
+                  <div>
+                    <div className="font-bold mb-2">Work Performed:</div>
+                    <div className="text-sm whitespace-pre-wrap">{item.description}</div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-12 gap-3 items-center">
+                    <div className="col-span-5">
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => {
+                          const updated = [...previewLineItems];
+                          updated[index].description = e.target.value;
+                          setPreviewLineItems(updated);
+                        }}
+                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const updated = [...previewLineItems];
+                          updated[index].quantity = parseFloat(e.target.value) || 0;
+                          updated[index].amount = updated[index].quantity * updated[index].unit_price;
+                          setPreviewLineItems(updated);
+                        }}
+                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.unit_price}
+                        onChange={(e) => {
+                          const updated = [...previewLineItems];
+                          updated[index].unit_price = parseFloat(e.target.value) || 0;
+                          updated[index].amount = updated[index].quantity * updated[index].unit_price;
+                          setPreviewLineItems(updated);
+                        }}
+                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
+                        placeholder="Unit Price"
+                      />
+                    </div>
+                    <div className="col-span-2 text-right font-bold">
+                      ${item.amount.toFixed(2)}
+                    </div>
+                    <div className="col-span-1 text-center">
+                      <button
+                        onClick={() => {
+                          setPreviewLineItems(previewLineItems.filter((_, i) => i !== index));
+                        }}
+                        className="text-red-400 hover:text-red-300 text-lg"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Add Custom Line Item */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h3 className="font-bold mb-3">➕ Add Custom Line Item</h3>
+          
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-6">
+              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <input
+                type="text"
+                value={customLineItem.description}
+                onChange={(e) => setCustomLineItem({ ...customLineItem, description: e.target.value })}
+                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                placeholder="e.g., Additional Service"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">Quantity</label>
+              <input
+                type="number"
+                step="0.01"
+                value={customLineItem.quantity}
+                onChange={(e) => setCustomLineItem({ ...customLineItem, quantity: parseFloat(e.target.value) || 0 })}
+                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">Unit Price</label>
+              <input
+                type="number"
+                step="0.01"
+                value={customLineItem.unit_price}
+                onChange={(e) => setCustomLineItem({ ...customLineItem, unit_price: parseFloat(e.target.value) || 0 })}
+                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
+                placeholder="0.00"
+              />
+            </div>
+            <div className="col-span-2">
+              <button
+                onClick={() => {
+                  if (!customLineItem.description.trim()) {
+                    alert('Please enter a description');
+                    return;
+                  }
+                  
+                  const newItem = {
+                    description: customLineItem.description,
+                    quantity: customLineItem.quantity,
+                    unit_price: customLineItem.unit_price,
+                    amount: customLineItem.quantity * customLineItem.unit_price,
+                    line_type: 'custom',
+                    editable: true
+                  };
+                  
+                  // Insert before the description item
+                  const descIndex = previewLineItems.findIndex(item => item.line_type === 'description');
+                  const updated = [...previewLineItems];
+                  if (descIndex >= 0) {
+                    updated.splice(descIndex, 0, newItem);
+                  } else {
+                    updated.push(newItem);
+                  }
+                  
+                  setPreviewLineItems(updated);
+                  setCustomLineItem({ description: '', quantity: 1, unit_price: 0 });
+                }}
+                className="w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded font-bold"
+              >
+                Add
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Totals */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <div className="flex justify-end">
+            <div className="w-80">
+              <div className="flex justify-between py-2 text-lg">
+                <span className="font-semibold">Subtotal:</span>
+                <span>
+                  ${previewLineItems
+                    .filter(item => item.line_type !== 'description')
+                    .reduce((sum, item) => sum + item.amount, 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between py-2 text-sm text-gray-400">
+                <span>Tax:</span>
+                <span>$0.00</span>
+              </div>
+              <div className="flex justify-between py-3 bg-green-900 px-4 font-bold text-xl border-2 border-green-500 mt-2 rounded">
+                <span>TOTAL:</span>
+                <span className="text-green-400">
+                  ${previewLineItems
+                    .filter(item => item.line_type !== 'description')
+                    .reduce((sum, item) => sum + item.amount, 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3 pt-4 border-t border-gray-700">
+          <button
+            onClick={finalizeInvoice}
+            disabled={generatingInvoice}
+            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
+          >
+            {generatingInvoice ? '⏳ Generating...' : '✅ Finalize & Generate Invoice'}
+          </button>
+          <button
+            onClick={() => {
+              setShowInvoicePreview(false);
+              setPreviewWO(null);
+              setPreviewLineItems([]);
+            }}
+            className="bg-gray-600 hover:bg-gray-700 px-6 py-4 rounded-lg font-semibold transition"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
         </div>
       )}
 

@@ -361,7 +361,7 @@ const { error: lockError } = await supabase
   .update({
     is_locked: true,
     locked_at: new Date().toISOString(),
-    locked_by: 'system'
+    locked_by: null  // <-- FIXED!
   })
   .eq('wo_id', wo_id);
 

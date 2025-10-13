@@ -212,31 +212,53 @@ export async function POST(request) {
       });
     }
 
-    // Team member labor
-    if (teamAssignments && teamAssignments.length > 0) {
-      teamAssignments.forEach(member => {
-        if (member.hours_regular > 0) {
-          lineItems.push({
-            invoice_id: invoice.invoice_id,
-            description: `${member.user?.first_name} ${member.user?.last_name} - Regular Time (${member.hours_regular} hrs @ $${member.user?.hourly_rate_regular || 64}/hr)`,
-            quantity: member.hours_regular,
-            unit_price: member.user?.hourly_rate_regular || 64,
-            amount: (member.hours_regular || 0) * (member.user?.hourly_rate_regular || 64),
-            line_type: 'labor'
-          });
-        }
-        if (member.hours_overtime > 0) {
-          lineItems.push({
-            invoice_id: invoice.invoice_id,
-            description: `${member.user?.first_name} ${member.user?.last_name} - Overtime (${member.hours_overtime} hrs @ $${member.user?.hourly_rate_overtime || 96}/hr)`,
-            quantity: member.hours_overtime,
-            unit_price: member.user?.hourly_rate_overtime || 96,
-            amount: (member.hours_overtime || 0) * (member.user?.hourly_rate_overtime || 96),
-            line_type: 'labor'
-          });
-        }
+    // Team member labor (by title, not name)
+if (teamAssignments && teamAssignments.length > 0) {
+  // Group by role and sum hours
+  const laborByRole = {};
+  
+  teamAssignments.forEach(member => {
+    const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
+                      member.role === 'tech' ? 'Tech' : 
+                      'Helper';
+    
+    if (!laborByRole[roleTitle]) {
+      laborByRole[roleTitle] = {
+        regular_hours: 0,
+        overtime_hours: 0,
+        regular_rate: member.user?.hourly_rate_regular || 64,
+        overtime_rate: member.user?.hourly_rate_overtime || 96
+      };
+    }
+    
+    laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
+    laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+  });
+  
+  // Create line items for each role
+  Object.entries(laborByRole).forEach(([role, data]) => {
+    if (data.regular_hours > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
+        quantity: data.regular_hours,
+        unit_price: data.regular_rate,
+        amount: data.regular_hours * data.regular_rate,
+        line_type: 'labor'
       });
     }
+    if (data.overtime_hours > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
+        quantity: data.overtime_hours,
+        unit_price: data.overtime_rate,
+        amount: data.overtime_hours * data.overtime_rate,
+        line_type: 'labor'
+      });
+    }
+  });
+}
 
     // ADMIN HOURS LINE ITEM
     lineItems.push({

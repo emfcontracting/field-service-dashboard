@@ -46,62 +46,71 @@ export default function MobileApp() {
   }, []);
 
   const fetchWorkOrders = async (userId) => {
-    setLoading(true);
-    
-    // Get work orders where user is lead tech AND assigned to field
-    const { data: leadTechWOs, error: leadError } = await supabase
+  setLoading(true);
+  
+  // Get work orders where user is lead tech AND assigned to field
+  const { data: leadTechWOs, error: leadError } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      lead_tech:users!lead_tech_id(first_name, last_name)
+    `)
+    .eq('lead_tech_id', userId)
+    .eq('assigned_to_field', true)
+    .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
+    .order('created_at', { ascending: false });
+
+  if (leadError) {
+    console.error('Error fetching lead tech work orders:', leadError);
+  }
+
+  // Get work orders where user is assigned as team member AND assigned to field
+  const { data: assignments } = await supabase
+    .from('work_order_assignments')
+    .select('wo_id')
+    .eq('user_id', userId);
+
+  let assignedWOs = [];
+  if (assignments && assignments.length > 0) {
+    const woIds = assignments.map(a => a.wo_id);
+    const { data: assignedWOData } = await supabase
       .from('work_orders')
       .select(`
         *,
         lead_tech:users!lead_tech_id(first_name, last_name)
       `)
-      .eq('lead_tech_id', userId)
+      .in('wo_id', woIds)
       .eq('assigned_to_field', true)
       .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
       .order('created_at', { ascending: false });
 
-    if (leadError) {
-      console.error('Error fetching lead tech work orders:', leadError);
-    }
+    assignedWOs = assignedWOData || [];
+  }
 
-    // Get work orders where user is assigned as team member AND assigned to field
-    const { data: assignments } = await supabase
-      .from('work_order_assignments')
-      .select('wo_id')
-      .eq('user_id', userId);
+  // Combine and deduplicate
+  const allWOs = [...(leadTechWOs || []), ...assignedWOs];
+  const uniqueWOs = Array.from(
+    new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+  );
 
-    let assignedWOs = [];
-    if (assignments && assignments.length > 0) {
-      const woIds = assignments.map(a => a.wo_id);
-      const { data: assignedWOData } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          lead_tech:users!lead_tech_id(first_name, last_name)
-        `)
-        .in('wo_id', woIds)
-        .eq('assigned_to_field', true)
-        .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-        .order('created_at', { ascending: false });
+  // Filter out acknowledged work orders that aren't invoiced yet
+  const filteredData = uniqueWOs.filter(wo => {
+    // Keep all non-completed work orders
+    if (wo.status !== 'completed') return true;
+    
+    // If completed but not acknowledged, keep it
+    if (!wo.acknowledged) return true;
+    
+    // If acknowledged but not yet invoiced, hide it
+    if (wo.acknowledged && !wo.is_locked) return false;
+    
+    // If acknowledged AND invoiced, hide it (shows in completed page instead)
+    return false;
+  });
 
-      assignedWOs = assignedWOData || [];
-    }
-
-    // Combine and deduplicate
-    const allWOs = [...(leadTechWOs || []), ...assignedWOs];
-    const uniqueWOs = Array.from(
-      new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
-    );
-
-    // Filter out locked/acknowledged completed work orders
-    const filteredData = uniqueWOs.filter(wo => {
-      if (wo.status !== 'completed') return true;
-      return !wo.is_locked && !wo.acknowledged;
-    });
-
-    setWorkOrders(filteredData);
-    setLoading(false);
-  };
+  setWorkOrders(filteredData);
+  setLoading(false);
+};
 
   const fetchAvailableUsers = async () => {
     const { data } = await supabase

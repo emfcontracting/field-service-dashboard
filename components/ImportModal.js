@@ -11,7 +11,7 @@ const GOOGLE_SHEET_ID = '1sm7HjR4PdZLCNbaCQkswktGKEZX61fiVdTUaA5Rg6IE';
 const GOOGLE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=xlsx`;
 
 export default function ImportModal({ isOpen, onClose, onImportComplete }) {
-  const [mode, setMode] = useState(null); // 'manual' or 'auto'
+  const [mode, setMode] = useState(null);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState([]);
@@ -48,7 +48,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     addLog('📂 Reading Excel file...', 'info');
 
     try {
-      // Dynamically import xlsx
       const XLSX = await import('xlsx');
       
       const data = await fileToRead.arrayBuffer();
@@ -67,7 +66,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
       addLog(`📋 Found ${jsonData.length} rows in OPEN WO sheet`, 'info');
 
-      // Get existing work orders
       addLog('🔍 Checking existing work orders...', 'info');
       const { data: existingWOs, error: fetchError } = await supabase
         .from('work_orders')
@@ -82,7 +80,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       const existingWONumbers = new Set(existingWOs.map(wo => wo.wo_number));
       addLog(`Found ${existingWONumbers.size} existing work orders`, 'info');
 
-      // Process data
       const processed = [];
       let newCount = 0;
       let existingCount = 0;
@@ -152,7 +149,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     addLog('⚡ Fetching data from Google Sheet...', 'info');
 
     try {
-      // Fetch the Excel file from Google Sheets
       const response = await fetch(GOOGLE_SHEET_URL);
       
       if (!response.ok) {
@@ -165,29 +161,11 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
       addLog('✅ Successfully fetched Google Sheet', 'success');
       
-      // Parse the file
       await parseExcel(file);
     } catch (error) {
       addLog(`❌ Error fetching Google Sheet: ${error.message}`, 'error');
       console.error(error);
       setLoading(false);
-    }
-  };
-
-  const handleAutoImport = async () => {
-    // For auto-import, you could:
-    // 1. Fetch from a known Google Sheets URL
-    // 2. Or prompt for a file path
-    // For now, let's just prompt for file upload
-    addLog('📥 Auto-import: Please select your Excel file', 'info');
-    document.getElementById('autoFileInput').click();
-  };
-
-  const handleAutoFileSelect = async (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      addLog(`Auto-importing: ${selectedFile.name}`, 'info');
-      await parseExcel(selectedFile);
     }
   };
 
@@ -259,7 +237,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
         <div className="bg-gray-700 px-6 py-4 flex justify-between items-center">
           <h2 className="text-2xl font-bold text-white">📥 Import Work Orders</h2>
           <button
@@ -270,10 +247,8 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
           {!mode ? (
-            /* Mode Selection */
             <div className="space-y-4">
               <p className="text-gray-300 mb-6">Choose how you want to import work orders:</p>
               
@@ -304,7 +279,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               </button>
             </div>
           ) : (
-            /* Import Interface */
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-white">
@@ -360,7 +334,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 </div>
               )}
 
-              {/* Preview */}
               {preview && (
                 <div className="bg-blue-900 bg-opacity-30 border border-blue-600 rounded-lg p-4">
                   <h4 className="text-lg font-bold text-white mb-3">📊 Preview</h4>
@@ -388,7 +361,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 </div>
               )}
 
-              {/* Log */}
               {log.length > 0 && (
                 <div className="bg-gray-900 rounded-lg p-4 max-h-60 overflow-y-auto">
                   <h4 className="text-white font-bold mb-2">📋 Log</h4>

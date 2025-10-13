@@ -458,30 +458,134 @@ const importFromSheets = async () => {
     const spreadsheetId = match[1];
     const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
 
-    console.log('Fetching CSV from:', csvUrl);
+    console.log('Fetching from:', csvUrl);
 
     const response = await fetch(csvUrl);
     const csvText = await response.text();
-    
-    console.log('CSV first 500 chars:', csvText.substring(0, 500));
 
-    // Simple split - just for testing
+    console.log('Raw CSV (first 500 chars):', csvText.substring(0, 500));
+
+    // Split into lines
     const lines = csvText.split('\n');
-    console.log('Total lines:', lines.length);
-    console.log('Header line:', lines[0]);
-    console.log('First data line:', lines[1]);
+    const header = lines[0];
+    console.log('Header:', header);
     
-    // Check which column the date is in
-    const firstDataCells = lines[1].split(',');
-    console.log('First data row split by comma:');
-    firstDataCells.forEach((cell, index) => {
-      console.log(`  Column ${index}: "${cell}"`);
+    const dataRows = [];
+    
+    // Parse each line properly handling quotes
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      // Better CSV parsing that handles quoted commas
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        const nextChar = line[j + 1];
+        
+        if (char === '"' && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          j++; // Skip next quote
+        } else if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim()); // Don't forget last column
+      
+      if (result[0]) { // Has WO#
+        dataRows.push(result);
+      }
+    }
+
+    console.log(`Found ${dataRows.length} rows to import`);
+    console.log('First data row:', dataRows[0]);
+    console.log('Columns in first row:', dataRows[0].length);
+
+    const workOrdersToImport = dataRows.map((row, idx) => {
+      // Column 0: WO#
+      // Column 1: Building
+      // Column 2: Priority  
+      // Column 3: Date entered (format: "6/6/2025 9:31:00")
+      // Column 4: Work Order Description
+      // Column 5: NTE
+      // Column 6: CONTACT
+      
+      console.log(`Row ${idx + 2} date value:`, row[3]);
+      
+      // Parse date - handle format like "6/6/2025 9:31:00" or "7/16/2025 15:42:00"
+      let dateEntered;
+      const dateStr = String(row[3] || '').trim();
+      
+      if (dateStr) {
+        // Try to parse the date string
+        const parsed = new Date(dateStr);
+        
+        if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2000) {
+          dateEntered = parsed.toISOString();
+          console.log(`  ✓ Parsed "${dateStr}" → ${dateEntered}`);
+        } else {
+          console.warn(`  ✗ Failed to parse "${dateStr}"`);
+          dateEntered = new Date().toISOString();
+        }
+      } else {
+        console.warn(`  ✗ No date in row ${idx + 2}`);
+        dateEntered = new Date().toISOString();
+      }
+
+      // Parse priority
+      let priority = 'medium';
+      const priorityStr = String(row[2] || '').toLowerCase();
+      if (priorityStr.includes('emergency') || priorityStr.includes('p1')) {
+        priority = 'emergency';
+      } else if (priorityStr.includes('urgent') || priorityStr.includes('p2')) {
+        priority = 'high';
+      } else if (priorityStr.includes('p3') || priorityStr.includes('p4')) {
+        priority = 'medium';
+      } else if (priorityStr.includes('p5')) {
+        priority = 'low';
+      }
+
+      return {
+        wo_number: String(row[0] || '').trim(),
+        building: String(row[1] || '').trim(),
+        priority: priority,
+        date_entered: dateEntered,
+        work_order_description: String(row[4] || '').trim(),
+        nte: parseFloat(String(row[5] || '').replace(/[^0-9.]/g, '')) || 0,
+        requestor: String(row[6] || '').trim(),
+        status: 'pending',
+        comments: ''
+      };
     });
 
-    alert('Check the console (F12) to see the CSV structure!');
-    
+    console.log('Sample work order to import:', workOrdersToImport[0]);
+
+    const { data, error } = await supabase
+      .from('work_orders')
+      .insert(workOrdersToImport)
+      .select();
+
+    if (error) {
+      console.error('Import error:', error);
+      alert('❌ Import error: ' + error.message);
+    } else {
+      console.log(`✅ Imported ${data.length} work orders`);
+      alert(`✅ Successfully imported ${data.length} work orders!`);
+      setShowImportModal(false);
+      setSheetsUrl('');
+      fetchWorkOrders();
+    }
   } catch (error) {
-    console.error('Import error:', error);
+    console.error('Import exception:', error);
     alert('❌ Failed to import: ' + error.message);
   } finally {
     setImporting(false);

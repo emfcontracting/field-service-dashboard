@@ -14,7 +14,6 @@ export default function MobileApp() {
   const [selectedWO, setSelectedWO] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('');
 
@@ -48,23 +47,54 @@ export default function MobileApp() {
 
   const fetchWorkOrders = async (userId) => {
     setLoading(true);
-    const { data, error } = await supabase
+    
+    // Get work orders where user is lead tech AND assigned to field
+    const { data: leadTechWOs, error: leadError } = await supabase
       .from('work_orders')
       .select(`
         *,
         lead_tech:users!lead_tech_id(first_name, last_name)
       `)
       .eq('lead_tech_id', userId)
+      .eq('assigned_to_field', true)
       .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching work orders:', error);
-      setLoading(false);
-      return;
+    if (leadError) {
+      console.error('Error fetching lead tech work orders:', leadError);
     }
 
-    const filteredData = (data || []).filter(wo => {
+    // Get work orders where user is assigned as team member AND assigned to field
+    const { data: assignments } = await supabase
+      .from('work_order_assignments')
+      .select('wo_id')
+      .eq('user_id', userId);
+
+    let assignedWOs = [];
+    if (assignments && assignments.length > 0) {
+      const woIds = assignments.map(a => a.wo_id);
+      const { data: assignedWOData } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!lead_tech_id(first_name, last_name)
+        `)
+        .in('wo_id', woIds)
+        .eq('assigned_to_field', true)
+        .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
+        .order('created_at', { ascending: false });
+
+      assignedWOs = assignedWOData || [];
+    }
+
+    // Combine and deduplicate
+    const allWOs = [...(leadTechWOs || []), ...assignedWOs];
+    const uniqueWOs = Array.from(
+      new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+    );
+
+    // Filter out locked/acknowledged completed work orders
+    const filteredData = uniqueWOs.filter(wo => {
       if (wo.status !== 'completed') return true;
       return !wo.is_locked && !wo.acknowledged;
     });
@@ -74,16 +104,15 @@ export default function MobileApp() {
   };
 
   const fetchAvailableUsers = async () => {
-  const { data } = await supabase
-    .from('users')
-    .select('*')
-    .eq('is_active', true)
-    .in('role', ['tech', 'helper', 'lead_tech'])
-    .order('first_name');
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('is_active', true)
+      .in('role', ['tech', 'helper', 'lead_tech'])
+      .order('first_name');
 
-  console.log('Available users for team:', data);
-  setAvailableUsers(data || []);
-};
+    setAvailableUsers(data || []);
+  };
 
   const selectWorkOrder = async (wo) => {
     setSelectedWO(wo);
@@ -301,7 +330,7 @@ export default function MobileApp() {
   };
 
   const addTeamMember = async (userId) => {
-    if (!selectedWO || userRole !== 'lead') return;
+    if (!selectedWO || userRole !== 'lead' || !userId) return;
 
     const { error } = await supabase
       .from('work_order_assignments')
@@ -312,10 +341,9 @@ export default function MobileApp() {
       });
 
     if (error) {
-      alert('Failed to add team member');
+      alert('Failed to add team member: ' + error.message);
     } else {
       fetchTeamMembers(selectedWO.wo_id);
-      setShowAddMemberModal(false);
       alert('✅ Team member added!');
     }
   };
@@ -383,64 +411,182 @@ export default function MobileApp() {
     };
     return colors[status] || 'bg-gray-600';
   };
-const LoginScreen = () => {
-    const [users, setUsers] = useState([]);
-    const [selectedUserId, setSelectedUserId] = useState('');
 
-    useEffect(() => {
-      fetchUsers();
-    }, []);
+  // NEW PIN LOGIN SCREEN
+  const LoginScreen = () => {
+    const [email, setEmail] = useState('');
+    const [pin, setPin] = useState('');
+    const [error, setError] = useState('');
+    const [loggingIn, setLoggingIn] = useState(false);
 
-    const fetchUsers = async () => {
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('is_active', true)
-        .order('first_name');
-      setUsers(data || []);
+    const handlePinInput = (digit) => {
+      if (pin.length < 4) {
+        setPin(pin + digit);
+      }
     };
 
-    const handleLogin = () => {
-      if (!selectedUserId) {
-        alert('Please select a user');
+    const handleBackspace = () => {
+      setPin(pin.slice(0, -1));
+    };
+
+    const handleLogin = async () => {
+      setError('');
+      
+      if (!email) {
+        setError('Please enter your email');
+        return;
+      }
+      
+      if (pin.length !== 4) {
+        setError('Please enter your 4-digit PIN');
         return;
       }
 
-      const user = users.find(u => u.user_id === selectedUserId);
-      localStorage.setItem('mobile_session', JSON.stringify(user));
-      setCurrentUser(user);
-      fetchWorkOrders(user.user_id);
+      setLoggingIn(true);
+
+      try {
+        // Find user by email and verify PIN
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email.toLowerCase().trim())
+          .eq('is_active', true)
+          .single();
+
+        if (userError || !user) {
+          setError('Invalid email or account not found');
+          setLoggingIn(false);
+          return;
+        }
+
+        // Verify PIN
+        if (user.pin !== pin) {
+          setError('Incorrect PIN');
+          setLoggingIn(false);
+          return;
+        }
+
+        // Success - save session and login
+        localStorage.setItem('mobile_session', JSON.stringify(user));
+        setCurrentUser(user);
+        fetchWorkOrders(user.user_id);
+        fetchAvailableUsers();
+      } catch (err) {
+        setError('Login failed. Please try again.');
+        console.error('Login error:', err);
+        setLoggingIn(false);
+      }
     };
 
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-white mb-6 text-center">
-            📱 Mobile Field App
-          </h1>
-          
-          <div className="mb-4">
-            <label className="block text-gray-400 mb-2">Select Your Profile</label>
-            <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="w-full bg-gray-700 text-white px-4 py-3 rounded-lg"
-            >
-              <option value="">Choose user...</option>
-              {users.map(user => (
-                <option key={user.user_id} value={user.user_id}>
-                  {user.first_name} {user.last_name} - {user.role.replace('_', ' ').toUpperCase()}
-                </option>
-              ))}
-            </select>
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo/Header */}
+          <div className="text-center mb-8">
+            <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <span className="text-4xl">🔧</span>
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">FSM Mobile</h1>
+            <p className="text-blue-100">Field Service Management</p>
           </div>
 
-          <button
-            onClick={handleLogin}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition"
-          >
-            Login
-          </button>
+          {/* Login Form */}
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <div className="space-y-6">
+              {/* Email Input */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="your.email@company.com"
+                  autoComplete="email"
+                />
+              </div>
+
+              {/* PIN Input */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  PIN Code
+                </label>
+                <div className="flex justify-center gap-3 mb-4">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="w-14 h-14 border-2 border-gray-300 rounded-xl flex items-center justify-center text-2xl font-bold bg-gray-50"
+                    >
+                      {pin[i] ? '•' : ''}
+                    </div>
+                  ))}
+                </div>
+
+                {/* PIN Pad */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handlePinInput(num.toString())}
+                      className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-2xl font-bold text-gray-800 active:bg-gray-300 transition"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleBackspace}
+                    className="h-16 bg-red-100 hover:bg-red-200 rounded-xl text-xl font-bold text-red-600 active:bg-red-300 transition"
+                  >
+                    ⌫
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePinInput('0')}
+                    className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-2xl font-bold text-gray-800 active:bg-gray-300 transition"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPin('')}
+                    className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-600 active:bg-gray-300 transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-red-600 text-center font-medium">{error}</p>
+                </div>
+              )}
+
+              {/* Login Button */}
+              <button
+                onClick={handleLogin}
+                disabled={loggingIn || !email || pin.length !== 4}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg transition active:scale-95"
+              >
+                {loggingIn ? '⏳ Signing In...' : '🔓 Sign In'}
+              </button>
+            </div>
+
+            {/* Help Text */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-500">
+                Default PIN: <span className="font-mono font-bold">5678</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                Contact your administrator if you need help
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -486,7 +632,8 @@ const LoginScreen = () => {
             ) : workOrders.length === 0 ? (
               <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
                 <div className="text-4xl mb-3">📋</div>
-                <div>No work orders assigned yet</div>
+                <div className="font-semibold mb-2">No work orders assigned yet</div>
+                <div className="text-sm">Work orders will appear here when assigned by an administrator</div>
               </div>
             ) : (
               workOrders.map(wo => (
@@ -614,7 +761,7 @@ const LoginScreen = () => {
 
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3 flex items-center gap-2">
-                <span className="text-pink-500">●</span> Check In/Out
+                <span className="text-pink-500">◉</span> Check In/Out
               </h3>
               
               {!isCheckedIn ? (
@@ -654,12 +801,28 @@ const LoginScreen = () => {
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold">Team Members</h3>
                 {userRole === 'lead' && (
-                  <button
-                    onClick={() => setShowAddMemberModal(true)}
-                    className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        addTeamMember(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-semibold"
                   >
-                    + Add Helper/Tech
-                  </button>
+                    <option value="">+ Add Helper/Tech</option>
+                    {availableUsers
+                      .filter(user => 
+                        user.user_id !== currentUser.user_id && 
+                        user.user_id !== selectedWO.lead_tech_id &&
+                        !teamMembers.some(m => m.user_id === user.user_id)
+                      )
+                      .map(user => (
+                        <option key={user.user_id} value={user.user_id}>
+                          {user.first_name} {user.last_name} ({user.role.replace('_', ' ').toUpperCase()})
+                        </option>
+                      ))}
+                  </select>
                 )}
               </div>
 
@@ -731,7 +894,8 @@ const LoginScreen = () => {
                 </div>
               )}
             </div>
-{userRole === 'lead' && (
+
+            {userRole === 'lead' && (
               <div className="bg-gray-800 rounded-lg p-4">
                 <h3 className="font-bold mb-3">Update Status</h3>
                 <select
@@ -994,51 +1158,6 @@ const LoginScreen = () => {
               </div>
             </div>
 
-          </div>
-        </div>
-      )}
-
-      {showAddMemberModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg w-full max-w-md">
-            <div className="border-b border-gray-700 p-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold">Add Team Member</h3>
-              <button
-                onClick={() => setShowAddMemberModal(false)}
-                className="text-gray-400 hover:text-white text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-4">
-              <div className="space-y-2">
-                {availableUsers
-                  .filter(user => 
-                    user.user_id !== currentUser.user_id && 
-                    !teamMembers.some(m => m.user_id === user.user_id)
-                  )
-                  .map(user => (
-                    <button
-  key={user.user_id}
-  onClick={() => addTeamMember(user.user_id)}
-  className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
->
-  <div className="flex justify-between items-center">
-    <div>
-      <div className="font-semibold">
-        {user.first_name} {user.last_name}
-      </div>
-      <div className="text-xs text-gray-400">{user.email}</div>
-    </div>
-    <span className="text-xs px-2 py-1 rounded bg-blue-600">
-      {user.role.replace('_', ' ').toUpperCase()}
-    </span>
-  </div>
-</button>
-                  ))}
-              </div>
-            </div>
           </div>
         </div>
       )}

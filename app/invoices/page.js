@@ -786,18 +786,18 @@ const finalizeInvoice = async () => {
 </div>
 
               <button
-  onClick={() => generateInvoicePreview(selectedItem.data.wo_id)}
-  disabled={generatingInvoice}
-  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
->
-  {generatingInvoice ? '⏳ Loading Preview...' : '📄 Preview & Generate Invoice'}
-</button>
-           </div>
+                onClick={() => generateInvoicePreview(selectedItem.data.wo_id)}
+                disabled={generatingInvoice}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
+              >
+                {generatingInvoice ? '⏳ Loading Preview...' : '📄 Preview & Generate Invoice'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Invoice Preview Modal - MUST be separate from work order modal */}
       {/* Invoice Preview Modal - MUST be separate from work order modal */}
       {showInvoicePreview && previewWO && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">

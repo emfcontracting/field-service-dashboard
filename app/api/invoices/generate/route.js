@@ -123,8 +123,10 @@ const equipmentCost = workOrder.emf_equipment_cost || 0;
 const trailerCost = workOrder.trailer_cost || 0;
 const rentalCost = workOrder.rental_cost || 0;
 
-// Calculate total
+// Calculate totals
 const subtotal = totalLabor + mileageCost + materialCost + equipmentCost + trailerCost + rentalCost;
+const tax = 0; // NO TAX
+const total = subtotal + tax;
 
     // Generate invoice number (format: INV-YYYY-XXXXX)
     const year = new Date().getFullYear();

@@ -499,13 +499,13 @@ export default function MobileApp() {
                   Email Address
                 </label>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="your.email@company.com"
-                  autoComplete="email"
-                />
+  type="email"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+  className="w-full px-4 py-4 text-lg text-gray-900 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  placeholder="your.email@company.com"
+  autoComplete="email"
+/>
               </div>
 
               {/* PIN Input */}

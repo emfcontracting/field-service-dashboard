@@ -792,248 +792,247 @@ const finalizeInvoice = async () => {
 >
   {generatingInvoice ? '⏳ Loading Preview...' : '📄 Preview & Generate Invoice'}
 </button>
+           </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Invoice Preview Modal */}
+      {/* Invoice Preview Modal - MUST be separate from work order modal */}
       {showInvoicePreview && previewWO && (
-  <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-    <div className="bg-gray-800 rounded-lg max-w-5xl w-full my-8">
-      <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
-        <div>
-          <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
-          <p className="text-gray-400 text-sm mt-1">
-            WO #{previewWO.wo_number} - {previewWO.building}
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setShowInvoicePreview(false);
-            setPreviewWO(null);
-            setPreviewLineItems([]);
-          }}
-          className="text-gray-400 hover:text-white text-3xl leading-none"
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-        
-        <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
-          <div className="font-bold mb-2">Review & Edit Line Items</div>
-          <div className="text-sm">
-            Review the line items below. You can edit quantities and prices, or add custom line items before finalizing the invoice.
-          </div>
-        </div>
-
-        {/* Line Items */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="font-bold text-lg mb-4">Line Items</h3>
-          
-          <div className="space-y-3">
-            {previewLineItems.map((item, index) => (
-              <div 
-                key={index}
-                className={`p-4 rounded-lg ${item.line_type === 'description' ? 'bg-blue-900 text-blue-100' : 'bg-gray-600'}`}
-              >
-                {item.line_type === 'description' ? (
-                  <div>
-                    <div className="font-bold mb-2">Work Performed:</div>
-                    <div className="text-sm whitespace-pre-wrap">{item.description}</div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-12 gap-3 items-center">
-                    <div className="col-span-5">
-                      <input
-                        type="text"
-                        value={item.description}
-                        onChange={(e) => {
-                          const updated = [...previewLineItems];
-                          updated[index].description = e.target.value;
-                          setPreviewLineItems(updated);
-                        }}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const updated = [...previewLineItems];
-                          updated[index].quantity = parseFloat(e.target.value) || 0;
-                          updated[index].amount = updated[index].quantity * updated[index].unit_price;
-                          setPreviewLineItems(updated);
-                        }}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.unit_price}
-                        onChange={(e) => {
-                          const updated = [...previewLineItems];
-                          updated[index].unit_price = parseFloat(e.target.value) || 0;
-                          updated[index].amount = updated[index].quantity * updated[index].unit_price;
-                          setPreviewLineItems(updated);
-                        }}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
-                        placeholder="Unit Price"
-                      />
-                    </div>
-                    <div className="col-span-2 text-right font-bold">
-                      ${item.amount.toFixed(2)}
-                    </div>
-                    <div className="col-span-1 text-center">
-                      <button
-                        onClick={() => {
-                          setPreviewLineItems(previewLineItems.filter((_, i) => i !== index));
-                        }}
-                        className="text-red-400 hover:text-red-300 text-lg"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                )}
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg max-w-5xl w-full my-8">
+            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
+              <div>
+                <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                  WO #{previewWO.wo_number} - {previewWO.building}
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Add Custom Line Item */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="font-bold mb-3">➕ Add Custom Line Item</h3>
-          
-          <div className="grid grid-cols-12 gap-3 items-end">
-            <div className="col-span-6">
-              <label className="block text-xs text-gray-400 mb-1">Description</label>
-              <input
-                type="text"
-                value={customLineItem.description}
-                onChange={(e) => setCustomLineItem({ ...customLineItem, description: e.target.value })}
-                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
-                placeholder="e.g., Additional Service"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-400 mb-1">Quantity</label>
-              <input
-                type="number"
-                step="0.01"
-                value={customLineItem.quantity}
-                onChange={(e) => setCustomLineItem({ ...customLineItem, quantity: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-gray-400 mb-1">Unit Price</label>
-              <input
-                type="number"
-                step="0.01"
-                value={customLineItem.unit_price}
-                onChange={(e) => setCustomLineItem({ ...customLineItem, unit_price: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
-                placeholder="0.00"
-              />
-            </div>
-            <div className="col-span-2">
               <button
                 onClick={() => {
-                  if (!customLineItem.description.trim()) {
-                    alert('Please enter a description');
-                    return;
-                  }
-                  
-                  const newItem = {
-                    description: customLineItem.description,
-                    quantity: customLineItem.quantity,
-                    unit_price: customLineItem.unit_price,
-                    amount: customLineItem.quantity * customLineItem.unit_price,
-                    line_type: 'custom',
-                    editable: true
-                  };
-                  
-                  // Insert before the description item
-                  const descIndex = previewLineItems.findIndex(item => item.line_type === 'description');
-                  const updated = [...previewLineItems];
-                  if (descIndex >= 0) {
-                    updated.splice(descIndex, 0, newItem);
-                  } else {
-                    updated.push(newItem);
-                  }
-                  
-                  setPreviewLineItems(updated);
-                  setCustomLineItem({ description: '', quantity: 1, unit_price: 0 });
+                  setShowInvoicePreview(false);
+                  setPreviewWO(null);
+                  setPreviewLineItems([]);
                 }}
-                className="w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded font-bold"
+                className="text-gray-400 hover:text-white text-3xl leading-none"
               >
-                Add
+                ×
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Totals */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <div className="flex justify-end">
-            <div className="w-80">
-              <div className="flex justify-between py-2 text-lg">
-                <span className="font-semibold">Subtotal:</span>
-                <span>
-                  ${previewLineItems
-                    .filter(item => item.line_type !== 'description')
-                    .reduce((sum, item) => sum + item.amount, 0)
-                    .toFixed(2)}
-                </span>
+            <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+              
+              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
+                <div className="font-bold mb-2">Review & Edit Line Items</div>
+                <div className="text-sm">
+                  Review the line items below. You can edit quantities and prices, or add custom line items before finalizing the invoice.
+                </div>
               </div>
-              <div className="flex justify-between py-2 text-sm text-gray-400">
-                <span>Tax:</span>
-                <span>$0.00</span>
+
+              {/* Line Items */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="font-bold text-lg mb-4">Line Items</h3>
+                
+                <div className="space-y-3">
+                  {previewLineItems.map((item, index) => (
+                    <div 
+                      key={index}
+                      className={`p-4 rounded-lg ${item.line_type === 'description' ? 'bg-blue-900 text-blue-100' : 'bg-gray-600'}`}
+                    >
+                      {item.line_type === 'description' ? (
+                        <div>
+                          <div className="font-bold mb-2">Work Performed:</div>
+                          <div className="text-sm whitespace-pre-wrap">{item.description}</div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                          <div className="col-span-5">
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => {
+                                const updated = [...previewLineItems];
+                                updated[index].description = e.target.value;
+                                setPreviewLineItems(updated);
+                              }}
+                              className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const updated = [...previewLineItems];
+                                updated[index].quantity = parseFloat(e.target.value) || 0;
+                                updated[index].amount = updated[index].quantity * updated[index].unit_price;
+                                setPreviewLineItems(updated);
+                              }}
+                              className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.unit_price}
+                              onChange={(e) => {
+                                const updated = [...previewLineItems];
+                                updated[index].unit_price = parseFloat(e.target.value) || 0;
+                                updated[index].amount = updated[index].quantity * updated[index].unit_price;
+                                setPreviewLineItems(updated);
+                              }}
+                              className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
+                              placeholder="Unit Price"
+                            />
+                          </div>
+                          <div className="col-span-2 text-right font-bold">
+                            ${item.amount.toFixed(2)}
+                          </div>
+                          <div className="col-span-1 text-center">
+                            <button
+                              onClick={() => {
+                                setPreviewLineItems(previewLineItems.filter((_, i) => i !== index));
+                              }}
+                              className="text-red-400 hover:text-red-300 text-lg"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex justify-between py-3 bg-green-900 px-4 font-bold text-xl border-2 border-green-500 mt-2 rounded">
-                <span>TOTAL:</span>
-                <span className="text-green-400">
-                  ${previewLineItems
-                    .filter(item => item.line_type !== 'description')
-                    .reduce((sum, item) => sum + item.amount, 0)
-                    .toFixed(2)}
-                </span>
+
+              {/* Add Custom Line Item */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="font-bold mb-3">➕ Add Custom Line Item</h3>
+                
+                <div className="grid grid-cols-12 gap-3 items-end">
+                  <div className="col-span-6">
+                    <label className="block text-xs text-gray-400 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={customLineItem.description}
+                      onChange={(e) => setCustomLineItem({ ...customLineItem, description: e.target.value })}
+                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                      placeholder="e.g., Additional Service"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-gray-400 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={customLineItem.quantity}
+                      onChange={(e) => setCustomLineItem({ ...customLineItem, quantity: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-gray-400 mb-1">Unit Price</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={customLineItem.unit_price}
+                      onChange={(e) => setCustomLineItem({ ...customLineItem, unit_price: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <button
+                      onClick={() => {
+                        if (!customLineItem.description.trim()) {
+                          alert('Please enter a description');
+                          return;
+                        }
+                        
+                        const newItem = {
+                          description: customLineItem.description,
+                          quantity: customLineItem.quantity,
+                          unit_price: customLineItem.unit_price,
+                          amount: customLineItem.quantity * customLineItem.unit_price,
+                          line_type: 'custom',
+                          editable: true
+                        };
+                        
+                        // Insert before the description item
+                        const descIndex = previewLineItems.findIndex(item => item.line_type === 'description');
+                        const updated = [...previewLineItems];
+                        if (descIndex >= 0) {
+                          updated.splice(descIndex, 0, newItem);
+                        } else {
+                          updated.push(newItem);
+                        }
+                        
+                        setPreviewLineItems(updated);
+                        setCustomLineItem({ description: '', quantity: 1, unit_price: 0 });
+                      }}
+                      className="w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded font-bold"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <div className="flex justify-end">
+                  <div className="w-80">
+                    <div className="flex justify-between py-2 text-lg">
+                      <span className="font-semibold">Subtotal:</span>
+                      <span>
+                        ${previewLineItems
+                          .filter(item => item.line_type !== 'description')
+                          .reduce((sum, item) => sum + item.amount, 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2 text-sm text-gray-400">
+                      <span>Tax:</span>
+                      <span>$0.00</span>
+                    </div>
+                    <div className="flex justify-between py-3 bg-green-900 px-4 font-bold text-xl border-2 border-green-500 mt-2 rounded">
+                      <span>TOTAL:</span>
+                      <span className="text-green-400">
+                        ${previewLineItems
+                          .filter(item => item.line_type !== 'description')
+                          .reduce((sum, item) => sum + item.amount, 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-gray-700">
+                <button
+                  onClick={finalizeInvoice}
+                  disabled={generatingInvoice}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
+                >
+                  {generatingInvoice ? '⏳ Generating...' : '✅ Finalize & Generate Invoice'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowInvoicePreview(false);
+                    setPreviewWO(null);
+                    setPreviewLineItems([]);
+                  }}
+                  className="bg-gray-600 hover:bg-gray-700 px-6 py-4 rounded-lg font-semibold transition"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 pt-4 border-t border-gray-700">
-          <button
-            onClick={finalizeInvoice}
-            disabled={generatingInvoice}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
-          >
-            {generatingInvoice ? '⏳ Generating...' : '✅ Finalize & Generate Invoice'}
-          </button>
-          <button
-            onClick={() => {
-              setShowInvoicePreview(false);
-              setPreviewWO(null);
-              setPreviewLineItems([]);
-            }}
-            className="bg-gray-600 hover:bg-gray-700 px-6 py-4 rounded-lg font-semibold transition"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
         </div>
       )}
 

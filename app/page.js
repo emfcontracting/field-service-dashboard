@@ -461,33 +461,40 @@ const importFromSheets = async () => {
     const response = await fetch(csvUrl);
     const csvText = await response.text();
 
-    const rows = csvText.split('\n').map(row => {
-      return row.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+    // Use a proper CSV parser to handle commas in fields
+    const Papa = await import('papaparse');
+    const parsed = Papa.default.parse(csvText, {
+      header: false,
+      skipEmptyLines: true,
+      dynamicTyping: false
     });
 
-    const dataRows = rows.slice(1).filter(row => row[0]);
+    const rows = parsed.data;
+    const dataRows = rows.slice(1).filter(row => row[0]); // Skip header, filter empty
+
+    console.log('First row columns:', rows[0]); // Show headers
+    console.log('First data row:', dataRows[0]); // Show first data row
 
     const workOrdersToImport = dataRows.map(row => {
-      // Parse date - it's in row[3] (column D in your sheet)
+      // Parse date - it's in column index 3 (Date entered)
       let dateEntered;
-      if (row[3] && row[3].trim()) {
-        const dateStr = row[3].trim();
+      if (row[3] && String(row[3]).trim()) {
+        const dateStr = String(row[3]).trim();
         const parsedDate = new Date(dateStr);
         
         if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 2000) {
-          // Valid date
           dateEntered = parsedDate.toISOString();
+          console.log(`Parsed date for ${row[0]}: ${dateStr} -> ${dateEntered}`);
         } else {
-          // Invalid date, use current date
           console.warn(`Invalid date for WO ${row[0]}: ${dateStr}`);
           dateEntered = new Date().toISOString();
         }
       } else {
-        // No date provided, use current date
+        console.warn(`No date for WO ${row[0]}`);
         dateEntered = new Date().toISOString();
       }
 
-      // Parse priority from strings like "P1-Emergency" or "P2-Urgent"
+      // Parse priority
       let priority = 'medium';
       const priorityStr = (row[2] || '').toLowerCase();
       if (priorityStr.includes('emergency') || priorityStr.includes('p1')) {
@@ -499,19 +506,19 @@ const importFromSheets = async () => {
       }
 
       return {
-        wo_number: row[0] || '',                    // Column A: WO#
-        building: row[1] || '',                     // Column B: Building
-        date_entered: dateEntered,                  // Column D: Date entered
-        work_order_description: row[4] || '',       // Column E: Work Order Description
-        requestor: row[6] || '',                    // Column G: CONTACT
-        priority: priority,                         // Column C: Priority
-        status: 'pending',                          // Default to pending (they all show OPEN)
-        nte: parseFloat(row[5]) || 0,              // Column F: NTE
-        comments: row[10] || ''                     // Column K: COMMENTS
+        wo_number: String(row[0] || '').trim(),           // Column A: WO#
+        building: String(row[1] || '').trim(),            // Column B: Building
+        date_entered: dateEntered,                        // Column D: Date entered
+        work_order_description: String(row[4] || '').trim(), // Column E: Description
+        requestor: String(row[6] || '').trim(),           // Column G: CONTACT
+        priority: priority,                                // Column C: Priority
+        status: 'pending',                                 // Default to pending
+        nte: parseFloat(row[5]) || 0,                     // Column F: NTE
+        comments: String(row[10] || '').trim()            // Column K: COMMENTS
       };
     });
 
-    console.log('Importing first work order:', workOrdersToImport[0]); // Debug
+    console.log('First work order to import:', workOrdersToImport[0]);
 
     const { data, error } = await supabase
       .from('work_orders')

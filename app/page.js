@@ -439,86 +439,101 @@ const unassignFromField = async (woId) => {
   }
 };
   // Import from Google Sheets
-  const importFromSheets = async () => {
-    if (!sheetsUrl) {
-      alert('Please enter a Google Sheets URL');
+const importFromSheets = async () => {
+  if (!sheetsUrl) {
+    alert('Please enter a Google Sheets URL');
+    return;
+  }
+
+  setImporting(true);
+
+  try {
+    const match = sheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      alert('Invalid Google Sheets URL');
+      setImporting(false);
       return;
     }
 
-    setImporting(true);
+    const spreadsheetId = match[1];
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
 
-    try {
-      const match = sheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-      if (!match) {
-        alert('Invalid Google Sheets URL');
-        setImporting(false);
-        return;
-      }
+    const response = await fetch(csvUrl);
+    const csvText = await response.text();
 
-      const spreadsheetId = match[1];
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
+    const rows = csvText.split('\n').map(row => {
+      return row.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+    });
 
-      const response = await fetch(csvUrl);
-      const csvText = await response.text();
+    const dataRows = rows.slice(1).filter(row => row[0]);
 
-      const rows = csvText.split('\n').map(row => {
-        return row.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
-      });
-
-      const dataRows = rows.slice(1).filter(row => row[0]);
-
-      const workOrdersToImport = dataRows.map(row => {
-  // Parse the date properly
-  let dateEntered = null;
-  if (row[1]) {
-    // Handle date format like "6/6/2025 9:31:00"
-    const dateStr = row[1].trim();
-    const parsedDate = new Date(dateStr);
-    
-    if (!isNaN(parsedDate.getTime())) {
-      dateEntered = parsedDate.toISOString();
-    } else {
-      // If parsing failed, use current date
-      dateEntered = new Date().toISOString();
-    }
-  } else {
-    dateEntered = new Date().toISOString();
-  }
-
-  return {
-    wo_number: row[0] || '',
-    date_entered: dateEntered,
-    building: row[2] || '',
-        work_order_description: row[3] || '',
-        requestor: row[4] || '',
-        priority: row[5]?.toLowerCase() || 'medium',
-        status: row[6]?.toLowerCase() || 'pending',
-        nte: parseFloat(row[7]) || 0,
-        comments: row[8] || ''
-  };
-});
-
-      const { data, error } = await supabase
-        .from('work_orders')
-        .insert(workOrdersToImport)
-        .select();
-
-      if (error) {
-        console.error('Error importing:', error);
-        alert('❌ Import error: ' + error.message);
+    const workOrdersToImport = dataRows.map(row => {
+      // Parse date - it's in row[3] (column D in your sheet)
+      let dateEntered;
+      if (row[3] && row[3].trim()) {
+        const dateStr = row[3].trim();
+        const parsedDate = new Date(dateStr);
+        
+        if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 2000) {
+          // Valid date
+          dateEntered = parsedDate.toISOString();
+        } else {
+          // Invalid date, use current date
+          console.warn(`Invalid date for WO ${row[0]}: ${dateStr}`);
+          dateEntered = new Date().toISOString();
+        }
       } else {
-        alert(`✅ Successfully imported ${data.length} work orders!`);
-        setShowImportModal(false);
-        setSheetsUrl('');
-        fetchWorkOrders();
+        // No date provided, use current date
+        dateEntered = new Date().toISOString();
       }
-    } catch (error) {
-      console.error('Import error:', error);
-      alert('❌ Failed to import: ' + error.message);
-    } finally {
-      setImporting(false);
+
+      // Parse priority from strings like "P1-Emergency" or "P2-Urgent"
+      let priority = 'medium';
+      const priorityStr = (row[2] || '').toLowerCase();
+      if (priorityStr.includes('emergency') || priorityStr.includes('p1')) {
+        priority = 'emergency';
+      } else if (priorityStr.includes('urgent') || priorityStr.includes('p2')) {
+        priority = 'high';
+      } else if (priorityStr.includes('p3') || priorityStr.includes('p4')) {
+        priority = 'medium';
+      }
+
+      return {
+        wo_number: row[0] || '',                    // Column A: WO#
+        building: row[1] || '',                     // Column B: Building
+        date_entered: dateEntered,                  // Column D: Date entered
+        work_order_description: row[4] || '',       // Column E: Work Order Description
+        requestor: row[6] || '',                    // Column G: CONTACT
+        priority: priority,                         // Column C: Priority
+        status: 'pending',                          // Default to pending (they all show OPEN)
+        nte: parseFloat(row[5]) || 0,              // Column F: NTE
+        comments: row[10] || ''                     // Column K: COMMENTS
+      };
+    });
+
+    console.log('Importing first work order:', workOrdersToImport[0]); // Debug
+
+    const { data, error } = await supabase
+      .from('work_orders')
+      .insert(workOrdersToImport)
+      .select();
+
+    if (error) {
+      console.error('Error importing:', error);
+      alert('❌ Import error: ' + error.message);
+    } else {
+      alert(`✅ Successfully imported ${data.length} work orders!`);
+      setShowImportModal(false);
+      setSheetsUrl('');
+      fetchWorkOrders();
     }
-  };
+  } catch (error) {
+    console.error('Import error:', error);
+    alert('❌ Failed to import: ' + error.message);
+  } finally {
+    setImporting(false);
+  }
+};
 
 return (
     <div className="min-h-screen bg-gray-900 text-white p-6">

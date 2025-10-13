@@ -467,17 +467,36 @@ const unassignFromField = async (woId) => {
 
       const dataRows = rows.slice(1).filter(row => row[0]);
 
-      const workOrdersToImport = dataRows.map(row => ({
-        wo_number: row[0] || '',
-        date_entered: row[1] || new Date().toISOString().split('T')[0],
-        building: row[2] || '',
+      const workOrdersToImport = dataRows.map(row => {
+  // Parse the date properly
+  let dateEntered = null;
+  if (row[1]) {
+    // Handle date format like "6/6/2025 9:31:00"
+    const dateStr = row[1].trim();
+    const parsedDate = new Date(dateStr);
+    
+    if (!isNaN(parsedDate.getTime())) {
+      dateEntered = parsedDate.toISOString();
+    } else {
+      // If parsing failed, use current date
+      dateEntered = new Date().toISOString();
+    }
+  } else {
+    dateEntered = new Date().toISOString();
+  }
+
+  return {
+    wo_number: row[0] || '',
+    date_entered: dateEntered,
+    building: row[2] || '',
         work_order_description: row[3] || '',
         requestor: row[4] || '',
         priority: row[5]?.toLowerCase() || 'medium',
         status: row[6]?.toLowerCase() || 'pending',
         nte: parseFloat(row[7]) || 0,
         comments: row[8] || ''
-      }));
+  };
+});
 
       const { data, error } = await supabase
         .from('work_orders')

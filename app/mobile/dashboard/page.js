@@ -23,11 +23,12 @@ export default function MobileDashboard() {
   const fetchWorkOrders = async (userId) => {
     setLoading(true);
     try {
-      // Get work orders where user is lead tech
+      // Get work orders where user is lead tech AND assigned to field
       const { data: leadTechWOs, error: leadError } = await supabase
         .from('work_orders')
         .select('*')
         .eq('lead_tech_id', userId)
+        .eq('assigned_to_field', true)
         .order('created_at', { ascending: false });
 
       if (leadError) {

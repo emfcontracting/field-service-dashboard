@@ -261,15 +261,48 @@ export default function WorkOrderDetail({ params }) {
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-500">Status</p>
-              <p className="text-lg font-semibold text-gray-900 capitalize">
-                {workOrder.status?.replace('_', ' ')}
-              </p>
+              <span className={`inline-block px-4 py-2 rounded-lg text-lg font-semibold ${
+                workOrder.status === 'needs_return' 
+                  ? 'bg-orange-100 text-orange-800 border-2 border-orange-400'
+                  : workOrder.status === 'completed'
+                  ? 'bg-green-100 text-green-800'
+                  : workOrder.status === 'in_progress'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {workOrder.status === 'needs_return' 
+                  ? '⚠️ Review for Invoice' 
+                  : workOrder.status?.replace('_', ' ').toUpperCase()}
+              </span>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Alert for Review Status */}
+        {workOrder.status === 'needs_return' && (
+          <div className="mb-6 bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-bold text-orange-800">
+                  Returned from Invoicing Team
+                </h3>
+                <p className="mt-1 text-sm text-orange-700">
+                  This work order needs to be reviewed and updated before it can be invoiced. 
+                  Please review the comments below for details on what needs to be changed.
+                </p>
+                <p className="mt-2 text-xs text-orange-600 font-medium">
+                  After making updates, change the status to "Completed" to send it back for invoicing.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Work Order Details */}
           <div className="lg:col-span-2 space-y-6">
@@ -289,7 +322,7 @@ export default function WorkOrderDetail({ params }) {
                     <option value="pending">Pending</option>
                     <option value="assigned">Assigned</option>
                     <option value="in_progress">In Progress</option>
-                    <option value="needs_return">Needs Return</option>
+                    <option value="needs_return">Review for Invoice</option>
                     <option value="completed">Completed</option>
                   </select>
                 </div>

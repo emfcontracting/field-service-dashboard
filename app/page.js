@@ -619,104 +619,119 @@ return (
         : 'No work orders yet. Create your first one!'}
     </div>
   ) : (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-max">
+    <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
+      <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
         <thead className="bg-gray-700">
           <tr>
-            <th className="px-4 py-3 text-left w-32 whitespace-nowrap">WO#</th>
-            <th className="px-4 py-3 text-left w-28 whitespace-nowrap">Date</th>
-            <th className="px-4 py-3 text-left w-32 whitespace-nowrap">Building</th>
-            <th className="px-4 py-3 text-left min-w-[300px]">Description</th>
-            <th className="px-4 py-3 text-left w-40 whitespace-nowrap">Status</th>
-            <th className="px-4 py-3 text-left w-28 whitespace-nowrap">Priority</th>
-            <th className="px-4 py-3 text-left w-48 whitespace-nowrap">Lead Tech</th>
-            <th className="px-4 py-3 text-right w-28 whitespace-nowrap">NTE</th>
-            <th className="px-4 py-3 text-right w-28 whitespace-nowrap">Est. Cost</th>
-            <th className="px-4 py-3 text-center w-12 whitespace-nowrap">🔒</th>
-            <th className="px-4 py-3 text-center w-20 whitespace-nowrap">View</th>
+            <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
+            <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
+            <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Building</th>
+            <th className="px-2 py-2 text-left" style={{ width: '300px' }}>Description</th>
+            <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Status</th>
+            <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Priority</th>
+            <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Lead Tech</th>
+            <th className="px-2 py-2 text-right" style={{ width: '80px' }}>NTE</th>
+            <th className="px-2 py-2 text-right" style={{ width: '80px' }}>Est Cost</th>
+            <th className="px-2 py-2 text-center" style={{ width: '40px' }}>🔒</th>
+            <th className="px-2 py-2 text-center" style={{ width: '60px' }}>Action</th>
           </tr>
         </thead>
         <tbody>
           {filteredWorkOrders.map(wo => {
             const totalCost = calculateTotalCost(wo);
             const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
+            
+            // Debug log first item only
+            if (wo === filteredWorkOrders[0]) {
+              console.log('First WO data:', {
+                wo_number: wo.wo_number,
+                date_entered: wo.date_entered,
+                created_at: wo.created_at,
+                date_entered_type: typeof wo.date_entered,
+                created_at_type: typeof wo.created_at
+              });
+            }
 
             return (
               <tr
                 key={wo.wo_id}
-                onClick={() => selectWorkOrderEnhanced(wo)}
-                className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+                className="border-t border-gray-700 hover:bg-gray-700 transition"
               >
-                <td className="px-4 py-3 font-semibold whitespace-nowrap">{wo.wo_number}</td>
-                <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
-  {(() => {
-    // Try date_entered first
-    const dateStr = wo.date_entered || wo.created_at;
-    if (!dateStr) return 'N/A';
-    
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return 'N/A';
-    
-    // Format: 10/13/2025 2:30 PM
-    return date.toLocaleDateString() + ' ' + 
-           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  })()}
-</td>
-                <td className="px-4 py-3 whitespace-nowrap">{wo.building}</td>
-                <td className="px-4 py-3">
-                  <div className="max-w-md truncate" title={wo.work_order_description}>
+                <td className="px-2 py-2 font-semibold">{wo.wo_number}</td>
+                <td className="px-2 py-2">
+                  {(() => {
+                    // Try to get a valid date from any available field
+                    const dateValue = wo.created_at || wo.date_entered;
+                    
+                    if (!dateValue) return 'No Date';
+                    
+                    const date = new Date(dateValue);
+                    
+                    // Check if date is valid and not epoch
+                    if (isNaN(date.getTime()) || date.getFullYear() < 2000) {
+                      return 'Invalid';
+                    }
+                    
+                    return date.toLocaleDateString('en-US', { 
+                      month: '2-digit', 
+                      day: '2-digit',
+                      year: '2-digit'
+                    });
+                  })()}
+                </td>
+                <td className="px-2 py-2">{wo.building}</td>
+                <td className="px-2 py-2">
+                  <div className="truncate" title={wo.work_order_description}>
                     {wo.work_order_description}
                   </div>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2 items-center">
-                    <span className={`px-3 py-1 rounded-lg text-sm font-semibold whitespace-nowrap ${getStatusColor(wo.status)}`}>
+                <td className="px-2 py-2">
+                  <div className="flex flex-col gap-1">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold text-center ${getStatusColor(wo.status)}`}>
                       {wo.status.replace('_', ' ').toUpperCase()}
                     </span>
                     {wo.assigned_to_field && (
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold whitespace-nowrap">
-                        📱 FIELD
+                      <span className="px-1 py-0.5 bg-blue-600 rounded text-xs font-bold text-center">
+                        📱
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className="px-2 py-2 text-center">
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-                    {wo.priority.toUpperCase()}
+                    {wo.priority.charAt(0).toUpperCase()}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   {wo.lead_tech ? (
-                    <div className="min-w-[150px]">
-                      <div className="font-semibold whitespace-nowrap">
-                        {wo.lead_tech.first_name} {wo.lead_tech.last_name}
-                      </div>
-                      <div className="text-xs text-gray-400 truncate">{wo.lead_tech.email}</div>
+                    <div className="truncate" title={`${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`}>
+                      {wo.lead_tech.first_name} {wo.lead_tech.last_name.charAt(0)}.
                     </div>
                   ) : (
                     <span className="text-gray-500">Unassigned</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">
-                  ${(wo.nte || 0).toFixed(2)}
+                <td className="px-2 py-2 text-right font-semibold">
+                  ${(wo.nte || 0).toFixed(0)}
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
+                <td className="px-2 py-2 text-right">
                   <span className={overBudget ? 'text-red-400 font-bold' : ''}>
-                    ${(totalCost || 0).toFixed(2)}
+                    ${(totalCost || 0).toFixed(0)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-center">
-                  {wo.is_locked && (
-                    <span
-                      title={`Locked on ${new Date(wo.locked_at).toLocaleDateString()}`}
-                      className="cursor-help"
-                    >
-                      🔒
-                    </span>
-                  )}
+                <td className="px-2 py-2 text-center">
+                  {wo.is_locked && '🔒'}
                 </td>
-                <td className="px-4 py-3 text-center text-gray-400 text-xl">
-                  →
+                <td className="px-2 py-2 text-center">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectWorkOrderEnhanced(wo);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold"
+                  >
+                    View
+                  </button>
                 </td>
               </tr>
             );

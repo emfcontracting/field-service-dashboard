@@ -52,7 +52,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     
     const data = await fileToRead.arrayBuffer();
     const workbook = XLSX.read(data, {
-      cellDates: true,  // Parse dates as Date objects
+      cellDates: true,
       cellNF: false,
       cellText: false
     });
@@ -70,7 +70,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
     addLog(`📋 Found ${jsonData.length} rows in OPEN WO sheet`, 'info');
 
-    // Debug: Show first row structure
     if (jsonData.length > 0) {
       addLog(`First row sample:`, 'info');
       addLog(`  WO#: ${jsonData[0]['WO#']}`, 'info');
@@ -103,36 +102,52 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       const exists = existingWONumbers.has(woNumber);
       
       // Parse date with better handling
-let dateEntered;
-const dateValue = row['Date entered'];
-
-if (dateValue) {
-  let parsedDate = null;
-  
-  // Strategy 1: If it's already a Date object
-  if (dateValue instanceof Date) {
-    parsedDate = dateValue;
-  }
-  // Strategy 2: If it's a string in format "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS"
-    else if (typeof dateValue === 'string') {
-      // Check if it has time component
-      if (dateValue.includes(':')) {
-        // Has time: "2025-06-06 09:31:00" or "6/6/2025 9:31:00"
-        parsedDate = new Date(dateValue);
-      } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        // Format: "YYYY-MM-DD" - parse as local date at noon to avoid timezone issues
-        const [year, month, day] = dateValue.split('-').map(Number);
-        parsedDate = new Date(year, month - 1, day, 12, 0, 0); // Use noon to avoid timezone issues
+      let dateEntered;
+      const dateValue = row['Date entered'];
+      
+      if (dateValue) {
+        let parsedDate = null;
+        
+        // Strategy 1: If it's already a Date object
+        if (dateValue instanceof Date) {
+          parsedDate = dateValue;
+        }
+        // Strategy 2: If it's a string in format "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS"
+        else if (typeof dateValue === 'string') {
+          // Check if it has time component
+          if (dateValue.includes(':')) {
+            // Has time: "2025-06-06 09:31:00" or "6/6/2025 9:31:00"
+            parsedDate = new Date(dateValue);
+          } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Format: "YYYY-MM-DD" - parse as local date at noon to avoid timezone issues
+            const [year, month, day] = dateValue.split('-').map(Number);
+            parsedDate = new Date(year, month - 1, day, 12, 0, 0);
+          } else {
+            // Other string format, try direct parsing
+            parsedDate = new Date(dateValue);
+          }
+        }
+        // Strategy 3: If it's a number (Excel serial date)
+        else if (typeof dateValue === 'number') {
+          const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+          parsedDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
+        }
+        
+        // Validate the parsed date
+        if (parsedDate && !isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1900 && parsedDate.getFullYear() < 2100) {
+          dateEntered = parsedDate.toISOString();
+          
+          if (processed.length < 3) {
+            addLog(`✓ ${woNumber}: ${parsedDate.toLocaleDateString()} ${parsedDate.toLocaleTimeString()}`, 'success');
+          }
+        } else {
+          addLog(`⚠️ ${woNumber}: Invalid date "${dateValue}", using current date`, 'warning');
+          dateEntered = new Date().toISOString();
+        }
       } else {
-        // Other string format, try direct parsing
-        parsedDate = new Date(dateValue);
+        addLog(`⚠️ ${woNumber}: No date provided, using current date`, 'warning');
+        dateEntered = new Date().toISOString();
       }
-    }
-    // Strategy 3: If it's a number (Excel serial date)
-    else if (typeof dateValue === 'number') {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      parsedDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
-    }
       
       const workOrder = {
         wo_number: woNumber,

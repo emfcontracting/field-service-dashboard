@@ -1283,180 +1283,140 @@ return (
               <div className="bg-gray-700 rounded-lg p-4">
   <h3 className="font-bold mb-3 text-lg">💰 Budget & Cost Summary</h3>
   
-  <div className="grid grid-cols-2 gap-4 mb-4">
-    <div>
-      <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
-      <input
-        type="number"
-        step="0.01"
-        value={selectedWO.nte || ''}
-        onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
-        onBlur={() => updateWorkOrder(selectedWO.wo_id, { nte: selectedWO.nte })}
-        className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
-      />
-    </div>
-    <div>
-      <label className="block text-sm text-gray-400 mb-1">Estimated Invoice Total</label>
-      <div className="bg-gray-600 px-4 py-2 rounded-lg font-bold text-2xl text-green-400">
-        ${(() => {
-          // Calculate base labor
-          const leadRegular = ((selectedWO.hours_regular || 0) * 64);
-          const leadOvertime = ((selectedWO.hours_overtime || 0) * 96);
-          const teamLabor = (selectedWO.teamMembers || []).reduce((sum, m) => 
-            sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0);
-          
-          // Add 2 admin hours
-          const adminHours = 2 * 64;
-          const totalLabor = leadRegular + leadOvertime + teamLabor + adminHours;
-          
-          // Calculate mileage
-          const totalMiles = (selectedWO.miles || 0) + 
-            ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.miles || 0), 0));
-          const mileageCost = totalMiles * 1.00;
-          
-          // Apply markups
-          const materials = (selectedWO.material_cost || 0);
-          const materialsWithMarkup = materials * 1.25; // 25% markup
-          
-          const equipment = (selectedWO.emf_equipment_cost || 0);
-          const equipmentWithMarkup = equipment * 1.15; // 15% markup
-          
-          const trailer = (selectedWO.trailer_cost || 0); // No markup
-          
-          const rental = (selectedWO.rental_cost || 0);
-          const rentalWithMarkup = rental * 1.15; // 15% markup
-          
-          return (totalLabor + mileageCost + materialsWithMarkup + 
-                  equipmentWithMarkup + trailer + rentalWithMarkup).toFixed(2);
-        })()}
-      </div>
-      <div className="text-xs text-gray-400 mt-1">
-        Includes all markups & admin hours
-      </div>
-    </div>
-  </div>
-
-  <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
-    <div className="font-bold mb-2">LABOR (with 2 Admin Hours)</div>
-    <div className="space-y-1 text-sm">
-      <div className="flex justify-between">
-        <span>Total RT Hours</span>
-        <span>{(selectedWO.hours_regular || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.hours_regular || 0), 0))} hrs × $64</span>
-      </div>
-      <div className="flex justify-between">
-        <span>Total OT Hours</span>
-        <span>{(selectedWO.hours_overtime || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.hours_overtime || 0), 0))} hrs × $96</span>
-      </div>
-      <div className="flex justify-between text-yellow-300">
-        <span>+ Admin Hours</span>
-        <span>2 hrs × $64 = $128.00</span>
-      </div>
-      <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
-        <span>Total Labor:</span>
-        <span>
-          ${(
-            ((selectedWO.hours_regular || 0) * 64) + 
-            ((selectedWO.hours_overtime || 0) * 96) +
-            ((selectedWO.teamMembers || []).reduce((sum, m) => sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0)) +
-            128
-          ).toFixed(2)}
-        </span>
-      </div>
-    </div>
-  </div>
-
-  <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-    <div className="flex justify-between">
-      <span className="text-gray-400">Materials:</span>
-      <span>${(selectedWO.material_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-yellow-300">
-      <span className="text-gray-400">+ 25% Markup:</span>
-      <span>+ ${((selectedWO.material_cost || 0) * 0.25).toFixed(2)}</span>
-    </div>
-    
-    <div className="flex justify-between">
-      <span className="text-gray-400">Equipment:</span>
-      <span>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-yellow-300">
-      <span className="text-gray-400">+ 15% Markup:</span>
-      <span>+ ${((selectedWO.emf_equipment_cost || 0) * 0.15).toFixed(2)}</span>
-    </div>
-    
-    <div className="flex justify-between">
-      <span className="text-gray-400">Trailer:</span>
-      <span>${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-gray-400">
-      <span className="text-gray-400">No Markup:</span>
-      <span>$0.00</span>
-    </div>
-    
-    <div className="flex justify-between">
-      <span className="text-gray-400">Rental:</span>
-      <span>${(selectedWO.rental_cost || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-yellow-300">
-      <span className="text-gray-400">+ 15% Markup:</span>
-      <span>+ ${((selectedWO.rental_cost || 0) * 0.15).toFixed(2)}</span>
-    </div>
-    
-    <div className="flex justify-between col-span-2">
-      <span className="text-gray-400">Total Mileage:</span>
-      <span>{(selectedWO.miles || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.miles || 0), 0))} mi × $1.00</span>
-    </div>
-  </div>
-
-  <div className="border-t border-gray-600 pt-3 mt-3">
-    <div className="flex justify-between text-sm mb-1">
-      <span className="text-gray-400">NTE Budget:</span>
-      <span>${(selectedWO.nte || 0).toFixed(2)}</span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-gray-400">Remaining:</span>
-      <span className={(() => {
-        const estimatedTotal = parseFloat(document.querySelector('.text-green-400')?.textContent?.replace('$', '').replace(',', '') || 0);
-        return estimatedTotal > (selectedWO.nte || 0) ? 'text-red-400 font-bold' : 'text-green-400';
-      })()}>
-        ${(() => {
-          const totalLabor = ((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96) +
-            ((selectedWO.teamMembers || []).reduce((sum, m) => sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0)) + 128;
-          const totalMiles = (selectedWO.miles || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.miles || 0), 0));
-          const estimated = totalLabor + (totalMiles * 1.00) + ((selectedWO.material_cost || 0) * 1.25) + 
-            ((selectedWO.emf_equipment_cost || 0) * 1.15) + (selectedWO.trailer_cost || 0) + ((selectedWO.rental_cost || 0) * 1.15);
-          return ((selectedWO.nte || 0) - estimated).toFixed(2);
-        })()}
-      </span>
-    </div>
-  </div>
-</div>
-
   {(() => {
+    // Calculate all costs with markups
     const leadRegular = ((selectedWO.hours_regular || 0) * 64);
     const leadOvertime = ((selectedWO.hours_overtime || 0) * 96);
     const teamLabor = (selectedWO.teamMembers || []).reduce((sum, m) => 
       sum + ((m.hours_regular || 0) * 64) + ((m.hours_overtime || 0) * 96), 0);
-    const adminHours = 2 * 64;
+    const adminHours = 128; // 2 hours × $64
     const totalLabor = leadRegular + leadOvertime + teamLabor + adminHours;
+    
     const totalMiles = (selectedWO.miles || 0) + 
       ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.miles || 0), 0));
     const mileageCost = totalMiles * 1.00;
+    
     const materialsWithMarkup = (selectedWO.material_cost || 0) * 1.25;
     const equipmentWithMarkup = (selectedWO.emf_equipment_cost || 0) * 1.15;
     const trailer = (selectedWO.trailer_cost || 0);
     const rentalWithMarkup = (selectedWO.rental_cost || 0) * 1.15;
+    
     const estimatedTotal = totalLabor + mileageCost + materialsWithMarkup + 
                           equipmentWithMarkup + trailer + rentalWithMarkup;
+    const remaining = (selectedWO.nte || 0) - estimatedTotal;
     const isOverBudget = estimatedTotal > (selectedWO.nte || 0) && (selectedWO.nte || 0) > 0;
     
-    return isOverBudget ? (
-      <div className="bg-red-900 text-red-200 p-3 rounded-lg mt-3 text-sm">
-        ⚠️ Over budget by ${(estimatedTotal - (selectedWO.nte || 0)).toFixed(2)}
-      </div>
-    ) : null;
+    return (
+      <>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={selectedWO.nte || ''}
+              onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
+              onBlur={() => updateWorkOrder(selectedWO.wo_id, { nte: selectedWO.nte })}
+              className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Estimated Invoice Total</label>
+            <div className="bg-gray-600 px-4 py-2 rounded-lg font-bold text-2xl text-green-400">
+              ${estimatedTotal.toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-400 mt-1">
+              Includes all markups & admin hours
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
+          <div className="font-bold mb-2">LABOR (with 2 Admin Hours)</div>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span>Total RT Hours</span>
+              <span>{(selectedWO.hours_regular || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.hours_regular || 0), 0))} hrs × $64</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Total OT Hours</span>
+              <span>{(selectedWO.hours_overtime || 0) + ((selectedWO.teamMembers || []).reduce((sum, m) => sum + (m.hours_overtime || 0), 0))} hrs × $96</span>
+            </div>
+            <div className="flex justify-between text-yellow-300">
+              <span>+ Admin Hours</span>
+              <span>2 hrs × $64 = $128.00</span>
+            </div>
+            <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
+              <span>Total Labor:</span>
+              <span>${totalLabor.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+          <div className="flex justify-between">
+            <span className="text-gray-400">Materials:</span>
+            <span>${(selectedWO.material_cost || 0).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-yellow-300">
+            <span className="text-gray-400">+ 25% Markup:</span>
+            <span>+ ${((selectedWO.material_cost || 0) * 0.25).toFixed(2)}</span>
+          </div>
+          
+          <div className="flex justify-between">
+            <span className="text-gray-400">Equipment:</span>
+            <span>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-yellow-300">
+            <span className="text-gray-400">+ 15% Markup:</span>
+            <span>+ ${((selectedWO.emf_equipment_cost || 0) * 0.15).toFixed(2)}</span>
+          </div>
+          
+          <div className="flex justify-between">
+            <span className="text-gray-400">Trailer:</span>
+            <span>${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-400">
+            <span className="text-gray-400">No Markup:</span>
+            <span>$0.00</span>
+          </div>
+          
+          <div className="flex justify-between">
+            <span className="text-gray-400">Rental:</span>
+            <span>${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-yellow-300">
+            <span className="text-gray-400">+ 15% Markup:</span>
+            <span>+ ${((selectedWO.rental_cost || 0) * 0.15).toFixed(2)}</span>
+          </div>
+          
+          <div className="flex justify-between col-span-2">
+            <span className="text-gray-400">Total Mileage:</span>
+            <span>{totalMiles} mi × $1.00 = ${mileageCost.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-600 pt-3 mt-3">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-400">NTE Budget:</span>
+            <span>${(selectedWO.nte || 0).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Remaining:</span>
+            <span className={isOverBudget ? 'text-red-400 font-bold' : 'text-green-400'}>
+              ${remaining.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {isOverBudget && (
+          <div className="bg-red-900 text-red-200 p-3 rounded-lg mt-3 text-sm">
+            ⚠️ Over budget by ${Math.abs(remaining).toFixed(2)}
+          </div>
+        )}
+      </>
+    );
   })()}
-</div>
 </div>
 
               <div>

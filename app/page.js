@@ -597,7 +597,17 @@ return (
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">🔧 Field Service Dashboard</h1>
+          <div className="flex items-center gap-4">
+  <img 
+    src="/emf-logo.png" 
+    alt="EMF Contracting LLC" 
+    className="h-12 w-auto"
+  />
+  <div>
+    <h1 className="text-2xl font-bold">EMF Contracting LLC</h1>
+    <p className="text-sm text-gray-400">Field Service Dashboard</p>
+  </div>
+</div>
           <div className="flex gap-3">
             <button
               onClick={() => window.location.href = '/invoices'}

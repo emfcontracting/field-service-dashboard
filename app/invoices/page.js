@@ -96,7 +96,7 @@ export default function InvoicingPage() {
   };
 
   const generateInvoice = async (woId) => {
-  if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Apply automatic markups\n\nContinue?')) {
+  if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n\nContinue?')) {
     return;
   }
 
@@ -112,10 +112,7 @@ export default function InvoicingPage() {
     const result = await response.json();
 
     if (result.success) {
-  alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + result.total.toFixed(2));
-  setSelectedItem(null);
-  fetchData();
-}
+      alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + result.total.toFixed(2));
       
       // Remove the work order from acknowledged list immediately
       setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== woId));

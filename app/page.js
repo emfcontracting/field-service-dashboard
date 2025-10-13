@@ -649,8 +649,19 @@ return (
               >
                 <td className="px-4 py-3 font-semibold whitespace-nowrap">{wo.wo_number}</td>
                 <td className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">
-                  {wo.date_entered ? new Date(wo.date_entered).toLocaleDateString() : wo.created_at ? new Date(wo.created_at).toLocaleDateString() : 'N/A'}
-                </td>
+  {(() => {
+    // Try date_entered first
+    const dateStr = wo.date_entered || wo.created_at;
+    if (!dateStr) return 'N/A';
+    
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return 'N/A';
+    
+    // Format: 10/13/2025 2:30 PM
+    return date.toLocaleDateString() + ' ' + 
+           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  })()}
+</td>
                 <td className="px-4 py-3 whitespace-nowrap">{wo.building}</td>
                 <td className="px-4 py-3">
                   <div className="max-w-md truncate" title={wo.work_order_description}>
@@ -761,15 +772,20 @@ return (
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Date Entered</label>
-                  <input
-                    type="date"
-                    value={selectedWO.date_entered}
-                    onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: e.target.value })}
-                    onBlur={() => updateWorkOrder(selectedWO.wo_id, { date_entered: selectedWO.date_entered })}
-                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                  />
-                </div>
+  <label className="block text-sm text-gray-400 mb-1">Date & Time Entered</label>
+  <input
+    type="datetime-local"
+    value={(() => {
+      if (!selectedWO.date_entered && !selectedWO.created_at) return '';
+      const date = new Date(selectedWO.date_entered || selectedWO.created_at);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
+    })()}
+    onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: new Date(e.target.value).toISOString() })}
+    onBlur={() => updateWorkOrder(selectedWO.wo_id, { date_entered: selectedWO.date_entered })}
+    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+  />
+</div>
               </div>
 
               <div>

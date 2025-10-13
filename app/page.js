@@ -372,7 +372,62 @@ const selectWorkOrderEnhanced = async (wo) => {
       setGeneratingInvoice(false);
     }
   };
+// Add this function after generateInvoice
+const assignToField = async (woId) => {
+  if (!confirm('Assign this work order to field workers?\n\nThis will make it visible in the mobile app.')) {
+    return;
+  }
 
+  try {
+    const { error } = await supabase
+      .from('work_orders')
+      .update({
+        assigned_to_field: true,
+        assigned_to_field_by: user?.email || 'admin',
+        assigned_to_field_at: new Date().toISOString()
+      })
+      .eq('wo_id', woId);
+
+    if (error) {
+      alert('❌ Error assigning to field: ' + error.message);
+    } else {
+      alert('✅ Work order assigned to field workers!');
+      setSelectedWO(null);
+      fetchWorkOrders();
+    }
+  } catch (err) {
+    alert('❌ Error: ' + err.message);
+    console.error(err);
+  }
+};
+
+const unassignFromField = async (woId) => {
+  if (!confirm('Remove this work order from field workers?\n\nThis will hide it from the mobile app.')) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('work_orders')
+      .update({
+        assigned_to_field: false,
+        assigned_to_field_by: null,
+        assigned_to_field_at: null
+      })
+      .eq('wo_id', woId);
+
+    if (error) {
+      alert('❌ Error unassigning from field: ' + error.message);
+    } else {
+      alert('✅ Work order removed from field workers!');
+      setSelectedWO(null);
+      fetchWorkOrders();
+    }
+  } catch (err) {
+    alert('❌ Error: ' + err.message);
+    console.error(err);
+  }
+};
   // Import from Google Sheets
   const importFromSheets = async () => {
     if (!sheetsUrl) {
@@ -593,10 +648,17 @@ return (
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
-                            {wo.status.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </td>
+  <div className="flex gap-2 items-center">
+    <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getStatusColor(wo.status)}`}>
+      {wo.status.replace('_', ' ').toUpperCase()}
+    </span>
+    {wo.assigned_to_field && (
+      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
+        📱 FIELD
+      </span>
+    )}
+  </div>
+</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
                             {wo.priority.toUpperCase()}
@@ -1204,7 +1266,34 @@ return (
                     </div>
                   </div>
                 )}
+{/* Add this section RIGHT BEFORE the Generate Invoice button */}
+{selectedWO.lead_tech_id && !selectedWO.assigned_to_field && (
+  <button
+    onClick={() => assignToField(selectedWO.wo_id)}
+    className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+  >
+    📱 Assign to Field Workers
+  </button>
+)}
 
+{selectedWO.assigned_to_field && (
+  <div className="space-y-2">
+    <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
+      <div className="font-bold">📱 Assigned to Field Workers</div>
+      <div className="text-sm mt-1">
+        {selectedWO.assigned_to_field_at && (
+          <>Assigned on {new Date(selectedWO.assigned_to_field_at).toLocaleString()}</>
+        )}
+      </div>
+    </div>
+    <button
+      onClick={() => unassignFromField(selectedWO.wo_id)}
+      className="w-full bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
+    >
+      ❌ Remove from Field Workers
+    </button>
+  </div>
+)}
                 {selectedWO.acknowledged && !selectedWO.is_locked && showInvoiceButton && (
                   <button
                     onClick={() => generateInvoice(selectedWO.wo_id)}

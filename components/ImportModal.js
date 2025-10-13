@@ -43,111 +43,151 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   };
 
   const parseExcel = async (fileToRead) => {
-    setLoading(true);
-    setLog([]);
-    addLog('📂 Reading Excel file...', 'info');
+  setLoading(true);
+  setLog([]);
+  addLog('📂 Reading Excel file...', 'info');
 
-    try {
-      const XLSX = await import('xlsx');
-      
-      const data = await fileToRead.arrayBuffer();
-      const workbook = XLSX.read(data);
+  try {
+    const XLSX = await import('xlsx');
+    
+    const data = await fileToRead.arrayBuffer();
+    const workbook = XLSX.read(data, {
+      cellDates: true,  // Parse dates as Date objects
+      cellNF: false,
+      cellText: false
+    });
 
-      addLog(`Found ${workbook.SheetNames.length} sheets`, 'info');
+    addLog(`Found ${workbook.SheetNames.length} sheets`, 'info');
 
-      if (!workbook.SheetNames.includes('OPEN WO')) {
-        addLog('❌ ERROR: "OPEN WO" sheet not found!', 'error');
-        setLoading(false);
-        return;
-      }
-
-      const sheet = workbook.Sheets['OPEN WO'];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      addLog(`📋 Found ${jsonData.length} rows in OPEN WO sheet`, 'info');
-
-      addLog('🔍 Checking existing work orders...', 'info');
-      const { data: existingWOs, error: fetchError } = await supabase
-        .from('work_orders')
-        .select('wo_number');
-
-      if (fetchError) {
-        addLog(`❌ Error: ${fetchError.message}`, 'error');
-        setLoading(false);
-        return;
-      }
-
-      const existingWONumbers = new Set(existingWOs.map(wo => wo.wo_number));
-      addLog(`Found ${existingWONumbers.size} existing work orders`, 'info');
-
-      const processed = [];
-      let newCount = 0;
-      let existingCount = 0;
-
-      for (const row of jsonData) {
-        const woNumber = row['WO#'];
-        if (!woNumber) continue;
-
-        const exists = existingWONumbers.has(woNumber);
-        const workOrder = {
-          wo_number: woNumber,
-          date_entered: row['Date entered'] ? (() => {
-  const dateValue = row['Date entered'];
-  // Excel stores dates as serial numbers, check if it's a number
-  if (typeof dateValue === 'number') {
-    // Convert Excel serial date to JavaScript date
-    const excelEpoch = new Date(1899, 11, 30); // Excel's epoch
-    const jsDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
-    return jsDate.toISOString();
-  } else {
-    // It's already a date string or Date object
-    const parsed = new Date(dateValue);
-    return !isNaN(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
-  }
-})() : new Date().toISOString(),
-          building: row['Building'] || '',
-          priority: mapPriority(row['Priority']),
-          work_order_description: row['Work Order Description'] || '',
-          nte: row['NTE'] ? parseFloat(row['NTE']) : null,
-          requestor: row['CONTACT'] || '',
-          status: 'pending',
-          lead_tech_id: null,
-          hours_regular: 0,
-          hours_overtime: 0,
-          miles: 0,
-          material_cost: 0,
-          emf_equipment_cost: 0,
-          trailer_cost: 0,
-          rental_cost: 0,
-          comments: '',
-          acknowledged: false,
-          is_locked: false,
-          _exists: exists
-        };
-
-        processed.push(workOrder);
-        if (exists) existingCount++;
-        else newCount++;
-      }
-
-      setParsedData(processed);
-      setPreview({
-        total: processed.length,
-        new: newCount,
-        existing: existingCount
-      });
-
-      addLog(`✅ Parse complete! ${newCount} new work orders ready`, 'success');
-      if (existingCount > 0) {
-        addLog(`⏭️ ${existingCount} already exist (will skip)`, 'warning');
-      }
-    } catch (error) {
-      addLog(`❌ Error: ${error.message}`, 'error');
-      console.error(error);
-    } finally {
+    if (!workbook.SheetNames.includes('OPEN WO')) {
+      addLog('❌ ERROR: "OPEN WO" sheet not found!', 'error');
       setLoading(false);
+      return;
     }
-  };
+
+    const sheet = workbook.Sheets['OPEN WO'];
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'yyyy-mm-dd' });
+
+    addLog(`📋 Found ${jsonData.length} rows in OPEN WO sheet`, 'info');
+
+    // Debug: Show first row structure
+    if (jsonData.length > 0) {
+      addLog(`First row sample:`, 'info');
+      addLog(`  WO#: ${jsonData[0]['WO#']}`, 'info');
+      addLog(`  Date entered: ${jsonData[0]['Date entered']} (type: ${typeof jsonData[0]['Date entered']})`, 'info');
+      addLog(`  Building: ${jsonData[0]['Building']}`, 'info');
+    }
+
+    addLog('🔍 Checking existing work orders...', 'info');
+    const { data: existingWOs, error: fetchError } = await supabase
+      .from('work_orders')
+      .select('wo_number');
+
+    if (fetchError) {
+      addLog(`❌ Error: ${fetchError.message}`, 'error');
+      setLoading(false);
+      return;
+    }
+
+    const existingWONumbers = new Set(existingWOs.map(wo => wo.wo_number));
+    addLog(`Found ${existingWONumbers.size} existing work orders`, 'info');
+
+    const processed = [];
+    let newCount = 0;
+    let existingCount = 0;
+
+    for (const row of jsonData) {
+      const woNumber = row['WO#'];
+      if (!woNumber) continue;
+
+      const exists = existingWONumbers.has(woNumber);
+      
+      // Parse date with better handling
+      let dateEntered;
+      const dateValue = row['Date entered'];
+      
+      if (dateValue) {
+        // Try multiple parsing strategies
+        let parsedDate = null;
+        
+        // Strategy 1: If it's already a Date object
+        if (dateValue instanceof Date) {
+          parsedDate = dateValue;
+        }
+        // Strategy 2: If it's a number (Excel serial date)
+        else if (typeof dateValue === 'number') {
+          // Excel dates are days since 1900-01-01 (with 1900 leap year bug)
+          const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+          parsedDate = new Date(excelEpoch.getTime() + dateValue * 86400000);
+        }
+        // Strategy 3: Try parsing as string
+        else if (typeof dateValue === 'string') {
+          parsedDate = new Date(dateValue);
+        }
+        
+        // Validate the parsed date
+        if (parsedDate && !isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1900 && parsedDate.getFullYear() < 2100) {
+          dateEntered = parsedDate.toISOString();
+          
+          // Only log first 3 for brevity
+          if (processed.length < 3) {
+            addLog(`✓ ${woNumber}: ${parsedDate.toLocaleDateString()} ${parsedDate.toLocaleTimeString()}`, 'success');
+          }
+        } else {
+          addLog(`⚠️ ${woNumber}: Invalid date "${dateValue}", using current date`, 'warning');
+          dateEntered = new Date().toISOString();
+        }
+      } else {
+        addLog(`⚠️ ${woNumber}: No date provided, using current date`, 'warning');
+        dateEntered = new Date().toISOString();
+      }
+      
+      const workOrder = {
+        wo_number: woNumber,
+        date_entered: dateEntered,
+        building: row['Building'] || '',
+        priority: mapPriority(row['Priority']),
+        work_order_description: row['Work Order Description'] || '',
+        nte: row['NTE'] ? parseFloat(row['NTE']) : null,
+        requestor: row['CONTACT'] || '',
+        status: 'pending',
+        lead_tech_id: null,
+        hours_regular: 0,
+        hours_overtime: 0,
+        miles: 0,
+        material_cost: 0,
+        emf_equipment_cost: 0,
+        trailer_cost: 0,
+        rental_cost: 0,
+        comments: '',
+        acknowledged: false,
+        is_locked: false,
+        _exists: exists
+      };
+
+      processed.push(workOrder);
+      if (exists) existingCount++;
+      else newCount++;
+    }
+
+    setParsedData(processed);
+    setPreview({
+      total: processed.length,
+      new: newCount,
+      existing: existingCount
+    });
+
+    addLog(`✅ Parse complete! ${newCount} new work orders ready`, 'success');
+    if (existingCount > 0) {
+      addLog(`⭐️ ${existingCount} already exist (will skip)`, 'warning');
+    }
+  } catch (error) {
+    addLog(`❌ Error: ${error.message}`, 'error');
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleManualUpload = async () => {
     if (!file) {

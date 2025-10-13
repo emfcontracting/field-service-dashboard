@@ -40,16 +40,17 @@ export default function CompletedWorkOrders() {
   const fetchCompletedWorkOrders = async (userId) => {
     setLoading(true);
     
-    // Get completed work orders where user is lead tech
-    const { data: leadTechWOs } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name)
-      `)
-      .eq('lead_tech_id', userId)
-      .eq('status', 'completed')
-      .order('date_completed', { ascending: false });
+    // Get completed AND invoiced work orders where user is lead tech
+const { data: leadTechWOs } = await supabase
+  .from('work_orders')
+  .select(`
+    *,
+    lead_tech:users!lead_tech_id(first_name, last_name)
+  `)
+  .eq('lead_tech_id', userId)
+  .eq('status', 'completed')
+  .eq('is_locked', true) // Only show invoiced work orders
+  .order('date_completed', { ascending: false });
 
     // Get completed work orders where user is team member
     const { data: assignments } = await supabase
@@ -58,20 +59,21 @@ export default function CompletedWorkOrders() {
       .eq('user_id', userId);
 
     let assignedWOs = [];
-    if (assignments && assignments.length > 0) {
-      const woIds = assignments.map(a => a.wo_id);
-      const { data: assignedWOData } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          lead_tech:users!lead_tech_id(first_name, last_name)
-        `)
-        .in('wo_id', woIds)
-        .eq('status', 'completed')
-        .order('date_completed', { ascending: false });
+if (assignments && assignments.length > 0) {
+  const woIds = assignments.map(a => a.wo_id);
+  const { data: assignedWOData } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      lead_tech:users!lead_tech_id(first_name, last_name)
+    `)
+    .in('wo_id', woIds)
+    .eq('status', 'completed')
+    .eq('is_locked', true) // Only show invoiced work orders
+    .order('date_completed', { ascending: false });
 
-      assignedWOs = assignedWOData || [];
-    }
+  assignedWOs = assignedWOData || [];
+}
 
     // Combine and deduplicate
     const allWOs = [...(leadTechWOs || []), ...assignedWOs];

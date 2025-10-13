@@ -1,20 +1,48 @@
-import { createClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
 export async function POST(request) {
+  const supabase = createRouteHandlerClient({ cookies });
+  
   try {
     const { wo_id } = await request.json();
-
-    console.log('Generating invoice for WO:', wo_id);
 
     if (!wo_id) {
       return NextResponse.json(
         { success: false, error: 'Work order ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get work order details with team assignments and comments
+    const { data: workOrder, error: woError } = await supabase
+      .from('work_orders')
+      .select(`
+        *,
+        lead_tech:users!lead_tech_id(first_name, last_name, hourly_rate_regular, hourly_rate_overtime)
+      `)
+      .eq('wo_id', wo_id)
+      .single();
+
+    if (woError || !workOrder) {
+      return NextResponse.json(
+        { success: false, error: 'Work order not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if work order is completed and acknowledged
+    if (workOrder.status !== 'completed') {
+      return NextResponse.json(
+        { success: false, error: 'Work order must be completed before generating invoice' },
+        { status: 400 }
+      );
+    }
+
+    if (!workOrder.acknowledged) {
+      return NextResponse.json(
+        { success: false, error: 'Work order must be acknowledged before generating invoice' },
         { status: 400 }
       );
     }
@@ -27,47 +55,14 @@ export async function POST(request) {
       .single();
 
     if (existingInvoice) {
-      console.log('Invoice already exists:', existingInvoice.invoice_id);
       return NextResponse.json(
         { success: false, error: 'Invoice already exists for this work order' },
         { status: 400 }
       );
     }
 
-    // Fetch work order
-    const { data: workOrder, error: woError } = await supabase
-      .from('work_orders')
-      .select('*')
-      .eq('wo_id', wo_id)
-      .single();
-
-    if (woError || !workOrder) {
-      console.error('Work order fetch error:', woError);
-      return NextResponse.json(
-        { success: false, error: 'Work order not found' },
-        { status: 404 }
-      );
-    }
-
-    console.log('Work order found:', workOrder.wo_number);
-
-    // Verify work order is completed
-    if (workOrder.status !== 'completed') {
-      return NextResponse.json(
-        { success: false, error: 'Work order must be completed before generating invoice' },
-        { status: 400 }
-      );
-    }
-
-    // Fetch lead tech info for rates
-    const { data: leadTech } = await supabase
-      .from('users')
-      .select('first_name, last_name, hourly_rate_regular, hourly_rate_overtime')
-      .eq('user_id', workOrder.lead_tech_id)
-      .single();
-
-    // Fetch team member assignments
-    const { data: assignments } = await supabase
+    // Get team member assignments
+    const { data: teamAssignments } = await supabase
       .from('work_order_assignments')
       .select(`
         *,
@@ -75,204 +70,267 @@ export async function POST(request) {
       `)
       .eq('wo_id', wo_id);
 
-    console.log('Team assignments found:', assignments?.length || 0);
+    // Get comments to include as work performed
+    const { data: comments } = await supabase
+      .from('work_order_comments')
+      .select(`
+        comment,
+        comment_type,
+        created_at,
+        user:users(first_name, last_name)
+      `)
+      .eq('wo_id', wo_id)
+      .eq('comment_type', 'note')
+      .order('created_at', { ascending: true });
 
-    // Calculate costs and build line items
-    let laborCost = 0;
-    const lineItems = [];
-
-    // Lead tech labor
-    if (leadTech) {
-      const regularHours = workOrder.hours_regular || 0;
-      const overtimeHours = workOrder.hours_overtime || 0;
-      const regularRate = leadTech.hourly_rate_regular || 64;
-      const overtimeRate = leadTech.hourly_rate_overtime || 96;
-
-      const regularCost = regularHours * regularRate;
-      const overtimeCost = overtimeHours * overtimeRate;
-      laborCost += regularCost + overtimeCost;
-
-      if (regularHours > 0) {
-        lineItems.push({
-          description: `${leadTech.first_name} ${leadTech.last_name} - Regular Hours`,
-          quantity: regularHours,
-          unit_price: regularRate,
-          amount: regularCost,
-          category: 'labor'
-        });
-      }
-
-      if (overtimeHours > 0) {
-        lineItems.push({
-          description: `${leadTech.first_name} ${leadTech.last_name} - Overtime Hours`,
-          quantity: overtimeHours,
-          unit_price: overtimeRate,
-          amount: overtimeCost,
-          category: 'labor'
-        });
-      }
-
-      console.log('Lead tech labor cost:', regularCost + overtimeCost);
+    // Compile work performed description from comments
+    let workPerformedDescription = workOrder.work_order_description;
+    
+    if (comments && comments.length > 0) {
+      workPerformedDescription += '\n\nWork Notes:\n';
+      comments.forEach(comment => {
+        const timestamp = new Date(comment.created_at).toLocaleString();
+        workPerformedDescription += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
+      });
     }
 
-    // Team members labor
-    if (assignments && assignments.length > 0) {
-      for (const assignment of assignments) {
-        if (!assignment.user) continue;
-
-        const regularHours = assignment.hours_regular || 0;
-        const overtimeHours = assignment.hours_overtime || 0;
-        const regularRate = assignment.user.hourly_rate_regular || 64;
-        const overtimeRate = assignment.user.hourly_rate_overtime || 96;
-
-        const regularCost = regularHours * regularRate;
-        const overtimeCost = overtimeHours * overtimeRate;
-        laborCost += regularCost + overtimeCost;
-
-        if (regularHours > 0) {
-          lineItems.push({
-            description: `${assignment.user.first_name} ${assignment.user.last_name} - Regular Hours`,
-            quantity: regularHours,
-            unit_price: regularRate,
-            amount: regularCost,
-            category: 'labor'
-          });
-        }
-
-        if (overtimeHours > 0) {
-          lineItems.push({
-            description: `${assignment.user.first_name} ${assignment.user.last_name} - Overtime Hours`,
-            quantity: overtimeHours,
-            unit_price: overtimeRate,
-            amount: overtimeCost,
-            category: 'labor'
-          });
-        }
-      }
+    // Calculate lead tech labor
+    const leadTechRegular = (workOrder.hours_regular || 0) * (workOrder.lead_tech?.hourly_rate_regular || 64);
+    const leadTechOvertime = (workOrder.hours_overtime || 0) * (workOrder.lead_tech?.hourly_rate_overtime || 96);
+    
+    // Calculate team member labor
+    let teamMemberLabor = 0;
+    if (teamAssignments && teamAssignments.length > 0) {
+      teamMemberLabor = teamAssignments.reduce((sum, member) => {
+        const regular = (member.hours_regular || 0) * (member.user?.hourly_rate_regular || 64);
+        const overtime = (member.hours_overtime || 0) * (member.user?.hourly_rate_overtime || 96);
+        return sum + regular + overtime;
+      }, 0);
     }
 
-    // Materials
+    // ADD 2 ADMIN HOURS AT RT RATE
+    const adminHours = 2;
+    const adminRate = 64; // RT rate
+    const adminLaborCost = adminHours * adminRate;
+
+    // Total labor (including admin hours)
+    const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor + adminLaborCost;
+
+    // Calculate mileage
+    const leadTechMiles = workOrder.miles || 0;
+    const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
+    const totalMiles = leadTechMiles + teamMemberMiles;
+    const mileageCost = totalMiles * 1.00;
+
+    // APPLY MARKUPS
     const materialCost = workOrder.material_cost || 0;
-    if (materialCost > 0) {
-      lineItems.push({
-        description: 'Materials',
-        quantity: 1,
-        unit_price: materialCost,
-        amount: materialCost,
-        category: 'materials'
-      });
-    }
+    const materialMarkup = materialCost * 0.25; // 25% upcharge
+    const materialTotal = materialCost + materialMarkup;
 
-    // Equipment
     const equipmentCost = workOrder.emf_equipment_cost || 0;
-    if (equipmentCost > 0) {
-      lineItems.push({
-        description: 'Equipment',
-        quantity: 1,
-        unit_price: equipmentCost,
-        amount: equipmentCost,
-        category: 'equipment'
-      });
-    }
+    const equipmentMarkup = equipmentCost * 0.15; // 15% upcharge
+    const equipmentTotal = equipmentCost + equipmentMarkup;
 
-    // Trailer
     const trailerCost = workOrder.trailer_cost || 0;
-    if (trailerCost > 0) {
-      lineItems.push({
-        description: 'Trailer',
-        quantity: 1,
-        unit_price: trailerCost,
-        amount: trailerCost,
-        category: 'trailer'
-      });
-    }
+    // No markup on trailer
 
-    // Rental
     const rentalCost = workOrder.rental_cost || 0;
-    if (rentalCost > 0) {
-      lineItems.push({
-        description: 'Equipment Rental',
-        quantity: 1,
-        unit_price: rentalCost,
-        amount: rentalCost,
-        category: 'rental'
-      });
+    const rentalMarkup = rentalCost * 0.15; // 15% upcharge
+    const rentalTotal = rentalCost + rentalMarkup;
+
+    // Calculate total
+    const subtotal = totalLabor + mileageCost + materialTotal + equipmentTotal + trailerCost + rentalTotal;
+    const tax = 0; // Add tax calculation if needed
+    const total = subtotal + tax;
+
+    // Generate invoice number (format: INV-YYYY-XXXXX)
+    const year = new Date().getFullYear();
+    const { data: lastInvoice } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .like('invoice_number', `INV-${year}-%`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    let invoiceNumber;
+    if (lastInvoice) {
+      const lastNumber = parseInt(lastInvoice.invoice_number.split('-')[2]);
+      invoiceNumber = `INV-${year}-${String(lastNumber + 1).padStart(5, '0')}`;
+    } else {
+      invoiceNumber = `INV-${year}-00001`;
     }
-
-    // Mileage
-    let totalMiles = workOrder.miles || 0;
-    if (assignments && assignments.length > 0) {
-      totalMiles += assignments.reduce((sum, a) => sum + (a.miles || 0), 0);
-    }
-    const mileageRate = 1.00;
-    const mileageCost = totalMiles * mileageRate;
-
-    if (totalMiles > 0) {
-      lineItems.push({
-        description: `Mileage (${totalMiles} miles)`,
-        quantity: totalMiles,
-        unit_price: mileageRate,
-        amount: mileageCost,
-        category: 'mileage'
-      });
-    }
-
-    // Calculate totals
-    const subtotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
-    const taxRate = 0.0;
-    const taxAmount = subtotal * taxRate;
-    const total = subtotal + taxAmount;
-
-    console.log('Invoice totals:', { subtotal, taxAmount, total });
-
-    // Generate invoice number
-    const invoiceNumber = `INV-${workOrder.wo_number}`;
 
     // Create invoice
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        wo_id,
         invoice_number: invoiceNumber,
+        wo_id: wo_id,
+        invoice_date: new Date().toISOString(),
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
         status: 'draft',
-        labor_cost: laborCost,
-        material_cost: materialCost,
-        equipment_cost: equipmentCost,
-        trailer_cost: trailerCost,
-        rental_cost: rentalCost,
-        mileage_cost: mileageCost,
-        subtotal,
-        tax_rate: taxRate,
-        tax_amount: taxAmount,
-        total
+        notes: 'Auto-generated invoice with standard markups applied'
       })
       .select()
       .single();
 
     if (invoiceError) {
-      console.error('Invoice creation error:', invoiceError);
-      throw new Error('Failed to create invoice: ' + invoiceError.message);
+      console.error('Error creating invoice:', invoiceError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create invoice: ' + invoiceError.message },
+        { status: 500 }
+      );
     }
 
-    console.log('Invoice created:', invoice.invoice_id);
+    // Create invoice line items
+    const lineItems = [];
 
-    // Insert line items
-    if (lineItems.length > 0) {
-      const lineItemsWithInvoiceId = lineItems.map(item => ({
-        ...item,
-        invoice_id: invoice.invoice_id
-      }));
+    // Labor line items
+    if (leadTechRegular > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Lead Tech Labor - Regular Time (${workOrder.hours_regular} hrs @ $${workOrder.lead_tech?.hourly_rate_regular || 64}/hr)`,
+        quantity: workOrder.hours_regular,
+        unit_price: workOrder.lead_tech?.hourly_rate_regular || 64,
+        amount: leadTechRegular,
+        line_type: 'labor'
+      });
+    }
 
-      const { error: lineItemsError } = await supabase
-        .from('invoice_line_items')
-        .insert(lineItemsWithInvoiceId);
+    if (leadTechOvertime > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Lead Tech Labor - Overtime (${workOrder.hours_overtime} hrs @ $${workOrder.lead_tech?.hourly_rate_overtime || 96}/hr)`,
+        quantity: workOrder.hours_overtime,
+        unit_price: workOrder.lead_tech?.hourly_rate_overtime || 96,
+        amount: leadTechOvertime,
+        line_type: 'labor'
+      });
+    }
 
-      if (lineItemsError) {
-        console.error('Line items error:', lineItemsError);
-        throw new Error('Failed to create line items: ' + lineItemsError.message);
-      }
+    // Team member labor
+    if (teamAssignments && teamAssignments.length > 0) {
+      teamAssignments.forEach(member => {
+        if (member.hours_regular > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${member.user?.first_name} ${member.user?.last_name} - Regular Time (${member.hours_regular} hrs @ $${member.user?.hourly_rate_regular || 64}/hr)`,
+            quantity: member.hours_regular,
+            unit_price: member.user?.hourly_rate_regular || 64,
+            amount: (member.hours_regular || 0) * (member.user?.hourly_rate_regular || 64),
+            line_type: 'labor'
+          });
+        }
+        if (member.hours_overtime > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${member.user?.first_name} ${member.user?.last_name} - Overtime (${member.hours_overtime} hrs @ $${member.user?.hourly_rate_overtime || 96}/hr)`,
+            quantity: member.hours_overtime,
+            unit_price: member.user?.hourly_rate_overtime || 96,
+            amount: (member.hours_overtime || 0) * (member.user?.hourly_rate_overtime || 96),
+            line_type: 'labor'
+          });
+        }
+      });
+    }
 
-      console.log('Line items created:', lineItems.length);
+    // ADMIN HOURS LINE ITEM
+    lineItems.push({
+      invoice_id: invoice.invoice_id,
+      description: `Administrative Hours (${adminHours} hrs @ $${adminRate}/hr)`,
+      quantity: adminHours,
+      unit_price: adminRate,
+      amount: adminLaborCost,
+      line_type: 'labor'
+    });
+
+    // Mileage
+    if (totalMiles > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
+        quantity: totalMiles,
+        unit_price: 1.00,
+        amount: mileageCost,
+        line_type: 'mileage'
+      });
+    }
+
+    // Materials (with 25% markup)
+    if (materialCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Materials (Base: $${materialCost.toFixed(2)} + 25% markup)`,
+        quantity: 1,
+        unit_price: materialTotal,
+        amount: materialTotal,
+        line_type: 'material'
+      });
+    }
+
+    // Equipment (with 15% markup)
+    if (equipmentCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Equipment (Base: $${equipmentCost.toFixed(2)} + 15% markup)`,
+        quantity: 1,
+        unit_price: equipmentTotal,
+        amount: equipmentTotal,
+        line_type: 'equipment'
+      });
+    }
+
+    // Trailer (no markup)
+    if (trailerCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Trailer',
+        quantity: 1,
+        unit_price: trailerCost,
+        amount: trailerCost,
+        line_type: 'equipment'
+      });
+    }
+
+    // Rental (with 15% markup)
+    if (rentalCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: `Rental (Base: $${rentalCost.toFixed(2)} + 15% markup)`,
+        quantity: 1,
+        unit_price: rentalTotal,
+        amount: rentalTotal,
+        line_type: 'rental'
+      });
+    }
+
+    // Work Performed Description
+    lineItems.push({
+      invoice_id: invoice.invoice_id,
+      description: workPerformedDescription,
+      quantity: 1,
+      unit_price: 0,
+      amount: 0,
+      line_type: 'description'
+    });
+
+    // Insert all line items
+    const { error: lineItemsError } = await supabase
+      .from('invoice_line_items')
+      .insert(lineItems);
+
+    if (lineItemsError) {
+      console.error('Error creating line items:', lineItemsError);
+      // Rollback invoice creation
+      await supabase.from('invoices').delete().eq('invoice_id', invoice.invoice_id);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create invoice line items: ' + lineItemsError.message },
+        { status: 500 }
+      );
     }
 
     // Lock the work order
@@ -281,28 +339,31 @@ export async function POST(request) {
       .update({
         is_locked: true,
         locked_at: new Date().toISOString(),
-        locked_by: null
+        locked_by: 'system'
       })
       .eq('wo_id', wo_id);
 
     if (lockError) {
-      console.error('Lock error:', lockError);
-      throw new Error('Failed to lock work order: ' + lockError.message);
+      console.error('Error locking work order:', lockError);
     }
-
-    console.log('Work order locked');
 
     return NextResponse.json({
       success: true,
-      invoice,
-      lineItems,
-      message: 'Invoice generated successfully'
+      invoice_id: invoice.invoice_id,
+      invoice_number: invoiceNumber,
+      total: total,
+      markups: {
+        admin_hours: adminLaborCost,
+        material_markup: materialMarkup,
+        equipment_markup: equipmentMarkup,
+        rental_markup: rentalMarkup
+      }
     });
 
   } catch (error) {
     console.error('Invoice generation error:', error);
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Internal server error: ' + error.message },
       { status: 500 }
     );
   }

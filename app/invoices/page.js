@@ -112,11 +112,10 @@ export default function InvoicingPage() {
     const result = await response.json();
 
     if (result.success) {
-      alert('✅ Invoice generated successfully!\n\nMarkups applied:\n' +
-            `- Admin Hours: $${result.markups.admin_hours.toFixed(2)}\n` +
-            `- Material Markup (25%): $${result.markups.material_markup.toFixed(2)}\n` +
-            `- Equipment Markup (15%): $${result.markups.equipment_markup.toFixed(2)}\n` +
-            `- Rental Markup (15%): $${result.markups.rental_markup.toFixed(2)}`);
+  alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + result.total.toFixed(2));
+  setSelectedItem(null);
+  fetchData();
+}
       
       // Remove the work order from acknowledged list immediately
       setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== woId));
@@ -519,18 +518,15 @@ export default function InvoicingPage() {
               </div>
 
               <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
-                <div className="font-bold mb-2">✓ Ready to Generate Invoice</div>
-                <div className="text-sm">
-                  This work order has been completed and acknowledged. Click below to generate an invoice with automatic markups:
-                  <ul className="list-disc list-inside mt-2 text-xs">
-                    <li>2 Admin Hours will be added</li>
-                    <li>25% markup on materials</li>
-                    <li>15% markup on equipment</li>
-                    <li>15% markup on rentals</li>
-                    <li>Comments will be included as work performed</li>
-                  </ul>
-                </div>
-              </div>
+  <div className="font-bold mb-2">✓ Ready to Generate Invoice</div>
+  <div className="text-sm">
+    This work order has been completed and acknowledged. Click below to generate an invoice:
+    <ul className="list-disc list-inside mt-2 text-xs">
+      <li>All labor, materials, and costs will be included</li>
+      <li>Comments will be included as work performed</li>
+    </ul>
+  </div>
+</div>
 
               <button
                 onClick={() => generateInvoice(selectedItem.data.wo_id)}

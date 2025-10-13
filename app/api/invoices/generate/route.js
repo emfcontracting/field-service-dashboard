@@ -108,40 +108,23 @@ export async function POST(request) {
       }, 0);
     }
 
-    // ADD 2 ADMIN HOURS AT RT RATE
-    const adminHours = 2;
-    const adminRate = 64; // RT rate
-    const adminLaborCost = adminHours * adminRate;
+    // Total labor (NO admin hours added)
+const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor;
 
-    // Total labor (including admin hours)
-    const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor + adminLaborCost;
+// Calculate mileage
+const leadTechMiles = workOrder.miles || 0;
+const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
+const totalMiles = leadTechMiles + teamMemberMiles;
+const mileageCost = totalMiles * 1.00;
 
-    // Calculate mileage
-    const leadTechMiles = workOrder.miles || 0;
-    const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
-    const totalMiles = leadTechMiles + teamMemberMiles;
-    const mileageCost = totalMiles * 1.00;
+// NO MARKUPS - Use actual costs
+const materialCost = workOrder.material_cost || 0;
+const equipmentCost = workOrder.emf_equipment_cost || 0;
+const trailerCost = workOrder.trailer_cost || 0;
+const rentalCost = workOrder.rental_cost || 0;
 
-    // APPLY MARKUPS
-    const materialCost = workOrder.material_cost || 0;
-    const materialMarkup = materialCost * 0.25; // 25% upcharge
-    const materialTotal = materialCost + materialMarkup;
-
-    const equipmentCost = workOrder.emf_equipment_cost || 0;
-    const equipmentMarkup = equipmentCost * 0.15; // 15% upcharge
-    const equipmentTotal = equipmentCost + equipmentMarkup;
-
-    const trailerCost = workOrder.trailer_cost || 0;
-    // No markup on trailer
-
-    const rentalCost = workOrder.rental_cost || 0;
-    const rentalMarkup = rentalCost * 0.15; // 15% upcharge
-    const rentalTotal = rentalCost + rentalMarkup;
-
-    // Calculate total
-    const subtotal = totalLabor + mileageCost + materialTotal + equipmentTotal + trailerCost + rentalTotal;
-    const tax = 0; // Add tax calculation if needed
-    const total = subtotal + tax;
+// Calculate total
+const subtotal = totalLabor + mileageCost + materialCost + equipmentCost + trailerCost + rentalCost;
 
     // Generate invoice number (format: INV-YYYY-XXXXX)
     const year = new Date().getFullYear();
@@ -260,15 +243,6 @@ if (teamAssignments && teamAssignments.length > 0) {
   });
 }
 
-    // ADMIN HOURS LINE ITEM
-    lineItems.push({
-      invoice_id: invoice.invoice_id,
-      description: `Administrative Hours (${adminHours} hrs @ $${adminRate}/hr)`,
-      quantity: adminHours,
-      unit_price: adminRate,
-      amount: adminLaborCost,
-      line_type: 'labor'
-    });
 
     // Mileage
     if (totalMiles > 0) {
@@ -282,29 +256,29 @@ if (teamAssignments && teamAssignments.length > 0) {
       });
     }
 
-    // Materials (with 25% markup)
-    if (materialCost > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Materials (Base: $${materialCost.toFixed(2)} + 25% markup)`,
-        quantity: 1,
-        unit_price: materialTotal,
-        amount: materialTotal,
-        line_type: 'material'
-      });
-    }
+    // Materials (no markup)
+if (materialCost > 0) {
+  lineItems.push({
+    invoice_id: invoice.invoice_id,
+    description: 'Materials',
+    quantity: 1,
+    unit_price: materialCost,
+    amount: materialCost,
+    line_type: 'material'
+  });
+}
 
-    // Equipment (with 15% markup)
-    if (equipmentCost > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Equipment (Base: $${equipmentCost.toFixed(2)} + 15% markup)`,
-        quantity: 1,
-        unit_price: equipmentTotal,
-        amount: equipmentTotal,
-        line_type: 'equipment'
-      });
-    }
+    // Equipment (no markup)
+if (equipmentCost > 0) {
+  lineItems.push({
+    invoice_id: invoice.invoice_id,
+    description: 'Equipment',
+    quantity: 1,
+    unit_price: equipmentCost,
+    amount: equipmentCost,
+    line_type: 'equipment'
+  });
+}
 
     // Trailer (no markup)
     if (trailerCost > 0) {
@@ -318,17 +292,17 @@ if (teamAssignments && teamAssignments.length > 0) {
       });
     }
 
-    // Rental (with 15% markup)
-    if (rentalCost > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Rental (Base: $${rentalCost.toFixed(2)} + 15% markup)`,
-        quantity: 1,
-        unit_price: rentalTotal,
-        amount: rentalTotal,
-        line_type: 'rental'
-      });
-    }
+    // Rental (no markup)
+if (rentalCost > 0) {
+  lineItems.push({
+    invoice_id: invoice.invoice_id,
+    description: 'Rental',
+    quantity: 1,
+    unit_price: rentalCost,
+    amount: rentalCost,
+    line_type: 'rental'
+  });
+}
 
     // Work Performed Description
     lineItems.push({
@@ -379,17 +353,11 @@ if (lockError) {
 }
 
     return NextResponse.json({
-      success: true,
-      invoice_id: invoice.invoice_id,
-      invoice_number: invoiceNumber,
-      total: total,
-      markups: {
-        admin_hours: adminLaborCost,
-        material_markup: materialMarkup,
-        equipment_markup: equipmentMarkup,
-        rental_markup: rentalMarkup
-      }
-    });
+  success: true,
+  invoice_id: invoice.invoice_id,
+  invoice_number: invoiceNumber,
+  total: total
+});
 
   } catch (error) {
     console.error('Invoice generation error:', error);

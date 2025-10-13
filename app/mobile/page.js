@@ -1203,7 +1203,36 @@ export default function MobileApp() {
                 </div>
               </div>
             )}
-
+{/* Email Photos Section */}
+<div className="bg-gray-800 rounded-lg p-4">
+  <h3 className="font-bold mb-3">📸 Send Photos</h3>
+  <p className="text-sm text-gray-400 mb-3">
+    Take photos and email them for this work order
+  </p>
+  <button
+    onClick={() => {
+      const subject = encodeURIComponent(`Photos - ${selectedWO.wo_number} - ${selectedWO.building}`);
+      const body = encodeURIComponent(
+        `Work Order: ${selectedWO.wo_number}\n` +
+        `Building: ${selectedWO.building}\n` +
+        `Description: ${selectedWO.work_order_description}\n` +
+        `Status: ${selectedWO.status.replace('_', ' ').toUpperCase()}\n` +
+        `Submitted by: ${currentUser.first_name} ${currentUser.last_name}\n` +
+        `Date: ${new Date().toLocaleString()}\n\n` +
+        `--- Attach photos below ---`
+      );
+      const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
+      window.location.href = mailtoLink;
+    }}
+    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-4 rounded-lg font-bold text-lg shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
+  >
+    <span className="text-2xl">📸</span>
+    <span>Email Photos to Office</span>
+  </button>
+  <div className="text-xs text-gray-500 mt-2 text-center">
+    Opens your email app with pre-filled details
+  </div>
+</div>
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
 

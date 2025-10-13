@@ -737,7 +737,7 @@ return (
               console.log('First WO data:', {
                 wo_number: wo.wo_number,
                 date_entered: wo.date_entered,
-                created_at: wo.created_at,
+                created_at: wo.date_entered,
                 date_entered_type: typeof wo.date_entered,
                 created_at_type: typeof wo.created_at
               });

@@ -653,10 +653,11 @@ return (
             }
 
             return (
-              <tr
-                key={wo.wo_id}
-                className="border-t border-gray-700 hover:bg-gray-700 transition"
-              >
+             <tr
+  key={wo.wo_id}
+  onClick={() => selectWorkOrderEnhanced(wo)}
+  className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+>
                 <td className="px-2 py-2 font-semibold">{wo.wo_number}</td>
                 <td className="px-2 py-2">
                   {(() => {
@@ -724,14 +725,10 @@ return (
                 </td>
                 <td className="px-2 py-2 text-center">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectWorkOrderEnhanced(wo);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold"
-                  >
-                    View
-                  </button>
+  className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold"
+>
+  View
+</button>
                 </td>
               </tr>
             );

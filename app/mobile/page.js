@@ -813,6 +813,7 @@ export default function MobilePage() {
                   <div className="text-sm space-y-1">
                     <p className="font-semibold">{wo.building}</p>
                     <p className="text-gray-400">{wo.work_order_description}</p>
+                    <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} days old</p>
                     <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
                     {wo.lead_tech && (
                       <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
@@ -1241,29 +1242,57 @@ export default function MobilePage() {
 
             {/* Cost Summary Section */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3 text-blue-400">LABOR (with 2 Admin Hours)</h3>
+              <h3 className="font-bold mb-3 text-blue-400">💰 Cost Summary</h3>
               
-              {/* Labor Costs */}
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Total RT Hours</span>
-                  <span>{parseFloat(getFieldValue('hours_regular')) || 0} hrs × $64</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Total OT Hours</span>
-                  <span>{parseFloat(getFieldValue('hours_overtime')) || 0} hrs × $96</span>
-                </div>
-                <div className="flex justify-between text-sm text-yellow-400">
-                  <span>+ Admin Hours</span>
-                  <span>2 hrs × $64 = $128.00</span>
-                </div>
-                <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
-                  <span>Total Labor:</span>
-                  <span className="text-green-500">
-                    ${(((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128).toFixed(2)}
-                  </span>
-                </div>
-              </div>
+              {/* Calculate team totals */}
+              {(() => {
+                const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
+                const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
+                const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
+                
+                let teamRT = 0;
+                let teamOT = 0;
+                let teamMiles = 0;
+                
+                currentTeamList.forEach(member => {
+                  teamRT += parseFloat(member.hours_regular) || 0;
+                  teamOT += parseFloat(member.hours_overtime) || 0;
+                  teamMiles += parseFloat(member.miles) || 0;
+                });
+                
+                const totalRT = primaryRT + teamRT;
+                const totalOT = primaryOT + teamOT;
+                const totalMiles = primaryMiles + teamMiles;
+                const adminHours = 2;
+                
+                const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+                
+                return (
+                  <>
+                    {/* Labor Costs */}
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">TEAM RT Hours (Primary + Helpers)</span>
+                        <span>{totalRT.toFixed(2)} hrs × $64</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">TEAM OT Hours (Primary + Helpers)</span>
+                        <span>{totalOT.toFixed(2)} hrs × $96</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-yellow-400">
+                        <span>+ Admin Hours</span>
+                        <span>2 hrs × $64 = $128.00</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
+                        <span>Total Labor:</span>
+                        <span className="text-green-500">
+                          ${laborCost.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="border-t border-gray-600 my-4"></div>
 
@@ -1308,8 +1337,18 @@ export default function MobilePage() {
 
               {/* Mileage */}
               <div className="flex justify-between text-sm mb-4">
-                <span className="text-gray-400">Total Mileage:</span>
-                <span>{parseFloat(getFieldValue('miles')) || 0} mi × $1.00 = ${((parseFloat(getFieldValue('miles')) || 0) * 1.00).toFixed(2)}</span>
+                <span className="text-gray-400">Total Mileage (All Team):</span>
+                <span>
+                  {(() => {
+                    const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
+                    let teamMiles = 0;
+                    currentTeamList.forEach(member => {
+                      teamMiles += parseFloat(member.miles) || 0;
+                    });
+                    const totalMiles = primaryMiles + teamMiles;
+                    return `${totalMiles.toFixed(1)} mi × $1.00 = $${totalMiles.toFixed(2)}`;
+                  })()}
+                </span>
               </div>
 
               {/* Budget */}
@@ -1320,124 +1359,117 @@ export default function MobilePage() {
                 </div>
                 
                 <div className={`flex justify-between font-bold text-lg ${
-                  (
-                    (((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128) +
-                    ((parseFloat(getFieldValue('material_cost')) || 0) * 1.25) +
-                    ((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15) +
-                    (parseFloat(getFieldValue('trailer_cost')) || 0) +
-                    ((parseFloat(getFieldValue('rental_cost')) || 0) * 1.15) +
-                    ((parseFloat(getFieldValue('miles')) || 0) * 1.00)
-                  ) > (selectedWO.nte || 0) ? 'text-red-500' : 'text-green-500'
+                  (() => {
+                    const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
+                    const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
+                    const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
+                    
+                    let teamRT = 0;
+                    let teamOT = 0;
+                    let teamMiles = 0;
+                    
+                    currentTeamList.forEach(member => {
+                      teamRT += parseFloat(member.hours_regular) || 0;
+                      teamOT += parseFloat(member.hours_overtime) || 0;
+                      teamMiles += parseFloat(member.miles) || 0;
+                    });
+                    
+                    const totalRT = primaryRT + teamRT;
+                    const totalOT = primaryOT + teamOT;
+                    const totalMiles = primaryMiles + teamMiles;
+                    
+                    const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
+                    const materialCost = (parseFloat(getFieldValue('material_cost')) || 0) * 1.25;
+                    const equipmentCost = (parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15;
+                    const trailerCost = parseFloat(getFieldValue('trailer_cost')) || 0;
+                    const rentalCost = (parseFloat(getFieldValue('rental_cost')) || 0) * 1.15;
+                    const mileageCost = totalMiles * 1.00;
+                    
+                    const grandTotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
+                    
+                    return grandTotal > (selectedWO.nte || 0) ? 'text-red-500' : 'text-green-500';
+                  })()
                 }`}>
                   <span>Remaining:</span>
                   <span>
-                    ${(
-                      (selectedWO.nte || 0) - (
-                        (((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128) +
-                        ((parseFloat(getFieldValue('material_cost')) || 0) * 1.25) +
-                        ((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15) +
-                        (parseFloat(getFieldValue('trailer_cost')) || 0) +
-                        ((parseFloat(getFieldValue('rental_cost')) || 0) * 1.15) +
-                        ((parseFloat(getFieldValue('miles')) || 0) * 1.00)
-                      )
-                    ).toFixed(2)}
+                    ${(() => {
+                      const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
+                      const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
+                      const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
+                      
+                      let teamRT = 0;
+                      let teamOT = 0;
+                      let teamMiles = 0;
+                      
+                      currentTeamList.forEach(member => {
+                        teamRT += parseFloat(member.hours_regular) || 0;
+                        teamOT += parseFloat(member.hours_overtime) || 0;
+                        teamMiles += parseFloat(member.miles) || 0;
+                      });
+                      
+                      const totalRT = primaryRT + teamRT;
+                      const totalOT = primaryOT + teamOT;
+                      const totalMiles = primaryMiles + teamMiles;
+                      
+                      const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
+                      const materialCost = (parseFloat(getFieldValue('material_cost')) || 0) * 1.25;
+                      const equipmentCost = (parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15;
+                      const trailerCost = parseFloat(getFieldValue('trailer_cost')) || 0;
+                      const rentalCost = (parseFloat(getFieldValue('rental_cost')) || 0) * 1.15;
+                      const mileageCost = totalMiles * 1.00;
+                      
+                      const grandTotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
+                      const remaining = (selectedWO.nte || 0) - grandTotal;
+                      
+                      return remaining.toFixed(2);
+                    })()}
                   </span>
                 </div>
               </div>
             </div>
 
+            {/* Time Tracking - Team Totals */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Field Data</h3>
-              <div className="space-y-3">
+              <h3 className="font-bold mb-3">⏱️ Time Tracking (All Team)</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Regular Hours</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={getFieldValue('hours_regular')}
-                    onChange={(e) => handleFieldChange('hours_regular', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
+                  <div className="text-2xl font-bold text-blue-400">
+                    {(() => {
+                      const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
+                      let teamRT = 0;
+                      currentTeamList.forEach(member => {
+                        teamRT += parseFloat(member.hours_regular) || 0;
+                      });
+                      return (primaryRT + teamRT).toFixed(1);
+                    })()}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">RT Hours</div>
                 </div>
-                
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Overtime Hours</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={getFieldValue('hours_overtime')}
-                    onChange={(e) => handleFieldChange('hours_overtime', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
+                  <div className="text-2xl font-bold text-orange-400">
+                    {(() => {
+                      const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
+                      let teamOT = 0;
+                      currentTeamList.forEach(member => {
+                        teamOT += parseFloat(member.hours_overtime) || 0;
+                      });
+                      return (primaryOT + teamOT).toFixed(1);
+                    })()}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">OT Hours</div>
                 </div>
-                
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Miles</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={getFieldValue('miles')}
-                    onChange={(e) => handleFieldChange('miles', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Material Cost</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={getFieldValue('material_cost')}
-                    onChange={(e) => handleFieldChange('material_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Trailer Cost</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={getFieldValue('trailer_cost')}
-                    onChange={(e) => handleFieldChange('trailer_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">EMF Equipment Cost</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={getFieldValue('emf_equipment_cost')}
-                    onChange={(e) => handleFieldChange('emf_equipment_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Rental Cost</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={getFieldValue('rental_cost')}
-                    onChange={(e) => handleFieldChange('rental_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
-                    disabled={saving || selectedWO.status === 'completed'}
-                  />
+                  <div className="text-2xl font-bold text-green-400">
+                    {(() => {
+                      const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
+                      let teamMiles = 0;
+                      currentTeamList.forEach(member => {
+                        teamMiles += parseFloat(member.miles) || 0;
+                      });
+                      return (primaryMiles + teamMiles).toFixed(0);
+                    })()}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">Miles</div>
                 </div>
               </div>
             </div>
@@ -1643,10 +1675,15 @@ export default function MobilePage() {
                 </div>
                 
                 <h3 className="font-semibold mb-1">{wo.building}</h3>
-                <p className="text-sm text-gray-400 mb-3">{wo.work_order_description}</p>
+                <p className="text-sm text-gray-400 mb-2">{wo.work_order_description}</p>
                 
                 <div className="flex justify-between items-center text-xs text-gray-500">
-                  <span>Entered: {formatDate(wo.date_entered)}</span>
+                  <div>
+                    <span>Entered: {formatDate(wo.date_entered)}</span>
+                    <span className="ml-2 text-orange-500 font-semibold">
+                      {calculateAge(wo.date_entered)} days old
+                    </span>
+                  </div>
                   <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
                 </div>
               </div>

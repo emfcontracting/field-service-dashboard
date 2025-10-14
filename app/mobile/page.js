@@ -940,6 +940,38 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
+    // Calculate team totals for display
+    const primaryRT = parseFloat(selectedWO.hours_regular) || 0;
+    const primaryOT = parseFloat(selectedWO.hours_overtime) || 0;
+    const primaryMiles = parseFloat(selectedWO.miles) || 0;
+    
+    let teamRT = 0;
+    let teamOT = 0;
+    let teamMiles = 0;
+    
+    currentTeamList.forEach(member => {
+      teamRT += parseFloat(member.hours_regular) || 0;
+      teamOT += parseFloat(member.hours_overtime) || 0;
+      teamMiles += parseFloat(member.miles) || 0;
+    });
+    
+    const totalRT = primaryRT + teamRT;
+    const totalOT = primaryOT + teamOT;
+    const totalMiles = primaryMiles + teamMiles;
+    const adminHours = 2;
+    
+    const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+    const materialBase = parseFloat(selectedWO.material_cost) || 0;
+    const materialWithMarkup = materialBase * 1.25;
+    const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
+    const equipmentWithMarkup = equipmentBase * 1.15;
+    const trailerCost = parseFloat(selectedWO.trailer_cost) || 0;
+    const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
+    const rentalWithMarkup = rentalBase * 1.15;
+    const mileageCost = totalMiles * 1.00;
+    const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
+    const remaining = (selectedWO.nte || 0) - grandTotal;
+
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
         <div className="max-w-2xl mx-auto">
@@ -1309,83 +1341,55 @@ export default function MobilePage() {
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3 text-blue-400">💰 Cost Summary</h3>
               
-              {/* Calculate team totals */}
-              {(() => {
-                const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
-                const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
-                const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
-                
-                let teamRT = 0;
-                let teamOT = 0;
-                let teamMiles = 0;
-                
-                currentTeamList.forEach(member => {
-                  teamRT += parseFloat(member.hours_regular) || 0;
-                  teamOT += parseFloat(member.hours_overtime) || 0;
-                  teamMiles += parseFloat(member.miles) || 0;
-                });
-                
-                const totalRT = primaryRT + teamRT;
-                const totalOT = primaryOT + teamOT;
-                const totalMiles = primaryMiles + teamMiles;
-                const adminHours = 2;
-                
-                const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-                
-                return (
-                  <>
-                    {/* Labor Costs */}
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">TEAM RT Hours (Primary + Helpers)</span>
-                        <span>{totalRT.toFixed(2)} hrs × $64</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">TEAM OT Hours (Primary + Helpers)</span>
-                        <span>{totalOT.toFixed(2)} hrs × $96</span>
-                      </div>
-                      <div className="flex justify-between text-sm text-yellow-400">
-                        <span>+ Admin Hours</span>
-                        <span>2 hrs × $64 = $128.00</span>
-                      </div>
-                      <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
-                        <span>Total Labor:</span>
-                        <span className="text-green-500">
-                          ${laborCost.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
+              {/* Labor Costs */}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">TEAM RT Hours (Primary + Helpers)</span>
+                  <span>{totalRT.toFixed(2)} hrs × $64</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">TEAM OT Hours (Primary + Helpers)</span>
+                  <span>{totalOT.toFixed(2)} hrs × $96</span>
+                </div>
+                <div className="flex justify-between text-sm text-yellow-400">
+                  <span>+ Admin Hours</span>
+                  <span>2 hrs × $64 = $128.00</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
+                  <span>Total Labor:</span>
+                  <span className="text-green-500">
+                    ${laborCost.toFixed(2)}
+                  </span>
+                </div>
+              </div>
 
               <div className="border-t border-gray-600 my-4"></div>
 
               {/* Materials */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Materials:</span>
-                <span>${(parseFloat(getFieldValue('material_cost')) || 0).toFixed(2)}</span>
+                <span>${materialBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 25% Markup:</span>
-                <span>+ ${((parseFloat(getFieldValue('material_cost')) || 0) * 0.25).toFixed(2)}</span>
+                <span>+ ${(materialBase * 0.25).toFixed(2)}</span>
               </div>
 
               {/* Equipment */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Equipment:</span>
-                <span>${(parseFloat(getFieldValue('emf_equipment_cost')) || 0).toFixed(2)}</span>
+                <span>${equipmentBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 0.15).toFixed(2)}</span>
+                <span>+ ${(equipmentBase * 0.15).toFixed(2)}</span>
               </div>
 
               {/* Trailer */}
               <div className="flex justify-between text-sm mb-3">
                 <span className="text-gray-400">Trailer:</span>
                 <div className="flex gap-4">
-                  <span>${(parseFloat(getFieldValue('trailer_cost')) || 0).toFixed(2)}</span>
+                  <span>${trailerCost.toFixed(2)}</span>
                   <span className="text-gray-500">No Markup</span>
                 </div>
               </div>
@@ -1393,27 +1397,17 @@ export default function MobilePage() {
               {/* Rental */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Rental:</span>
-                <span>${(parseFloat(getFieldValue('rental_cost')) || 0).toFixed(2)}</span>
+                <span>${rentalBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${((parseFloat(getFieldValue('rental_cost')) || 0) * 0.15).toFixed(2)}</span>
+                <span>+ ${(rentalBase * 0.15).toFixed(2)}</span>
               </div>
 
               {/* Mileage */}
               <div className="flex justify-between text-sm mb-4">
                 <span className="text-gray-400">Total Mileage (All Team):</span>
-                <span>
-                  {(() => {
-                    const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
-                    let teamMiles = 0;
-                    currentTeamList.forEach(member => {
-                      teamMiles += parseFloat(member.miles) || 0;
-                    });
-                    const totalMiles = primaryMiles + teamMiles;
-                    return `${totalMiles.toFixed(1)} mi × $1.00 = $${totalMiles.toFixed(2)}`;
-                  })()}
-                </span>
+                <span>{totalMiles.toFixed(1)} mi × $1.00 = ${mileageCost.toFixed(2)}</span>
               </div>
 
               {/* Budget */}
@@ -1423,72 +1417,9 @@ export default function MobilePage() {
                   <span>${(selectedWO.nte || 0).toFixed(2)}</span>
                 </div>
                 
-                <div className={`flex justify-between font-bold text-lg ${
-                  (() => {
-                    const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
-                    const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
-                    const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
-                    
-                    let teamRT = 0;
-                    let teamOT = 0;
-                    let teamMiles = 0;
-                    
-                    currentTeamList.forEach(member => {
-                      teamRT += parseFloat(member.hours_regular) || 0;
-                      teamOT += parseFloat(member.hours_overtime) || 0;
-                      teamMiles += parseFloat(member.miles) || 0;
-                    });
-                    
-                    const totalRT = primaryRT + teamRT;
-                    const totalOT = primaryOT + teamOT;
-                    const totalMiles = primaryMiles + teamMiles;
-                    
-                    const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
-                    const materialCost = (parseFloat(getFieldValue('material_cost')) || 0) * 1.25;
-                    const equipmentCost = (parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15;
-                    const trailerCost = parseFloat(getFieldValue('trailer_cost')) || 0;
-                    const rentalCost = (parseFloat(getFieldValue('rental_cost')) || 0) * 1.15;
-                    const mileageCost = totalMiles * 1.00;
-                    
-                    const grandTotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
-                    
-                    return grandTotal > (selectedWO.nte || 0) ? 'text-red-500' : 'text-green-500';
-                  })()
-                }`}>
+                <div className={`flex justify-between font-bold text-lg ${remaining >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                   <span>Remaining:</span>
-                  <span>
-                    ${(() => {
-                      const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
-                      const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
-                      const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
-                      
-                      let teamRT = 0;
-                      let teamOT = 0;
-                      let teamMiles = 0;
-                      
-                      currentTeamList.forEach(member => {
-                        teamRT += parseFloat(member.hours_regular) || 0;
-                        teamOT += parseFloat(member.hours_overtime) || 0;
-                        teamMiles += parseFloat(member.miles) || 0;
-                      });
-                      
-                      const totalRT = primaryRT + teamRT;
-                      const totalOT = primaryOT + teamOT;
-                      const totalMiles = primaryMiles + teamMiles;
-                      
-                      const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
-                      const materialCost = (parseFloat(getFieldValue('material_cost')) || 0) * 1.25;
-                      const equipmentCost = (parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15;
-                      const trailerCost = parseFloat(getFieldValue('trailer_cost')) || 0;
-                      const rentalCost = (parseFloat(getFieldValue('rental_cost')) || 0) * 1.15;
-                      const mileageCost = totalMiles * 1.00;
-                      
-                      const grandTotal = laborCost + materialCost + equipmentCost + trailerCost + rentalCost + mileageCost;
-                      const remaining = (selectedWO.nte || 0) - grandTotal;
-                      
-                      return remaining.toFixed(2);
-                    })()}
-                  </span>
+                  <span>${remaining.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -1499,40 +1430,19 @@ export default function MobilePage() {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <div className="text-2xl font-bold text-blue-400">
-                    {(() => {
-                      const primaryRT = parseFloat(getFieldValue('hours_regular')) || 0;
-                      let teamRT = 0;
-                      currentTeamList.forEach(member => {
-                        teamRT += parseFloat(member.hours_regular) || 0;
-                      });
-                      return (primaryRT + teamRT).toFixed(1);
-                    })()}
+                    {totalRT.toFixed(1)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">RT Hours</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-orange-400">
-                    {(() => {
-                      const primaryOT = parseFloat(getFieldValue('hours_overtime')) || 0;
-                      let teamOT = 0;
-                      currentTeamList.forEach(member => {
-                        teamOT += parseFloat(member.hours_overtime) || 0;
-                      });
-                      return (primaryOT + teamOT).toFixed(1);
-                    })()}
+                    {totalOT.toFixed(1)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">OT Hours</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-green-400">
-                    {(() => {
-                      const primaryMiles = parseFloat(getFieldValue('miles')) || 0;
-                      let teamMiles = 0;
-                      currentTeamList.forEach(member => {
-                        teamMiles += parseFloat(member.miles) || 0;
-                      });
-                      return (primaryMiles + teamMiles).toFixed(0);
-                    })()}
+                    {totalMiles.toFixed(0)}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">Miles</div>
                 </div>

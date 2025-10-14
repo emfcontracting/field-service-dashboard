@@ -1,1250 +1,887 @@
 'use client';
-
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-export default function MobileApp() {
+export default function MobilePage() {
+  const [user, setUser] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState('');
-
-  const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInTime, setCheckInTime] = useState(null);
-
-  const [fieldData, setFieldData] = useState({
-    hours_regular: 0,
-    hours_overtime: 0,
-    miles: 0,
-    material_cost: 0,
-    emf_equipment_cost: 0,
-    trailer_cost: 0,
-    rental_cost: 0
-  });
-
-  const [comments, setComments] = useState([]);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [showCompletedPage, setShowCompletedPage] = useState(false);
+  const [completedWorkOrders, setCompletedWorkOrders] = useState([]);
+
+  const supabase = createClientComponentClient();
 
   useEffect(() => {
-    const savedSession = localStorage.getItem('mobile_session');
-    if (savedSession) {
-      const user = JSON.parse(savedSession);
-      setCurrentUser(user);
-      fetchWorkOrders(user.user_id);
-      fetchAvailableUsers();
-      
-      // Request notification permission
-      requestNotificationPermission();
-      
-      // Check for new assignments immediately
-      checkForNewAssignments(user.user_id);
-      
-      // Poll for new assignments every 2 minutes
-      const intervalId = setInterval(() => {
-        checkForNewAssignments(user.user_id);
-      }, 2 * 60 * 1000);
-
-      // Cleanup interval on unmount
-      return () => clearInterval(intervalId);
-    } else {
-      setLoading(false);
-    }
+    checkAuth();
   }, []);
 
-  // Request notification permission
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        console.log('Notification permission granted');
-      }
-    }
-  };
+  useEffect(() => {
+    if (currentUser) {
+      loadWorkOrders();
+      loadCompletedWorkOrders();
+      const channel = supabase
+        .channel('work-orders-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'work_orders'
+          },
+          () => {
+            loadWorkOrders();
+            loadCompletedWorkOrders();
+          }
+        )
+        .subscribe();
 
-  // Check for new assignments periodically
-  const checkForNewAssignments = async (userId) => {
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [currentUser]);
+
+  async function checkAuth() {
+    const savedPin = localStorage.getItem('mobilePin');
+    if (savedPin) {
+      await loginWithPin(savedPin);
+    }
+    setLoading(false);
+  }
+
+  async function loginWithPin(pinValue) {
     try {
-      // Get the latest assignment check time
-      const lastCheck = localStorage.getItem('last_assignment_check');
-      const checkTime = lastCheck || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      
-      // Check for work orders assigned since last check
-      const { data: newWOs } = await supabase
-        .from('work_orders')
-        .select('wo_number, building, work_order_description')
-        .eq('lead_tech_id', userId)
-        .eq('assigned_to_field', true)
-        .gte('assigned_to_field_at', checkTime)
-        .order('assigned_to_field_at', { ascending: false });
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('pin', pinValue)
+        .single();
 
-      // Also check for team member assignments
-      const { data: teamAssignments } = await supabase
-        .from('work_order_assignments')
-        .select(`
-          wo_id,
-          created_at,
-          work_order:work_orders(wo_number, building, work_order_description)
-        `)
-        .eq('user_id', userId)
-        .gte('created_at', checkTime);
-
-      const allNewAssignments = [
-        ...(newWOs || []).map(wo => ({ ...wo, type: 'lead' })),
-        ...(teamAssignments || []).map(ta => ({ 
-          wo_number: ta.work_order?.wo_number,
-          building: ta.work_order?.building,
-          work_order_description: ta.work_order?.work_order_description,
-          type: 'helper'
-        }))
-      ];
-
-      // Show notifications for new assignments
-      if (allNewAssignments.length > 0 && Notification.permission === 'granted') {
-        allNewAssignments.forEach(wo => {
-          new Notification('🔔 New Work Order Assigned!', {
-            body: `${wo.wo_number} - ${wo.building}\n${wo.type === 'lead' ? 'Lead Tech' : 'Team Member'}`,
-            tag: wo.wo_number,
-            requireInteraction: true
-          });
-        });
+      if (error || !users) {
+        setError('Invalid PIN');
+        localStorage.removeItem('mobilePin');
+        return;
       }
 
-      // Update last check time
-      localStorage.setItem('last_assignment_check', new Date().toISOString());
+      setCurrentUser(users);
+      localStorage.setItem('mobilePin', pinValue);
+      setError('');
     } catch (err) {
-      console.error('Error checking for new assignments:', err);
+      setError('Login failed');
+      localStorage.removeItem('mobilePin');
     }
-  };
+  }
 
-  const fetchWorkOrders = async (userId) => {
-    setLoading(true);
-    
-    // Get work orders where user is lead tech AND assigned to field
-    const { data: leadTechWOs, error: leadError } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name)
-      `)
-      .eq('lead_tech_id', userId)
-      .eq('assigned_to_field', true)
-      .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-      .order('created_at', { ascending: false });
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError('');
+    await loginWithPin(pin);
+  }
 
-    if (leadError) {
-      console.error('Error fetching lead tech work orders:', leadError);
-    }
+  function handleLogout() {
+    localStorage.removeItem('mobilePin');
+    setCurrentUser(null);
+    setPin('');
+    setSelectedWO(null);
+  }
 
-    // Get work orders where user is assigned as team member AND assigned to field
-    const { data: assignments } = await supabase
-      .from('work_order_assignments')
-      .select('wo_id')
-      .eq('user_id', userId);
+  async function loadWorkOrders() {
+    if (!currentUser) return;
 
-    let assignedWOs = [];
-    if (assignments && assignments.length > 0) {
-      const woIds = assignments.map(a => a.wo_id);
-      const { data: assignedWOData } = await supabase
+    try {
+      const { data, error } = await supabase
         .from('work_orders')
         .select(`
           *,
-          lead_tech:users!lead_tech_id(first_name, last_name)
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
+          helper1:users!work_orders_helper1_id_fkey(first_name, last_name),
+          helper2:users!work_orders_helper2_id_fkey(first_name, last_name),
+          helper3:users!work_orders_helper3_id_fkey(first_name, last_name),
+          helper4:users!work_orders_helper4_id_fkey(first_name, last_name)
         `)
-        .in('wo_id', woIds)
-        .eq('assigned_to_field', true)
-        .in('status', ['assigned', 'in_progress', 'needs_return', 'completed'])
-        .order('created_at', { ascending: false });
+        .or(`lead_tech_id.eq.${currentUser.user_id},helper1_id.eq.${currentUser.user_id},helper2_id.eq.${currentUser.user_id},helper3_id.eq.${currentUser.user_id},helper4_id.eq.${currentUser.user_id}`)
+        .in('status', ['assigned', 'in_progress', 'pending'])
+        .order('priority', { ascending: true })
+        .order('date_entered', { ascending: true });
 
-      assignedWOs = assignedWOData || [];
+      if (error) throw error;
+      setWorkOrders(data || []);
+    } catch (err) {
+      console.error('Error loading work orders:', err);
     }
+  }
 
-    // Combine and deduplicate
-    const allWOs = [...(leadTechWOs || []), ...assignedWOs];
-    const uniqueWOs = Array.from(
-      new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
-    );
-
-    // Hide all acknowledged/completed work orders from dashboard
-    const filteredData = uniqueWOs.filter(wo => {
-      // Keep all non-completed work orders
-      if (wo.status !== 'completed') return true;
-      
-      // If completed and acknowledged, hide it
-      if (wo.status === 'completed' && wo.acknowledged) return false;
-      
-      // If completed but NOT acknowledged yet, keep it
-      return true;
-    });
-
-    setWorkOrders(filteredData);
-    setLoading(false);
-  };
-
-  const fetchAvailableUsers = async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('is_active', true)
-      .in('role', ['tech', 'helper', 'lead_tech'])
-      .order('first_name');
-
-    setAvailableUsers(data || []);
-  };
-
-  const selectWorkOrder = async (wo) => {
-    setSelectedWO(wo);
-    setUserRole(wo.lead_tech_id === currentUser?.user_id ? 'lead' : 'helper');
-
-    setFieldData({
-      hours_regular: wo.hours_regular || 0,
-      hours_overtime: wo.hours_overtime || 0,
-      miles: wo.miles || 0,
-      material_cost: wo.material_cost || 0,
-      emf_equipment_cost: wo.emf_equipment_cost || 0,
-      trailer_cost: wo.trailer_cost || 0,
-      rental_cost: wo.rental_cost || 0
-    });
-
-    await fetchTeamMembers(wo.wo_id);
-    await fetchComments(wo.wo_id);
-    checkIfCheckedIn(wo.wo_id);
-  };
-
-  const fetchTeamMembers = async (woId) => {
-    const { data } = await supabase
-      .from('work_order_assignments')
-      .select(`
-        *,
-        user:users(first_name, last_name, email)
-      `)
-      .eq('wo_id', woId);
-
-    setTeamMembers(data || []);
-  };
-
-  const fetchComments = async (woId) => {
-    const { data } = await supabase
-      .from('work_order_comments')
-      .select(`
-        *,
-        user:users(first_name, last_name)
-      `)
-      .eq('wo_id', woId)
-      .order('created_at', { ascending: false });
-
-    setComments(data || []);
-  };
-
-  const checkIfCheckedIn = async (woId) => {
-    const { data } = await supabase
-      .from('work_order_comments')
-      .select('*')
-      .eq('wo_id', woId)
-      .eq('user_id', currentUser.user_id)
-      .eq('comment_type', 'check_in')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (data) {
-      const { data: checkOut } = await supabase
-        .from('work_order_comments')
-        .select('*')
-        .eq('wo_id', woId)
-        .eq('user_id', currentUser.user_id)
-        .eq('comment_type', 'check_out')
-        .gt('created_at', data.created_at)
-        .single();
-
-      if (!checkOut) {
-        setIsCheckedIn(true);
-        setCheckInTime(data.created_at);
-      }
-    }
-  };
-
-  const handleCheckIn = async () => {
-    if (!selectedWO) return;
+  async function loadCompletedWorkOrders() {
+    if (!currentUser) return;
 
     try {
-      const now = new Date().toISOString();
-      const location = await getLocation();
-
       const { data, error } = await supabase
-        .from('work_order_comments')
-        .insert({
-          wo_id: selectedWO.wo_id,
-          user_id: currentUser.user_id,
-          comment: `CHECKED IN\nGPS: ${location.lat}, ${location.lng}`,
-          comment_type: 'check_in'
-        })
-        .select()
-        .single();
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+        `)
+        .or(`lead_tech_id.eq.${currentUser.user_id},helper1_id.eq.${currentUser.user_id},helper2_id.eq.${currentUser.user_id},helper3_id.eq.${currentUser.user_id},helper4_id.eq.${currentUser.user_id}`)
+        .eq('status', 'completed')
+        .order('date_completed', { ascending: false })
+        .limit(50);
 
-      if (error) {
-        console.error('Check-in error:', error);
-        alert('Failed to check in: ' + error.message);
-      } else {
-        setIsCheckedIn(true);
-        setCheckInTime(now);
-        await fetchComments(selectedWO.wo_id);
-        alert('✅ Checked In!');
-      }
+      if (error) throw error;
+      setCompletedWorkOrders(data || []);
     } catch (err) {
-      console.error('Check-in exception:', err);
-      alert('Failed to check in: ' + err.message);
+      console.error('Error loading completed work orders:', err);
     }
-  };
+  }
 
-  const handleCheckOut = async () => {
-    if (!selectedWO || !checkInTime) return;
-
+  async function handleCheckIn(woId) {
     try {
+      setSaving(true);
       const now = new Date().toISOString();
-      const location = await getLocation();
-      const duration = calculateDuration(checkInTime, now);
-
-      const { data, error } = await supabase
-        .from('work_order_comments')
-        .insert({
-          wo_id: selectedWO.wo_id,
-          user_id: currentUser.user_id,
-          comment: `CHECKED OUT\nGPS: ${location.lat}, ${location.lng}\nDuration: ${duration}`,
-          comment_type: 'check_out'
+      
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          time_in: now,
+          status: 'in_progress'
         })
-        .select()
-        .single();
+        .eq('wo_id', woId);
 
-      if (error) {
-        console.error('Check-out error:', error);
-        alert('Failed to check out: ' + error.message);
-      } else {
-        setIsCheckedIn(false);
-        setCheckInTime(null);
-        await fetchComments(selectedWO.wo_id);
-        alert('✅ Checked Out!');
+      if (error) throw error;
+
+      await loadWorkOrders();
+      if (selectedWO && selectedWO.wo_id === woId) {
+        const { data: updated } = await supabase
+          .from('work_orders')
+          .select('*')
+          .eq('wo_id', woId)
+          .single();
+        setSelectedWO(updated);
       }
     } catch (err) {
-      console.error('Check-out exception:', err);
-      alert('Failed to check out: ' + err.message);
+      alert('Error checking in: ' + err.message);
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
-  const getLocation = () => {
-    return new Promise((resolve) => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            resolve({
-              lat: position.coords.latitude.toFixed(6),
-              lng: position.coords.longitude.toFixed(6)
-            });
-          },
-          () => resolve({ lat: 'N/A', lng: 'N/A' })
-        );
-      } else {
-        resolve({ lat: 'N/A', lng: 'N/A' });
+  async function handleCheckOut(woId) {
+    try {
+      setSaving(true);
+      const now = new Date().toISOString();
+      
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          time_out: now
+        })
+        .eq('wo_id', woId);
+
+      if (error) throw error;
+
+      await loadWorkOrders();
+      if (selectedWO && selectedWO.wo_id === woId) {
+        const { data: updated } = await supabase
+          .from('work_orders')
+          .select('*')
+          .eq('wo_id', woId)
+          .single();
+        setSelectedWO(updated);
       }
-    });
-  };
-
-  const calculateDuration = (start, end) => {
-    const diff = new Date(end) - new Date(start);
-    const hours = Math.floor(diff / 3600000);
-    const minutes = Math.floor((diff % 3600000) / 60000);
-    return `${hours}h ${minutes}m`;
-  };
-
-  const updateFieldData = async (field, value) => {
-    if (!selectedWO || userRole !== 'lead') {
-      alert('Only lead tech can update field data');
-      return;
+    } catch (err) {
+      alert('Error checking out: ' + err.message);
+    } finally {
+      setSaving(false);
     }
+  }
 
-    const { error } = await supabase
-      .from('work_orders')
-      .update({ [field]: value })
-      .eq('wo_id', selectedWO.wo_id);
+  async function handleUpdateField(woId, field, value) {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ [field]: value })
+        .eq('wo_id', woId);
 
-    if (!error) {
-      setFieldData({ ...fieldData, [field]: value });
-      setSelectedWO({ ...selectedWO, [field]: value });
+      if (error) throw error;
+
+      await loadWorkOrders();
+      if (selectedWO && selectedWO.wo_id === woId) {
+        const { data: updated } = await supabase
+          .from('work_orders')
+          .select('*')
+          .eq('wo_id', woId)
+          .single();
+        setSelectedWO(updated);
+      }
+    } catch (err) {
+      alert('Error updating: ' + err.message);
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
-  const updateStatus = async (newStatus) => {
-    if (!selectedWO || userRole !== 'lead') return;
-
-    const { error } = await supabase
-      .from('work_orders')
-      .update({ status: newStatus })
-      .eq('wo_id', selectedWO.wo_id);
-
-    if (!error) {
-      setSelectedWO({ ...selectedWO, status: newStatus });
-      alert('✅ Status updated!');
-    }
-  };
-
-  const addComment = async () => {
+  async function handleAddComment() {
     if (!newComment.trim() || !selectedWO) return;
 
-    const { error } = await supabase
-      .from('work_order_comments')
-      .insert({
-        wo_id: selectedWO.wo_id,
-        user_id: currentUser.user_id,
-        comment: newComment,
-        comment_type: 'note'
-      });
+    try {
+      setSaving(true);
+      const existingComments = selectedWO.comments || '';
+      const timestamp = new Date().toLocaleString();
+      const updatedComments = existingComments 
+        ? `${existingComments}\n\n[${timestamp}] ${currentUser.first_name}: ${newComment}`
+        : `[${timestamp}] ${currentUser.first_name}: ${newComment}`;
 
-    if (error) {
-      alert('Failed to add comment');
-    } else {
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ comments: updatedComments })
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
       setNewComment('');
-      fetchComments(selectedWO.wo_id);
+      await loadWorkOrders();
+      const { data: updated } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+      setSelectedWO(updated);
+    } catch (err) {
+      alert('Error adding comment: ' + err.message);
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
-  const addTeamMember = async (userId) => {
-    if (!selectedWO || userRole !== 'lead' || !userId) return;
+  async function handleCompleteWorkOrder() {
+    if (!selectedWO) return;
 
-    const { error } = await supabase
-      .from('work_order_assignments')
-      .insert({
-        wo_id: selectedWO.wo_id,
-        user_id: userId,
-        role: 'helper'
-      });
+    if (!confirm('Mark this work order as completed?')) return;
 
-    if (error) {
-      alert('Failed to add team member: ' + error.message);
-    } else {
-      fetchTeamMembers(selectedWO.wo_id);
-      alert('✅ Team member added!');
-    }
-  };
-
-  const removeTeamMember = async (assignmentId) => {
-    if (!selectedWO || userRole !== 'lead') return;
-    if (!confirm('Remove this team member?')) return;
-
-    const { error } = await supabase
-      .from('work_order_assignments')
-      .delete()
-      .eq('assignment_id', assignmentId);
-
-    if (!error) {
-      fetchTeamMembers(selectedWO.wo_id);
-    }
-  };
-
-  const updateTeamMemberHours = async (assignmentId, field, value) => {
-    if (userRole !== 'lead') return;
-
-    const { error } = await supabase
-      .from('work_order_assignments')
-      .update({ [field]: value })
-      .eq('assignment_id', assignmentId);
-
-    if (!error) {
-      fetchTeamMembers(selectedWO.wo_id);
-    }
-  };
-
-  const calculateTotalCost = () => {
-    if (!selectedWO) return 0;
-
-    const leadRegular = (fieldData.hours_regular || 0) * 64;
-    const leadOvertime = (fieldData.hours_overtime || 0) * 96;
-    
-    const teamLabor = teamMembers.reduce((sum, member) => {
-      const regular = (member.hours_regular || 0) * 64;
-      const overtime = (member.hours_overtime || 0) * 96;
-      return sum + regular + overtime;
-    }, 0);
-
-    const totalMiles = (fieldData.miles || 0) + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0);
-
-    return leadRegular + leadOvertime + teamLabor + 
-           (fieldData.material_cost || 0) +
-           (fieldData.emf_equipment_cost || 0) +
-           (fieldData.trailer_cost || 0) +
-           (fieldData.rental_cost || 0) +
-           (totalMiles * 1.00);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('mobile_session');
-    window.location.reload();
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      assigned: 'bg-blue-600',
-      in_progress: 'bg-yellow-600',
-      needs_return: 'bg-purple-600',
-      completed: 'bg-green-600'
-    };
-    return colors[status] || 'bg-gray-600';
-  };
-
-  // LOGIN SCREEN
-  const LoginScreen = () => {
-    const [email, setEmail] = useState('');
-    const [pin, setPin] = useState('');
-    const [error, setError] = useState('');
-    const [loggingIn, setLoggingIn] = useState(false);
-
-    const handlePinInput = (digit) => {
-      if (pin.length < 4) {
-        setPin(pin + digit);
-      }
-    };
-
-    const handleBackspace = () => {
-      setPin(pin.slice(0, -1));
-    };
-
-    const handleLogin = async () => {
-      setError('');
+    try {
+      setSaving(true);
+      const now = new Date().toISOString();
       
-      if (!email) {
-        setError('Please enter your email');
-        return;
-      }
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          status: 'completed',
+          date_completed: now,
+          time_out: selectedWO.time_out || now
+        })
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
+      await loadWorkOrders();
+      await loadCompletedWorkOrders();
+      setSelectedWO(null);
+      alert('Work order completed successfully!');
+    } catch (err) {
+      alert('Error completing work order: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadTeamMembers() {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'tech')
+        .neq('user_id', currentUser.user_id)
+        .order('first_name');
+
+      if (error) throw error;
+      setTeamMembers(data || []);
+      setShowTeamModal(true);
+    } catch (err) {
+      alert('Error loading team members: ' + err.message);
+    }
+  }
+
+  async function handleAddTeamMember(memberId, helperSlot) {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ [helperSlot]: memberId })
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
+      await loadWorkOrders();
+      const { data: updated } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
+          helper1:users!work_orders_helper1_id_fkey(first_name, last_name),
+          helper2:users!work_orders_helper2_id_fkey(first_name, last_name),
+          helper3:users!work_orders_helper3_id_fkey(first_name, last_name),
+          helper4:users!work_orders_helper4_id_fkey(first_name, last_name)
+        `)
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
       
-      if (pin.length !== 4) {
-        setError('Please enter your 4-digit PIN');
-        return;
-      }
+      setSelectedWO(updated);
+      setShowTeamModal(false);
+    } catch (err) {
+      alert('Error adding team member: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
-      setLoggingIn(true);
+  function getPriorityColor(priority) {
+    switch(priority) {
+      case 1: return 'text-red-500';
+      case 2: return 'text-orange-500';
+      case 3: return 'text-yellow-500';
+      case 4: return 'text-blue-500';
+      default: return 'text-gray-500';
+    }
+  }
 
-      try {
-        // Find user by email and verify PIN
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email.toLowerCase().trim())
-          .eq('is_active', true)
-          .single();
-
-        if (userError || !user) {
-          setError('Invalid email or account not found');
-          setLoggingIn(false);
-          return;
-        }
-
-        // Verify PIN
-        if (user.pin !== pin) {
-          setError('Incorrect PIN');
-          setLoggingIn(false);
-          return;
-        }
-
-        // Success - save session and login
-        localStorage.setItem('mobile_session', JSON.stringify(user));
-        setCurrentUser(user);
-        fetchWorkOrders(user.user_id);
-        fetchAvailableUsers();
-        
-        // Request notification permission right after login
-        setTimeout(() => {
-          if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-          }
-        }, 1000);
-        
-      } catch (err) {
-        setError('Login failed. Please try again.');
-        console.error('Login error:', err);
-        setLoggingIn(false);
-      }
+  function getPriorityBadge(priority) {
+    const badges = {
+      1: '🔴 Emergency',
+      2: '🟠 Urgent',
+      3: '🟡 Normal',
+      4: '🔵 Low'
     };
+    return badges[priority] || '⚪ Unknown';
+  }
 
+  function getStatusBadge(status) {
+    const badges = {
+      'assigned': '📋 Assigned',
+      'in_progress': '⚙️ In Progress',
+      'pending': '⏸️ Pending',
+      'completed': '✅ Completed'
+    };
+    return badges[status] || status;
+  }
+
+  function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          {/* Logo/Header */}
           <div className="text-center mb-8">
-            <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-4xl">🔧</span>
+            <div className="bg-white w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+              <img 
+                src="/emf-logo.png" 
+                alt="EMF Contracting LLC" 
+                className="w-full h-full object-contain"
+              />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">FSM Mobile</h1>
-            <p className="text-blue-100">Field Service Management</p>
+            <h1 className="text-2xl font-bold text-white mb-2">EMF Contracting LLC</h1>
+            <p className="text-gray-300">Field Service Mobile</p>
           </div>
 
-          {/* Login Form */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <div className="space-y-6">
-              {/* Email Input */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
-                  placeholder="your.email@company.com"
-                  autoComplete="email"
-                />
-              </div>
-
-              {/* PIN Input */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  PIN Code
-                </label>
-                <div className="flex justify-center gap-3 mb-4">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="w-14 h-14 border-2 border-gray-300 rounded-xl flex items-center justify-center text-3xl font-bold bg-gray-50 text-gray-900"
-                    >
-                      {pin[i] ? '•' : ''}
-                    </div>
-                  ))}
-                </div>
-
-                {/* PIN Pad */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => handlePinInput(num.toString())}
-                      className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-2xl font-bold text-gray-800 active:bg-gray-300 transition"
-                    >
-                      {num}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleBackspace}
-                    className="h-16 bg-red-100 hover:bg-red-200 rounded-xl text-xl font-bold text-red-600 active:bg-red-300 transition"
-                  >
-                    ⌫
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePinInput('0')}
-                    className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-2xl font-bold text-gray-800 active:bg-gray-300 transition"
-                  >
-                    0
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPin('')}
-                    className="h-16 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-600 active:bg-gray-300 transition"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              {/* Error Message */}
-              {error && (
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
-                  <p className="text-red-600 text-center font-medium">{error}</p>
-                </div>
-              )}
-
-              {/* Login Button */}
+          <div className="bg-white rounded-2xl p-8 shadow-2xl">
+            <h2 className="text-2xl font-bold mb-6 text-gray-900">Enter PIN</h2>
+            <form onSubmit={handleLogin}>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength="4"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="4-digit PIN"
+                className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 mb-4"
+                autoFocus
+              />
+              {error && <p className="text-red-500 mb-4">{error}</p>}
               <button
-                onClick={handleLogin}
-                disabled={loggingIn || !email || pin.length !== 4}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold text-lg shadow-lg transition active:scale-95"
+                type="submit"
+                className="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-blue-700 transition active:scale-95"
               >
-                {loggingIn ? '⏳ Signing In...' : '🔓 Sign In'}
+                Login
               </button>
-            </div>
-
-            {/* Help Text */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-500">
-                Default PIN: <span className="font-mono font-bold text-gray-700">5678</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-2">
-                Contact your administrator if you need help
-              </p>
-            </div>
+            </form>
           </div>
         </div>
       </div>
     );
-  };
-
-  if (!currentUser) {
-    return <LoginScreen />;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      
-      {!selectedWO && (
-        <div>
-          <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-xl font-bold">👋 {currentUser.first_name}</h1>
-                <p className="text-sm text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
-                {/* Notification indicator */}
-                {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
-                  <p className="text-xs text-green-400 mt-1">🔔 Notifications enabled</p>
-                )}
-                {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (
-                  <p className="text-xs text-red-400 mt-1">🔕 Notifications disabled</p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => window.location.href = '/completed'}
-                  className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
-                >
-                  ✅ Completed
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm font-semibold"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
+  if (showCompletedPage) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex justify-between items-center mb-6">
+            <button
+              onClick={() => setShowCompletedPage(false)}
+              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
+            >
+              ← Back
+            </button>
+            <h1 className="text-2xl font-bold">Completed Work Orders</h1>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
+            >
+              Logout
+            </button>
           </div>
 
-          <div className="p-4 space-y-3">
-            <h2 className="text-lg font-bold mb-3">My Work Orders ({workOrders.length})</h2>
-            
-            {loading ? (
-              <div className="text-center py-12 text-gray-400">Loading...</div>
-            ) : workOrders.length === 0 ? (
-              <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-                <div className="text-4xl mb-3">📋</div>
-                <div className="font-semibold mb-2">No work orders assigned yet</div>
-                <div className="text-sm">Work orders will appear here when assigned by an administrator</div>
+          <div className="space-y-4">
+            {completedWorkOrders.length === 0 ? (
+              <div className="bg-gray-800 rounded-lg p-8 text-center">
+                <p className="text-gray-400">No completed work orders</p>
               </div>
             ) : (
-              workOrders.map(wo => (
+              completedWorkOrders.map(wo => (
                 <div
                   key={wo.wo_id}
-                  onClick={() => selectWorkOrder(wo)}
-                  className="bg-gray-800 rounded-lg p-4 cursor-pointer active:bg-gray-700"
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <div className="font-bold text-lg">{wo.wo_number}</div>
-                      <div className="text-sm text-gray-400">{wo.building}</div>
+                      <span className="font-bold text-lg">{wo.wo_number}</span>
+                      <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                        {getPriorityBadge(wo.priority)}
+                      </span>
                     </div>
-                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(wo.status)}`}>
-                      {wo.status.replace('_', ' ').toUpperCase()}
-                    </span>
+                    <span className="text-green-500 text-sm">✅ Completed</span>
                   </div>
-                  <div className="text-sm text-gray-300">
-                    {wo.work_order_description.substring(0, 100)}...
+                  
+                  <div className="text-sm space-y-1">
+                    <p className="font-semibold">{wo.building}</p>
+                    <p className="text-gray-400">{wo.work_order_description}</p>
+                    <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
+                    {wo.lead_tech && (
+                      <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    NTE: ${(wo.nte || 0).toFixed(2)}
-                  </div>
+
+                  {wo.hours && (
+                    <div className="mt-2 text-xs text-gray-400">
+                      Hours: {wo.hours} | Miles: {wo.miles || 0}
+                    </div>
+                  )}
                 </div>
               ))
             )}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {selectedWO && (
-        <div className="pb-20">
-          <div className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
+  if (selectedWO) {
+    const availableHelperSlots = [];
+    if (!selectedWO.helper1_id) availableHelperSlots.push('helper1_id');
+    if (!selectedWO.helper2_id) availableHelperSlots.push('helper2_id');
+    if (!selectedWO.helper3_id) availableHelperSlots.push('helper3_id');
+    if (!selectedWO.helper4_id) availableHelperSlots.push('helper4_id');
+
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex justify-between items-center mb-6">
             <button
-              onClick={() => {
-                setSelectedWO(null);
-                setIsCheckedIn(false);
-                setCheckInTime(null);
-              }}
-              className="text-blue-400 mb-2"
+              onClick={() => setSelectedWO(null)}
+              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
             >
-              ← Back to List
+              ← Back
             </button>
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-2xl font-bold">{selectedWO.wo_number}</h1>
-                <p className="text-sm text-gray-400">Created on {new Date(selectedWO.date_entered).toLocaleDateString()}</p>
-              </div>
-              <div className="flex gap-2">
-                <span className={`px-3 py-2 rounded-lg text-sm font-semibold ${selectedWO.priority === 'emergency' ? 'bg-red-600' : selectedWO.priority === 'high' ? 'bg-orange-600' : 'bg-yellow-600'}`}>
-                  {selectedWO.priority.toUpperCase()}
-                </span>
-                <span className={`px-3 py-2 rounded-lg text-sm font-semibold ${getStatusColor(selectedWO.status)}`}>
-                  {selectedWO.status.replace('_', ' ').toUpperCase()}
-                </span>
-              </div>
-            </div>
+            <h1 className="text-xl font-bold">{selectedWO.wo_number}</h1>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+            >
+              Logout
+            </button>
           </div>
 
-          <div className="p-4 space-y-6">
-            
-            {(selectedWO.is_locked || selectedWO.acknowledged) && (
-              <div className="bg-red-900 text-red-200 p-4 rounded-lg">
-                <div className="font-bold text-lg">🔒 Work Order Locked</div>
-                <div className="text-sm mt-1">
-                  {selectedWO.acknowledged && 'This work order has been acknowledged by the office. '}
-                  {selectedWO.is_locked && 'Invoice has been generated. '}
-                  You can view details but cannot make changes.
-                </div>
-              </div>
-            )}
-            
+          <div className="space-y-4">
             <div className="bg-gray-800 rounded-lg p-4">
-              <h2 className="text-lg font-bold mb-3">Work Order Details</h2>
+              <div className="flex items-center justify-between mb-3">
+                <span className={`text-lg font-bold ${getPriorityColor(selectedWO.priority)}`}>
+                  {getPriorityBadge(selectedWO.priority)}
+                </span>
+                <span className="text-sm bg-gray-700 px-3 py-1 rounded-full">
+                  {getStatusBadge(selectedWO.status)}
+                </span>
+              </div>
               
-              <div className="space-y-2 text-sm">
+              <h2 className="text-xl font-bold mb-2">{selectedWO.building}</h2>
+              <p className="text-gray-300 mb-4">{selectedWO.work_order_description}</p>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-400">Building:</span>
-                  <div className="font-semibold">{selectedWO.building}</div>
+                  <p className="text-gray-400">Entered</p>
+                  <p className="font-semibold">{formatDate(selectedWO.date_entered)}</p>
                 </div>
-                
                 <div>
-                  <span className="text-gray-400">Requestor:</span>
-                  <div className="font-semibold">{selectedWO.requestor || 'N/A'}</div>
+                  <p className="text-gray-400">NTE</p>
+                  <p className="font-semibold text-green-500">${(selectedWO.nte || 0).toFixed(2)}</p>
                 </div>
-                
                 <div>
-                  <span className="text-gray-400">Description:</span>
-                  <div className="mt-1">{selectedWO.work_order_description}</div>
+                  <p className="text-gray-400">Requestor</p>
+                  <p className="font-semibold">{selectedWO.requestor || 'N/A'}</p>
                 </div>
-                
                 <div>
-                  <span className="text-gray-400">NTE (Not To Exceed):</span>
-                  <div className="font-bold text-lg">${(selectedWO.nte || 0).toFixed(2)}</div>
-                </div>
-
-                <div>
-                  <span className="text-gray-400">Age:</span>
-                  <div>
-                    {Math.floor((new Date() - new Date(selectedWO.date_entered)) / (1000 * 60 * 60 * 24))} days
-                  </div>
+                  <p className="text-gray-400">Status</p>
+                  <p className="font-semibold">{selectedWO.status.replace('_', ' ').toUpperCase()}</p>
                 </div>
               </div>
             </div>
 
+            {!selectedWO.time_in ? (
+              <button
+                onClick={() => handleCheckIn(selectedWO.wo_id)}
+                disabled={saving}
+                className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
+              >
+                ✅ Check In
+              </button>
+            ) : !selectedWO.time_out ? (
+              <button
+                onClick={() => handleCheckOut(selectedWO.wo_id)}
+                disabled={saving}
+                className="w-full bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
+              >
+                ⏰ Check Out
+              </button>
+            ) : (
+              <div className="bg-gray-800 rounded-lg p-4 text-center">
+                <p className="text-green-500 font-bold">✅ Checked Out</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  In: {formatDate(selectedWO.time_in)}
+                </p>
+                <p className="text-sm text-gray-400">
+                  Out: {formatDate(selectedWO.time_out)}
+                </p>
+              </div>
+            )}
+
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3 flex items-center gap-2">
-                <span className="text-pink-500">◉</span> Check In/Out
-              </h3>
-              
-              {!isCheckedIn ? (
+              <h3 className="font-bold mb-3">Team</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-500">👷</span>
+                  <span>Lead: {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</span>
+                </div>
+                {selectedWO.helper1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">👤</span>
+                    <span>Helper 1: {selectedWO.helper1.first_name} {selectedWO.helper1.last_name}</span>
+                  </div>
+                )}
+                {selectedWO.helper2 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">👤</span>
+                    <span>Helper 2: {selectedWO.helper2.first_name} {selectedWO.helper2.last_name}</span>
+                  </div>
+                )}
+                {selectedWO.helper3 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">👤</span>
+                    <span>Helper 3: {selectedWO.helper3.first_name} {selectedWO.helper3.last_name}</span>
+                  </div>
+                )}
+                {selectedWO.helper4 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">👤</span>
+                    <span>Helper 4: {selectedWO.helper4.first_name} {selectedWO.helper4.last_name}</span>
+                  </div>
+                )}
+              </div>
+              {availableHelperSlots.length > 0 && selectedWO.status !== 'completed' && (
                 <button
-                  onClick={handleCheckIn}
-                  className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold text-lg"
+                  onClick={loadTeamMembers}
+                  className="mt-3 w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold"
                 >
-                  ✓ CHECK IN
+                  + Add Helper
                 </button>
-              ) : (
+              )}
+            </div>
+
+            {/* Email Photos Section */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">📸 Send Photos</h3>
+              <p className="text-sm text-gray-400 mb-3">
+                Take photos and email them for this work order
+              </p>
+              <button
+                onClick={() => {
+                  const subject = encodeURIComponent(`Photos - ${selectedWO.wo_number} - ${selectedWO.building}`);
+                  const body = encodeURIComponent(
+                    `Work Order: ${selectedWO.wo_number}\n` +
+                    `Building: ${selectedWO.building}\n` +
+                    `Description: ${selectedWO.work_order_description}\n` +
+                    `Status: ${selectedWO.status.replace('_', ' ').toUpperCase()}\n` +
+                    `Submitted by: ${currentUser.first_name} ${currentUser.last_name}\n` +
+                    `Date: ${new Date().toLocaleString()}\n\n` +
+                    `--- Attach photos below ---`
+                  );
+                  const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
+                  window.location.href = mailtoLink;
+                }}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-4 rounded-lg font-bold text-lg shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
+              >
+                <span className="text-2xl">📸</span>
+                <span>Email Photos to Office</span>
+              </button>
+              <div className="text-xs text-gray-500 mt-2 text-center">
+                Opens your email app with pre-filled details
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">Field Data</h3>
+              <div className="space-y-3">
                 <div>
-                  <div className="bg-green-900 text-green-200 p-3 rounded-lg mb-3 text-center">
-                    <div className="font-bold">✓ Checked In</div>
-                    <div className="text-sm mt-1">
-                      Since {new Date(checkInTime).toLocaleTimeString()}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleCheckOut}
-                    className="w-full bg-red-600 hover:bg-red-700 py-3 rounded-lg font-bold text-lg"
-                  >
-                    CHECK OUT
-                  </button>
+                  <label className="block text-sm text-gray-400 mb-1">Hours</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={selectedWO.hours || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
                 </div>
-              )}
-            </div>
-
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Primary Assignment</h3>
-              <div className="text-sm text-gray-400 mb-1">Lead Technician</div>
-              <div className="bg-gray-700 p-3 rounded-lg font-semibold">
-                {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}
-              </div>
-            </div>
-
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold">Team Members</h3>
-                {userRole === 'lead' && (
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        addTeamMember(e.target.value);
-                        e.target.value = '';
-                      }
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-semibold"
-                  >
-                    <option value="">+ Add Helper/Tech</option>
-                    {availableUsers
-                      .filter(user => 
-                        user.user_id !== currentUser.user_id && 
-                        user.user_id !== selectedWO.lead_tech_id &&
-                        !teamMembers.some(m => m.user_id === user.user_id)
-                      )
-                      .map(user => (
-                        <option key={user.user_id} value={user.user_id}>
-                          {user.first_name} {user.last_name} ({user.role.replace('_', ' ').toUpperCase()})
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-
-              {teamMembers.length === 0 ? (
-                <div className="text-center text-gray-400 py-4 text-sm">
-                  No additional team members yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {teamMembers.map(member => (
-                    <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <div className="font-bold">
-                            {member.user?.first_name} {member.user?.last_name}
-                          </div>
-                          <div className="text-xs text-gray-400 capitalize">{member.role}</div>
-                        </div>
-                        {userRole === 'lead' && (
-                          <button
-                            onClick={() => removeTeamMember(member.assignment_id)}
-                            className="text-red-400 text-sm"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div>
-                          <label className="text-xs text-gray-400">RT Hours</label>
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={member.hours_regular || 0}
-                            onChange={(e) => updateTeamMemberHours(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
-                            disabled={userRole !== 'lead'}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-400">OT Hours</label>
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={member.hours_overtime || 0}
-                            onChange={(e) => updateTeamMemberHours(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
-                            disabled={userRole !== 'lead'}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-400">Miles</label>
-                          <input
-                            type="number"
-                            value={member.miles || 0}
-                            onChange={(e) => updateTeamMemberHours(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
-                            disabled={userRole !== 'lead'}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="text-xs text-gray-400 mt-2">
-                        Labor: ${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {userRole === 'lead' && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="font-bold mb-3">Update Status</h3>
-                <select
-                  value={selectedWO.status}
-                  onChange={(e) => updateStatus(e.target.value)}
-                  disabled={selectedWO.is_locked || selectedWO.acknowledged}
-                  className={`w-full px-4 py-3 rounded-lg font-semibold ${getStatusColor(selectedWO.status)} ${
-                    (selectedWO.is_locked || selectedWO.acknowledged) ? 'opacity-50' : ''
-                  }`}
-                >
-                  <option value="assigned">Assigned</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="needs_return">Needs Return</option>
-                  <option value="completed">Completed</option>
-                </select>
-                {(selectedWO.is_locked || selectedWO.acknowledged) && (
-                  <div className="text-xs text-red-400 mt-2">
-                    Status locked - work order has been acknowledged
-                  </div>
-                )}
-              </div>
-            )}
-
-            {userRole === 'lead' && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-bold">Primary Tech Field Data</h3>
-                  <button
-                    onClick={() => {
-                      if (confirm('Save all field data changes?')) {
-                        alert('✅ Changes saved!');
-                      }
-                    }}
-                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
-                  >
-                    💾 Save Changes
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Regular Hours (RT)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={fieldData.hours_regular}
-                        onChange={(e) => updateFieldData('hours_regular', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        Up to 8 hrs @ $64/hr
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Overtime Hours (OT)</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={fieldData.hours_overtime}
-                        onChange={(e) => updateFieldData('hours_overtime', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        Over 8 hrs @ $96/hr
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Miles</label>
-                      <input
-                        type="number"
-                        value={fieldData.miles}
-                        onChange={(e) => updateFieldData('miles', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                      <div className="text-xs text-gray-500 mt-1">
-                        @ $1.00 per mile
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Material Cost ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={fieldData.material_cost}
-                        onChange={(e) => updateFieldData('material_cost', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Equipment Cost ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={fieldData.emf_equipment_cost}
-                        onChange={(e) => updateFieldData('emf_equipment_cost', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400 mb-1 block">Trailer Cost ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={fieldData.trailer_cost}
-                        onChange={(e) => updateFieldData('trailer_cost', parseFloat(e.target.value) || 0)}
-                        className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-400 mb-1 block">Rental Cost ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={fieldData.rental_cost}
-                      onChange={(e) => updateFieldData('rental_cost', parseFloat(e.target.value) || 0)}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {userRole === 'lead' && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="font-bold mb-3">Cost Summary</h3>
-
-                <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
-                  <div className="font-bold mb-2">TEAM LABOR</div>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span>Total RT ({fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} hrs)</span>
-                      <span>${((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Total OT ({fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} hrs)</span>
-                      <span>${((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96).toFixed(2)}</span>
-                    </div>
-                    <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
-                      <span>Total Labor:</span>
-                      <span>
-                        ${(
-                          ((fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)) * 64) +
-                          ((fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)) * 96)
-                        ).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-sm mb-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Mileage ({fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi × $1.00)</span>
-                    <span>${((fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)) * 1.00).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Materials</span>
-                    <span>${(fieldData.material_cost || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Equipment</span>
-                    <span>${(fieldData.emf_equipment_cost || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Trailer</span>
-                    <span>${(fieldData.trailer_cost || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Rental</span>
-                    <span>${(fieldData.rental_cost || 0).toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-700 pt-3 mt-3">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-lg">Grand Total:</span>
-                    <span className="text-2xl font-bold text-green-400">
-                      ${calculateTotalCost().toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">NTE Budget:</span>
-                    <span>${(selectedWO.nte || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Remaining:</span>
-                    <span className={calculateTotalCost() > selectedWO.nte ? 'text-red-400 font-bold' : 'text-green-400'}>
-                      ${((selectedWO.nte || 0) - calculateTotalCost()).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {userRole === 'lead' && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="font-bold mb-3">Time Tracking</h3>
                 
-                <div className="bg-gray-700 rounded-lg p-3 mb-3">
-                  <div className="text-sm text-gray-400 mb-1">TEAM TOTALS</div>
-                  <div className="text-2xl font-bold text-blue-400">
-                    {fieldData.hours_regular + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0), 0)} RT + {fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_overtime || 0), 0)} OT
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    = {fieldData.hours_regular + fieldData.hours_overtime + teamMembers.reduce((sum, m) => sum + (m.hours_regular || 0) + (m.hours_overtime || 0), 0)} total hours
-                  </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Miles</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={selectedWO.miles || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
                 </div>
 
-                <div className="text-sm">
-                  <div className="text-gray-400 mb-1">Total Miles Traveled</div>
-                  <div className="text-xl font-bold">
-                    {fieldData.miles + teamMembers.reduce((sum, m) => sum + (m.miles || 0), 0)} mi
-                  </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Material Cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={selectedWO.material || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'material', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Trailer Cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={selectedWO.trailer || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'trailer', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">EMF Equipment Cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={selectedWO.emf_equipment || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Rental Cost</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={selectedWO.rental || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'rental', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
-
-              <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
-                {comments.length === 0 ? (
-                  <div className="text-center text-gray-400 py-4 text-sm">
-                    No comments yet
-                  </div>
+              <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
+                {selectedWO.comments ? (
+                  <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
+                    {selectedWO.comments}
+                  </pre>
                 ) : (
-                  comments.map(comment => (
-                    <div key={comment.comment_id} className="bg-gray-700 rounded p-3 text-sm">
-                      <div className="text-xs text-gray-400 mb-1">
-                        [{new Date(comment.created_at).toLocaleString()}] {comment.user?.first_name} {comment.user?.last_name}
-                      </div>
-                      <div className="whitespace-pre-wrap">{comment.comment}</div>
-                    </div>
-                  ))
+                  <p className="text-gray-500 text-sm">No comments yet</p>
                 )}
               </div>
-
-              <div>
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a new comment..."
-                  className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg mb-2"
-                  rows="3"
-                />
-                <button
-                  onClick={addComment}
-                  disabled={!newComment.trim()}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed py-2 rounded-lg font-semibold"
-                >
-                  Add Comment
-                </button>
-              </div>
+              {selectedWO.status !== 'completed' && (
+                <>
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg mb-2 text-sm text-white"
+                    rows="3"
+                    disabled={saving}
+                  />
+                  <button
+                    onClick={handleAddComment}
+                    disabled={saving || !newComment.trim()}
+                    className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold disabled:bg-gray-600"
+                  >
+                    Add Comment
+                  </button>
+                </>
+              )}
             </div>
 
+            {selectedWO.time_out && selectedWO.status !== 'completed' && (
+              <button
+                onClick={handleCompleteWorkOrder}
+                disabled={saving}
+                className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
+              >
+                ✅ Complete Work Order
+              </button>
+            )}
           </div>
         </div>
-      )}
+
+        {showTeamModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full max-h-96 overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">Add Helper</h3>
+                <button
+                  onClick={() => setShowTeamModal(false)}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-2">
+                {teamMembers.map(member => (
+                  <button
+                    key={member.user_id}
+                    onClick={() => handleAddTeamMember(member.user_id, availableHelperSlots[0])}
+                    disabled={saving}
+                    className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
+                  >
+                    {member.first_name} {member.last_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/emf-logo.png" 
+              alt="EMF Contracting LLC" 
+              className="h-10 w-auto"
+            />
+            <div>
+              <h1 className="text-lg font-bold">👋 {currentUser.first_name}</h1>
+              <p className="text-xs text-gray-400">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCompletedPage(true)}
+              className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
+            >
+              ✅ Completed
+            </button>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold mb-2">My Work Orders</h2>
+          <p className="text-gray-400">
+            {workOrders.length} active work {workOrders.length === 1 ? 'order' : 'orders'}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {workOrders.length === 0 ? (
+            <div className="bg-gray-800 rounded-lg p-8 text-center">
+              <p className="text-gray-400 text-lg">No active work orders</p>
+              <p className="text-gray-500 text-sm mt-2">Check back later for new assignments</p>
+            </div>
+          ) : (
+            workOrders.map(wo => (
+              <div
+                key={wo.wo_id}
+                onClick={() => setSelectedWO(wo)}
+                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <span className="font-bold text-lg">{wo.wo_number}</span>
+                    <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                      {getPriorityBadge(wo.priority)}
+                    </span>
+                  </div>
+                  <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+                    {getStatusBadge(wo.status)}
+                  </span>
+                </div>
+                
+                <h3 className="font-semibold mb-1">{wo.building}</h3>
+                <p className="text-sm text-gray-400 mb-3">{wo.work_order_description}</p>
+                
+                <div className="flex justify-between items-center text-xs text-gray-500">
+                  <span>Entered: {formatDate(wo.date_entered)}</span>
+                  <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

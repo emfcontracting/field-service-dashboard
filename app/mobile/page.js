@@ -8,6 +8,7 @@ export default function MobilePage() {
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [teamMembers, setTeamMembers] = useState([]);
@@ -50,32 +51,45 @@ export default function MobilePage() {
   }, [currentUser]);
 
   async function checkAuth() {
+    const savedEmail = localStorage.getItem('mobileEmail');
     const savedPin = localStorage.getItem('mobilePin');
-    if (savedPin) {
-      await loginWithPin(savedPin);
+    if (savedEmail && savedPin) {
+      await loginWithCredentials(savedEmail, savedPin);
     }
     setLoading(false);
   }
 
-  async function loginWithPin(pinValue) {
+  async function loginWithCredentials(emailValue, pinValue) {
     try {
+      // Check if PIN is correct (5678)
+      if (pinValue !== '5678') {
+        setError('Invalid PIN');
+        localStorage.removeItem('mobileEmail');
+        localStorage.removeItem('mobilePin');
+        return;
+      }
+
+      // Check if user exists with this email
       const { data: users, error } = await supabase
         .from('users')
         .select('*')
-        .eq('pin', pinValue)
+        .eq('email', emailValue)
         .single();
 
       if (error || !users) {
-        setError('Invalid PIN');
+        setError('Invalid email or PIN');
+        localStorage.removeItem('mobileEmail');
         localStorage.removeItem('mobilePin');
         return;
       }
 
       setCurrentUser(users);
+      localStorage.setItem('mobileEmail', emailValue);
       localStorage.setItem('mobilePin', pinValue);
       setError('');
     } catch (err) {
       setError('Login failed');
+      localStorage.removeItem('mobileEmail');
       localStorage.removeItem('mobilePin');
     }
   }
@@ -83,12 +97,20 @@ export default function MobilePage() {
   async function handleLogin(e) {
     e.preventDefault();
     setError('');
-    await loginWithPin(pin);
+    
+    if (!email || !pin) {
+      setError('Please enter both email and PIN');
+      return;
+    }
+    
+    await loginWithCredentials(email, pin);
   }
 
   function handleLogout() {
+    localStorage.removeItem('mobileEmail');
     localStorage.removeItem('mobilePin');
     setCurrentUser(null);
+    setEmail('');
     setPin('');
     setSelectedWO(null);
   }
@@ -403,19 +425,34 @@ export default function MobilePage() {
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-2xl">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900">Enter PIN</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900">Login</h2>
             <form onSubmit={handleLogin}>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength="4"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="4-digit PIN"
-                className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 mb-4"
-                autoFocus
-              />
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your.email@example.com"
+                  className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength="4"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="4-digit PIN"
+                  className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                  required
+                />
+              </div>
               {error && <p className="text-red-500 mb-4">{error}</p>}
               <button
                 type="submit"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams } from 'next/navigation';
 
@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export default function SettingsPage() {
+function SettingsContent() {
   const [qbConnected, setQbConnected] = useState(false);
   const [qbSettings, setQbSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -159,5 +159,17 @@ export default function SettingsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-2xl">Loading settings...</div>
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

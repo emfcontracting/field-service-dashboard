@@ -64,6 +64,8 @@ export default function MobilePage() {
 
   async function loginWithCredentials(emailValue, pinValue) {
     try {
+      console.log('Attempting login with email:', emailValue);
+      
       // Check if user exists with this email
       const { data: users, error } = await supabase
         .from('users')
@@ -71,8 +73,18 @@ export default function MobilePage() {
         .eq('email', emailValue)
         .single();
 
+      console.log('User query result:', users, error);
+
       if (error || !users) {
-        setError('Invalid email');
+        setError('Invalid email - user not found');
+        localStorage.removeItem('mobileEmail');
+        localStorage.removeItem('mobilePin');
+        return;
+      }
+
+      // Check if user has a PIN set
+      if (!users.pin) {
+        setError('No PIN set for this user. Contact admin to set up your PIN.');
         localStorage.removeItem('mobileEmail');
         localStorage.removeItem('mobilePin');
         return;
@@ -80,18 +92,20 @@ export default function MobilePage() {
 
       // Check if PIN matches user's PIN
       if (users.pin !== pinValue) {
-        setError('Invalid PIN');
+        setError('Invalid PIN - PIN does not match');
         localStorage.removeItem('mobileEmail');
         localStorage.removeItem('mobilePin');
         return;
       }
 
+      console.log('Login successful! User:', users);
       setCurrentUser(users);
       localStorage.setItem('mobileEmail', emailValue);
       localStorage.setItem('mobilePin', pinValue);
       setError('');
     } catch (err) {
-      setError('Login failed');
+      console.error('Login error:', err);
+      setError('Login failed: ' + err.message);
       localStorage.removeItem('mobileEmail');
       localStorage.removeItem('mobilePin');
     }
@@ -161,7 +175,12 @@ export default function MobilePage() {
   }
 
   async function loadWorkOrders() {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('loadWorkOrders: No current user');
+      return;
+    }
+
+    console.log('Loading work orders for user:', currentUser.user_id, currentUser.email);
 
     try {
       const { data, error } = await supabase
@@ -169,25 +188,33 @@ export default function MobilePage() {
         .select(`
           *,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
-          helper1:users!work_orders_helper1_id_fkey(first_name, last_name),
-          helper2:users!work_orders_helper2_id_fkey(first_name, last_name),
-          helper3:users!work_orders_helper3_id_fkey(first_name, last_name),
-          helper4:users!work_orders_helper4_id_fkey(first_name, last_name)
+          helper_1:users!work_orders_helper_1_id_fkey(first_name, last_name),
+          helper_2:users!work_orders_helper_2_id_fkey(first_name, last_name),
+          helper_3:users!work_orders_helper_3_id_fkey(first_name, last_name),
+          helper_4:users!work_orders_helper_4_id_fkey(first_name, last_name)
         `)
-        .or(`lead_tech_id.eq.${currentUser.user_id},helper1_id.eq.${currentUser.user_id},helper2_id.eq.${currentUser.user_id},helper3_id.eq.${currentUser.user_id},helper4_id.eq.${currentUser.user_id}`)
+        .or(`lead_tech_id.eq.${currentUser.user_id},helper_1_id.eq.${currentUser.user_id},helper_2_id.eq.${currentUser.user_id},helper_3_id.eq.${currentUser.user_id},helper_4_id.eq.${currentUser.user_id}`)
         .in('status', ['assigned', 'in_progress', 'pending'])
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
+      console.log('Work orders query result:', data, error);
+
       if (error) throw error;
       setWorkOrders(data || []);
+      console.log('Work orders loaded:', data?.length || 0);
     } catch (err) {
       console.error('Error loading work orders:', err);
     }
   }
 
   async function loadCompletedWorkOrders() {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('loadCompletedWorkOrders: No current user');
+      return;
+    }
+
+    console.log('Loading completed work orders for user:', currentUser.user_id);
 
     try {
       const { data, error } = await supabase
@@ -196,13 +223,16 @@ export default function MobilePage() {
           *,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
-        .or(`lead_tech_id.eq.${currentUser.user_id},helper1_id.eq.${currentUser.user_id},helper2_id.eq.${currentUser.user_id},helper3_id.eq.${currentUser.user_id},helper4_id.eq.${currentUser.user_id}`)
+        .or(`lead_tech_id.eq.${currentUser.user_id},helper_1_id.eq.${currentUser.user_id},helper_2_id.eq.${currentUser.user_id},helper_3_id.eq.${currentUser.user_id},helper_4_id.eq.${currentUser.user_id}`)
         .eq('status', 'completed')
         .order('date_completed', { ascending: false })
         .limit(50);
 
+      console.log('Completed work orders query result:', data, error);
+
       if (error) throw error;
       setCompletedWorkOrders(data || []);
+      console.log('Completed work orders loaded:', data?.length || 0);
     } catch (err) {
       console.error('Error loading completed work orders:', err);
     }
@@ -392,10 +422,10 @@ export default function MobilePage() {
         .select(`
           *,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
-          helper1:users!work_orders_helper1_id_fkey(first_name, last_name),
-          helper2:users!work_orders_helper2_id_fkey(first_name, last_name),
-          helper3:users!work_orders_helper3_id_fkey(first_name, last_name),
-          helper4:users!work_orders_helper4_id_fkey(first_name, last_name)
+          helper_1:users!work_orders_helper_1_id_fkey(first_name, last_name),
+          helper_2:users!work_orders_helper_2_id_fkey(first_name, last_name),
+          helper_3:users!work_orders_helper_3_id_fkey(first_name, last_name),
+          helper_4:users!work_orders_helper_4_id_fkey(first_name, last_name)
         `)
         .eq('wo_id', selectedWO.wo_id)
         .single();
@@ -642,10 +672,10 @@ export default function MobilePage() {
 
   if (selectedWO) {
     const availableHelperSlots = [];
-    if (!selectedWO.helper1_id) availableHelperSlots.push('helper1_id');
-    if (!selectedWO.helper2_id) availableHelperSlots.push('helper2_id');
-    if (!selectedWO.helper3_id) availableHelperSlots.push('helper3_id');
-    if (!selectedWO.helper4_id) availableHelperSlots.push('helper4_id');
+    if (!selectedWO.helper_1_id) availableHelperSlots.push('helper_1_id');
+    if (!selectedWO.helper_2_id) availableHelperSlots.push('helper_2_id');
+    if (!selectedWO.helper_3_id) availableHelperSlots.push('helper_3_id');
+    if (!selectedWO.helper_4_id) availableHelperSlots.push('helper_4_id');
 
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -743,28 +773,28 @@ export default function MobilePage() {
                   <span className="text-blue-500">👷</span>
                   <span>Lead: {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</span>
                 </div>
-                {selectedWO.helper1 && (
+                {selectedWO.helper_1 && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">👤</span>
-                    <span>Helper 1: {selectedWO.helper1.first_name} {selectedWO.helper1.last_name}</span>
+                    <span>Helper 1: {selectedWO.helper_1.first_name} {selectedWO.helper_1.last_name}</span>
                   </div>
                 )}
-                {selectedWO.helper2 && (
+                {selectedWO.helper_2 && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">👤</span>
-                    <span>Helper 2: {selectedWO.helper2.first_name} {selectedWO.helper2.last_name}</span>
+                    <span>Helper 2: {selectedWO.helper_2.first_name} {selectedWO.helper_2.last_name}</span>
                   </div>
                 )}
-                {selectedWO.helper3 && (
+                {selectedWO.helper_3 && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">👤</span>
-                    <span>Helper 3: {selectedWO.helper3.first_name} {selectedWO.helper3.last_name}</span>
+                    <span>Helper 3: {selectedWO.helper_3.first_name} {selectedWO.helper_3.last_name}</span>
                   </div>
                 )}
-                {selectedWO.helper4 && (
+                {selectedWO.helper_4 && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">👤</span>
-                    <span>Helper 4: {selectedWO.helper4.first_name} {selectedWO.helper4.last_name}</span>
+                    <span>Helper 4: {selectedWO.helper_4.first_name} {selectedWO.helper_4.last_name}</span>
                   </div>
                 )}
               </div>

@@ -909,7 +909,7 @@ export default function MobilePage() {
                     </div>
                   ) : null}
                 </div>
-              )))}
+              ))}
               </>
             )}
           </div>

@@ -300,14 +300,38 @@ export default function MobilePage() {
   async function handleCheckIn(woId) {
     try {
       setSaving(true);
-      const now = new Date().toISOString();
+      const now = new Date();
+      const timestamp = now.toLocaleString();
+      const isoTime = now.toISOString();
+      
+      // Get current work order
+      const { data: wo } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', woId)
+        .single();
+      
+      // Add check-in note to comments
+      const existingComments = wo.comments || '';
+      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN`;
+      const updatedComments = existingComments 
+        ? `${existingComments}\n\n${checkInNote}`
+        : checkInNote;
+      
+      // Update work order with check-in
+      const updateData = {
+        comments: updatedComments,
+        status: 'in_progress'
+      };
+      
+      // If this is the first check-in, also set time_in field
+      if (!wo.time_in) {
+        updateData.time_in = isoTime;
+      }
       
       const { error } = await supabase
         .from('work_orders')
-        .update({
-          time_in: now,
-          status: 'in_progress'
-        })
+        .update(updateData)
         .eq('wo_id', woId);
 
       if (error) throw error;
@@ -331,13 +355,37 @@ export default function MobilePage() {
   async function handleCheckOut(woId) {
     try {
       setSaving(true);
-      const now = new Date().toISOString();
+      const now = new Date();
+      const timestamp = now.toLocaleString();
+      const isoTime = now.toISOString();
+      
+      // Get current work order
+      const { data: wo } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', woId)
+        .single();
+      
+      // Add check-out note to comments
+      const existingComments = wo.comments || '';
+      const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT`;
+      const updatedComments = existingComments 
+        ? `${existingComments}\n\n${checkOutNote}`
+        : checkOutNote;
+      
+      // Update work order with check-out
+      const updateData = {
+        comments: updatedComments
+      };
+      
+      // If this is the first check-out, also set time_out field
+      if (!wo.time_out) {
+        updateData.time_out = isoTime;
+      }
       
       const { error } = await supabase
         .from('work_orders')
-        .update({
-          time_out: now
-        })
+        .update(updateData)
         .eq('wo_id', woId);
 
       if (error) throw error;
@@ -968,33 +1016,41 @@ export default function MobilePage() {
               </button>
             </div>
 
-            {/* Check In/Out */}
-            {!selectedWO.time_in ? (
-              <button
-                onClick={() => handleCheckIn(selectedWO.wo_id)}
-                disabled={saving}
-                className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
-              >
-                ✓ CHECK IN
-              </button>
-            ) : !selectedWO.time_out ? (
-              <button
-                onClick={() => handleCheckOut(selectedWO.wo_id)}
-                disabled={saving}
-                className="w-full bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
-              >
-                Check Out
-              </button>
-            ) : (
-              <div className="bg-gray-800 rounded-lg p-4 text-center">
-                <p className="text-green-500 font-bold">✅ Checked Out</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  In: {formatDate(selectedWO.time_in)}
-                </p>
-                <p className="text-sm text-gray-400">
-                  Out: {formatDate(selectedWO.time_out)}
-                </p>
-              </div>
+            {/* Check In/Out - Always Available */}
+            {selectedWO.status !== 'completed' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleCheckIn(selectedWO.wo_id)}
+                    disabled={saving}
+                    className="bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
+                  >
+                    ✓ CHECK IN
+                  </button>
+                  <button
+                    onClick={() => handleCheckOut(selectedWO.wo_id)}
+                    disabled={saving}
+                    className="bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
+                  >
+                    ⏸ CHECK OUT
+                  </button>
+                </div>
+                
+                {/* Check-in/out History Indicator */}
+                {selectedWO.time_in && (
+                  <div className="bg-gray-800 rounded-lg p-3 text-center text-sm">
+                    <p className="text-gray-400">
+                      First Check-In: {formatDate(selectedWO.time_in)}
+                      {selectedWO.time_out && (
+                        <> • First Check-Out: {formatDate(selectedWO.time_out)}</>
+                      )}
+                    </p>
+                    <p className="text-blue-400 text-xs mt-1">
+                      See Comments below for full check-in/out history
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Primary Assignment */}
@@ -1476,6 +1532,9 @@ export default function MobilePage() {
 
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Comments & Notes</h3>
+              <p className="text-xs text-gray-400 mb-2">
+                📝 Includes check-in/out history and team notes
+              </p>
               <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
                 {selectedWO.comments ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">

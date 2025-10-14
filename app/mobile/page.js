@@ -1606,8 +1606,8 @@ export default function MobilePage() {
             <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6 sticky top-0 bg-gray-800 pb-4 border-b border-gray-700">
                 <div>
-                  <h3 className="text-2xl font-bold text-blue-400">📊 Work Order Summary</h3>
-                  <p className="text-sm text-green-500 mt-1">✅ Completed Work Order</p>
+                  <h3 className="text-2xl font-bold text-blue-400">Work Order Summary</h3>
+                  <p className="text-sm text-green-500 mt-1">✅ {summaryWorkOrder.wo_number} - Completed</p>
                 </div>
                 <button
                   onClick={() => {
@@ -1622,303 +1622,122 @@ export default function MobilePage() {
               </div>
 
               <div className="space-y-6">
-                {/* Basic Info */}
+                {/* Location & Basic Info */}
                 <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Work Order Information</h4>
-                  <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">WO Number:</span>
-                      <span className="font-semibold">{summaryWorkOrder.wo_number}</span>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Location & Details</h4>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                    <div>
+                      <div className="text-gray-400 text-xs mb-1">Building/Location:</div>
+                      <div className="font-semibold text-lg">{summaryWorkOrder.building}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Building:</span>
-                      <span className="font-semibold">{summaryWorkOrder.building}</span>
+                    <div>
+                      <div className="text-gray-400 text-xs mb-1">Description:</div>
+                      <div className="text-sm">{summaryWorkOrder.work_order_description}</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Priority:</span>
-                      <span className={getPriorityColor(summaryWorkOrder.priority)}>{getPriorityBadge(summaryWorkOrder.priority)}</span>
+                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-600">
+                      <div>
+                        <div className="text-gray-400 text-xs mb-1">Date Completed:</div>
+                        <div className="text-sm font-semibold">{formatDate(summaryWorkOrder.date_completed)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-400 text-xs mb-1">Total Age:</div>
+                        <div className="text-sm font-semibold text-orange-500">{calculateAge(summaryWorkOrder.date_entered)} days</div>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Status:</span>
-                      <span className="text-green-500">✅ Completed</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Date Completed:</span>
-                      <span className="font-semibold">{formatDate(summaryWorkOrder.date_completed)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Total Age:</span>
-                      <span className="text-orange-500 font-semibold">{calculateAge(summaryWorkOrder.date_entered)} days</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Requestor:</span>
-                      <span>{summaryWorkOrder.requestor || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">NTE Budget:</span>
-                      <span className="text-green-500 font-bold">${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
-                    </div>
-                  </div>
-                  <div className="bg-gray-700 rounded-lg p-4 mt-2">
-                    <div className="text-gray-400 text-xs mb-1">Description:</div>
-                    <div className="text-sm">{summaryWorkOrder.work_order_description}</div>
                   </div>
                 </div>
 
-                {/* Team Information */}
+                {/* Team Hours & Mileage - Individual Breakdown */}
                 <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Team</h4>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Team Hours & Mileage</h4>
                   <div className="bg-gray-700 rounded-lg p-4 space-y-3">
-                    <div>
-                      <div className="text-gray-400 text-xs mb-1">Lead Tech:</div>
-                      <div className="font-semibold">{summaryWorkOrder.lead_tech?.first_name} {summaryWorkOrder.lead_tech?.last_name}</div>
+                    {/* Lead Tech */}
+                    <div className="border-b border-gray-600 pb-3">
+                      <div className="font-semibold text-blue-400 mb-2">
+                        Lead Tech: {summaryWorkOrder.lead_tech?.first_name} {summaryWorkOrder.lead_tech?.last_name}
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-400">RT Hours:</span>
+                          <span className="ml-2 font-semibold">{summaryWorkOrder.hours_regular || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">OT Hours:</span>
+                          <span className="ml-2 font-semibold">{summaryWorkOrder.hours_overtime || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Miles:</span>
+                          <span className="ml-2 font-semibold">{summaryWorkOrder.miles || 0}</span>
+                        </div>
+                      </div>
                     </div>
-                    {currentTeamList.length > 0 && (
-                      <div>
-                        <div className="text-gray-400 text-xs mb-2">Helpers:</div>
-                        {currentTeamList.map((member, idx) => (
-                          <div key={member.assignment_id} className="mb-2 pl-3 border-l-2 border-blue-500">
-                            <div className="font-semibold">{idx + 1}. {member.user?.first_name} {member.user?.last_name}</div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              RT: {member.hours_regular || 0} hrs • OT: {member.hours_overtime || 0} hrs • Miles: {member.miles || 0} mi
+
+                    {/* Helper/Team Members */}
+                    {currentTeamList.length > 0 ? (
+                      currentTeamList.map((member, idx) => (
+                        <div key={member.assignment_id} className="pb-3">
+                          <div className="font-semibold text-gray-300 mb-2">
+                            Helper {idx + 1}: {member.user?.first_name} {member.user?.last_name}
+                          </div>
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-400">RT Hours:</span>
+                              <span className="ml-2 font-semibold">{member.hours_regular || 0}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">OT Hours:</span>
+                              <span className="ml-2 font-semibold">{member.hours_overtime || 0}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Miles:</span>
+                              <span className="ml-2 font-semibold">{member.miles || 0}</span>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-400 text-sm">No additional team members</div>
                     )}
                   </div>
                 </div>
 
-                {/* Time & Field Data */}
-                <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Primary Tech Field Data</h4>
-                  <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Regular Hours:</span>
-                      <span className="font-semibold">{summaryWorkOrder.hours_regular || 0} hrs</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Overtime Hours:</span>
-                      <span className="font-semibold">{summaryWorkOrder.hours_overtime || 0} hrs</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Miles:</span>
-                      <span className="font-semibold">{summaryWorkOrder.miles || 0} mi</span>
-                    </div>
-                    <div className="border-t border-gray-600 my-2"></div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Material Cost:</span>
-                      <span className="font-semibold">${(summaryWorkOrder.material_cost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">EMF Equipment:</span>
-                      <span className="font-semibold">${(summaryWorkOrder.emf_equipment_cost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Trailer Cost:</span>
-                      <span className="font-semibold">${(summaryWorkOrder.trailer_cost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Rental Cost:</span>
-                      <span className="font-semibold">${(summaryWorkOrder.rental_cost || 0).toFixed(2)}</span>
+                {/* Costs - Only visible to lead tech */}
+                {currentUser && summaryWorkOrder.lead_tech_id === currentUser.user_id && (
+                  <div>
+                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Costs (Lead Tech Only)</h4>
+                    <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Material Cost:</span>
+                          <span className="font-semibold">${(summaryWorkOrder.material_cost || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Equipment Cost:</span>
+                          <span className="font-semibold">${(summaryWorkOrder.emf_equipment_cost || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Rental Cost:</span>
+                          <span className="font-semibold">${(summaryWorkOrder.rental_cost || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Trailer Cost:</span>
+                          <span className="font-semibold">${(summaryWorkOrder.trailer_cost || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="border-t border-gray-600 mt-3 pt-3">
+                        <div className="flex justify-between font-bold text-green-400">
+                          <span>NTE Budget:</span>
+                          <span>${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Complete Cost Breakdown */}
-                <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">💰 Complete Cost Breakdown</h4>
-                  <div className="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
-                    {(() => {
-                      const primaryRT = parseFloat(summaryWorkOrder.hours_regular) || 0;
-                      const primaryOT = parseFloat(summaryWorkOrder.hours_overtime) || 0;
-                      const primaryMiles = parseFloat(summaryWorkOrder.miles) || 0;
-                      
-                      let teamRT = 0;
-                      let teamOT = 0;
-                      let teamMiles = 0;
-                      
-                      currentTeamList.forEach(member => {
-                        teamRT += parseFloat(member.hours_regular) || 0;
-                        teamOT += parseFloat(member.hours_overtime) || 0;
-                        teamMiles += parseFloat(member.miles) || 0;
-                      });
-                      
-                      const totalRT = primaryRT + teamRT;
-                      const totalOT = primaryOT + teamOT;
-                      const totalMiles = primaryMiles + teamMiles;
-                      const adminHours = 2;
-                      
-                      const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-                      const materialBase = parseFloat(summaryWorkOrder.material_cost) || 0;
-                      const materialWithMarkup = materialBase * 1.25;
-                      const equipmentBase = parseFloat(summaryWorkOrder.emf_equipment_cost) || 0;
-                      const equipmentWithMarkup = equipmentBase * 1.15;
-                      const trailerCost = parseFloat(summaryWorkOrder.trailer_cost) || 0;
-                      const rentalBase = parseFloat(summaryWorkOrder.rental_cost) || 0;
-                      const rentalWithMarkup = rentalBase * 1.15;
-                      const mileageCost = totalMiles * 1.00;
-                      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
-                      const remaining = (summaryWorkOrder.nte || 0) - grandTotal;
-                      
-                      return (
-                        <>
-                          {/* Labor */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">LABOR</div>
-                            <div className="space-y-1 text-xs ml-3">
-                              <div className="flex justify-between">
-                                <span>Primary RT: {primaryRT.toFixed(2)} hrs × $64</span>
-                                <span>${(primaryRT * 64).toFixed(2)}</span>
-                              </div>
-                              {teamRT > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Team RT: {teamRT.toFixed(2)} hrs × $64</span>
-                                  <span>${(teamRT * 64).toFixed(2)}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between">
-                                <span>Primary OT: {primaryOT.toFixed(2)} hrs × $96</span>
-                                <span>${(primaryOT * 96).toFixed(2)}</span>
-                              </div>
-                              {teamOT > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Team OT: {teamOT.toFixed(2)} hrs × $96</span>
-                                  <span>${(teamOT * 96).toFixed(2)}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between text-yellow-400">
-                                <span>Admin Hours: 2 × $64</span>
-                                <span>$128.00</span>
-                              </div>
-                            </div>
-                            <div className="flex justify-between font-bold mt-2 text-green-400">
-                              <span>Total Labor:</span>
-                              <span>${laborCost.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Materials */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">MATERIALS</div>
-                            <div className="space-y-1 text-xs ml-3">
-                              <div className="flex justify-between">
-                                <span>Base Cost:</span>
-                                <span>${materialBase.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-yellow-400">
-                                <span>+ 25% Markup:</span>
-                                <span>+ ${(materialBase * 0.25).toFixed(2)}</span>
-                              </div>
-                            </div>
-                            <div className="flex justify-between font-bold mt-2">
-                              <span>Total Materials:</span>
-                              <span>${materialWithMarkup.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Equipment */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">EQUIPMENT</div>
-                            <div className="space-y-1 text-xs ml-3">
-                              <div className="flex justify-between">
-                                <span>Base Cost:</span>
-                                <span>${equipmentBase.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-yellow-400">
-                                <span>+ 15% Markup:</span>
-                                <span>+ ${(equipmentBase * 0.15).toFixed(2)}</span>
-                              </div>
-                            </div>
-                            <div className="flex justify-between font-bold mt-2">
-                              <span>Total Equipment:</span>
-                              <span>${equipmentWithMarkup.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Trailer */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">TRAILER</div>
-                            <div className="flex justify-between">
-                              <span className="text-xs ml-3">No Markup</span>
-                              <span className="font-bold">${trailerCost.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Rental */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">RENTAL</div>
-                            <div className="space-y-1 text-xs ml-3">
-                              <div className="flex justify-between">
-                                <span>Base Cost:</span>
-                                <span>${rentalBase.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-yellow-400">
-                                <span>+ 15% Markup:</span>
-                                <span>+ ${(rentalBase * 0.15).toFixed(2)}</span>
-                              </div>
-                            </div>
-                            <div className="flex justify-between font-bold mt-2">
-                              <span>Total Rental:</span>
-                              <span>${rentalWithMarkup.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Mileage */}
-                          <div className="border-b border-gray-600 pb-3">
-                            <div className="font-bold text-blue-400 mb-2">MILEAGE</div>
-                            <div className="space-y-1 text-xs ml-3">
-                              {primaryMiles > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Primary Tech: {primaryMiles.toFixed(1)} mi</span>
-                                  <span>${(primaryMiles * 1.00).toFixed(2)}</span>
-                                </div>
-                              )}
-                              {teamMiles > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Team: {teamMiles.toFixed(1)} mi</span>
-                                  <span>${(teamMiles * 1.00).toFixed(2)}</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex justify-between font-bold mt-2">
-                              <span>Total Mileage ({totalMiles.toFixed(1)} mi):</span>
-                              <span>${mileageCost.toFixed(2)}</span>
-                            </div>
-                          </div>
-
-                          {/* Grand Total */}
-                          <div className="pt-2">
-                            <div className="flex justify-between text-lg font-bold text-green-400 mb-3">
-                              <span>GRAND TOTAL:</span>
-                              <span>${grandTotal.toFixed(2)}</span>
-                            </div>
-                            <div className="bg-gray-800 rounded-lg p-3 space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-400">NTE Budget:</span>
-                                <span className="font-bold">${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
-                              </div>
-                              <div className={`flex justify-between text-lg font-bold ${remaining >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                <span>Remaining:</span>
-                                <span>${remaining.toFixed(2)}</span>
-                              </div>
-                              {remaining < 0 && (
-                                <div className="text-red-400 text-xs text-center mt-2">
-                                  ⚠️ OVER BUDGET
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
+                )}
 
                 {/* Comments */}
                 {summaryWorkOrder.comments && (
                   <div>
-                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Comments & History</h4>
+                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Comments & Notes</h4>
                     <div className="bg-gray-700 rounded-lg p-4 max-h-60 overflow-y-auto">
                       <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
                         {summaryWorkOrder.comments}

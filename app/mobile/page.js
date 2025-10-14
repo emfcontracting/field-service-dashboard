@@ -315,7 +315,7 @@ export default function MobilePage() {
       
       // Add check-in note to comments
       const existingComments = wo.comments || '';
-      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN`;
+      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✔ CHECKED IN`;
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${checkInNote}`
         : checkInNote;
@@ -857,67 +857,66 @@ export default function MobilePage() {
                   </p>
                 </div>
                 {completedWorkOrders.map(wo => (
-                <div
-                  key={wo.wo_id}
-                  onClick={async () => {
-                    // Load team data for this work order
-                    const { data } = await supabase
-                      .from('work_order_assignments')
-                      .select(`
-                        assignment_id,
-                        user_id,
-                        role_on_job,
-                        hours_regular,
-                        hours_overtime,
-                        miles,
-                        user:users(first_name, last_name)
-                      `)
-                      .eq('wo_id', wo.wo_id);
+                  <div
+                    key={wo.wo_id}
+                    onClick={async () => {
+                      // Load team data for this work order
+                      const { data } = await supabase
+                        .from('work_order_assignments')
+                        .select(`
+                          assignment_id,
+                          user_id,
+                          role_on_job,
+                          hours_regular,
+                          hours_overtime,
+                          miles,
+                          user:users(first_name, last_name)
+                        `)
+                        .eq('wo_id', wo.wo_id);
+                      
+                      setCurrentTeamList(data || []);
+                      setSummaryWorkOrder(wo);
+                      setShowSummaryModal(true);
+                    }}
+                    className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-bold text-lg">{wo.wo_number}</span>
+                        <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                          {getPriorityBadge(wo.priority)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-500 text-sm">✅ Completed</span>
+                        <span className="text-blue-400 text-lg">📊</span>
+                      </div>
+                    </div>
                     
-                    setCurrentTeamList(data || []);
-                    setSummaryWorkOrder(wo);
-                    setShowSummaryModal(true);
-                  }}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <span className="font-bold text-lg">{wo.wo_number}</span>
-                      <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
-                        {getPriorityBadge(wo.priority)}
-                      </span>
+                    <div className="text-sm space-y-1">
+                      <p className="font-semibold">{wo.building}</p>
+                      <p className="text-gray-400">{wo.work_order_description}</p>
+                      <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} days old</p>
+                      <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
+                      {wo.lead_tech && (
+                        <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-500 text-sm">✅ Completed</span>
-                      <span className="text-blue-400 text-lg">📊</span>
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm space-y-1">
-                    <p className="font-semibold">{wo.building}</p>
-                    <p className="text-gray-400">{wo.work_order_description}</p>
-                    <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} days old</p>
-                    <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
-                    {wo.lead_tech && (
-                      <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
-                    )}
-                  </div>
 
-                  {wo.hours_regular || wo.hours_overtime ? (
-                    <div className="mt-2 text-xs text-gray-400">
-                      Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
+                    {wo.hours_regular || wo.hours_overtime ? (
+                      <div className="mt-2 text-xs text-gray-400">
+                        Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
+                      </div>
+                    ) : null}
+                    
+                    {/* Tap to View Indicator */}
+                    <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+                      <p className="text-xs text-blue-400 font-semibold">
+                        👆 Tap to View Full Summary
+                      </p>
                     </div>
-                  ) : null}
-                  
-                  {/* Tap to View Indicator */}
-                  <div className="mt-3 pt-3 border-t border-gray-700 text-center">
-                    <p className="text-xs text-blue-400 font-semibold">
-                      👆 Tap to View Full Summary
-                    </p>
                   </div>
-                </div>
-              );
-            }))}
+                ))}
               </>
             )}
           </div>
@@ -1101,7 +1100,7 @@ export default function MobilePage() {
                     disabled={saving}
                     className="bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
                   >
-                    ✓ CHECK IN
+                    ✔ CHECK IN
                   </button>
                   <button
                     onClick={() => handleCheckOut(selectedWO.wo_id)}

@@ -22,6 +22,7 @@ export default function MobilePage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
+  const [currentTeamList, setCurrentTeamList] = useState([]);
 
   const supabase = createClientComponentClient();
 
@@ -187,48 +188,84 @@ export default function MobilePage() {
     debug += `User Email: ${currentUser.email}\n\n`;
 
     try {
-      const { data, error } = await supabase
+      // Query 1: Get work orders where user is lead tech
+      const { data: leadWOs, error: leadError } = await supabase
         .from('work_orders')
         .select(`
           *,
-          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
-          helper_1:users!work_orders_helper_1_id_fkey(first_name, last_name),
-          helper_2:users!work_orders_helper_2_id_fkey(first_name, last_name),
-          helper_3:users!work_orders_helper_3_id_fkey(first_name, last_name),
-          helper_4:users!work_orders_helper_4_id_fkey(first_name, last_name)
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
-        .or(`lead_tech_id.eq.${currentUser.user_id},helper_1_id.eq.${currentUser.user_id},helper_2_id.eq.${currentUser.user_id},helper_3_id.eq.${currentUser.user_id},helper_4_id.eq.${currentUser.user_id}`)
+        .eq('lead_tech_id', currentUser.user_id)
         .in('status', ['assigned', 'in_progress', 'pending'])
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
-      if (error) {
-        debug += `ERROR: ${error.message}\n`;
-        setDebugInfo(debug);
-        throw error;
+      if (leadError) {
+        debug += `ERROR loading lead tech WOs: ${leadError.message}\n`;
+      } else {
+        debug += `Found ${leadWOs?.length || 0} work orders as lead tech\n`;
       }
 
-      debug += `Query successful!\n`;
-      debug += `Work orders found: ${data?.length || 0}\n\n`;
+      // Query 2: Get work order assignments where user is helper
+      const { data: assignments, error: assignError } = await supabase
+        .from('work_order_assignments')
+        .select('wo_id, role_on_job')
+        .eq('user_id', currentUser.user_id);
+
+      if (assignError) {
+        debug += `ERROR loading assignments: ${assignError.message}\n`;
+      } else {
+        debug += `Found ${assignments?.length || 0} work order assignments\n`;
+      }
+
+      // Query 3: Get full work order details for assignments
+      let helperWOs = [];
+      if (assignments && assignments.length > 0) {
+        const woIds = assignments.map(a => a.wo_id);
+        const { data: helperWOData, error: helperError } = await supabase
+          .from('work_orders')
+          .select(`
+            *,
+            lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+          `)
+          .in('wo_id', woIds)
+          .in('status', ['assigned', 'in_progress', 'pending']);
+
+        if (helperError) {
+          debug += `ERROR loading helper WOs: ${helperError.message}\n`;
+        } else {
+          debug += `Found ${helperWOData?.length || 0} work orders as helper\n`;
+          helperWOs = helperWOData || [];
+        }
+      }
+
+      // Combine and deduplicate
+      const allWOs = [...(leadWOs || []), ...helperWOs];
+      const uniqueWOs = Array.from(
+        new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+      );
+
+      debug += `\nTotal unique work orders: ${uniqueWOs.length}\n\n`;
       
-      if (data && data.length > 0) {
+      if (uniqueWOs.length > 0) {
         debug += `Work Orders:\n`;
-        data.forEach((wo, i) => {
+        uniqueWOs.forEach((wo, i) => {
           debug += `${i + 1}. ${wo.wo_number} - ${wo.building}\n`;
           debug += `   Status: ${wo.status}\n`;
-          debug += `   Lead: ${wo.lead_tech_id || 'none'}\n`;
-          debug += `   Helpers: ${wo.helper_1_id || '-'}, ${wo.helper_2_id || '-'}, ${wo.helper_3_id || '-'}, ${wo.helper_4_id || '-'}\n\n`;
+          debug += `   Priority: ${wo.priority}\n`;
+          debug += `   Lead: ${wo.lead_tech_id === currentUser.user_id ? 'YOU' : wo.lead_tech_id || 'none'}\n\n`;
         });
       } else {
         debug += `No work orders found!\n`;
         debug += `Possible reasons:\n`;
-        debug += `- Not assigned as lead or helper\n`;
+        debug += `- Not assigned as lead tech\n`;
+        debug += `- Not assigned as helper in work_order_assignments table\n`;
         debug += `- Status not 'assigned', 'in_progress', or 'pending'\n`;
         debug += `- Work orders don't exist in database\n`;
       }
 
       setDebugInfo(debug);
-      setWorkOrders(data || []);
+      setWorkOrders(uniqueWOs);
     } catch (err) {
       console.error('Error loading work orders:', err);
       setDebugInfo(debug + `\nCRITICAL ERROR: ${err.message}`);
@@ -244,22 +281,50 @@ export default function MobilePage() {
     console.log('Loading completed work orders for user:', currentUser.user_id);
 
     try {
-      const { data, error } = await supabase
+      // Get completed work orders where user is lead tech
+      const { data: leadWOs, error: leadError } = await supabase
         .from('work_orders')
         .select(`
           *,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
-        .or(`lead_tech_id.eq.${currentUser.user_id},helper_1_id.eq.${currentUser.user_id},helper_2_id.eq.${currentUser.user_id},helper_3_id.eq.${currentUser.user_id},helper_4_id.eq.${currentUser.user_id}`)
+        .eq('lead_tech_id', currentUser.user_id)
         .eq('status', 'completed')
         .order('date_completed', { ascending: false })
         .limit(50);
 
-      console.log('Completed work orders query result:', data, error);
+      // Get assignments where user is helper
+      const { data: assignments } = await supabase
+        .from('work_order_assignments')
+        .select('wo_id')
+        .eq('user_id', currentUser.user_id);
 
-      if (error) throw error;
-      setCompletedWorkOrders(data || []);
-      console.log('Completed work orders loaded:', data?.length || 0);
+      // Get completed work orders for those assignments
+      let helperWOs = [];
+      if (assignments && assignments.length > 0) {
+        const woIds = assignments.map(a => a.wo_id);
+        const { data: helperWOData } = await supabase
+          .from('work_orders')
+          .select(`
+            *,
+            lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+          `)
+          .in('wo_id', woIds)
+          .eq('status', 'completed')
+          .order('date_completed', { ascending: false })
+          .limit(50);
+
+        helperWOs = helperWOData || [];
+      }
+
+      // Combine and deduplicate
+      const allWOs = [...(leadWOs || []), ...helperWOs];
+      const uniqueWOs = Array.from(
+        new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
+      );
+
+      setCompletedWorkOrders(uniqueWOs);
+      console.log('Completed work orders loaded:', uniqueWOs.length);
     } catch (err) {
       console.error('Error loading completed work orders:', err);
     }
@@ -433,37 +498,42 @@ export default function MobilePage() {
     }
   }
 
-  async function handleAddTeamMember(memberId, helperSlot) {
+  async function handleAddTeamMember(memberId) {
     try {
       setSaving(true);
+      
+      // Add to work_order_assignments table instead
       const { error } = await supabase
-        .from('work_orders')
-        .update({ [helperSlot]: memberId })
-        .eq('wo_id', selectedWO.wo_id);
+        .from('work_order_assignments')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: memberId,
+          role_on_job: 'helper'
+        });
 
       if (error) throw error;
 
       await loadWorkOrders();
-      const { data: updated } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
-          helper_1:users!work_orders_helper_1_id_fkey(first_name, last_name),
-          helper_2:users!work_orders_helper_2_id_fkey(first_name, last_name),
-          helper_3:users!work_orders_helper_3_id_fkey(first_name, last_name),
-          helper_4:users!work_orders_helper_4_id_fkey(first_name, last_name)
-        `)
-        .eq('wo_id', selectedWO.wo_id)
-        .single();
-      
-      setSelectedWO(updated);
+      await loadTeamForWorkOrder(selectedWO.wo_id);
       setShowTeamModal(false);
     } catch (err) {
       alert('Error adding team member: ' + err.message);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function loadTeamForWorkOrder(woId) {
+    const { data } = await supabase
+      .from('work_order_assignments')
+      .select(`
+        user_id,
+        role_on_job,
+        user:users(first_name, last_name)
+      `)
+      .eq('wo_id', woId);
+    
+    setCurrentTeamList(data || []);
   }
 
   function getPriorityColor(priority) {
@@ -698,11 +768,12 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
-    const availableHelperSlots = [];
-    if (!selectedWO.helper_1_id) availableHelperSlots.push('helper_1_id');
-    if (!selectedWO.helper_2_id) availableHelperSlots.push('helper_2_id');
-    if (!selectedWO.helper_3_id) availableHelperSlots.push('helper_3_id');
-    if (!selectedWO.helper_4_id) availableHelperSlots.push('helper_4_id');
+    // Load team when work order is selected
+    useEffect(() => {
+      if (selectedWO) {
+        loadTeamForWorkOrder(selectedWO.wo_id);
+      }
+    }, [selectedWO?.wo_id]);
 
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -800,32 +871,14 @@ export default function MobilePage() {
                   <span className="text-blue-500">👷</span>
                   <span>Lead: {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</span>
                 </div>
-                {selectedWO.helper_1 && (
-                  <div className="flex items-center gap-2">
+                {currentTeamList.map((member, idx) => (
+                  <div key={member.user_id} className="flex items-center gap-2">
                     <span className="text-gray-400">👤</span>
-                    <span>Helper 1: {selectedWO.helper_1.first_name} {selectedWO.helper_1.last_name}</span>
+                    <span>Helper {idx + 1}: {member.user?.first_name} {member.user?.last_name}</span>
                   </div>
-                )}
-                {selectedWO.helper_2 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">👤</span>
-                    <span>Helper 2: {selectedWO.helper_2.first_name} {selectedWO.helper_2.last_name}</span>
-                  </div>
-                )}
-                {selectedWO.helper_3 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">👤</span>
-                    <span>Helper 3: {selectedWO.helper_3.first_name} {selectedWO.helper_3.last_name}</span>
-                  </div>
-                )}
-                {selectedWO.helper_4 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">👤</span>
-                    <span>Helper 4: {selectedWO.helper_4.first_name} {selectedWO.helper_4.last_name}</span>
-                  </div>
-                )}
+                ))}
               </div>
-              {availableHelperSlots.length > 0 && selectedWO.status !== 'completed' && (
+              {selectedWO.status !== 'completed' && (
                 <button
                   onClick={loadTeamMembers}
                   className="mt-3 w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold"
@@ -1003,7 +1056,7 @@ export default function MobilePage() {
                 {teamMembers.map(member => (
                   <button
                     key={member.user_id}
-                    onClick={() => handleAddTeamMember(member.user_id, availableHelperSlots[0])}
+                    onClick={() => handleAddTeamMember(member.user_id)}
                     disabled={saving}
                     className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
                   >

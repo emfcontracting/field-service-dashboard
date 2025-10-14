@@ -459,8 +459,8 @@ export default function MobilePage() {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'tech')
-        .neq('user_id', currentUser.user_id)
+        .in('role', ['tech', 'helper', 'lead_tech'])
+        .eq('is_active', true)
         .order('first_name');
 
       if (error) throw error;
@@ -500,13 +500,36 @@ export default function MobilePage() {
     const { data } = await supabase
       .from('work_order_assignments')
       .select(`
+        assignment_id,
         user_id,
         role_on_job,
+        hours_regular,
+        hours_overtime,
+        miles,
         user:users(first_name, last_name)
       `)
       .eq('wo_id', woId);
     
     setCurrentTeamList(data || []);
+  }
+
+  async function handleUpdateTeamMemberField(assignmentId, field, value) {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('work_order_assignments')
+        .update({ [field]: value })
+        .eq('assignment_id', assignmentId);
+
+      if (error) throw error;
+
+      // Refresh team list
+      await loadTeamForWorkOrder(selectedWO.wo_id);
+    } catch (err) {
+      alert('Error updating team member: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function getPriorityColor(priority) {
@@ -862,12 +885,52 @@ export default function MobilePage() {
                 )}
               </div>
               {currentTeamList.length > 0 ? (
-                <div className="space-y-2">
-                  {currentTeamList.map((member, idx) => (
-                    <div key={member.user_id} className="bg-gray-700 rounded-lg p-3">
-                      <p className="font-semibold">
+                <div className="space-y-4">
+                  {currentTeamList.map((member) => (
+                    <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
+                      <p className="font-semibold mb-3">
                         {member.user?.first_name} {member.user?.last_name}
                       </p>
+                      
+                      {/* Team Member Fields */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">RT (hrs)</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={member.hours_regular || ''}
+                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                            disabled={saving || selectedWO.status === 'completed'}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">OT (hrs)</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={member.hours_overtime || ''}
+                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                            disabled={saving || selectedWO.status === 'completed'}
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Miles</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={member.miles || ''}
+                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                            disabled={saving || selectedWO.status === 'completed'}
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

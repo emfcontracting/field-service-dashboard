@@ -225,11 +225,11 @@ export default function InvoicePrintPage() {
 
         {/* Footer */}
         <div className="border-t-2 border-gray-300 pt-4 text-center text-sm text-gray-600">
-  <p className="mb-2">Thank you for your business!</p>
-  <p>Please remit payment within 30 days of invoice date.</p>
-  <p className="mt-4 text-xs">EMF Contracting LLC • 565 Pine Plain Rd, Gaston, SC 29053</p>
-  <p className="text-xs">Email: emfcontractingsc@gmail.com • Phone: (864) 376-4965</p>
-</div>
+          <p className="mb-2">Thank you for your business!</p>
+          <p>Please remit payment within 30 days of invoice date.</p>
+          <p className="mt-4 text-xs">EMF Contracting LLC • 565 Pine Plain Rd, Gaston, SC 29053</p>
+          <p className="text-xs">Email: emfcontractingsc@gmail.com • Phone: (864) 376-4965</p>
+        </div>
       </div>
     </>
   );

@@ -1554,7 +1554,7 @@ export default function MobilePage() {
 
             {wo.time_out && status !== 'completed' && (
               <button
-                onClick={handleCompleteWorkOrder}
+                onClick={() => handleCompleteWorkOrder()}
                 disabled={saving}
                 className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
               >

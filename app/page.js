@@ -621,6 +621,12 @@ return (
             >
               👥 Users
             </button>
+<button
+  onClick={() => window.location.href = '/settings'}
+  className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition"
+>
+  ⚙️ Settings
+</button>
             <button
               onClick={() => window.location.href = '/mobile'}
               className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"

@@ -1169,7 +1169,39 @@ const finalizeInvoice = async () => {
                     📤 Share
                   </button>
                 </div>
-
+{selectedItem.data.status === 'approved' && (
+  <button
+    onClick={async () => {
+      if (!confirm('Sync this invoice to QuickBooks?')) return;
+      
+      setLoading(true);
+      try {
+        const response = await fetch('/api/quickbooks/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice_id: selectedItem.data.invoice_id })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('✅ Invoice synced to QuickBooks!\n\nQuickBooks ID: ' + result.quickbooks_id);
+          fetchData();
+        } else {
+          alert('❌ Sync failed: ' + result.error);
+        }
+      } catch (error) {
+        alert('❌ Sync failed: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    }}
+    disabled={selectedItem.data.quickbooks_invoice_id}
+    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
+  >
+    {selectedItem.data.quickbooks_invoice_id ? '✅ Synced to QuickBooks' : '📤 Sync to QuickBooks'}
+  </button>
+)}
                 {selectedItem.data.status === 'draft' && (
                   <>
                     <button

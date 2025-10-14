@@ -642,6 +642,11 @@ export default function MobilePage() {
     if (!selectedWO) return;
     
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Unable to open print window. Please check your popup settings.');
+      return;
+    }
+    
     const age = calculateAge(selectedWO.date_entered);
     
     printWindow.document.write(`
@@ -666,15 +671,15 @@ export default function MobilePage() {
       </head>
       <body>
         <div class="header">
-          <h1>Work Order: ${selectedWO.wo_number}</h1>
+          <h1>Work Order: ${selectedWO.wo_number || 'N/A'}</h1>
           <p><strong>Created:</strong> ${new Date().toLocaleString()}</p>
         </div>
         
         <div class="section">
           <h2>Work Order Details</h2>
-          <div class="value"><span class="label">Building:</span> ${selectedWO.building}</div>
-          <div class="value"><span class="label">Priority:</span> ${selectedWO.priority}</div>
-          <div class="value"><span class="label">Status:</span> ${selectedWO.status.replace('_', ' ').toUpperCase()}</div>
+          <div class="value"><span class="label">Building:</span> ${selectedWO.building || 'N/A'}</div>
+          <div class="value"><span class="label">Priority:</span> ${selectedWO.priority || 'N/A'}</div>
+          <div class="value"><span class="label">Status:</span> ${(selectedWO.status || '').replace('_', ' ').toUpperCase()}</div>
           <div class="value"><span class="label">Age:</span> ${age} days</div>
           <div class="value"><span class="label">Date Entered:</span> ${formatDate(selectedWO.date_entered)}</div>
           <div class="value"><span class="label">Requestor:</span> ${selectedWO.requestor || 'N/A'}</div>
@@ -688,9 +693,9 @@ export default function MobilePage() {
         
         <div class="section">
           <h2>Team</h2>
-          <div class="value"><span class="label">Lead Tech:</span> ${selectedWO.lead_tech?.first_name} ${selectedWO.lead_tech?.last_name}</div>
+          <div class="value"><span class="label">Lead Tech:</span> ${selectedWO.lead_tech?.first_name || ''} ${selectedWO.lead_tech?.last_name || ''}</div>
           ${currentTeamList.map((member, idx) => 
-            `<div class="value"><span class="label">Helper ${idx + 1}:</span> ${member.user?.first_name} ${member.user?.last_name}</div>`
+            `<div class="value"><span class="label">Helper ${idx + 1}:</span> ${member.user?.first_name || ''} ${member.user?.last_name || ''}</div>`
           ).join('')}
         </div>
         
@@ -968,10 +973,21 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
+    // Safely access properties with fallbacks
+    const wo = selectedWO || {};
+    const woNumber = wo.wo_number || 'Unknown';
+    const building = wo.building || 'Unknown Location';
+    const description = wo.work_order_description || 'No description';
+    const status = wo.status || 'assigned';
+    const nte = wo.nte || 0;
+    const dateEntered = wo.date_entered;
+    const requestor = wo.requestor || 'N/A';
+    const leadTech = wo.lead_tech || {};
+    
     // Calculate team totals for display
-    const primaryRT = parseFloat(selectedWO.hours_regular) || 0;
-    const primaryOT = parseFloat(selectedWO.hours_overtime) || 0;
-    const primaryMiles = parseFloat(selectedWO.miles) || 0;
+    const primaryRT = parseFloat(wo.hours_regular) || 0;
+    const primaryOT = parseFloat(wo.hours_overtime) || 0;
+    const primaryMiles = parseFloat(wo.miles) || 0;
     
     let teamRT = 0;
     let teamOT = 0;
@@ -989,16 +1005,16 @@ export default function MobilePage() {
     const adminHours = 2;
     
     const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-    const materialBase = parseFloat(selectedWO.material_cost) || 0;
+    const materialBase = parseFloat(wo.material_cost) || 0;
     const materialWithMarkup = materialBase * 1.25;
-    const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
+    const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
     const equipmentWithMarkup = equipmentBase * 1.15;
-    const trailerCost = parseFloat(selectedWO.trailer_cost) || 0;
-    const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
+    const trailerCost = parseFloat(wo.trailer_cost) || 0;
+    const rentalBase = parseFloat(wo.rental_cost) || 0;
     const rentalWithMarkup = rentalBase * 1.15;
     const mileageCost = totalMiles * 1.00;
     const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
-    const remaining = (selectedWO.nte || 0) - grandTotal;
+    const remaining = nte - grandTotal;
 
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
@@ -1010,7 +1026,7 @@ export default function MobilePage() {
             >
               ← Back to List
             </button>
-            <h1 className="text-xl font-bold">{selectedWO.wo_number}</h1>
+            <h1 className="text-xl font-bold">{woNumber}</h1>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowChangePinModal(true)}
@@ -1035,33 +1051,33 @@ export default function MobilePage() {
               <div className="space-y-2 text-sm">
                 <div>
                   <span className="text-gray-400">Building:</span>
-                  <p className="font-semibold">{selectedWO.building}</p>
+                  <p className="font-semibold">{building}</p>
                 </div>
                 
                 <div>
                   <span className="text-gray-400">Requestor:</span>
-                  <p className="font-semibold">{selectedWO.requestor || 'N/A'}</p>
+                  <p className="font-semibold">{requestor}</p>
                 </div>
                 
                 <div>
                   <span className="text-gray-400">Description:</span>
-                  <p className="text-gray-300">{selectedWO.work_order_description}</p>
+                  <p className="text-gray-300">{description}</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700">
                   <div>
                     <span className="text-gray-400">Date Entered:</span>
-                    <p className="font-semibold">{formatDate(selectedWO.date_entered)}</p>
+                    <p className="font-semibold">{formatDate(dateEntered)}</p>
                   </div>
                   <div>
                     <span className="text-gray-400">Age:</span>
-                    <p className="font-semibold text-orange-500">{calculateAge(selectedWO.date_entered)} days</p>
+                    <p className="font-semibold text-orange-500">{calculateAge(dateEntered)} days</p>
                   </div>
                 </div>
                 
                 <div className="flex justify-between items-center pt-2 border-t border-gray-700">
                   <span className="text-gray-400">NTE (Not to Exceed):</span>
-                  <span className="text-green-500 font-bold text-lg">${(selectedWO.nte || 0).toFixed(2)}</span>
+                  <span className="text-green-500 font-bold text-lg">${nte.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -1078,18 +1094,18 @@ export default function MobilePage() {
             </div>
 
             {/* Check In/Out - Always Available */}
-            {selectedWO.status !== 'completed' && (
+            {status !== 'completed' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => handleCheckIn(selectedWO.wo_id)}
+                    onClick={() => handleCheckIn(wo.wo_id)}
                     disabled={saving}
                     className="bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
                   >
                     ✔ CHECK IN
                   </button>
                   <button
-                    onClick={() => handleCheckOut(selectedWO.wo_id)}
+                    onClick={() => handleCheckOut(wo.wo_id)}
                     disabled={saving}
                     className="bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
                   >
@@ -1098,12 +1114,12 @@ export default function MobilePage() {
                 </div>
                 
                 {/* Check-in/out History Indicator */}
-                {selectedWO.time_in && (
+                {wo.time_in && (
                   <div className="bg-gray-800 rounded-lg p-3 text-center text-sm">
                     <p className="text-gray-400">
-                      First Check-In: {formatDate(selectedWO.time_in)}
-                      {selectedWO.time_out && (
-                        <> • First Check-Out: {formatDate(selectedWO.time_out)}</>
+                      First Check-In: {formatDate(wo.time_in)}
+                      {wo.time_out && (
+                        <> • First Check-Out: {formatDate(wo.time_out)}</>
                       )}
                     </p>
                     <p className="text-blue-400 text-xs mt-1">
@@ -1119,7 +1135,7 @@ export default function MobilePage() {
               <h3 className="font-bold mb-3">Primary Assignment</h3>
               <div className="bg-gray-700 rounded-lg p-3">
                 <p className="font-semibold">
-                  {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}
+                  {leadTech.first_name || 'Unknown'} {leadTech.last_name || ''}
                 </p>
               </div>
             </div>
@@ -1128,7 +1144,7 @@ export default function MobilePage() {
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold">Team Members</h3>
-                {selectedWO.status !== 'completed' && (
+                {status !== 'completed' && (
                   <button
                     onClick={loadTeamMembers}
                     className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
@@ -1142,7 +1158,7 @@ export default function MobilePage() {
                   {currentTeamList.map((member) => (
                     <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
                       <p className="font-semibold mb-3">
-                        {member.user?.first_name} {member.user?.last_name}
+                        {member.user?.first_name || 'Unknown'} {member.user?.last_name || ''}
                       </p>
                       
                       {/* Team Member Fields */}
@@ -1155,7 +1171,7 @@ export default function MobilePage() {
                             value={member.hours_regular || ''}
                             onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
-                            disabled={saving || selectedWO.status === 'completed'}
+                            disabled={saving || status === 'completed'}
                             placeholder="0"
                           />
                         </div>
@@ -1167,7 +1183,7 @@ export default function MobilePage() {
                             value={member.hours_overtime || ''}
                             onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
-                            disabled={saving || selectedWO.status === 'completed'}
+                            disabled={saving || status === 'completed'}
                             placeholder="0"
                           />
                         </div>
@@ -1179,7 +1195,7 @@ export default function MobilePage() {
                             value={member.miles || ''}
                             onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
-                            disabled={saving || selectedWO.status === 'completed'}
+                            disabled={saving || status === 'completed'}
                             placeholder="0"
                           />
                         </div>
@@ -1196,9 +1212,9 @@ export default function MobilePage() {
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Update Status</h3>
               <select
-                value={selectedWO.status}
-                onChange={(e) => handleUpdateField(selectedWO.wo_id, 'status', e.target.value)}
-                disabled={saving || selectedWO.status === 'completed'}
+                value={status}
+                onChange={(e) => handleUpdateField(wo.wo_id, 'status', e.target.value)}
+                disabled={saving || status === 'completed'}
                 className="w-full px-4 py-3 bg-blue-600 rounded-lg text-white font-semibold text-center"
               >
                 <option value="assigned">Assigned</option>
@@ -1218,7 +1234,7 @@ export default function MobilePage() {
                   onClick={() => {
                     // Save all fields at once
                     Object.keys(editingField).forEach(field => {
-                      handleUpdateField(selectedWO.wo_id, field, parseFloat(editingField[field]) || 0);
+                      handleUpdateField(wo.wo_id, field, parseFloat(editingField[field]) || 0);
                     });
                   }}
                   disabled={saving || Object.keys(editingField).length === 0}
@@ -1236,9 +1252,9 @@ export default function MobilePage() {
                     step="0.5"
                     value={getFieldValue('hours_regular')}
                     onChange={(e) => handleFieldChange('hours_regular', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0 hrs @ $64/hr"
                   />
                 </div>
@@ -1250,9 +1266,9 @@ export default function MobilePage() {
                     step="0.5"
                     value={getFieldValue('hours_overtime')}
                     onChange={(e) => handleFieldChange('hours_overtime', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0 hrs @ $96/hr"
                   />
                 </div>
@@ -1264,9 +1280,9 @@ export default function MobilePage() {
                     step="0.1"
                     value={getFieldValue('miles')}
                     onChange={(e) => handleFieldChange('miles', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'miles', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0 mi @ $1/mi"
                   />
                 </div>
@@ -1278,9 +1294,9 @@ export default function MobilePage() {
                     step="0.01"
                     value={getFieldValue('material_cost')}
                     onChange={(e) => handleFieldChange('material_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0"
                   />
                 </div>
@@ -1292,9 +1308,9 @@ export default function MobilePage() {
                     step="0.01"
                     value={getFieldValue('emf_equipment_cost')}
                     onChange={(e) => handleFieldChange('emf_equipment_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0"
                   />
                 </div>
@@ -1306,9 +1322,9 @@ export default function MobilePage() {
                     step="0.01"
                     value={getFieldValue('trailer_cost')}
                     onChange={(e) => handleFieldChange('trailer_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0"
                   />
                 </div>
@@ -1320,9 +1336,9 @@ export default function MobilePage() {
                     step="0.01"
                     value={getFieldValue('rental_cost')}
                     onChange={(e) => handleFieldChange('rental_cost', e.target.value)}
-                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
+                    onBlur={(e) => handleUpdateField(wo.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
-                    disabled={saving || selectedWO.status === 'completed'}
+                    disabled={saving || status === 'completed'}
                     placeholder="0"
                   />
                 </div>
@@ -1337,12 +1353,12 @@ export default function MobilePage() {
               </p>
               <button
                 onClick={() => {
-                  const subject = encodeURIComponent(`Photos - ${selectedWO.wo_number} - ${selectedWO.building}`);
+                  const subject = encodeURIComponent(`Photos - ${woNumber} - ${building}`);
                   const body = encodeURIComponent(
-                    `Work Order: ${selectedWO.wo_number}\n` +
-                    `Building: ${selectedWO.building}\n` +
-                    `Description: ${selectedWO.work_order_description}\n` +
-                    `Status: ${selectedWO.status.replace('_', ' ').toUpperCase()}\n` +
+                    `Work Order: ${woNumber}\n` +
+                    `Building: ${building}\n` +
+                    `Description: ${description}\n` +
+                    `Status: ${status.replace('_', ' ').toUpperCase()}\n` +
                     `Submitted by: ${currentUser.first_name} ${currentUser.last_name}\n` +
                     `Date: ${new Date().toLocaleString()}\n\n` +
                     `--- Attach photos below ---`
@@ -1434,7 +1450,7 @@ export default function MobilePage() {
               <div className="border-t-2 border-gray-700 pt-3">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-400">NTE Budget:</span>
-                  <span>${(selectedWO.nte || 0).toFixed(2)}</span>
+                  <span>${nte.toFixed(2)}</span>
                 </div>
                 
                 <div className={`flex justify-between font-bold text-lg ${remaining >= 0 ? 'text-green-500' : 'text-red-500'}`}>
@@ -1475,15 +1491,15 @@ export default function MobilePage() {
                 📝 Includes check-in/out history and team notes
               </p>
               <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
-                {selectedWO.comments ? (
+                {wo.comments ? (
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
-                    {selectedWO.comments}
+                    {wo.comments}
                   </pre>
                 ) : (
                   <p className="text-gray-500 text-sm">No comments yet</p>
                 )}
               </div>
-              {selectedWO.status !== 'completed' && (
+              {status !== 'completed' && (
                 <>
                   <textarea
                     value={newComment}
@@ -1504,7 +1520,7 @@ export default function MobilePage() {
               )}
             </div>
 
-            {selectedWO.time_out && selectedWO.status !== 'completed' && (
+            {wo.time_out && status !== 'completed' && (
               <button
                 onClick={handleCompleteWorkOrder}
                 disabled={saving}
@@ -1819,7 +1835,15 @@ export default function MobilePage() {
             workOrders.map(wo => (
               <div
                 key={wo.wo_id}
-                onClick={() => setSelectedWO(wo)}
+                onClick={() => {
+                  try {
+                    console.log('Setting selected work order:', wo);
+                    setSelectedWO(wo);
+                  } catch (err) {
+                    console.error('Error setting work order:', err);
+                    alert('Error opening work order. Please try again.');
+                  }
+                }}
                 className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
               >
                 <div className="flex justify-between items-start mb-2">

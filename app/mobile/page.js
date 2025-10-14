@@ -20,6 +20,8 @@ export default function MobilePage() {
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
 
   const supabase = createClientComponentClient();
 
@@ -180,7 +182,9 @@ export default function MobilePage() {
       return;
     }
 
-    console.log('Loading work orders for user:', currentUser.user_id, currentUser.email);
+    let debug = `Loading work orders...\n`;
+    debug += `User ID: ${currentUser.user_id}\n`;
+    debug += `User Email: ${currentUser.email}\n\n`;
 
     try {
       const { data, error } = await supabase
@@ -198,13 +202,36 @@ export default function MobilePage() {
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
-      console.log('Work orders query result:', data, error);
+      if (error) {
+        debug += `ERROR: ${error.message}\n`;
+        setDebugInfo(debug);
+        throw error;
+      }
 
-      if (error) throw error;
+      debug += `Query successful!\n`;
+      debug += `Work orders found: ${data?.length || 0}\n\n`;
+      
+      if (data && data.length > 0) {
+        debug += `Work Orders:\n`;
+        data.forEach((wo, i) => {
+          debug += `${i + 1}. ${wo.wo_number} - ${wo.building}\n`;
+          debug += `   Status: ${wo.status}\n`;
+          debug += `   Lead: ${wo.lead_tech_id || 'none'}\n`;
+          debug += `   Helpers: ${wo.helper_1_id || '-'}, ${wo.helper_2_id || '-'}, ${wo.helper_3_id || '-'}, ${wo.helper_4_id || '-'}\n\n`;
+        });
+      } else {
+        debug += `No work orders found!\n`;
+        debug += `Possible reasons:\n`;
+        debug += `- Not assigned as lead or helper\n`;
+        debug += `- Status not 'assigned', 'in_progress', or 'pending'\n`;
+        debug += `- Work orders don't exist in database\n`;
+      }
+
+      setDebugInfo(debug);
       setWorkOrders(data || []);
-      console.log('Work orders loaded:', data?.length || 0);
     } catch (err) {
       console.error('Error loading work orders:', err);
+      setDebugInfo(debug + `\nCRITICAL ERROR: ${err.message}`);
     }
   }
 
@@ -1070,6 +1097,12 @@ export default function MobilePage() {
               ✅ Completed
             </button>
             <button
+              onClick={() => setShowDebug(true)}
+              className="bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold"
+            >
+              🐛 Debug
+            </button>
+            <button
               onClick={() => setShowChangePinModal(true)}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
             >
@@ -1180,6 +1213,34 @@ export default function MobilePage() {
                   {saving ? 'Changing...' : 'Change PIN'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Debug Modal */}
+        {showDebug && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-screen overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">🐛 Debug Info</h3>
+                <button
+                  onClick={() => setShowDebug(false)}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <pre className="text-xs text-green-400 bg-gray-900 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">
+                {debugInfo || 'No debug info yet. Try logging in or refreshing work orders.'}
+              </pre>
+              <button
+                onClick={() => {
+                  loadWorkOrders();
+                }}
+                className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold"
+              >
+                🔄 Refresh & Re-check
+              </button>
             </div>
           </div>
         )}

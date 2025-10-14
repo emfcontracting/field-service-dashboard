@@ -21,6 +21,7 @@ export default function MobilePage() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
+  const [editingField, setEditingField] = useState({});
   const [showSummaryModal, setShowSummaryModal] = useState(false);
 
   const supabase = createClientComponentClient();

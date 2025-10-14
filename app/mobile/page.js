@@ -59,8 +59,11 @@ export default function MobilePage() {
 
   // Load team members when work order is selected
   useEffect(() => {
-    if (selectedWO) {
-      loadTeamForWorkOrder(selectedWO.wo_id);
+    if (selectedWO && selectedWO.wo_id) {
+      console.log('Loading team for work order:', selectedWO.wo_id);
+      loadTeamForWorkOrder(selectedWO.wo_id).catch(err => {
+        console.error('Error in useEffect loading team:', err);
+      });
       setEditingField({}); // Clear editing state when work order changes
     }
   }, [selectedWO?.wo_id]);
@@ -437,6 +440,7 @@ export default function MobilePage() {
 
   function getFieldValue(field) {
     // Return editing value if exists, otherwise return from selectedWO
+    if (!selectedWO) return '';
     return editingField.hasOwnProperty(field) ? editingField[field] : (selectedWO[field] || '');
   }
 
@@ -556,20 +560,38 @@ export default function MobilePage() {
   }
 
   async function loadTeamForWorkOrder(woId) {
-    const { data } = await supabase
-      .from('work_order_assignments')
-      .select(`
-        assignment_id,
-        user_id,
-        role_on_job,
-        hours_regular,
-        hours_overtime,
-        miles,
-        user:users(first_name, last_name)
-      `)
-      .eq('wo_id', woId);
-    
-    setCurrentTeamList(data || []);
+    if (!woId) {
+      console.error('loadTeamForWorkOrder: No work order ID provided');
+      setCurrentTeamList([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          assignment_id,
+          user_id,
+          role_on_job,
+          hours_regular,
+          hours_overtime,
+          miles,
+          user:users(first_name, last_name)
+        `)
+        .eq('wo_id', woId);
+      
+      if (error) {
+        console.error('Error loading team for work order:', error);
+        setCurrentTeamList([]);
+        return;
+      }
+      
+      console.log('Team loaded successfully:', data);
+      setCurrentTeamList(data || []);
+    } catch (err) {
+      console.error('Exception in loadTeamForWorkOrder:', err);
+      setCurrentTeamList([]);
+    }
   }
 
   async function handleUpdateTeamMemberField(assignmentId, field, value) {
@@ -973,75 +995,85 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
-    // Safely access properties with fallbacks
-    const wo = selectedWO || {};
-    const woNumber = wo.wo_number || 'Unknown';
-    const building = wo.building || 'Unknown Location';
-    const description = wo.work_order_description || 'No description';
-    const status = wo.status || 'assigned';
-    const nte = wo.nte || 0;
-    const dateEntered = wo.date_entered;
-    const requestor = wo.requestor || 'N/A';
-    const leadTech = wo.lead_tech || {};
-    
-    // Calculate team totals for display
-    const primaryRT = parseFloat(wo.hours_regular) || 0;
-    const primaryOT = parseFloat(wo.hours_overtime) || 0;
-    const primaryMiles = parseFloat(wo.miles) || 0;
-    
-    let teamRT = 0;
-    let teamOT = 0;
-    let teamMiles = 0;
-    
-    currentTeamList.forEach(member => {
-      teamRT += parseFloat(member.hours_regular) || 0;
-      teamOT += parseFloat(member.hours_overtime) || 0;
-      teamMiles += parseFloat(member.miles) || 0;
-    });
-    
-    const totalRT = primaryRT + teamRT;
-    const totalOT = primaryOT + teamOT;
-    const totalMiles = primaryMiles + teamMiles;
-    const adminHours = 2;
-    
-    const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-    const materialBase = parseFloat(wo.material_cost) || 0;
-    const materialWithMarkup = materialBase * 1.25;
-    const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-    const equipmentWithMarkup = equipmentBase * 1.15;
-    const trailerCost = parseFloat(wo.trailer_cost) || 0;
-    const rentalBase = parseFloat(wo.rental_cost) || 0;
-    const rentalWithMarkup = rentalBase * 1.15;
-    const mileageCost = totalMiles * 1.00;
-    const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
-    const remaining = nte - grandTotal;
+    try {
+      console.log('Rendering selectedWO view:', selectedWO);
+      
+      // Safely access properties with fallbacks
+      const wo = selectedWO || {};
+      const woNumber = wo.wo_number || 'Unknown';
+      const building = wo.building || 'Unknown Location';
+      const description = wo.work_order_description || 'No description';
+      const status = wo.status || 'assigned';
+      const nte = wo.nte || 0;
+      const dateEntered = wo.date_entered;
+      const requestor = wo.requestor || 'N/A';
+      const leadTech = wo.lead_tech || {};
+      
+      // Calculate team totals for display
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+      
+      let teamRT = 0;
+      let teamOT = 0;
+      let teamMiles = 0;
+      
+      if (currentTeamList && Array.isArray(currentTeamList)) {
+        currentTeamList.forEach(member => {
+          if (member) {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
+          }
+        });
+      }
+      
+      const totalRT = primaryRT + teamRT;
+      const totalOT = primaryOT + teamOT;
+      const totalMiles = primaryMiles + teamMiles;
+      const adminHours = 2;
+      
+      const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+      const materialBase = parseFloat(wo.material_cost) || 0;
+      const materialWithMarkup = materialBase * 1.25;
+      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+      const equipmentWithMarkup = equipmentBase * 1.15;
+      const trailerCost = parseFloat(wo.trailer_cost) || 0;
+      const rentalBase = parseFloat(wo.rental_cost) || 0;
+      const rentalWithMarkup = rentalBase * 1.15;
+      const mileageCost = totalMiles * 1.00;
+      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
+      const remaining = nte - grandTotal;
 
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <button
-              onClick={() => setSelectedWO(null)}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
-            >
-              ← Back to List
-            </button>
-            <h1 className="text-xl font-bold">{woNumber}</h1>
-            <div className="flex gap-2">
+      return (
+        <div className="min-h-screen bg-gray-900 text-white p-4">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
               <button
-                onClick={() => setShowChangePinModal(true)}
-                className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
+                onClick={() => {
+                  console.log('Going back to list');
+                  setSelectedWO(null);
+                }}
+                className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
               >
-                🔐
+                ← Back to List
               </button>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
-              >
-                Logout
-              </button>
+              <h1 className="text-xl font-bold">{woNumber}</h1>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowChangePinModal(true)}
+                  className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
+                >
+                  🔐
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
 
           <div className="space-y-4">
             {/* Work Order Details */}
@@ -1779,6 +1811,30 @@ export default function MobilePage() {
         )}
       </div>
     );
+    } catch (err) {
+      console.error('Error rendering work order detail:', err);
+      return (
+        <div className="min-h-screen bg-gray-900 text-white p-4">
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-red-900 rounded-lg p-6 text-center">
+              <h2 className="text-xl font-bold mb-4">Error Loading Work Order</h2>
+              <p className="mb-4">There was an error displaying the work order details.</p>
+              <p className="text-sm text-gray-300 mb-6">Error: {err.message || 'Unknown error'}</p>
+              <button
+                onClick={() => {
+                  console.log('Resetting selectedWO after error');
+                  setSelectedWO(null);
+                  setCurrentTeamList([]);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold"
+              >
+                Back to List
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (

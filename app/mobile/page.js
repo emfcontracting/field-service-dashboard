@@ -908,8 +908,16 @@ export default function MobilePage() {
                       Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
                     </div>
                   ) : null}
+                  
+                  {/* Tap to View Indicator */}
+                  <div className="mt-3 pt-3 border-t border-gray-700 text-center">
+                    <p className="text-xs text-blue-400 font-semibold">
+                      👆 Tap to View Full Summary
+                    </p>
+                  </div>
                 </div>
-              ))}
+              );
+            }))}
               </>
             )}
           </div>

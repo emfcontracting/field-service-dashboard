@@ -751,7 +751,7 @@ export default function MobilePage() {
               onClick={() => setSelectedWO(null)}
               className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
             >
-              ← Back
+              ← Back to List
             </button>
             <h1 className="text-xl font-bold">{selectedWO.wo_number}</h1>
             <div className="flex gap-2">
@@ -771,64 +771,52 @@ export default function MobilePage() {
           </div>
 
           <div className="space-y-4">
+            {/* Work Order Details */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-lg font-bold ${getPriorityColor(selectedWO.priority)}`}>
-                  {getPriorityBadge(selectedWO.priority)}
-                </span>
-                <span className="text-sm bg-gray-700 px-3 py-1 rounded-full">
-                  {getStatusBadge(selectedWO.status)}
-                </span>
-              </div>
+              <h3 className="font-bold mb-3 text-blue-400">Work Order Details</h3>
               
-              <h2 className="text-xl font-bold mb-2">{selectedWO.building}</h2>
-              <p className="text-gray-300 mb-4">{selectedWO.work_order_description}</p>
-              
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2 text-sm">
                 <div>
-                  <p className="text-gray-400">Entered</p>
-                  <p className="font-semibold">{formatDate(selectedWO.date_entered)}</p>
+                  <span className="text-gray-400">Building:</span>
+                  <p className="font-semibold">{selectedWO.building}</p>
                 </div>
+                
                 <div>
-                  <p className="text-gray-400">NTE</p>
-                  <p className="font-semibold text-green-500">${(selectedWO.nte || 0).toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400">Requestor</p>
+                  <span className="text-gray-400">Requestor:</span>
                   <p className="font-semibold">{selectedWO.requestor || 'N/A'}</p>
                 </div>
+                
                 <div>
-                  <p className="text-gray-400">Status</p>
-                  <p className="font-semibold">{selectedWO.status.replace('_', ' ').toUpperCase()}</p>
+                  <span className="text-gray-400">Other Plant Equip-Mechanic:</span>
+                  <p className="text-gray-300">{selectedWO.work_order_description}</p>
+                </div>
+                
+                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+                  <span className="text-gray-400">NTE (Not to Exceed):</span>
+                  <span className="text-green-500 font-bold text-lg">${(selectedWO.nte || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
-            {/* Status Change Section */}
+            {/* Quick Actions */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Status</h3>
-              <select
-                value={selectedWO.status}
-                onChange={(e) => handleUpdateField(selectedWO.wo_id, 'status', e.target.value)}
-                disabled={saving || selectedWO.status === 'completed'}
-                className="w-full px-4 py-3 bg-gray-700 rounded-lg text-white font-semibold"
+              <h3 className="font-bold mb-3">Quick Actions</h3>
+              <button
+                onClick={() => alert('Print WO feature coming soon')}
+                className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
               >
-                <option value="assigned">📋 Assigned</option>
-                <option value="in_progress">⚙️ In Progress</option>
-                <option value="pending">⏸️ Pending</option>
-                <option value="needs_return">🔄 Needs Return</option>
-                <option value="return_trip">↩️ Return Trip</option>
-                <option value="completed">✅ Completed</option>
-              </select>
+                Print WO
+              </button>
             </div>
 
+            {/* Check In/Out */}
             {!selectedWO.time_in ? (
               <button
                 onClick={() => handleCheckIn(selectedWO.wo_id)}
                 disabled={saving}
                 className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
               >
-                ✅ Check In
+                ✓ CHECK IN
               </button>
             ) : !selectedWO.time_out ? (
               <button
@@ -836,7 +824,7 @@ export default function MobilePage() {
                 disabled={saving}
                 className="w-full bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
               >
-                ⏰ Check Out
+                Check Out
               </button>
             ) : (
               <div className="bg-gray-800 rounded-lg p-4 text-center">
@@ -850,28 +838,179 @@ export default function MobilePage() {
               </div>
             )}
 
+            {/* Primary Assignment */}
             <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3">Team</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-500">👷</span>
-                  <span>Lead: {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</span>
-                </div>
-                {currentTeamList.map((member, idx) => (
-                  <div key={member.user_id} className="flex items-center gap-2">
-                    <span className="text-gray-400">👤</span>
-                    <span>Helper {idx + 1}: {member.user?.first_name} {member.user?.last_name}</span>
-                  </div>
-                ))}
+              <h3 className="font-bold mb-3">Primary Assignment</h3>
+              <div className="bg-gray-700 rounded-lg p-3">
+                <p className="font-semibold">
+                  {selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}
+                </p>
               </div>
-              {selectedWO.status !== 'completed' && (
-                <button
-                  onClick={loadTeamMembers}
-                  className="mt-3 w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold"
-                >
-                  + Add Helper
-                </button>
+            </div>
+
+            {/* Team Members */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold">Team Members</h3>
+                {selectedWO.status !== 'completed' && (
+                  <button
+                    onClick={loadTeamMembers}
+                    className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+                  >
+                    + Add Helper/Tech
+                  </button>
+                )}
+              </div>
+              {currentTeamList.length > 0 ? (
+                <div className="space-y-2">
+                  {currentTeamList.map((member, idx) => (
+                    <div key={member.user_id} className="bg-gray-700 rounded-lg p-3">
+                      <p className="font-semibold">
+                        {member.user?.first_name} {member.user?.last_name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm text-center py-2">No additional team members yet</p>
               )}
+            </div>
+
+            {/* Update Status */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">Update Status</h3>
+              <select
+                value={selectedWO.status}
+                onChange={(e) => handleUpdateField(selectedWO.wo_id, 'status', e.target.value)}
+                disabled={saving || selectedWO.status === 'completed'}
+                className="w-full px-4 py-3 bg-blue-600 rounded-lg text-white font-semibold text-center"
+              >
+                <option value="assigned">Assigned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="pending">Pending</option>
+                <option value="needs_return">Needs Return</option>
+                <option value="return_trip">Return Trip</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+
+            {/* Primary Tech Field Data */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold">Primary Tech Field Data</h3>
+                <button
+                  onClick={() => {
+                    // Save all fields at once
+                    Object.keys(editingField).forEach(field => {
+                      handleUpdateField(selectedWO.wo_id, field, parseFloat(editingField[field]) || 0);
+                    });
+                  }}
+                  disabled={saving || Object.keys(editingField).length === 0}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold disabled:bg-gray-600"
+                >
+                  💾 Save Changes
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Regular Hours (RT)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={getFieldValue('hours_regular')}
+                    onChange={(e) => handleFieldChange('hours_regular', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0 hrs @ $64/hr"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Overtime Hours (OT)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={getFieldValue('hours_overtime')}
+                    onChange={(e) => handleFieldChange('hours_overtime', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0 hrs @ $96/hr"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Miles</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={getFieldValue('miles')}
+                    onChange={(e) => handleFieldChange('miles', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0 mi @ $1/mi"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Material Cost ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={getFieldValue('material_cost')}
+                    onChange={(e) => handleFieldChange('material_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">EMF Equipment ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={getFieldValue('emf_equipment_cost')}
+                    onChange={(e) => handleFieldChange('emf_equipment_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Trailer Cost ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={getFieldValue('trailer_cost')}
+                    onChange={(e) => handleFieldChange('trailer_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Rental Cost ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={getFieldValue('rental_cost')}
+                    onChange={(e) => handleFieldChange('rental_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                    disabled={saving || selectedWO.status === 'completed'}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Email Photos Section */}
@@ -900,9 +1039,6 @@ export default function MobilePage() {
                 <span className="text-2xl">📸</span>
                 <span>Email Photos to Office</span>
               </button>
-              <div className="text-xs text-gray-500 mt-2 text-center">
-                Opens your email app with pre-filled details
-              </div>
             </div>
 
             {/* Cost Summary Section */}

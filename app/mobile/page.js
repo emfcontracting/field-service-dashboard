@@ -405,15 +405,65 @@ export default function MobilePage() {
         setSelectedWO(updated);
       }
     } catch (err) {
-      alert('Error checking out: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
+    alert('Error checking out: ' + err.message);
+  } finally {
+    setSaving(false);
   }
+}
 
-  async function handleUpdateField(woId, field, value) {
-    try {
-      setSaving(true);
+async function handleCompleteWorkOrder() {
+  if (!selectedWO) return;
+  
+  const confirmed = window.confirm(
+    'Are you sure you want to mark this work order as completed? This action cannot be undone from the mobile app.'
+  );
+  
+  if (!confirmed) return;
+
+  try {
+    setSaving(true);
+    const now = new Date();
+    const timestamp = now.toLocaleString();
+    const isoTime = now.toISOString();
+    
+    const { data: wo } = await supabase
+      .from('work_orders')
+      .select('*')
+      .eq('wo_id', selectedWO.wo_id)
+      .single();
+    
+    const existingComments = wo.comments || '';
+    const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED`;
+    const updatedComments = existingComments 
+      ? `${existingComments}\n\n${completionNote}`
+      : completionNote;
+    
+    const { error } = await supabase
+      .from('work_orders')
+      .update({
+        status: 'completed',
+        date_completed: isoTime,
+        comments: updatedComments
+      })
+      .eq('wo_id', selectedWO.wo_id);
+
+    if (error) throw error;
+
+    alert('Work order marked as completed! ✅');
+    
+    await loadWorkOrders();
+    await loadCompletedWorkOrders();
+    setSelectedWO(null);
+  } catch (err) {
+    alert('Error completing work order: ' + err.message);
+  } finally {
+    setSaving(false);
+  }
+}
+
+async function handleUpdateField(woId, field, value) {
+  try {
+    setSaving(true);
       const { error } = await supabase
         .from('work_orders')
         .update({ [field]: value })

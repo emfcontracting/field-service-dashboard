@@ -570,6 +570,130 @@ export default function MobilePage() {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  function calculateAge(dateEntered) {
+    if (!dateEntered) return 0;
+    const entered = new Date(dateEntered);
+    const now = new Date();
+    const diffTime = Math.abs(now - entered);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }
+
+  function handlePrintWO() {
+    if (!selectedWO) return;
+    
+    const printWindow = window.open('', '_blank');
+    const age = calculateAge(selectedWO.date_entered);
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Work Order ${selectedWO.wo_number}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: #1e40af; }
+          .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 20px; }
+          .section { margin-bottom: 20px; }
+          .label { font-weight: bold; color: #4b5563; }
+          .value { margin-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+          th { background-color: #f3f4f6; }
+          @media print {
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Work Order: ${selectedWO.wo_number}</h1>
+          <p><strong>Created:</strong> ${new Date().toLocaleString()}</p>
+        </div>
+        
+        <div class="section">
+          <h2>Work Order Details</h2>
+          <div class="value"><span class="label">Building:</span> ${selectedWO.building}</div>
+          <div class="value"><span class="label">Priority:</span> ${selectedWO.priority}</div>
+          <div class="value"><span class="label">Status:</span> ${selectedWO.status.replace('_', ' ').toUpperCase()}</div>
+          <div class="value"><span class="label">Age:</span> ${age} days</div>
+          <div class="value"><span class="label">Date Entered:</span> ${formatDate(selectedWO.date_entered)}</div>
+          <div class="value"><span class="label">Requestor:</span> ${selectedWO.requestor || 'N/A'}</div>
+          <div class="value"><span class="label">NTE:</span> ${(selectedWO.nte || 0).toFixed(2)}</div>
+        </div>
+        
+        <div class="section">
+          <h2>Description</h2>
+          <p>${selectedWO.work_order_description || 'N/A'}</p>
+        </div>
+        
+        <div class="section">
+          <h2>Team</h2>
+          <div class="value"><span class="label">Lead Tech:</span> ${selectedWO.lead_tech?.first_name} ${selectedWO.lead_tech?.last_name}</div>
+          ${currentTeamList.map((member, idx) => 
+            `<div class="value"><span class="label">Helper ${idx + 1}:</span> ${member.user?.first_name} ${member.user?.last_name}</div>`
+          ).join('')}
+        </div>
+        
+        <div class="section">
+          <h2>Time & Costs</h2>
+          <table>
+            <tr>
+              <th>Item</th>
+              <th>Amount</th>
+            </tr>
+            <tr>
+              <td>Regular Hours</td>
+              <td>${selectedWO.hours_regular || 0} hrs</td>
+            </tr>
+            <tr>
+              <td>Overtime Hours</td>
+              <td>${selectedWO.hours_overtime || 0} hrs</td>
+            </tr>
+            <tr>
+              <td>Miles</td>
+              <td>${selectedWO.miles || 0} mi</td>
+            </tr>
+            <tr>
+              <td>Material Cost</td>
+              <td>${(selectedWO.material_cost || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Equipment Cost</td>
+              <td>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Trailer Cost</td>
+              <td>${(selectedWO.trailer_cost || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Rental Cost</td>
+              <td>${(selectedWO.rental_cost || 0).toFixed(2)}</td>
+            </tr>
+          </table>
+        </div>
+        
+        ${selectedWO.comments ? `
+          <div class="section">
+            <h2>Comments</h2>
+            <p style="white-space: pre-wrap;">${selectedWO.comments}</p>
+          </div>
+        ` : ''}
+        
+        <div class="section" style="margin-top: 40px;">
+          <p><strong>Signature:</strong> ___________________________ <strong>Date:</strong> _______________</p>
+        </div>
+        
+        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #1e40af; color: white; border: none; cursor: pointer; border-radius: 5px;">
+          Print
+        </button>
+      </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -810,8 +934,19 @@ export default function MobilePage() {
                 </div>
                 
                 <div>
-                  <span className="text-gray-400">Other Plant Equip-Mechanic:</span>
+                  <span className="text-gray-400">Description:</span>
                   <p className="text-gray-300">{selectedWO.work_order_description}</p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700">
+                  <div>
+                    <span className="text-gray-400">Date Entered:</span>
+                    <p className="font-semibold">{formatDate(selectedWO.date_entered)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Age:</span>
+                    <p className="font-semibold text-orange-500">{calculateAge(selectedWO.date_entered)} days</p>
+                  </div>
                 </div>
                 
                 <div className="flex justify-between items-center pt-2 border-t border-gray-700">
@@ -825,10 +960,10 @@ export default function MobilePage() {
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Quick Actions</h3>
               <button
-                onClick={() => alert('Print WO feature coming soon')}
+                onClick={handlePrintWO}
                 className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
               >
-                Print WO
+                🖨️ Print WO
               </button>
             </div>
 

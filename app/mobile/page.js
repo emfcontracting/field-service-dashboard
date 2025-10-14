@@ -662,11 +662,11 @@ export default function MobilePage() {
                     )}
                   </div>
 
-                  {wo.hours && (
+                  {wo.hours_regular || wo.hours_overtime ? (
                     <div className="mt-2 text-xs text-gray-400">
-                      Hours: {wo.hours} | Miles: {wo.miles || 0}
+                      Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))
             )}
@@ -794,6 +794,22 @@ export default function MobilePage() {
               </div>
             </div>
 
+            {/* Status Change Section */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">Status</h3>
+              <select
+                value={selectedWO.status}
+                onChange={(e) => handleUpdateField(selectedWO.wo_id, 'status', e.target.value)}
+                disabled={saving || selectedWO.status === 'completed'}
+                className="w-full px-4 py-3 bg-gray-700 rounded-lg text-white font-semibold"
+              >
+                <option value="assigned">📋 Assigned</option>
+                <option value="in_progress">⚙️ In Progress</option>
+                <option value="pending">⏸️ Pending</option>
+                <option value="completed">✅ Completed</option>
+              </select>
+            </div>
+
             {!selectedWO.time_in ? (
               <button
                 onClick={() => handleCheckIn(selectedWO.wo_id)}
@@ -877,16 +893,134 @@ export default function MobilePage() {
               </div>
             </div>
 
+            {/* Cost Summary Section */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="font-bold mb-3">Cost Summary</h3>
+              
+              {/* Labor Costs */}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Regular Hours ({selectedWO.hours_regular || 0} hrs × $64)</span>
+                  <span>${((selectedWO.hours_regular || 0) * 64).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Overtime Hours ({selectedWO.hours_overtime || 0} hrs × $96)</span>
+                  <span>${((selectedWO.hours_overtime || 0) * 96).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Subtotal Labor</span>
+                  <span>${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Admin Hours (15%)</span>
+                  <span>${((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 0.15).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Upcharge (25%)</span>
+                  <span>${((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 1.15 * 0.25).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
+                  <span>Total Labor Cost</span>
+                  <span className="text-green-500">
+                    ${((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 1.15 * 1.25).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Other Costs */}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Mileage ({selectedWO.miles || 0} mi × $1.00)</span>
+                  <span>${((selectedWO.miles || 0) * 1.00).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Materials</span>
+                  <span>${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Trailer</span>
+                  <span>${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">EMF Equipment</span>
+                  <span>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Rental</span>
+                  <span>${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Grand Total */}
+              <div className="border-t-2 border-gray-700 pt-3">
+                <div className="flex justify-between font-bold text-lg mb-2">
+                  <span>Grand Total</span>
+                  <span className="text-green-500">
+                    ${(
+                      ((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 1.15 * 1.25) +
+                      ((selectedWO.miles || 0) * 1.00) +
+                      (selectedWO.material_cost || 0) +
+                      (selectedWO.trailer_cost || 0) +
+                      (selectedWO.emf_equipment_cost || 0) +
+                      (selectedWO.rental_cost || 0)
+                    ).toFixed(2)}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">NTE Budget</span>
+                  <span>${(selectedWO.nte || 0).toFixed(2)}</span>
+                </div>
+                
+                <div className={`flex justify-between font-bold text-sm mt-1 ${
+                  (
+                    ((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 1.15 * 1.25) +
+                    ((selectedWO.miles || 0) * 1.00) +
+                    (selectedWO.material_cost || 0) +
+                    (selectedWO.trailer_cost || 0) +
+                    (selectedWO.emf_equipment_cost || 0) +
+                    (selectedWO.rental_cost || 0)
+                  ) > (selectedWO.nte || 0) ? 'text-red-500' : 'text-green-500'
+                }`}>
+                  <span>Remaining</span>
+                  <span>
+                    ${(
+                      (selectedWO.nte || 0) - (
+                        ((((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96)) * 1.15 * 1.25) +
+                        ((selectedWO.miles || 0) * 1.00) +
+                        (selectedWO.material_cost || 0) +
+                        (selectedWO.trailer_cost || 0) +
+                        (selectedWO.emf_equipment_cost || 0) +
+                        (selectedWO.rental_cost || 0)
+                      )
+                    ).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Field Data</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Hours</label>
+                  <label className="block text-sm text-gray-400 mb-1">Regular Hours</label>
                   <input
                     type="number"
                     step="0.5"
-                    value={selectedWO.hours || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours', parseFloat(e.target.value) || 0)}
+                    value={selectedWO.hours_regular || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
+                    disabled={saving || selectedWO.status === 'completed'}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Overtime Hours</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={selectedWO.hours_overtime || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -909,8 +1043,8 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.material || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'material', parseFloat(e.target.value) || 0)}
+                    value={selectedWO.material_cost || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -921,8 +1055,8 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.trailer || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'trailer', parseFloat(e.target.value) || 0)}
+                    value={selectedWO.trailer_cost || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -933,8 +1067,8 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.emf_equipment || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment', parseFloat(e.target.value) || 0)}
+                    value={selectedWO.emf_equipment_cost || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -945,8 +1079,8 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.rental || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'rental', parseFloat(e.target.value) || 0)}
+                    value={selectedWO.rental_cost || ''}
+                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />

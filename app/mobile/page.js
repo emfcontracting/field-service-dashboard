@@ -21,7 +21,7 @@ export default function MobilePage() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
-  const [editingField, setEditingField] = useState({});
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
 
   const supabase = createClientComponentClient();
 
@@ -1008,12 +1008,20 @@ export default function MobilePage() {
             {/* Quick Actions */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Quick Actions</h3>
-              <button
-                onClick={handlePrintWO}
-                className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
-              >
-                🖨️ Print WO
-              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowSummaryModal(true)}
+                  className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold"
+                >
+                  📊 View Summary
+                </button>
+                <button
+                  onClick={handlePrintWO}
+                  className="bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
+                >
+                  🖨️ Print WO
+                </button>
+              </div>
             </div>
 
             {/* Check In/Out - Always Available */}
@@ -1655,6 +1663,334 @@ export default function MobilePage() {
                   className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
                 >
                   {saving ? 'Changing...' : 'Change PIN'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Work Order Summary Modal */}
+        {showSummaryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6 sticky top-0 bg-gray-800 pb-4 border-b border-gray-700">
+                <h3 className="text-2xl font-bold text-blue-400">📊 Work Order Summary</h3>
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="text-gray-400 hover:text-white text-3xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Basic Info */}
+                <div>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Work Order Information</h4>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">WO Number:</span>
+                      <span className="font-semibold">{selectedWO.wo_number}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Building:</span>
+                      <span className="font-semibold">{selectedWO.building}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Priority:</span>
+                      <span className={getPriorityColor(selectedWO.priority)}>{getPriorityBadge(selectedWO.priority)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Status:</span>
+                      <span>{getStatusBadge(selectedWO.status)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Age:</span>
+                      <span className="text-orange-500 font-semibold">{calculateAge(selectedWO.date_entered)} days</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Requestor:</span>
+                      <span>{selectedWO.requestor || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">NTE Budget:</span>
+                      <span className="text-green-500 font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4 mt-2">
+                    <div className="text-gray-400 text-xs mb-1">Description:</div>
+                    <div className="text-sm">{selectedWO.work_order_description}</div>
+                  </div>
+                </div>
+
+                {/* Team Information */}
+                <div>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Team</h4>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                    <div>
+                      <div className="text-gray-400 text-xs mb-1">Lead Tech:</div>
+                      <div className="font-semibold">{selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</div>
+                    </div>
+                    {currentTeamList.length > 0 && (
+                      <div>
+                        <div className="text-gray-400 text-xs mb-2">Helpers:</div>
+                        {currentTeamList.map((member, idx) => (
+                          <div key={member.assignment_id} className="mb-2 pl-3 border-l-2 border-blue-500">
+                            <div className="font-semibold">{idx + 1}. {member.user?.first_name} {member.user?.last_name}</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              RT: {member.hours_regular || 0} hrs • OT: {member.hours_overtime || 0} hrs • Miles: {member.miles || 0} mi
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Time & Field Data */}
+                <div>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Primary Tech Field Data</h4>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Regular Hours:</span>
+                      <span className="font-semibold">{selectedWO.hours_regular || 0} hrs</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Overtime Hours:</span>
+                      <span className="font-semibold">{selectedWO.hours_overtime || 0} hrs</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Miles:</span>
+                      <span className="font-semibold">{selectedWO.miles || 0} mi</span>
+                    </div>
+                    <div className="border-t border-gray-600 my-2"></div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Material Cost:</span>
+                      <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">EMF Equipment:</span>
+                      <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Trailer Cost:</span>
+                      <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Rental Cost:</span>
+                      <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Complete Cost Breakdown */}
+                <div>
+                  <h4 className="text-lg font-bold text-yellow-400 mb-3">💰 Complete Cost Breakdown</h4>
+                  <div className="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
+                    {(() => {
+                      const primaryRT = parseFloat(selectedWO.hours_regular) || 0;
+                      const primaryOT = parseFloat(selectedWO.hours_overtime) || 0;
+                      const primaryMiles = parseFloat(selectedWO.miles) || 0;
+                      
+                      let teamRT = 0;
+                      let teamOT = 0;
+                      let teamMiles = 0;
+                      
+                      currentTeamList.forEach(member => {
+                        teamRT += parseFloat(member.hours_regular) || 0;
+                        teamOT += parseFloat(member.hours_overtime) || 0;
+                        teamMiles += parseFloat(member.miles) || 0;
+                      });
+                      
+                      const totalRT = primaryRT + teamRT;
+                      const totalOT = primaryOT + teamOT;
+                      const totalMiles = primaryMiles + teamMiles;
+                      const adminHours = 2;
+                      
+                      const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+                      const materialBase = parseFloat(selectedWO.material_cost) || 0;
+                      const materialWithMarkup = materialBase * 1.25;
+                      const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
+                      const equipmentWithMarkup = equipmentBase * 1.15;
+                      const trailerCost = parseFloat(selectedWO.trailer_cost) || 0;
+                      const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
+                      const rentalWithMarkup = rentalBase * 1.15;
+                      const mileageCost = totalMiles * 1.00;
+                      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
+                      const remaining = (selectedWO.nte || 0) - grandTotal;
+                      
+                      return (
+                        <>
+                          {/* Labor */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">LABOR</div>
+                            <div className="space-y-1 text-xs ml-3">
+                              <div className="flex justify-between">
+                                <span>Primary RT: {primaryRT.toFixed(2)} hrs × $64</span>
+                                <span>${(primaryRT * 64).toFixed(2)}</span>
+                              </div>
+                              {teamRT > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Team RT: {teamRT.toFixed(2)} hrs × $64</span>
+                                  <span>${(teamRT * 64).toFixed(2)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between">
+                                <span>Primary OT: {primaryOT.toFixed(2)} hrs × $96</span>
+                                <span>${(primaryOT * 96).toFixed(2)}</span>
+                              </div>
+                              {teamOT > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Team OT: {teamOT.toFixed(2)} hrs × $96</span>
+                                  <span>${(teamOT * 96).toFixed(2)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-yellow-400">
+                                <span>Admin Hours: 2 × $64</span>
+                                <span>$128.00</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between font-bold mt-2 text-green-400">
+                              <span>Total Labor:</span>
+                              <span>${laborCost.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Materials */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">MATERIALS</div>
+                            <div className="space-y-1 text-xs ml-3">
+                              <div className="flex justify-between">
+                                <span>Base Cost:</span>
+                                <span>${materialBase.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-yellow-400">
+                                <span>+ 25% Markup:</span>
+                                <span>+ ${(materialBase * 0.25).toFixed(2)}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between font-bold mt-2">
+                              <span>Total Materials:</span>
+                              <span>${materialWithMarkup.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Equipment */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">EQUIPMENT</div>
+                            <div className="space-y-1 text-xs ml-3">
+                              <div className="flex justify-between">
+                                <span>Base Cost:</span>
+                                <span>${equipmentBase.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-yellow-400">
+                                <span>+ 15% Markup:</span>
+                                <span>+ ${(equipmentBase * 0.15).toFixed(2)}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between font-bold mt-2">
+                              <span>Total Equipment:</span>
+                              <span>${equipmentWithMarkup.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Trailer */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">TRAILER</div>
+                            <div className="flex justify-between">
+                              <span className="text-xs ml-3">No Markup</span>
+                              <span className="font-bold">${trailerCost.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Rental */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">RENTAL</div>
+                            <div className="space-y-1 text-xs ml-3">
+                              <div className="flex justify-between">
+                                <span>Base Cost:</span>
+                                <span>${rentalBase.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-yellow-400">
+                                <span>+ 15% Markup:</span>
+                                <span>+ ${(rentalBase * 0.15).toFixed(2)}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between font-bold mt-2">
+                              <span>Total Rental:</span>
+                              <span>${rentalWithMarkup.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Mileage */}
+                          <div className="border-b border-gray-600 pb-3">
+                            <div className="font-bold text-blue-400 mb-2">MILEAGE</div>
+                            <div className="space-y-1 text-xs ml-3">
+                              {primaryMiles > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Primary Tech: {primaryMiles.toFixed(1)} mi</span>
+                                  <span>${(primaryMiles * 1.00).toFixed(2)}</span>
+                                </div>
+                              )}
+                              {teamMiles > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Team: {teamMiles.toFixed(1)} mi</span>
+                                  <span>${(teamMiles * 1.00).toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex justify-between font-bold mt-2">
+                              <span>Total Mileage ({totalMiles.toFixed(1)} mi):</span>
+                              <span>${mileageCost.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Grand Total */}
+                          <div className="pt-2">
+                            <div className="flex justify-between text-lg font-bold text-green-400 mb-3">
+                              <span>GRAND TOTAL:</span>
+                              <span>${grandTotal.toFixed(2)}</span>
+                            </div>
+                            <div className="bg-gray-800 rounded-lg p-3 space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-400">NTE Budget:</span>
+                                <span className="font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
+                              </div>
+                              <div className={`flex justify-between text-lg font-bold ${remaining >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                <span>Remaining:</span>
+                                <span>${remaining.toFixed(2)}</span>
+                              </div>
+                              {remaining < 0 && (
+                                <div className="text-red-400 text-xs text-center mt-2">
+                                  ⚠️ OVER BUDGET
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Comments */}
+                {selectedWO.comments && (
+                  <div>
+                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Comments & History</h4>
+                    <div className="bg-gray-700 rounded-lg p-4 max-h-60 overflow-y-auto">
+                      <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
+                        {selectedWO.comments}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setShowSummaryModal(false)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-lg transition active:scale-95"
+                >
+                  Close Summary
                 </button>
               </div>
             </div>

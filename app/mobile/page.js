@@ -21,6 +21,7 @@ export default function MobilePage() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
+  const [editingField, setEditingField] = useState({});
 
   const supabase = createClientComponentClient();
 
@@ -58,6 +59,7 @@ export default function MobilePage() {
   useEffect(() => {
     if (selectedWO) {
       loadTeamForWorkOrder(selectedWO.wo_id);
+      setEditingField({}); // Clear editing state when work order changes
     }
   }, [selectedWO?.wo_id]);
 
@@ -366,20 +368,26 @@ export default function MobilePage() {
 
       if (error) throw error;
 
-      await loadWorkOrders();
-      if (selectedWO && selectedWO.wo_id === woId) {
-        const { data: updated } = await supabase
-          .from('work_orders')
-          .select('*')
-          .eq('wo_id', woId)
-          .single();
-        setSelectedWO(updated);
-      }
+      // Update selected work order locally
+      setSelectedWO({ ...selectedWO, [field]: value });
+      
+      // Clear editing state
+      setEditingField({});
     } catch (err) {
       alert('Error updating: ' + err.message);
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleFieldChange(field, value) {
+    // Update local editing state without saving
+    setEditingField({ ...editingField, [field]: value });
+  }
+
+  function getFieldValue(field) {
+    // Return editing value if exists, otherwise return from selectedWO
+    return editingField.hasOwnProperty(field) ? editingField[field] : (selectedWO[field] || '');
   }
 
   async function handleAddComment() {
@@ -905,11 +913,11 @@ export default function MobilePage() {
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Total RT Hours</span>
-                  <span>{selectedWO.hours_regular || 0} hrs × $64</span>
+                  <span>{parseFloat(getFieldValue('hours_regular')) || 0} hrs × $64</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Total OT Hours</span>
-                  <span>{selectedWO.hours_overtime || 0} hrs × $96</span>
+                  <span>{parseFloat(getFieldValue('hours_overtime')) || 0} hrs × $96</span>
                 </div>
                 <div className="flex justify-between text-sm text-yellow-400">
                   <span>+ Admin Hours</span>
@@ -918,7 +926,7 @@ export default function MobilePage() {
                 <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
                   <span>Total Labor:</span>
                   <span className="text-green-500">
-                    ${(((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96) + 128).toFixed(2)}
+                    ${(((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -928,28 +936,28 @@ export default function MobilePage() {
               {/* Materials */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Materials:</span>
-                <span>${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                <span>${(parseFloat(getFieldValue('material_cost')) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 25% Markup:</span>
-                <span>+ ${((selectedWO.material_cost || 0) * 0.25).toFixed(2)}</span>
+                <span>+ ${((parseFloat(getFieldValue('material_cost')) || 0) * 0.25).toFixed(2)}</span>
               </div>
 
               {/* Equipment */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Equipment:</span>
-                <span>${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                <span>${(parseFloat(getFieldValue('emf_equipment_cost')) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${((selectedWO.emf_equipment_cost || 0) * 0.15).toFixed(2)}</span>
+                <span>+ ${((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 0.15).toFixed(2)}</span>
               </div>
 
               {/* Trailer */}
               <div className="flex justify-between text-sm mb-3">
                 <span className="text-gray-400">Trailer:</span>
                 <div className="flex gap-4">
-                  <span>${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                  <span>${(parseFloat(getFieldValue('trailer_cost')) || 0).toFixed(2)}</span>
                   <span className="text-gray-500">No Markup</span>
                 </div>
               </div>
@@ -957,17 +965,17 @@ export default function MobilePage() {
               {/* Rental */}
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Rental:</span>
-                <span>${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                <span>${(parseFloat(getFieldValue('rental_cost')) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-yellow-400 mb-3">
                 <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${((selectedWO.rental_cost || 0) * 0.15).toFixed(2)}</span>
+                <span>+ ${((parseFloat(getFieldValue('rental_cost')) || 0) * 0.15).toFixed(2)}</span>
               </div>
 
               {/* Mileage */}
               <div className="flex justify-between text-sm mb-4">
                 <span className="text-gray-400">Total Mileage:</span>
-                <span>{selectedWO.miles || 0} mi × $1.00 = ${((selectedWO.miles || 0) * 1.00).toFixed(2)}</span>
+                <span>{parseFloat(getFieldValue('miles')) || 0} mi × $1.00 = ${((parseFloat(getFieldValue('miles')) || 0) * 1.00).toFixed(2)}</span>
               </div>
 
               {/* Budget */}
@@ -979,24 +987,24 @@ export default function MobilePage() {
                 
                 <div className={`flex justify-between font-bold text-lg ${
                   (
-                    (((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96) + 128) +
-                    ((selectedWO.material_cost || 0) * 1.25) +
-                    ((selectedWO.emf_equipment_cost || 0) * 1.15) +
-                    (selectedWO.trailer_cost || 0) +
-                    ((selectedWO.rental_cost || 0) * 1.15) +
-                    ((selectedWO.miles || 0) * 1.00)
+                    (((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128) +
+                    ((parseFloat(getFieldValue('material_cost')) || 0) * 1.25) +
+                    ((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15) +
+                    (parseFloat(getFieldValue('trailer_cost')) || 0) +
+                    ((parseFloat(getFieldValue('rental_cost')) || 0) * 1.15) +
+                    ((parseFloat(getFieldValue('miles')) || 0) * 1.00)
                   ) > (selectedWO.nte || 0) ? 'text-red-500' : 'text-green-500'
                 }`}>
                   <span>Remaining:</span>
                   <span>
                     ${(
                       (selectedWO.nte || 0) - (
-                        (((selectedWO.hours_regular || 0) * 64) + ((selectedWO.hours_overtime || 0) * 96) + 128) +
-                        ((selectedWO.material_cost || 0) * 1.25) +
-                        ((selectedWO.emf_equipment_cost || 0) * 1.15) +
-                        (selectedWO.trailer_cost || 0) +
-                        ((selectedWO.rental_cost || 0) * 1.15) +
-                        ((selectedWO.miles || 0) * 1.00)
+                        (((parseFloat(getFieldValue('hours_regular')) || 0) * 64) + ((parseFloat(getFieldValue('hours_overtime')) || 0) * 96) + 128) +
+                        ((parseFloat(getFieldValue('material_cost')) || 0) * 1.25) +
+                        ((parseFloat(getFieldValue('emf_equipment_cost')) || 0) * 1.15) +
+                        (parseFloat(getFieldValue('trailer_cost')) || 0) +
+                        ((parseFloat(getFieldValue('rental_cost')) || 0) * 1.15) +
+                        ((parseFloat(getFieldValue('miles')) || 0) * 1.00)
                       )
                     ).toFixed(2)}
                   </span>
@@ -1012,8 +1020,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.5"
-                    value={selectedWO.hours_regular || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('hours_regular')}
+                    onChange={(e) => handleFieldChange('hours_regular', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1024,8 +1033,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.5"
-                    value={selectedWO.hours_overtime || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('hours_overtime')}
+                    onChange={(e) => handleFieldChange('hours_overtime', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1036,8 +1046,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.1"
-                    value={selectedWO.miles || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('miles')}
+                    onChange={(e) => handleFieldChange('miles', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'miles', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1048,8 +1059,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.material_cost || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('material_cost')}
+                    onChange={(e) => handleFieldChange('material_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1060,8 +1072,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.trailer_cost || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('trailer_cost')}
+                    onChange={(e) => handleFieldChange('trailer_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1072,8 +1085,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.emf_equipment_cost || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('emf_equipment_cost')}
+                    onChange={(e) => handleFieldChange('emf_equipment_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />
@@ -1084,8 +1098,9 @@ export default function MobilePage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={selectedWO.rental_cost || ''}
-                    onChange={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
+                    value={getFieldValue('rental_cost')}
+                    onChange={(e) => handleFieldChange('rental_cost', e.target.value)}
+                    onBlur={(e) => handleUpdateField(selectedWO.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white"
                     disabled={saving || selectedWO.status === 'completed'}
                   />

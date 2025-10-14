@@ -91,7 +91,7 @@ export default function Dashboard() {
       lead_tech:users!lead_tech_id(first_name, last_name, email),
       locked_by_user:users!locked_by(first_name, last_name)
     `)
-    .order('created_at', { ascending: false });
+    .order('date_entered', { ascending: true });
 
   if (error) {
     console.error('Error fetching work orders:', error);

@@ -20,8 +20,6 @@ export default function MobilePage() {
   const [showChangePinModal, setShowChangePinModal] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
 
   const supabase = createClientComponentClient();
@@ -178,14 +176,7 @@ export default function MobilePage() {
   }
 
   async function loadWorkOrders() {
-    if (!currentUser) {
-      console.log('loadWorkOrders: No current user');
-      return;
-    }
-
-    let debug = `Loading work orders...\n`;
-    debug += `User ID: ${currentUser.user_id}\n`;
-    debug += `User Email: ${currentUser.email}\n\n`;
+    if (!currentUser) return;
 
     try {
       // Query 1: Get work orders where user is lead tech
@@ -200,11 +191,7 @@ export default function MobilePage() {
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
-      if (leadError) {
-        debug += `ERROR loading lead tech WOs: ${leadError.message}\n`;
-      } else {
-        debug += `Found ${leadWOs?.length || 0} work orders as lead tech\n`;
-      }
+      if (leadError) throw leadError;
 
       // Query 2: Get work order assignments where user is helper
       const { data: assignments, error: assignError } = await supabase
@@ -212,11 +199,7 @@ export default function MobilePage() {
         .select('wo_id, role_on_job')
         .eq('user_id', currentUser.user_id);
 
-      if (assignError) {
-        debug += `ERROR loading assignments: ${assignError.message}\n`;
-      } else {
-        debug += `Found ${assignments?.length || 0} work order assignments\n`;
-      }
+      if (assignError) throw assignError;
 
       // Query 3: Get full work order details for assignments
       let helperWOs = [];
@@ -231,12 +214,8 @@ export default function MobilePage() {
           .in('wo_id', woIds)
           .in('status', ['assigned', 'in_progress', 'pending']);
 
-        if (helperError) {
-          debug += `ERROR loading helper WOs: ${helperError.message}\n`;
-        } else {
-          debug += `Found ${helperWOData?.length || 0} work orders as helper\n`;
-          helperWOs = helperWOData || [];
-        }
+        if (helperError) throw helperError;
+        helperWOs = helperWOData || [];
       }
 
       // Combine and deduplicate
@@ -245,30 +224,9 @@ export default function MobilePage() {
         new Map(allWOs.map(wo => [wo.wo_id, wo])).values()
       );
 
-      debug += `\nTotal unique work orders: ${uniqueWOs.length}\n\n`;
-      
-      if (uniqueWOs.length > 0) {
-        debug += `Work Orders:\n`;
-        uniqueWOs.forEach((wo, i) => {
-          debug += `${i + 1}. ${wo.wo_number} - ${wo.building}\n`;
-          debug += `   Status: ${wo.status}\n`;
-          debug += `   Priority: ${wo.priority}\n`;
-          debug += `   Lead: ${wo.lead_tech_id === currentUser.user_id ? 'YOU' : wo.lead_tech_id || 'none'}\n\n`;
-        });
-      } else {
-        debug += `No work orders found!\n`;
-        debug += `Possible reasons:\n`;
-        debug += `- Not assigned as lead tech\n`;
-        debug += `- Not assigned as helper in work_order_assignments table\n`;
-        debug += `- Status not 'assigned', 'in_progress', or 'pending'\n`;
-        debug += `- Work orders don't exist in database\n`;
-      }
-
-      setDebugInfo(debug);
       setWorkOrders(uniqueWOs);
     } catch (err) {
       console.error('Error loading work orders:', err);
-      setDebugInfo(debug + `\nCRITICAL ERROR: ${err.message}`);
     }
   }
 
@@ -1150,12 +1108,6 @@ export default function MobilePage() {
               ✅ Completed
             </button>
             <button
-              onClick={() => setShowDebug(true)}
-              className="bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded-lg text-sm font-semibold"
-            >
-              🐛 Debug
-            </button>
-            <button
               onClick={() => setShowChangePinModal(true)}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
             >
@@ -1266,34 +1218,6 @@ export default function MobilePage() {
                   {saving ? 'Changing...' : 'Change PIN'}
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Debug Modal */}
-        {showDebug && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-screen overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold">🐛 Debug Info</h3>
-                <button
-                  onClick={() => setShowDebug(false)}
-                  className="text-gray-400 hover:text-white text-2xl"
-                >
-                  ×
-                </button>
-              </div>
-              <pre className="text-xs text-green-400 bg-gray-900 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono">
-                {debugInfo || 'No debug info yet. Try logging in or refreshing work orders.'}
-              </pre>
-              <button
-                onClick={() => {
-                  loadWorkOrders();
-                }}
-                className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold"
-              >
-                🔄 Refresh & Re-check
-              </button>
             </div>
           </div>
         )}

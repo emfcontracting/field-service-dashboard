@@ -860,153 +860,6 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <button
-              onClick={() => setShowCompletedPage(false)}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
-            >
-              ← Back
-            </button>
-            <h1 className="text-2xl font-bold">Completed Work Orders</h1>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowChangePinModal(true)}
-                className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
-              >
-                🔐
-              </button>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {completedWorkOrders.length === 0 ? (
-              <div className="bg-gray-800 rounded-lg p-8 text-center">
-                <p className="text-gray-400">No completed work orders</p>
-              </div>
-            ) : (
-              <>
-                <div className="bg-blue-900 rounded-lg p-3 mb-4 text-center">
-                  <p className="text-sm text-blue-200">
-                    👆 Tap any completed work order to view details
-                  </p>
-                </div>
-                {completedWorkOrders.map(wo => (
-                  <div
-                    key={wo.wo_id}
-                    onClick={() => setSelectedWO(wo)}
-                    className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="font-bold text-lg">{wo.wo_number}</span>
-                        <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
-                          {getPriorityBadge(wo.priority)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-green-500 text-sm">✅ Completed</span>
-                        <span className="text-blue-400 text-lg">📊</span>
-                      </div>
-                    </div>
-                    
-                    <div className="text-sm space-y-1">
-                      <p className="font-semibold">{wo.building}</p>
-                      <p className="text-gray-400">{wo.work_order_description}</p>
-                      <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} days old</p>
-                      <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
-                      {wo.lead_tech && (
-                        <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
-                      )}
-                    </div>
-
-                    {wo.hours_regular || wo.hours_overtime ? (
-                      <div className="mt-2 text-xs text-gray-400">
-                        Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
-                      </div>
-                    ) : null}
-                    
-                    {/* Tap to View Indicator */}
-                    <div className="mt-3 pt-3 border-t border-gray-700 text-center">
-                      <p className="text-xs text-blue-400 font-semibold">
-                        👆 Tap to View Details
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-
-          {/* Change PIN Modal */}
-          {showChangePinModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold">Change PIN</h3>
-                  <button
-                    onClick={() => {
-                      setShowChangePinModal(false);
-                      setNewPin('');
-                      setConfirmPin('');
-                    }}
-                    className="text-gray-400 hover:text-white text-2xl"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">New PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength="4"
-                      value={newPin}
-                      onChange={(e) => setNewPin(e.target.value)}
-                      placeholder="4-digit PIN"
-                      className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">Confirm PIN</label>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength="4"
-                      value={confirmPin}
-                      onChange={(e) => setConfirmPin(e.target.value)}
-                      placeholder="Re-enter PIN"
-                      className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <button
-                    onClick={handleChangePin}
-                    disabled={saving}
-                    className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
-                  >
-                    {saving ? 'Changing...' : 'Change PIN'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (selectedWO) {
     try {
       console.log('Rendering selectedWO view:', selectedWO);
       
@@ -1065,10 +918,14 @@ export default function MobilePage() {
                 onClick={() => {
                   console.log('Going back to list');
                   setSelectedWO(null);
+                  // If viewing a completed WO, stay on completed page
+                  if (status === 'completed') {
+                    setShowCompletedPage(true);
+                  }
                 }}
                 className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
               >
-                ← Back to List
+                ← Back
               </button>
               <h1 className="text-xl font-bold">{woNumber}</h1>
               <div className="flex gap-2">

@@ -17,6 +17,9 @@ export default function MobilePage() {
   const [newComment, setNewComment] = useState('');
   const [showCompletedPage, setShowCompletedPage] = useState(false);
   const [completedWorkOrders, setCompletedWorkOrders] = useState([]);
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
 
   const supabase = createClientComponentClient();
 
@@ -61,14 +64,6 @@ export default function MobilePage() {
 
   async function loginWithCredentials(emailValue, pinValue) {
     try {
-      // Check if PIN is correct (5678)
-      if (pinValue !== '5678') {
-        setError('Invalid PIN');
-        localStorage.removeItem('mobileEmail');
-        localStorage.removeItem('mobilePin');
-        return;
-      }
-
       // Check if user exists with this email
       const { data: users, error } = await supabase
         .from('users')
@@ -77,7 +72,15 @@ export default function MobilePage() {
         .single();
 
       if (error || !users) {
-        setError('Invalid email or PIN');
+        setError('Invalid email');
+        localStorage.removeItem('mobileEmail');
+        localStorage.removeItem('mobilePin');
+        return;
+      }
+
+      // Check if PIN matches user's PIN
+      if (users.pin !== pinValue) {
+        setError('Invalid PIN');
         localStorage.removeItem('mobileEmail');
         localStorage.removeItem('mobilePin');
         return;
@@ -113,6 +116,48 @@ export default function MobilePage() {
     setEmail('');
     setPin('');
     setSelectedWO(null);
+  }
+
+  async function handleChangePin() {
+    if (!newPin || !confirmPin) {
+      alert('Please enter both PIN fields');
+      return;
+    }
+
+    if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+      alert('PIN must be exactly 4 digits');
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      alert('PINs do not match');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('users')
+        .update({ pin: newPin })
+        .eq('user_id', currentUser.user_id);
+
+      if (error) throw error;
+
+      // Update local storage with new PIN
+      localStorage.setItem('mobilePin', newPin);
+      
+      // Update current user state
+      setCurrentUser({ ...currentUser, pin: newPin });
+
+      alert('PIN changed successfully!');
+      setShowChangePinModal(false);
+      setNewPin('');
+      setConfirmPin('');
+    } catch (err) {
+      alert('Error changing PIN: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function loadWorkOrders() {
@@ -479,12 +524,20 @@ export default function MobilePage() {
               ← Back
             </button>
             <h1 className="text-2xl font-bold">Completed Work Orders</h1>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
-            >
-              Logout
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowChangePinModal(true)}
+                className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
+              >
+                🔐
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -526,6 +579,62 @@ export default function MobilePage() {
               ))
             )}
           </div>
+
+          {/* Change PIN Modal */}
+          {showChangePinModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">Change PIN</h3>
+                  <button
+                    onClick={() => {
+                      setShowChangePinModal(false);
+                      setNewPin('');
+                      setConfirmPin('');
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">New PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength="4"
+                      value={newPin}
+                      onChange={(e) => setNewPin(e.target.value)}
+                      placeholder="4-digit PIN"
+                      className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">Confirm PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength="4"
+                      value={confirmPin}
+                      onChange={(e) => setConfirmPin(e.target.value)}
+                      placeholder="Re-enter PIN"
+                      className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleChangePin}
+                    disabled={saving}
+                    className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
+                  >
+                    {saving ? 'Changing...' : 'Change PIN'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -549,12 +658,20 @@ export default function MobilePage() {
               ← Back
             </button>
             <h1 className="text-xl font-bold">{selectedWO.wo_number}</h1>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
-            >
-              Logout
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowChangePinModal(true)}
+                className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
+              >
+                🔐
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -840,6 +957,62 @@ export default function MobilePage() {
             </div>
           </div>
         )}
+
+        {/* Change PIN Modal */}
+        {showChangePinModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">Change PIN</h3>
+                <button
+                  onClick={() => {
+                    setShowChangePinModal(false);
+                    setNewPin('');
+                    setConfirmPin('');
+                  }}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">New PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength="4"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value)}
+                    placeholder="4-digit PIN"
+                    className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Confirm PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength="4"
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    placeholder="Re-enter PIN"
+                    className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleChangePin}
+                  disabled={saving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
+                >
+                  {saving ? 'Changing...' : 'Change PIN'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -865,6 +1038,12 @@ export default function MobilePage() {
               className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
             >
               ✅ Completed
+            </button>
+            <button
+              onClick={() => setShowChangePinModal(true)}
+              className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
+            >
+              🔐 PIN
             </button>
             <button
               onClick={handleLogout}
@@ -918,6 +1097,62 @@ export default function MobilePage() {
             ))
           )}
         </div>
+
+        {/* Change PIN Modal */}
+        {showChangePinModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">Change PIN</h3>
+                <button
+                  onClick={() => {
+                    setShowChangePinModal(false);
+                    setNewPin('');
+                    setConfirmPin('');
+                  }}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">New PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength="4"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value)}
+                    placeholder="4-digit PIN"
+                    className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Confirm PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength="4"
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    placeholder="Re-enter PIN"
+                    className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleChangePin}
+                  disabled={saving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
+                >
+                  {saving ? 'Changing...' : 'Change PIN'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

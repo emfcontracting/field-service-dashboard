@@ -473,39 +473,43 @@ export default function MobilePage() {
     }
   }
 
-  async function handleCompleteWorkOrder() {
-    if (!selectedWO) return;
-
-    if (!confirm('Mark this work order as completed?')) return;
-
+  async function handleViewCompletedSummary(wo) {
     try {
+      console.log('Loading summary for:', wo.wo_number);
+      
+      // Set loading state if needed
       setSaving(true);
-      const now = new Date().toISOString();
       
-      const { error } = await supabase
-        .from('work_orders')
-        .update({
-          status: 'completed',
-          date_completed: now,
-          time_out: selectedWO.time_out || now
-        })
-        .eq('wo_id', selectedWO.wo_id);
-
-      if (error) throw error;
-
-      await loadWorkOrders();
-      await loadCompletedWorkOrders();
-      
-      // Show summary modal for completed work order
-      setSummaryWorkOrder(selectedWO);
+      // Set the work order immediately so modal can show basic info
+      setSummaryWorkOrder(wo);
       setShowSummaryModal(true);
-      setSelectedWO(null);
       
-      alert('Work order completed successfully!');
-    } catch (err) {
-      alert('Error completing work order: ' + err.message);
-    } finally {
+      // Then load team data (non-blocking)
+      const { data, error } = await supabase
+        .from('work_order_assignments')
+        .select(`
+          assignment_id,
+          user_id,
+          role_on_job,
+          hours_regular,
+          hours_overtime,
+          miles,
+          user:users(first_name, last_name)
+        `)
+        .eq('wo_id', wo.wo_id);
+      
+      if (error) {
+        console.error('Error loading team:', error);
+        setCurrentTeamList([]);
+      } else {
+        setCurrentTeamList(data || []);
+      }
+      
       setSaving(false);
+    } catch (err) {
+      console.error('Error in handleViewCompletedSummary:', err);
+      setSaving(false);
+      alert('Error loading summary. Please try again.');
     }
   }
 
@@ -859,25 +863,7 @@ export default function MobilePage() {
                 {completedWorkOrders.map(wo => (
                   <div
                     key={wo.wo_id}
-                    onClick={async () => {
-                      // Load team data for this work order
-                      const { data } = await supabase
-                        .from('work_order_assignments')
-                        .select(`
-                          assignment_id,
-                          user_id,
-                          role_on_job,
-                          hours_regular,
-                          hours_overtime,
-                          miles,
-                          user:users(first_name, last_name)
-                        `)
-                        .eq('wo_id', wo.wo_id);
-                      
-                      setCurrentTeamList(data || []);
-                      setSummaryWorkOrder(wo);
-                      setShowSummaryModal(true);
-                    }}
+                    onClick={() => handleViewCompletedSummary(wo)}
                     className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-2">

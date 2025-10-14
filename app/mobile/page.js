@@ -1910,7 +1910,7 @@ export default function MobilePage() {
                             <div className="bg-gray-800 rounded-lg p-3 space-y-2">
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-400">NTE Budget:</span>
-                                <span className="font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
+                                <span className="font-bold">${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
                               </div>
                               <div className={`flex justify-between text-lg font-bold ${remaining >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 <span>Remaining:</span>

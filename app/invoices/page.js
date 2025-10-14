@@ -131,161 +131,174 @@ export default function InvoicingPage() {
       .eq('comment_type', 'note')
       .order('created_at', { ascending: true });
 
-    // Build line items preview
-    const items = [];
+    // Build line items preview with MARKUPS
+const items = [];
 
-    // Labor - Lead Tech
-    const leadRegular = (wo.hours_regular || 0) * 64;
-    const leadOvertime = (wo.hours_overtime || 0) * 96;
+// Labor - Lead Tech
+const leadRegular = (wo.hours_regular || 0) * 64;
+const leadOvertime = (wo.hours_overtime || 0) * 96;
 
-    if (wo.hours_regular > 0) {
+if (wo.hours_regular > 0) {
+  items.push({
+    description: `Lead Tech Labor - Regular Time (${wo.hours_regular} hrs @ $64/hr)`,
+    quantity: wo.hours_regular,
+    unit_price: 64,
+    amount: leadRegular,
+    line_type: 'labor',
+    editable: true
+  });
+}
+
+if (wo.hours_overtime > 0) {
+  items.push({
+    description: `Lead Tech Labor - Overtime (${wo.hours_overtime} hrs @ $96/hr)`,
+    quantity: wo.hours_overtime,
+    unit_price: 96,
+    amount: leadOvertime,
+    line_type: 'labor',
+    editable: true
+  });
+}
+
+// Team member labor
+if (teamAssignments && teamAssignments.length > 0) {
+  const laborByRole = {};
+  
+  teamAssignments.forEach(member => {
+    const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
+                      member.role === 'tech' ? 'Tech' : 
+                      'Helper';
+    
+    if (!laborByRole[roleTitle]) {
+      laborByRole[roleTitle] = {
+        regular_hours: 0,
+        overtime_hours: 0,
+        regular_rate: member.user?.hourly_rate_regular || 64,
+        overtime_rate: member.user?.hourly_rate_overtime || 96
+      };
+    }
+    
+    laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
+    laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+  });
+  
+  Object.entries(laborByRole).forEach(([role, data]) => {
+    if (data.regular_hours > 0) {
       items.push({
-        description: `Lead Tech Labor - Regular Time (${wo.hours_regular} hrs @ $64/hr)`,
-        quantity: wo.hours_regular,
-        unit_price: 64,
-        amount: leadRegular,
+        description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
+        quantity: data.regular_hours,
+        unit_price: data.regular_rate,
+        amount: data.regular_hours * data.regular_rate,
         line_type: 'labor',
         editable: true
       });
     }
-
-    if (wo.hours_overtime > 0) {
+    if (data.overtime_hours > 0) {
       items.push({
-        description: `Lead Tech Labor - Overtime (${wo.hours_overtime} hrs @ $96/hr)`,
-        quantity: wo.hours_overtime,
-        unit_price: 96,
-        amount: leadOvertime,
+        description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
+        quantity: data.overtime_hours,
+        unit_price: data.overtime_rate,
+        amount: data.overtime_hours * data.overtime_rate,
         line_type: 'labor',
         editable: true
       });
     }
+  });
+}
 
-    // Team member labor
-    if (teamAssignments && teamAssignments.length > 0) {
-      const laborByRole = {};
-      
-      teamAssignments.forEach(member => {
-        const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
-                          member.role === 'tech' ? 'Tech' : 
-                          'Helper';
-        
-        if (!laborByRole[roleTitle]) {
-          laborByRole[roleTitle] = {
-            regular_hours: 0,
-            overtime_hours: 0,
-            regular_rate: member.user?.hourly_rate_regular || 64,
-            overtime_rate: member.user?.hourly_rate_overtime || 96
-          };
-        }
-        
-        laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
-        laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
-      });
-      
-      Object.entries(laborByRole).forEach(([role, data]) => {
-        if (data.regular_hours > 0) {
-          items.push({
-            description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
-            quantity: data.regular_hours,
-            unit_price: data.regular_rate,
-            amount: data.regular_hours * data.regular_rate,
-            line_type: 'labor',
-            editable: true
-          });
-        }
-        if (data.overtime_hours > 0) {
-          items.push({
-            description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
-            quantity: data.overtime_hours,
-            unit_price: data.overtime_rate,
-            amount: data.overtime_hours * data.overtime_rate,
-            line_type: 'labor',
-            editable: true
-          });
-        }
-      });
-    }
+// *** ADD ADMIN HOURS HERE ***
+items.push({
+  description: 'Administrative Hours (2 hrs @ $64/hr)',
+  quantity: 2,
+  unit_price: 64,
+  amount: 128,
+  line_type: 'labor',
+  editable: true
+});
 
-    // Mileage
-    const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (m.miles || 0), 0);
-    const totalMiles = (wo.miles || 0) + teamMiles;
-    if (totalMiles > 0) {
-      items.push({
-        description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
-        quantity: totalMiles,
-        unit_price: 1.00,
-        amount: totalMiles * 1.00,
-        line_type: 'mileage',
-        editable: true
-      });
-    }
+// Mileage
+const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (m.miles || 0), 0);
+const totalMiles = (wo.miles || 0) + teamMiles;
+if (totalMiles > 0) {
+  items.push({
+    description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
+    quantity: totalMiles,
+    unit_price: 1.00,
+    amount: totalMiles * 1.00,
+    line_type: 'mileage',
+    editable: true
+  });
+}
 
-    // Materials
-    if (wo.material_cost > 0) {
-      items.push({
-        description: 'Materials',
-        quantity: 1,
-        unit_price: wo.material_cost,
-        amount: wo.material_cost,
-        line_type: 'material',
-        editable: true
-      });
-    }
+// Materials WITH 25% MARKUP
+if (wo.material_cost > 0) {
+  const markedUpMaterials = wo.material_cost * 1.25;
+  items.push({
+    description: `Materials (Base: $${wo.material_cost.toFixed(2)} + 25% markup)`,
+    quantity: 1,
+    unit_price: markedUpMaterials,
+    amount: markedUpMaterials,
+    line_type: 'material',
+    editable: true
+  });
+}
 
-    // Equipment
-    if (wo.emf_equipment_cost > 0) {
-      items.push({
-        description: 'Equipment',
-        quantity: 1,
-        unit_price: wo.emf_equipment_cost,
-        amount: wo.emf_equipment_cost,
-        line_type: 'equipment',
-        editable: true
-      });
-    }
+// Equipment WITH 15% MARKUP
+if (wo.emf_equipment_cost > 0) {
+  const markedUpEquipment = wo.emf_equipment_cost * 1.15;
+  items.push({
+    description: `Equipment (Base: $${wo.emf_equipment_cost.toFixed(2)} + 15% markup)`,
+    quantity: 1,
+    unit_price: markedUpEquipment,
+    amount: markedUpEquipment,
+    line_type: 'equipment',
+    editable: true
+  });
+}
 
-    // Trailer
-    if (wo.trailer_cost > 0) {
-      items.push({
-        description: 'Trailer',
-        quantity: 1,
-        unit_price: wo.trailer_cost,
-        amount: wo.trailer_cost,
-        line_type: 'equipment',
-        editable: true
-      });
-    }
+// Trailer (NO MARKUP)
+if (wo.trailer_cost > 0) {
+  items.push({
+    description: 'Trailer',
+    quantity: 1,
+    unit_price: wo.trailer_cost,
+    amount: wo.trailer_cost,
+    line_type: 'equipment',
+    editable: true
+  });
+}
 
-    // Rental
-    if (wo.rental_cost > 0) {
-      items.push({
-        description: 'Rental',
-        quantity: 1,
-        unit_price: wo.rental_cost,
-        amount: wo.rental_cost,
-        line_type: 'rental',
-        editable: true
-      });
-    }
+// Rental WITH 15% MARKUP
+if (wo.rental_cost > 0) {
+  const markedUpRental = wo.rental_cost * 1.15;
+  items.push({
+    description: `Rental (Base: $${wo.rental_cost.toFixed(2)} + 15% markup)`,
+    quantity: 1,
+    unit_price: markedUpRental,
+    amount: markedUpRental,
+    line_type: 'rental',
+    editable: true
+  });
+}
 
-    // Work Performed Description
-    let workPerformed = wo.work_order_description;
-    if (comments && comments.length > 0) {
-      workPerformed += '\n\nWork Notes:\n';
-      comments.forEach(comment => {
-        const timestamp = new Date(comment.created_at).toLocaleString();
-        workPerformed += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
-      });
-    }
+// Work Performed Description
+let workPerformed = wo.work_order_description;
+if (comments && comments.length > 0) {
+  workPerformed += '\n\nWork Notes:\n';
+  comments.forEach(comment => {
+    const timestamp = new Date(comment.created_at).toLocaleString();
+    workPerformed += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
+  });
+}
 
-    items.push({
-      description: workPerformed,
-      quantity: 1,
-      unit_price: 0,
-      amount: 0,
-      line_type: 'description',
-      editable: false
-    });
+items.push({
+  description: workPerformed,
+  quantity: 1,
+  unit_price: 0,
+  amount: 0,
+  line_type: 'description',
+  editable: false
+});
 
     setPreviewWO(wo);
     setPreviewLineItems(items);

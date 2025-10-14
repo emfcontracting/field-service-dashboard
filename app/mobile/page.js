@@ -22,8 +22,6 @@ export default function MobilePage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
   const [editingField, setEditingField] = useState({});
-  const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [summaryWorkOrder, setSummaryWorkOrder] = useState(null);
 
   const supabase = createClientComponentClient();
 
@@ -405,65 +403,69 @@ export default function MobilePage() {
         setSelectedWO(updated);
       }
     } catch (err) {
-    alert('Error checking out: ' + err.message);
-  } finally {
-    setSaving(false);
+      alert('Error checking out: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
-async function handleCompleteWorkOrder() {
-  if (!selectedWO) return;
-  
-  const confirmed = window.confirm(
-    'Are you sure you want to mark this work order as completed? This action cannot be undone from the mobile app.'
-  );
-  
-  if (!confirmed) return;
+  async function handleCompleteWorkOrder() {
+    if (!selectedWO) return;
+    
+    const confirmed = window.confirm(
+      'Are you sure you want to mark this work order as completed? This action cannot be undone from the mobile app.'
+    );
+    
+    if (!confirmed) return;
 
-  try {
-    setSaving(true);
-    const now = new Date();
-    const timestamp = now.toLocaleString();
-    const isoTime = now.toISOString();
-    
-    const { data: wo } = await supabase
-      .from('work_orders')
-      .select('*')
-      .eq('wo_id', selectedWO.wo_id)
-      .single();
-    
-    const existingComments = wo.comments || '';
-    const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED`;
-    const updatedComments = existingComments 
-      ? `${existingComments}\n\n${completionNote}`
-      : completionNote;
-    
-    const { error } = await supabase
-      .from('work_orders')
-      .update({
-        status: 'completed',
-        date_completed: isoTime,
-        comments: updatedComments
-      })
-      .eq('wo_id', selectedWO.wo_id);
+    try {
+      setSaving(true);
+      const now = new Date();
+      const timestamp = now.toLocaleString();
+      const isoTime = now.toISOString();
+      
+      // Get current work order
+      const { data: wo } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+      
+      // Add completion note to comments
+      const existingComments = wo.comments || '';
+      const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED`;
+      const updatedComments = existingComments 
+        ? `${existingComments}\n\n${completionNote}`
+        : completionNote;
+      
+      // Update work order to completed status
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          status: 'completed',
+          date_completed: isoTime,
+          comments: updatedComments
+        })
+        .eq('wo_id', selectedWO.wo_id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    alert('Work order marked as completed! ✅');
-    
-    await loadWorkOrders();
-    await loadCompletedWorkOrders();
-    setSelectedWO(null);
-  } catch (err) {
-    alert('Error completing work order: ' + err.message);
-  } finally {
-    setSaving(false);
+      alert('Work order marked as completed! ✅');
+      
+      // Reload work orders and go back to list
+      await loadWorkOrders();
+      await loadCompletedWorkOrders();
+      setSelectedWO(null);
+    } catch (err) {
+      alert('Error completing work order: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
-async function handleUpdateField(woId, field, value) {
-  try {
-    setSaving(true);
+  async function handleUpdateField(woId, field, value) {
+    try {
+      setSaving(true);
       const { error } = await supabase
         .from('work_orders')
         .update({ [field]: value })
@@ -524,46 +526,6 @@ async function handleUpdateField(woId, field, value) {
       alert('Error adding comment: ' + err.message);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleViewCompletedSummary(wo) {
-    try {
-      console.log('Loading summary for:', wo.wo_number);
-      
-      // Set loading state if needed
-      setSaving(true);
-      
-      // Set the work order immediately so modal can show basic info
-      setSummaryWorkOrder(wo);
-      setShowSummaryModal(true);
-      
-      // Then load team data (non-blocking)
-      const { data, error } = await supabase
-        .from('work_order_assignments')
-        .select(`
-          assignment_id,
-          user_id,
-          role_on_job,
-          hours_regular,
-          hours_overtime,
-          miles,
-          user:users(first_name, last_name)
-        `)
-        .eq('wo_id', wo.wo_id);
-      
-      if (error) {
-        console.error('Error loading team:', error);
-        setCurrentTeamList([]);
-      } else {
-        setCurrentTeamList(data || []);
-      }
-      
-      setSaving(false);
-    } catch (err) {
-      console.error('Error in handleViewCompletedSummary:', err);
-      setSaving(false);
-      alert('Error loading summary. Please try again.');
     }
   }
 
@@ -934,13 +896,13 @@ async function handleUpdateField(woId, field, value) {
               <>
                 <div className="bg-blue-900 rounded-lg p-3 mb-4 text-center">
                   <p className="text-sm text-blue-200">
-                    👆 Tap any completed work order to view full summary
+                    👆 Tap any completed work order to view details
                   </p>
                 </div>
                 {completedWorkOrders.map(wo => (
                   <div
                     key={wo.wo_id}
-                    onClick={() => handleViewCompletedSummary(wo)}
+                    onClick={() => setSelectedWO(wo)}
                     className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-2">
@@ -975,7 +937,7 @@ async function handleUpdateField(woId, field, value) {
                     {/* Tap to View Indicator */}
                     <div className="mt-3 pt-3 border-t border-gray-700 text-center">
                       <p className="text-xs text-blue-400 font-semibold">
-                        👆 Tap to View Full Summary
+                        👆 Tap to View Details
                       </p>
                     </div>
                   </div>
@@ -1692,168 +1654,6 @@ async function handleUpdateField(woId, field, value) {
                   className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition active:scale-95 disabled:bg-gray-600"
                 >
                   {saving ? 'Changing...' : 'Change PIN'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Work Order Summary Modal */}
-        {showSummaryModal && summaryWorkOrder && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6 sticky top-0 bg-gray-800 pb-4 border-b border-gray-700">
-                <div>
-                  <h3 className="text-2xl font-bold text-blue-400">Work Order Summary</h3>
-                  <p className="text-sm text-green-500 mt-1">✅ {summaryWorkOrder.wo_number} - Completed</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowSummaryModal(false);
-                    setSummaryWorkOrder(null);
-                    setCurrentTeamList([]);
-                  }}
-                  className="text-gray-400 hover:text-white text-3xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Location & Basic Info */}
-                <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Location & Details</h4>
-                  <div className="bg-gray-700 rounded-lg p-4 space-y-3">
-                    <div>
-                      <div className="text-gray-400 text-xs mb-1">Building/Location:</div>
-                      <div className="font-semibold text-lg">{summaryWorkOrder.building}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-400 text-xs mb-1">Description:</div>
-                      <div className="text-sm">{summaryWorkOrder.work_order_description}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-600">
-                      <div>
-                        <div className="text-gray-400 text-xs mb-1">Date Completed:</div>
-                        <div className="text-sm font-semibold">{formatDate(summaryWorkOrder.date_completed)}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-400 text-xs mb-1">Total Age:</div>
-                        <div className="text-sm font-semibold text-orange-500">{calculateAge(summaryWorkOrder.date_entered)} days</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Team Hours & Mileage - Individual Breakdown */}
-                <div>
-                  <h4 className="text-lg font-bold text-yellow-400 mb-3">Team Hours & Mileage</h4>
-                  <div className="bg-gray-700 rounded-lg p-4 space-y-3">
-                    {/* Lead Tech */}
-                    <div className="border-b border-gray-600 pb-3">
-                      <div className="font-semibold text-blue-400 mb-2">
-                        Lead Tech: {summaryWorkOrder.lead_tech?.first_name} {summaryWorkOrder.lead_tech?.last_name}
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-400">RT Hours:</span>
-                          <span className="ml-2 font-semibold">{summaryWorkOrder.hours_regular || 0}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">OT Hours:</span>
-                          <span className="ml-2 font-semibold">{summaryWorkOrder.hours_overtime || 0}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400">Miles:</span>
-                          <span className="ml-2 font-semibold">{summaryWorkOrder.miles || 0}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Helper/Team Members */}
-                    {currentTeamList.length > 0 ? (
-                      currentTeamList.map((member, idx) => (
-                        <div key={member.assignment_id} className="pb-3">
-                          <div className="font-semibold text-gray-300 mb-2">
-                            Helper {idx + 1}: {member.user?.first_name} {member.user?.last_name}
-                          </div>
-                          <div className="grid grid-cols-3 gap-4 text-sm">
-                            <div>
-                              <span className="text-gray-400">RT Hours:</span>
-                              <span className="ml-2 font-semibold">{member.hours_regular || 0}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-400">OT Hours:</span>
-                              <span className="ml-2 font-semibold">{member.hours_overtime || 0}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-400">Miles:</span>
-                              <span className="ml-2 font-semibold">{member.miles || 0}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-gray-400 text-sm">No additional team members</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Costs - Only visible to lead tech */}
-                {currentUser && summaryWorkOrder.lead_tech_id === currentUser.user_id && (
-                  <div>
-                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Costs (Lead Tech Only)</h4>
-                    <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Material Cost:</span>
-                          <span className="font-semibold">${(summaryWorkOrder.material_cost || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Equipment Cost:</span>
-                          <span className="font-semibold">${(summaryWorkOrder.emf_equipment_cost || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Rental Cost:</span>
-                          <span className="font-semibold">${(summaryWorkOrder.rental_cost || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Trailer Cost:</span>
-                          <span className="font-semibold">${(summaryWorkOrder.trailer_cost || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="border-t border-gray-600 mt-3 pt-3">
-                        <div className="flex justify-between font-bold text-green-400">
-                          <span>NTE Budget:</span>
-                          <span>${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Comments */}
-                {summaryWorkOrder.comments && (
-                  <div>
-                    <h4 className="text-lg font-bold text-yellow-400 mb-3">Comments & Notes</h4>
-                    <div className="bg-gray-700 rounded-lg p-4 max-h-60 overflow-y-auto">
-                      <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
-                        {summaryWorkOrder.comments}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-
-                {/* Close Button */}
-                <button
-                  onClick={() => {
-                    setShowSummaryModal(false);
-                    setSummaryWorkOrder(null);
-                    setCurrentTeamList([]);
-                  }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-lg transition active:scale-95"
-                >
-                  Close Summary
                 </button>
               </div>
             </div>

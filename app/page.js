@@ -19,6 +19,11 @@ export default function Dashboard() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
   
+  // NEW: Team Member Modal States
+  const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+  const [selectedTeamUserId, setSelectedTeamUserId] = useState('');
+  const [selectedTeamRole, setSelectedTeamRole] = useState('helper');
+  
   // Filters
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -393,7 +398,7 @@ const assignToField = async (woId) => {
       .from('work_orders')
       .update({
         assigned_to_field: true,
-        assigned_to_field_by: 'admin',  // <-- FIXED
+        assigned_to_field_by: 'admin',
         assigned_to_field_at: new Date().toISOString()
       })
       .eq('wo_id', woId);
@@ -999,69 +1004,25 @@ return (
                 </div>
               </div>
 
+              {/* UPDATED TEAM MEMBERS SECTION WITH DROPDOWN */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-bold text-lg">Team Members</h3>
                   <button
-                    onClick={async () => {
-                      // Fetch current team members
-                      const { data } = await supabase
-                        .from('work_order_assignments')
-                        .select(`
-                          *,
-                          user:users(first_name, last_name, email, role)
-                        `)
-                        .eq('wo_id', selectedWO.wo_id);
-                      
-                      setSelectedWO({ ...selectedWO, teamMembers: data || [] });
-                      
-                      // Filter available users - exclude lead tech and current team members
-                      // Include lead_tech, tech, and helper roles
+                    onClick={() => {
+                      // Filter available users
                       const availableUsers = users.filter(u => 
                         (u.role === 'lead_tech' || u.role === 'tech' || u.role === 'helper') &&
                         u.user_id !== selectedWO.lead_tech_id &&
-                        !(data || []).some(tm => tm.user_id === u.user_id)
+                        !(selectedWO.teamMembers || []).some(tm => tm.user_id === u.user_id)
                       );
-                      
-                      console.log('Available users for team:', availableUsers);
                       
                       if (availableUsers.length === 0) {
                         alert('No available team members to add. Make sure you have active users with tech, helper, or lead_tech roles.');
                         return;
                       }
                       
-                      // Create a better selection dialog
-                      const userOptions = availableUsers.map((u, i) => 
-                        `${i + 1}. ${u.first_name} ${u.last_name} (${u.role.replace('_', ' ').toUpperCase()})`
-                      ).join('\n');
-                      
-                      const selection = prompt(`Select team member:\n\n${userOptions}\n\nEnter number:`);
-                      
-                      if (selection) {
-                        const index = parseInt(selection) - 1;
-                        if (index >= 0 && index < availableUsers.length) {
-                          const selectedUser = availableUsers[index];
-                          const { error } = await supabase
-                            .from('work_order_assignments')
-                            .insert({
-                              wo_id: selectedWO.wo_id,
-                              user_id: selectedUser.user_id,
-                              role: 'helper' // All added members are helpers
-                            });
-                          
-                          if (error) {
-                            console.error('Error adding team member:', error);
-                            alert('Failed to add team member: ' + error.message);
-                          } else {
-                            alert(`✅ ${selectedUser.first_name} ${selectedUser.last_name} added to team!`);
-                            // Refresh the work order with team members
-                            const wo = workOrders.find(w => w.wo_id === selectedWO.wo_id);
-                            if (wo) selectWorkOrderEnhanced(wo);
-                          }
-                        } else {
-                          alert('Invalid selection');
-                        }
-                      }
+                      setShowAddTeamModal(true);
                     }}
                     className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
                   >
@@ -1121,7 +1082,6 @@ return (
                                   .update({ hours_regular: value })
                                   .eq('assignment_id', member.assignment_id);
                                 
-                                // Update local state
                                 const updatedMembers = selectedWO.teamMembers.map(m => 
                                   m.assignment_id === member.assignment_id 
                                     ? { ...m, hours_regular: value }
@@ -1145,7 +1105,6 @@ return (
                                   .update({ hours_overtime: value })
                                   .eq('assignment_id', member.assignment_id);
                                 
-                                // Update local state
                                 const updatedMembers = selectedWO.teamMembers.map(m => 
                                   m.assignment_id === member.assignment_id 
                                     ? { ...m, hours_overtime: value }
@@ -1168,7 +1127,6 @@ return (
                                   .update({ miles: value })
                                   .eq('assignment_id', member.assignment_id);
                                 
-                                // Update local state
                                 const updatedMembers = selectedWO.teamMembers.map(m => 
                                   m.assignment_id === member.assignment_id 
                                     ? { ...m, miles: value }
@@ -1189,6 +1147,110 @@ return (
                   )}
                 </div>
               </div>
+
+              {/* ADD TEAM MEMBER MODAL */}
+              {showAddTeamModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+                  <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-600 p-6 w-full max-w-md">
+                    <h3 className="text-xl font-bold text-white mb-4">Add Team Member</h3>
+                    
+                    <div className="space-y-4">
+                      {/* Team Member Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                          Select Team Member
+                        </label>
+                        <select
+                          value={selectedTeamUserId}
+                          onChange={(e) => setSelectedTeamUserId(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Choose a person...</option>
+                          {users
+                            .filter(u => 
+                              (u.role === 'lead_tech' || u.role === 'tech' || u.role === 'helper') &&
+                              u.user_id !== selectedWO.lead_tech_id &&
+                              !(selectedWO.teamMembers || []).some(tm => tm.user_id === u.user_id)
+                            )
+                            .map(user => (
+                              <option key={user.user_id} value={user.user_id}>
+                                {user.first_name} {user.last_name} ({user.role?.replace('_', ' ').toUpperCase()})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {/* Role Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                          Role on this Job
+                        </label>
+                        <select
+                          value={selectedTeamRole}
+                          onChange={(e) => setSelectedTeamRole(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="helper">Helper</option>
+                          <option value="lead_tech">Co-Lead Tech</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Modal Buttons */}
+                    <div className="flex gap-3 mt-6">
+                      <button
+                        onClick={() => {
+                          setShowAddTeamModal(false);
+                          setSelectedTeamUserId('');
+                          setSelectedTeamRole('helper');
+                        }}
+                        className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 border border-gray-500 text-white rounded-lg font-semibold transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!selectedTeamUserId) {
+                            alert('Please select a team member');
+                            return;
+                          }
+
+                          const { error } = await supabase
+                            .from('work_order_assignments')
+                            .insert({
+                              wo_id: selectedWO.wo_id,
+                              user_id: selectedTeamUserId,
+                              role: selectedTeamRole,
+                              hours_regular: 0,
+                              hours_overtime: 0,
+                              miles: 0
+                            });
+                          
+                          if (error) {
+                            console.error('Error adding team member:', error);
+                            alert('Failed to add team member: ' + error.message);
+                          } else {
+                            const selectedUser = users.find(u => u.user_id === selectedTeamUserId);
+                            alert(`✅ ${selectedUser.first_name} ${selectedUser.last_name} added to team!`);
+                            
+                            // Refresh the work order with team members
+                            const wo = workOrders.find(w => w.wo_id === selectedWO.wo_id);
+                            if (wo) await selectWorkOrderEnhanced(wo);
+                            
+                            // Close modal and reset
+                            setShowAddTeamModal(false);
+                            setSelectedTeamUserId('');
+                            setSelectedTeamRole('helper');
+                          }
+                        }}
+                        className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
+                      >
+                        Add Member
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-gray-700 rounded-lg p-4">
                 <h3 className="font-bold mb-3 text-lg">Primary Tech Field Data</h3>

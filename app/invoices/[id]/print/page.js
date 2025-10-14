@@ -119,16 +119,17 @@ export default function InvoicePrintPage() {
         </div>
 
         {/* Company & Bill To */}
-        <div>
-  <h3 className="font-bold text-lg mb-2 text-gray-700">FROM:</h3>
-  <div className="text-sm space-y-1">
-    <div className="font-bold">EMF Contracting LLC</div>
-    <div>565 Pine Plain Rd</div>
-    <div>Gaston, SC 29053</div>
-    <div>Email: emfcontractingsc@gmail.com</div>
-    <div>Phone: (864) 376-4965</div>
-  </div>
-</div>
+        <div className="grid grid-cols-2 gap-8 mb-8">
+          <div>
+            <h3 className="font-bold text-lg mb-2 text-gray-700">FROM:</h3>
+            <div className="text-sm space-y-1">
+              <div className="font-bold">EMF Contracting LLC</div>
+              <div>565 Pine Plain Rd</div>
+              <div>Gaston, SC 29053</div>
+              <div>Email: emfcontractingsc@gmail.com</div>
+              <div>Phone: (864) 376-4965</div>
+            </div>
+          </div>
           <div>
             <h3 className="font-bold text-lg mb-2 text-gray-700">BILL TO:</h3>
             <div className="text-sm space-y-1">

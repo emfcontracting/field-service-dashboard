@@ -23,6 +23,7 @@ export default function MobilePage() {
   const [currentTeamList, setCurrentTeamList] = useState([]);
   const [editingField, setEditingField] = useState({});
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryWorkOrder, setSummaryWorkOrder] = useState(null);
 
   const supabase = createClientComponentClient();
 
@@ -494,7 +495,12 @@ export default function MobilePage() {
 
       await loadWorkOrders();
       await loadCompletedWorkOrders();
+      
+      // Show summary modal for completed work order
+      setSummaryWorkOrder(selectedWO);
+      setShowSummaryModal(true);
       setSelectedWO(null);
+      
       alert('Work order completed successfully!');
     } catch (err) {
       alert('Error completing work order: ' + err.message);
@@ -844,10 +850,35 @@ export default function MobilePage() {
                 <p className="text-gray-400">No completed work orders</p>
               </div>
             ) : (
-              completedWorkOrders.map(wo => (
+              <>
+                <div className="bg-blue-900 rounded-lg p-3 mb-4 text-center">
+                  <p className="text-sm text-blue-200">
+                    👆 Tap any completed work order to view full summary
+                  </p>
+                </div>
+                {completedWorkOrders.map(wo => (
                 <div
                   key={wo.wo_id}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition"
+                  onClick={async () => {
+                    // Load team data for this work order
+                    const { data } = await supabase
+                      .from('work_order_assignments')
+                      .select(`
+                        assignment_id,
+                        user_id,
+                        role_on_job,
+                        hours_regular,
+                        hours_overtime,
+                        miles,
+                        user:users(first_name, last_name)
+                      `)
+                      .eq('wo_id', wo.wo_id);
+                    
+                    setCurrentTeamList(data || []);
+                    setSummaryWorkOrder(wo);
+                    setShowSummaryModal(true);
+                  }}
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -856,7 +887,10 @@ export default function MobilePage() {
                         {getPriorityBadge(wo.priority)}
                       </span>
                     </div>
-                    <span className="text-green-500 text-sm">✅ Completed</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500 text-sm">✅ Completed</span>
+                      <span className="text-blue-400 text-lg">📊</span>
+                    </div>
                   </div>
                   
                   <div className="text-sm space-y-1">
@@ -875,7 +909,8 @@ export default function MobilePage() {
                     </div>
                   ) : null}
                 </div>
-              ))
+              )))}
+              </>
             )}
           </div>
 
@@ -1041,20 +1076,12 @@ export default function MobilePage() {
             {/* Quick Actions */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-bold mb-3">Quick Actions</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setShowSummaryModal(true)}
-                  className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold"
-                >
-                  📊 View Summary
-                </button>
-                <button
-                  onClick={handlePrintWO}
-                  className="bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
-                >
-                  🖨️ Print WO
-                </button>
-              </div>
+              <button
+                onClick={handlePrintWO}
+                className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
+              >
+                🖨️ Print WO
+              </button>
             </div>
 
             {/* Check In/Out - Always Available */}
@@ -1581,13 +1608,20 @@ export default function MobilePage() {
         )}
 
         {/* Work Order Summary Modal */}
-        {showSummaryModal && (
+        {showSummaryModal && summaryWorkOrder && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 overflow-y-auto">
             <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6 sticky top-0 bg-gray-800 pb-4 border-b border-gray-700">
-                <h3 className="text-2xl font-bold text-blue-400">📊 Work Order Summary</h3>
+                <div>
+                  <h3 className="text-2xl font-bold text-blue-400">📊 Work Order Summary</h3>
+                  <p className="text-sm text-green-500 mt-1">✅ Completed Work Order</p>
+                </div>
                 <button
-                  onClick={() => setShowSummaryModal(false)}
+                  onClick={() => {
+                    setShowSummaryModal(false);
+                    setSummaryWorkOrder(null);
+                    setCurrentTeamList([]);
+                  }}
                   className="text-gray-400 hover:text-white text-3xl"
                 >
                   ×
@@ -1601,36 +1635,40 @@ export default function MobilePage() {
                   <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-400">WO Number:</span>
-                      <span className="font-semibold">{selectedWO.wo_number}</span>
+                      <span className="font-semibold">{summaryWorkOrder.wo_number}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Building:</span>
-                      <span className="font-semibold">{selectedWO.building}</span>
+                      <span className="font-semibold">{summaryWorkOrder.building}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Priority:</span>
-                      <span className={getPriorityColor(selectedWO.priority)}>{getPriorityBadge(selectedWO.priority)}</span>
+                      <span className={getPriorityColor(summaryWorkOrder.priority)}>{getPriorityBadge(summaryWorkOrder.priority)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Status:</span>
-                      <span>{getStatusBadge(selectedWO.status)}</span>
+                      <span className="text-green-500">✅ Completed</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Age:</span>
-                      <span className="text-orange-500 font-semibold">{calculateAge(selectedWO.date_entered)} days</span>
+                      <span className="text-gray-400">Date Completed:</span>
+                      <span className="font-semibold">{formatDate(summaryWorkOrder.date_completed)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Age:</span>
+                      <span className="text-orange-500 font-semibold">{calculateAge(summaryWorkOrder.date_entered)} days</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Requestor:</span>
-                      <span>{selectedWO.requestor || 'N/A'}</span>
+                      <span>{summaryWorkOrder.requestor || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">NTE Budget:</span>
-                      <span className="text-green-500 font-bold">${(selectedWO.nte || 0).toFixed(2)}</span>
+                      <span className="text-green-500 font-bold">${(summaryWorkOrder.nte || 0).toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="bg-gray-700 rounded-lg p-4 mt-2">
                     <div className="text-gray-400 text-xs mb-1">Description:</div>
-                    <div className="text-sm">{selectedWO.work_order_description}</div>
+                    <div className="text-sm">{summaryWorkOrder.work_order_description}</div>
                   </div>
                 </div>
 
@@ -1640,7 +1678,7 @@ export default function MobilePage() {
                   <div className="bg-gray-700 rounded-lg p-4 space-y-3">
                     <div>
                       <div className="text-gray-400 text-xs mb-1">Lead Tech:</div>
-                      <div className="font-semibold">{selectedWO.lead_tech?.first_name} {selectedWO.lead_tech?.last_name}</div>
+                      <div className="font-semibold">{summaryWorkOrder.lead_tech?.first_name} {summaryWorkOrder.lead_tech?.last_name}</div>
                     </div>
                     {currentTeamList.length > 0 && (
                       <div>
@@ -1664,32 +1702,32 @@ export default function MobilePage() {
                   <div className="bg-gray-700 rounded-lg p-4 space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Regular Hours:</span>
-                      <span className="font-semibold">{selectedWO.hours_regular || 0} hrs</span>
+                      <span className="font-semibold">{summaryWorkOrder.hours_regular || 0} hrs</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Overtime Hours:</span>
-                      <span className="font-semibold">{selectedWO.hours_overtime || 0} hrs</span>
+                      <span className="font-semibold">{summaryWorkOrder.hours_overtime || 0} hrs</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Miles:</span>
-                      <span className="font-semibold">{selectedWO.miles || 0} mi</span>
+                      <span className="font-semibold">{summaryWorkOrder.miles || 0} mi</span>
                     </div>
                     <div className="border-t border-gray-600 my-2"></div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Material Cost:</span>
-                      <span className="font-semibold">${(selectedWO.material_cost || 0).toFixed(2)}</span>
+                      <span className="font-semibold">${(summaryWorkOrder.material_cost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">EMF Equipment:</span>
-                      <span className="font-semibold">${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</span>
+                      <span className="font-semibold">${(summaryWorkOrder.emf_equipment_cost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Trailer Cost:</span>
-                      <span className="font-semibold">${(selectedWO.trailer_cost || 0).toFixed(2)}</span>
+                      <span className="font-semibold">${(summaryWorkOrder.trailer_cost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Rental Cost:</span>
-                      <span className="font-semibold">${(selectedWO.rental_cost || 0).toFixed(2)}</span>
+                      <span className="font-semibold">${(summaryWorkOrder.rental_cost || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1699,9 +1737,9 @@ export default function MobilePage() {
                   <h4 className="text-lg font-bold text-yellow-400 mb-3">💰 Complete Cost Breakdown</h4>
                   <div className="bg-gray-700 rounded-lg p-4 space-y-3 text-sm">
                     {(() => {
-                      const primaryRT = parseFloat(selectedWO.hours_regular) || 0;
-                      const primaryOT = parseFloat(selectedWO.hours_overtime) || 0;
-                      const primaryMiles = parseFloat(selectedWO.miles) || 0;
+                      const primaryRT = parseFloat(summaryWorkOrder.hours_regular) || 0;
+                      const primaryOT = parseFloat(summaryWorkOrder.hours_overtime) || 0;
+                      const primaryMiles = parseFloat(summaryWorkOrder.miles) || 0;
                       
                       let teamRT = 0;
                       let teamOT = 0;
@@ -1719,16 +1757,16 @@ export default function MobilePage() {
                       const adminHours = 2;
                       
                       const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-                      const materialBase = parseFloat(selectedWO.material_cost) || 0;
+                      const materialBase = parseFloat(summaryWorkOrder.material_cost) || 0;
                       const materialWithMarkup = materialBase * 1.25;
-                      const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
+                      const equipmentBase = parseFloat(summaryWorkOrder.emf_equipment_cost) || 0;
                       const equipmentWithMarkup = equipmentBase * 1.15;
-                      const trailerCost = parseFloat(selectedWO.trailer_cost) || 0;
-                      const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
+                      const trailerCost = parseFloat(summaryWorkOrder.trailer_cost) || 0;
+                      const rentalBase = parseFloat(summaryWorkOrder.rental_cost) || 0;
                       const rentalWithMarkup = rentalBase * 1.15;
                       const mileageCost = totalMiles * 1.00;
                       const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
-                      const remaining = (selectedWO.nte || 0) - grandTotal;
+                      const remaining = (summaryWorkOrder.nte || 0) - grandTotal;
                       
                       return (
                         <>
@@ -1885,12 +1923,12 @@ export default function MobilePage() {
                 </div>
 
                 {/* Comments */}
-                {selectedWO.comments && (
+                {summaryWorkOrder.comments && (
                   <div>
                     <h4 className="text-lg font-bold text-yellow-400 mb-3">Comments & History</h4>
                     <div className="bg-gray-700 rounded-lg p-4 max-h-60 overflow-y-auto">
                       <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
-                        {selectedWO.comments}
+                        {summaryWorkOrder.comments}
                       </pre>
                     </div>
                   </div>
@@ -1898,7 +1936,11 @@ export default function MobilePage() {
 
                 {/* Close Button */}
                 <button
-                  onClick={() => setShowSummaryModal(false)}
+                  onClick={() => {
+                    setShowSummaryModal(false);
+                    setSummaryWorkOrder(null);
+                    setCurrentTeamList([]);
+                  }}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-lg transition active:scale-95"
                 >
                   Close Summary

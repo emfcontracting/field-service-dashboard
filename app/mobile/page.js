@@ -54,6 +54,13 @@ export default function MobilePage() {
     }
   }, [currentUser]);
 
+  // Load team members when work order is selected
+  useEffect(() => {
+    if (selectedWO) {
+      loadTeamForWorkOrder(selectedWO.wo_id);
+    }
+  }, [selectedWO?.wo_id]);
+
   async function checkAuth() {
     const savedEmail = localStorage.getItem('mobileEmail');
     const savedPin = localStorage.getItem('mobilePin');
@@ -726,13 +733,6 @@ export default function MobilePage() {
   }
 
   if (selectedWO) {
-    // Load team when work order is selected
-    useEffect(() => {
-      if (selectedWO) {
-        loadTeamForWorkOrder(selectedWO.wo_id);
-      }
-    }, [selectedWO?.wo_id]);
-
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4">
         <div className="max-w-2xl mx-auto">

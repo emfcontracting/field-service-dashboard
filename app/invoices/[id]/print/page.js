@@ -119,15 +119,16 @@ export default function InvoicePrintPage() {
         </div>
 
         {/* Company & Bill To */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div>
-            <h3 className="font-bold text-lg mb-2 text-gray-700">FROM:</h3>
-            <div className="text-sm space-y-1">
-              <div className="font-bold">EMF Contracting LLC</div>
-              <div>Email: emfcbre@gmail.com</div>
-              <div>Phone: (864) 376-4965</div>
-            </div>
-          </div>
+        <div>
+  <h3 className="font-bold text-lg mb-2 text-gray-700">FROM:</h3>
+  <div className="text-sm space-y-1">
+    <div className="font-bold">EMF Contracting LLC</div>
+    <div>565 Pine Plain Rd</div>
+    <div>Gaston, SC 29053</div>
+    <div>Email: emfcontractingsc@gmail.com</div>
+    <div>Phone: (864) 376-4965</div>
+  </div>
+</div>
           <div>
             <h3 className="font-bold text-lg mb-2 text-gray-700">BILL TO:</h3>
             <div className="text-sm space-y-1">
@@ -224,10 +225,11 @@ export default function InvoicePrintPage() {
 
         {/* Footer */}
         <div className="border-t-2 border-gray-300 pt-4 text-center text-sm text-gray-600">
-          <p className="mb-2">Thank you for your business!</p>
-          <p>Please remit payment within 30 days of invoice date.</p>
-          <p className="mt-4 text-xs">EMF Contracting LLC • Email: emfcbre@gmail.com • Phone: (864) 376-4965</p>
-        </div>
+  <p className="mb-2">Thank you for your business!</p>
+  <p>Please remit payment within 30 days of invoice date.</p>
+  <p className="mt-4 text-xs">EMF Contracting LLC • 565 Pine Plain Rd, Gaston, SC 29053</p>
+  <p className="text-xs">Email: emfcontractingsc@gmail.com • Phone: (864) 376-4965</p>
+</div>
       </div>
     </>
   );

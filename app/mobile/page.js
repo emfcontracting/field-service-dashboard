@@ -1224,19 +1224,19 @@ export default function MobileApp() {
   </p>
   <button
     onClick={() => {
-      const subject = encodeURIComponent(`Photos - ${selectedWO.wo_number} - ${selectedWO.building}`);
-      const body = encodeURIComponent(
-        `Work Order: ${selectedWO.wo_number}\n` +
-        `Building: ${selectedWO.building}\n` +
-        `Description: ${selectedWO.work_order_description}\n` +
-        `Status: ${selectedWO.status.replace('_', ' ').toUpperCase()}\n` +
-        `Submitted by: ${currentUser.first_name} ${currentUser.last_name}\n` +
-        `Date: ${new Date().toLocaleString()}\n\n` +
-        `--- Attach photos below ---`
-      );
-      const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
-      window.location.href = mailtoLink;
-    }}
+  const subject = encodeURIComponent(`Photos - ${selectedWO.wo_number} - ${selectedWO.building}`);
+  const body = encodeURIComponent(
+    `Work Order: ${selectedWO.wo_number}\n` +
+    `Building: ${selectedWO.building}\n` +
+    `Description: ${selectedWO.work_order_description}\n` +
+    `Status: ${selectedWO.status.replace('_', ' ').toUpperCase()}\n` +
+    `Submitted by: ${currentUser.first_name} ${currentUser.last_name}\n` +
+    `Date: ${new Date().toLocaleString()}\n\n` +
+    `--- Attach photos below ---`
+  );
+  const mailtoLink = `mailto:emfcontractingsc@gmail.com?subject=${subject}&body=${body}`;
+  window.location.href = mailtoLink;
+}}
     className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-4 rounded-lg font-bold text-lg shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
   >
     <span className="text-2xl">📸</span>

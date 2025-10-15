@@ -917,12 +917,10 @@ export default function MobilePage() {
       const materialBase = parseFloat(wo.material_cost) || 0;
       const materialWithMarkup = materialBase * 1.25;
       const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-      const equipmentWithMarkup = equipmentBase * 1.15;
-      const trailerCost = parseFloat(wo.trailer_cost) || 0;
-      const rentalBase = parseFloat(wo.rental_cost) || 0;
-      const rentalWithMarkup = rentalBase * 1.15;
-      const mileageCost = totalMiles * 1.00;
-      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerCost + rentalWithMarkup + mileageCost;
+      const equipmentWithMarkup = equipmentBase * 1.25; // 25% markup (CHANGED from 1.15)
+const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25; // 25% markup (NEW)
+const rentalWithMarkup = rentalBase * 1.25; // 25% markup (CHANGED from 1.15)
+const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
       const remaining = nte - grandTotal;
 
       return (
@@ -1328,33 +1326,37 @@ export default function MobilePage() {
               </div>
 
               {/* Equipment */}
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-400">Equipment:</span>
-                <span>${equipmentBase.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-yellow-400 mb-3">
-                <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${(equipmentBase * 0.15).toFixed(2)}</span>
-              </div>
+              {/* Equipment */}
+<div className="flex justify-between text-sm mb-2">
+  <span className="text-gray-400">Equipment:</span>
+  <span>${equipmentBase.toFixed(2)}</span>
+</div>
+<div className="flex justify-between text-sm text-yellow-400 mb-3">
+  <span className="ml-4">+ 25% Markup:</span>
+  <span>+ ${(equipmentBase * 0.25).toFixed(2)}</span>
+</div>
 
               {/* Trailer */}
-              <div className="flex justify-between text-sm mb-3">
-                <span className="text-gray-400">Trailer:</span>
-                <div className="flex gap-4">
-                  <span>${trailerCost.toFixed(2)}</span>
-                  <span className="text-gray-500">No Markup</span>
-                </div>
-              </div>
+              {/* Trailer */}
+<div className="flex justify-between text-sm mb-2">
+  <span className="text-gray-400">Trailer:</span>
+  <span>${(parseFloat(wo.trailer_cost) || 0).toFixed(2)}</span>
+</div>
+<div className="flex justify-between text-sm text-yellow-400 mb-3">
+  <span className="ml-4">+ 25% Markup:</span>
+  <span>+ ${((parseFloat(wo.trailer_cost) || 0) * 0.25).toFixed(2)}</span>
+</div>
 
               {/* Rental */}
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-400">Rental:</span>
-                <span>${rentalBase.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-yellow-400 mb-3">
-                <span className="ml-4">+ 15% Markup:</span>
-                <span>+ ${(rentalBase * 0.15).toFixed(2)}</span>
-              </div>
+              {/* Rental */}
+<div className="flex justify-between text-sm mb-2">
+  <span className="text-gray-400">Rental:</span>
+  <span>${rentalBase.toFixed(2)}</span>
+</div>
+<div className="flex justify-between text-sm text-yellow-400 mb-3">
+  <span className="ml-4">+ 25% Markup:</span>
+  <span>+ ${(rentalBase * 0.25).toFixed(2)}</span>
+</div>
 
               {/* Mileage */}
               <div className="flex justify-between text-sm mb-4">

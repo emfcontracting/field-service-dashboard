@@ -117,25 +117,14 @@ const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0)
 const totalMiles = leadTechMiles + teamMemberMiles;
 const mileageCost = totalMiles * 1.00;
 
-// APPLY 25% MARKUPS
+// NO MARKUPS - Use actual costs
 const materialCost = workOrder.material_cost || 0;
-const materialMarkup = materialCost * 0.25; // 25% markup
-const materialTotal = materialCost + materialMarkup;
-
 const equipmentCost = workOrder.emf_equipment_cost || 0;
-const equipmentMarkup = equipmentCost * 0.25; // 25% markup
-const equipmentTotal = equipmentCost + equipmentMarkup;
-
 const trailerCost = workOrder.trailer_cost || 0;
-const trailerMarkup = trailerCost * 0.25; // 25% markup
-const trailerTotal = trailerCost + trailerMarkup;
-
 const rentalCost = workOrder.rental_cost || 0;
-const rentalMarkup = rentalCost * 0.25; // 25% markup
-const rentalTotal = rentalCost + rentalMarkup;
 
 // Calculate totals
-const subtotal = totalLabor + mileageCost + materialTotal + equipmentTotal + trailerTotal + rentalTotal;
+const subtotal = totalLabor + mileageCost + materialCost + equipmentCost + trailerCost + rentalCost;
 const tax = 0; // NO TAX
 const total = subtotal + tax;
 
@@ -269,50 +258,50 @@ if (teamAssignments && teamAssignments.length > 0) {
       });
     }
 
-    // Materials (with 25% markup)
+    // Materials (no markup)
 if (materialCost > 0) {
   lineItems.push({
     invoice_id: invoice.invoice_id,
-    description: `Materials (Base: $${materialCost.toFixed(2)} + 25% markup)`,
+    description: 'Materials',
     quantity: 1,
-    unit_price: materialTotal,
-    amount: materialTotal,
+    unit_price: materialCost,
+    amount: materialCost,
     line_type: 'material'
   });
 }
 
-    // Equipment (with 25% markup)
+    // Equipment (no markup)
 if (equipmentCost > 0) {
   lineItems.push({
     invoice_id: invoice.invoice_id,
-    description: `Equipment (Base: $${equipmentCost.toFixed(2)} + 25% markup)`,
+    description: 'Equipment',
     quantity: 1,
-    unit_price: equipmentTotal,
-    amount: equipmentTotal,
+    unit_price: equipmentCost,
+    amount: equipmentCost,
     line_type: 'equipment'
   });
 }
 
-    // Trailer (with 25% markup)
-if (trailerCost > 0) {
-  lineItems.push({
-    invoice_id: invoice.invoice_id,
-    description: `Trailer (Base: $${trailerCost.toFixed(2)} + 25% markup)`,
-    quantity: 1,
-    unit_price: trailerTotal,
-    amount: trailerTotal,
-    line_type: 'equipment'
-  });
-}
+    // Trailer (no markup)
+    if (trailerCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Trailer',
+        quantity: 1,
+        unit_price: trailerCost,
+        amount: trailerCost,
+        line_type: 'equipment'
+      });
+    }
 
-    // Rental (with 25% markup)
+    // Rental (no markup)
 if (rentalCost > 0) {
   lineItems.push({
     invoice_id: invoice.invoice_id,
-    description: `Rental (Base: $${rentalCost.toFixed(2)} + 25% markup)`,
+    description: 'Rental',
     quantity: 1,
-    unit_price: rentalTotal,
-    amount: rentalTotal,
+    unit_price: rentalCost,
+    amount: rentalCost,
     line_type: 'rental'
   });
 }

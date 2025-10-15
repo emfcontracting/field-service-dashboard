@@ -316,7 +316,7 @@ export default function MobilePage() {
       
       // Add check-in note to comments
       const existingComments = wo.comments || '';
-      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✔ CHECKED IN`;
+      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN`;
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${checkInNote}`
         : checkInNote;
@@ -626,23 +626,40 @@ export default function MobilePage() {
   }
 
   function getPriorityColor(priority) {
-    switch(priority) {
-      case 1: return 'text-red-500';
-      case 2: return 'text-orange-500';
-      case 3: return 'text-yellow-500';
-      case 4: return 'text-blue-500';
-      default: return 'text-gray-500';
-    }
+    // Handle string priority that might come as "P1", "P2", etc.
+    const priorityStr = String(priority).toUpperCase();
+    
+    const colors = {
+      'P1': 'text-red-500',      // Emergency
+      'P2': 'text-orange-500',   // Urgent
+      'P3': 'text-yellow-500',   // Urgent - Non Emergency
+      'P4': 'text-blue-500',     // Non-Urgent, Non-Emergency
+      'P5': 'text-green-500',    // Non-Equipment-Based
+      'P6': 'text-purple-500',   // Tech/Vendor Entered
+      'P10': 'text-cyan-500',    // PM
+      'P11': 'text-indigo-500',  // PM - Compliance
+      'P23': 'text-pink-500'     // Complaints
+    };
+    return colors[priorityStr] || 'text-gray-500';
   }
 
   function getPriorityBadge(priority) {
+    // Handle string priority that might come as "P1", "P2", etc.
+    const priorityStr = String(priority).toUpperCase();
+    
     const badges = {
-      1: '🔴 Emergency',
-      2: '🟠 Urgent',
-      3: '🟡 Normal',
-      4: '🔵 Low'
+      'P1': '🔴 P1 - Emergency',
+      'P2': '🟠 P2 - Urgent',
+      'P3': '🟡 P3 - Urgent (Non-Emerg)',
+      'P4': '🔵 P4 - Non-Urgent',
+      'P5': '🟢 P5 - Handyman',
+      'P6': '🟣 P6 - Tech/Vendor',
+      'P10': '🔷 P10 - PM',
+      'P11': '💠 P11 - PM Compliance',
+      'P23': '💬 P23 - Complaints'
     };
-    return badges[priority] || '⚪ Unknown';
+    
+    return badges[priorityStr] || `⚪ ${priority || 'Not Set'}`;
   }
 
   function getStatusBadge(status) {
@@ -933,7 +950,7 @@ export default function MobilePage() {
                   onClick={() => setShowChangePinModal(true)}
                   className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
                 >
-                  🔐
+                  🔒
                 </button>
                 <button
                   onClick={handleLogout}
@@ -1003,7 +1020,7 @@ export default function MobilePage() {
                     disabled={saving}
                     className="bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95 disabled:bg-gray-600"
                   >
-                    ✔ CHECK IN
+                    ✓ CHECK IN
                   </button>
                   <button
                     onClick={() => handleCheckOut(wo.wo_id)}
@@ -1561,7 +1578,7 @@ export default function MobilePage() {
                 onClick={() => setShowChangePinModal(true)}
                 className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
               >
-                🔐
+                🔒
               </button>
               <button
                 onClick={handleLogout}
@@ -1717,7 +1734,7 @@ export default function MobilePage() {
               onClick={() => setShowChangePinModal(true)}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
             >
-              🔐 PIN
+              🔒 PIN
             </button>
             <button
               onClick={handleLogout}
@@ -1744,44 +1761,45 @@ export default function MobilePage() {
           ) : (
             workOrders.map(wo => (
               <div
-                key={wo.wo_id}
-                onClick={() => {
-                  try {
-                    console.log('Setting selected work order:', wo);
-                    setSelectedWO(wo);
-                  } catch (err) {
-                    console.error('Error setting work order:', err);
-                    alert('Error opening work order. Please try again.');
-                  }
-                }}
-                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <span className="font-bold text-lg">{wo.wo_number}</span>
-                    <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
-                      {getPriorityBadge(wo.priority)}
+                  key={wo.wo_id}
+                  onClick={() => {
+                    try {
+                      console.log('Setting selected work order:', wo);
+                      setSelectedWO(wo);
+                    } catch (err) {
+                      console.error('Error setting work order:', err);
+                      alert('Error opening work order. Please try again.');
+                    }
+                  }}
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <span className="font-bold text-lg">{wo.wo_number}</span>
+                      <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                        {getPriorityBadge(wo.priority)}
+                      </span>
+                    </div>
+                    <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+                      {getStatusBadge(wo.status)}
                     </span>
                   </div>
-                  <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
-                    {getStatusBadge(wo.status)}
-                  </span>
-                </div>
-                
-                <h3 className="font-semibold mb-1">{wo.building}</h3>
-                <p className="text-sm text-gray-400 mb-2">{wo.work_order_description}</p>
-                
-                <div className="flex justify-between items-center text-xs text-gray-500">
-                  <div>
-                    <span>Entered: {formatDate(wo.date_entered)}</span>
-                    <span className="ml-2 text-orange-500 font-semibold">
-                      {calculateAge(wo.date_entered)} days old
-                    </span>
+                  
+                  <h3 className="font-semibold mb-1">{wo.building}</h3>
+                  <p className="text-sm text-gray-400 mb-2">{wo.work_order_description}</p>
+                  
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <div>
+                      <span>Entered: {formatDate(wo.date_entered)}</span>
+                      <span className="ml-2 text-orange-500 font-semibold">
+                        {calculateAge(wo.date_entered)} days old
+                      </span>
+                    </div>
+                    <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
                   </div>
-                  <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

@@ -889,39 +889,42 @@ export default function MobilePage() {
       const requestor = wo.requestor || 'N/A';
       const leadTech = wo.lead_tech || {};
       
-      // Calculate team totals for display
-      const primaryRT = parseFloat(wo.hours_regular) || 0;
-      const primaryOT = parseFloat(wo.hours_overtime) || 0;
-      const primaryMiles = parseFloat(wo.miles) || 0;
-      
-      let teamRT = 0;
-      let teamOT = 0;
-      let teamMiles = 0;
-      
-      if (currentTeamList && Array.isArray(currentTeamList)) {
-        currentTeamList.forEach(member => {
-          if (member) {
-            teamRT += parseFloat(member.hours_regular) || 0;
-            teamOT += parseFloat(member.hours_overtime) || 0;
-            teamMiles += parseFloat(member.miles) || 0;
-          }
-        });
-      }
-      
-      const totalRT = primaryRT + teamRT;
-      const totalOT = primaryOT + teamOT;
-      const totalMiles = primaryMiles + teamMiles;
-      const adminHours = 2;
-      
-      const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-      const materialBase = parseFloat(wo.material_cost) || 0;
-      const materialWithMarkup = materialBase * 1.25;
-      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-      const equipmentWithMarkup = equipmentBase * 1.25; // 25% markup (CHANGED from 1.15)
-const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25; // 25% markup (NEW)
+     // Calculate team totals for display
+const primaryRT = parseFloat(wo.hours_regular) || 0;
+const primaryOT = parseFloat(wo.hours_overtime) || 0;
+const primaryMiles = parseFloat(wo.miles) || 0;
+
+let teamRT = 0;
+let teamOT = 0;
+let teamMiles = 0;
+
+if (currentTeamList && Array.isArray(currentTeamList)) {
+  currentTeamList.forEach(member => {
+    if (member) {
+      teamRT += parseFloat(member.hours_regular) || 0;
+      teamOT += parseFloat(member.hours_overtime) || 0;
+      teamMiles += parseFloat(member.miles) || 0;
+    }
+  });
+}
+
+const totalRT = primaryRT + teamRT;
+const totalOT = primaryOT + teamOT;
+const totalMiles = primaryMiles + teamMiles;
+const adminHours = 2;
+
+const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+const materialBase = parseFloat(wo.material_cost) || 0;
+const materialWithMarkup = materialBase * 1.25;
+const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+const equipmentWithMarkup = equipmentBase * 1.25; // 25% markup (CHANGED from 1.15)
+const trailerBase = parseFloat(wo.trailer_cost) || 0;
+const trailerWithMarkup = trailerBase * 1.25; // 25% markup (NEW)
+const rentalBase = parseFloat(wo.rental_cost) || 0;
 const rentalWithMarkup = rentalBase * 1.25; // 25% markup (CHANGED from 1.15)
+const mileageCost = totalMiles * 1.00;
 const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
-      const remaining = nte - grandTotal;
+const remaining = nte - grandTotal;
 
       return (
         <div className="min-h-screen bg-gray-900 text-white p-4">

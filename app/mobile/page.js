@@ -626,25 +626,23 @@ export default function MobilePage() {
   }
 
   function getPriorityColor(priority) {
-    // Handle string priority that might come as "P1", "P2", etc.
     const priorityStr = String(priority).toUpperCase();
     
     const colors = {
-      'P1': 'text-red-500',      // Emergency
-      'P2': 'text-orange-500',   // Urgent
-      'P3': 'text-yellow-500',   // Urgent - Non Emergency
-      'P4': 'text-blue-500',     // Non-Urgent, Non-Emergency
-      'P5': 'text-green-500',    // Non-Equipment-Based
-      'P6': 'text-purple-500',   // Tech/Vendor Entered
-      'P10': 'text-cyan-500',    // PM
-      'P11': 'text-indigo-500',  // PM - Compliance
-      'P23': 'text-pink-500'     // Complaints
+      'P1': 'text-red-500',
+      'P2': 'text-orange-500',
+      'P3': 'text-yellow-500',
+      'P4': 'text-blue-500',
+      'P5': 'text-green-500',
+      'P6': 'text-purple-500',
+      'P10': 'text-cyan-500',
+      'P11': 'text-indigo-500',
+      'P23': 'text-pink-500'
     };
     return colors[priorityStr] || 'text-gray-500';
   }
 
   function getPriorityBadge(priority) {
-    // Handle string priority that might come as "P1", "P2", etc.
     const priorityStr = String(priority).toUpperCase();
     
     const badges = {
@@ -1761,45 +1759,44 @@ export default function MobilePage() {
           ) : (
             workOrders.map(wo => (
               <div
-                  key={wo.wo_id}
-                  onClick={() => {
-                    try {
-                      console.log('Setting selected work order:', wo);
-                      setSelectedWO(wo);
-                    } catch (err) {
-                      console.error('Error setting work order:', err);
-                      alert('Error opening work order. Please try again.');
-                    }
-                  }}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <span className="font-bold text-lg">{wo.wo_number}</span>
-                      <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
-                        {getPriorityBadge(wo.priority)}
-                      </span>
-                    </div>
-                    <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
-                      {getStatusBadge(wo.status)}
+                key={wo.wo_id}
+                onClick={() => {
+                  try {
+                    console.log('Setting selected work order:', wo);
+                    setSelectedWO(wo);
+                  } catch (err) {
+                    console.error('Error setting work order:', err);
+                    alert('Error opening work order. Please try again.');
+                  }
+                }}
+                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <span className="font-bold text-lg">{wo.wo_number}</span>
+                    <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                      {getPriorityBadge(wo.priority)}
                     </span>
                   </div>
-                  
-                  <h3 className="font-semibold mb-1">{wo.building}</h3>
-                  <p className="text-sm text-gray-400 mb-2">{wo.work_order_description}</p>
-                  
-                  <div className="flex justify-between items-center text-xs text-gray-500">
-                    <div>
-                      <span>Entered: {formatDate(wo.date_entered)}</span>
-                      <span className="ml-2 text-orange-500 font-semibold">
-                        {calculateAge(wo.date_entered)} days old
-                      </span>
-                    </div>
-                    <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
-                  </div>
+                  <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+                    {getStatusBadge(wo.status)}
+                  </span>
                 </div>
-              );
-            })
+                
+                <h3 className="font-semibold mb-1">{wo.building}</h3>
+                <p className="text-sm text-gray-400 mb-2">{wo.work_order_description}</p>
+                
+                <div className="flex justify-between items-center text-xs text-gray-500">
+                  <div>
+                    <span>Entered: {formatDate(wo.date_entered)}</span>
+                    <span className="ml-2 text-orange-500 font-semibold">
+                      {calculateAge(wo.date_entered)} days old
+                    </span>
+                  </div>
+                  <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            ))
           )}
         </div>
 

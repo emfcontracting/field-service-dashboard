@@ -152,14 +152,128 @@ useEffect(() => {
     await loginWithCredentials(email, pin);
   }
 
-  function handleLogout() {
-    localStorage.removeItem('mobileEmail');
-    localStorage.removeItem('mobilePin');
-    setCurrentUser(null);
-    setEmail('');
-    setPin('');
-    setSelectedWO(null);
+function handleLogout() {
+  localStorage.removeItem('mobileEmail');
+  localStorage.removeItem('mobilePin');
+  setCurrentUser(null);
+  setEmail('');
+  setPin('');
+  setSelectedWO(null);
+}
+
+// ✅ ADD THESE THREE FUNCTIONS HERE ✅
+
+async function checkAvailabilityStatus() {
+  if (!currentUser) return;
+
+  // Check if user is tech, helper, or lead_tech
+  const eligibleRoles = ['tech', 'helper', 'lead_tech'];
+  if (!eligibleRoles.includes(currentUser.role)) {
+    return;
   }
+
+  const now = new Date();
+  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const hour = estTime.getHours();
+  const today = estTime.toISOString().split('T')[0];
+
+  // Check if already submitted today
+  const { data: todaySubmission } = await supabase
+    .from('daily_availability')
+    .select('*')
+    .eq('user_id', currentUser.user_id)
+    .eq('availability_date', today)
+    .single();
+
+  if (todaySubmission) {
+    setHasSubmittedToday(true);
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+    return;
+  }
+
+  // Between 6 PM and 8 PM - show modal
+  if (hour >= 18 && hour < 20) {
+    setShowAvailabilityModal(true);
+    setAvailabilityBlocked(false);
+  }
+  // After 8 PM and not submitted - block app
+  else if (hour >= 20) {
+    setAvailabilityBlocked(true);
+    setShowAvailabilityModal(true);
+  }
+  // Before 6 PM - normal operation
+  else {
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+  }
+}
+
+async function handleAvailabilitySubmit() {
+  if (!currentUser) return;
+
+  if (!scheduledWork && !emergencyWork && !notAvailable) {
+    alert('Please select at least one availability option');
+    return;
+  }
+
+  try {
+    setSaving(true);
+    const today = new Date().toISOString().split('T')[0];
+
+    const { error } = await supabase
+      .from('daily_availability')
+      .insert({
+        user_id: currentUser.user_id,
+        availability_date: today,
+        scheduled_work: scheduledWork,
+        emergency_work: emergencyWork,
+        not_available: notAvailable,
+        submitted_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+
+    setHasSubmittedToday(true);
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+    
+    setScheduledWork(false);
+    setEmergencyWork(false);
+    setNotAvailable(false);
+
+    alert('✅ Availability submitted successfully!');
+  } catch (err) {
+    alert('Error submitting availability: ' + err.message);
+  } finally {
+    setSaving(false);
+  }
+}
+
+function handleAvailabilityChange(option) {
+  if (option === 'notAvailable') {
+    if (!notAvailable) {
+      setNotAvailable(true);
+      setScheduledWork(false);
+      setEmergencyWork(false);
+    } else {
+      setNotAvailable(false);
+    }
+  } else {
+    if (notAvailable) return;
+
+    if (option === 'scheduledWork') {
+      setScheduledWork(!scheduledWork);
+    } else if (option === 'emergencyWork') {
+      setEmergencyWork(!emergencyWork);
+    }
+  }
+}
+
+// ✅ END OF NEW FUNCTIONS ✅
+
+async function handleChangePin() {
+  // ... your existing handleChangePin code continues here
 
   async function handleChangePin() {
     if (!newPin || !confirmPin) {

@@ -781,125 +781,125 @@ export default function MobilePage() {
     return diffDays;
   }
 
-  function handlePrintWO() {
-    if (!selectedWO) return;
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Unable to open print window. Please check your popup settings.');
-      return;
-    }
-    
-    const age = calculateAge(selectedWO.date_entered);
-    
-    printWindow.document.write(\`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Work Order \${selectedWO.wo_number}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { color: #1e40af; }
-          .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 20px; }
-          .section { margin-bottom: 20px; }
-          .label { font-weight: bold; color: #4b5563; }
-          .value { margin-bottom: 10px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
-          th { background-color: #f3f4f6; }
-          @media print {
-            button { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Work Order: \${selectedWO.wo_number || 'N/A'}</h1>
-          <p><strong>Created:</strong> \${new Date().toLocaleString()}</p>
-        </div>
-        
-        <div class="section">
-          <h2>Work Order Details</h2>
-          <div class="value"><span class="label">Building:</span> \${selectedWO.building || 'N/A'}</div>
-          <div class="value"><span class="label">Priority:</span> \${selectedWO.priority || 'N/A'}</div>
-          <div class="value"><span class="label">Status:</span> \${(selectedWO.status || '').replace('_', ' ').toUpperCase()}</div>
-          <div class="value"><span class="label">Age:</span> \${age} days</div>
-          <div class="value"><span class="label">Date Entered:</span> \${formatDate(selectedWO.date_entered)}</div>
-          <div class="value"><span class="label">Requestor:</span> \${selectedWO.requestor || 'N/A'}</div>
-          <div class="value"><span class="label">NTE:</span> $\${(selectedWO.nte || 0).toFixed(2)}</div>
-        </div>
-        
-        <div class="section">
-          <h2>Description</h2>
-          <p>\${selectedWO.work_order_description || 'N/A'}</p>
-        </div>
-        
-        <div class="section">
-          <h2>Team</h2>
-          <div class="value"><span class="label">Lead Tech:</span> \${selectedWO.lead_tech?.first_name || ''} \${selectedWO.lead_tech?.last_name || ''}</div>
-          \${currentTeamList.map((member, idx) => 
-            \`<div class="value"><span class="label">Helper \${idx + 1}:</span> \${member.user?.first_name || ''} \${member.user?.last_name || ''}</div>\`
-          ).join('')}
-        </div>
-        
-        <div class="section">
-          <h2>Time & Costs</h2>
-          <table>
-            <tr>
-              <th>Item</th>
-              <th>Amount</th>
-            </tr>
-            <tr>
-              <td>Regular Hours</td>
-              <td>\${selectedWO.hours_regular || 0} hrs</td>
-            </tr>
-            <tr>
-              <td>Overtime Hours</td>
-              <td>\${selectedWO.hours_overtime || 0} hrs</td>
-            </tr>
-            <tr>
-              <td>Miles</td>
-              <td>\${selectedWO.miles || 0} mi</td>
-            </tr>
-            <tr>
-              <td>Material Cost</td>
-              <td>$\${(selectedWO.material_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Equipment Cost</td>
-              <td>$\${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Trailer Cost</td>
-              <td>$\${(selectedWO.trailer_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Rental Cost</td>
-              <td>$\${(selectedWO.rental_cost || 0).toFixed(2)}</td>
-            </tr>
-          </table>
-        </div>
-        
-        \${selectedWO.comments ? \`
-          <div class="section">
-            <h2>Comments</h2>
-            <p style="white-space: pre-wrap;">\${selectedWO.comments}</p>
-          </div>
-        \` : ''}
-        
-        <div class="section" style="margin-top: 40px;">
-          <p><strong>Signature:</strong> ___________________________ <strong>Date:</strong> _______________</p>
-        </div>
-        
-        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #1e40af; color: white; border: none; cursor: pointer; border-radius: 5px;">
-          Print
-        </button>
-      </body>
-      </html>
-    \`);
-    
-    printWindow.document.close();
+function handlePrintWO() {
+  if (!selectedWO) return;
+  
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Unable to open print window. Please check your popup settings.');
+    return;
   }
+  
+  const age = calculateAge(selectedWO.date_entered);
+  
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Work Order ${selectedWO.wo_number}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { color: #1e40af; }
+        .header { border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-bottom: 20px; }
+        .section { margin-bottom: 20px; }
+        .label { font-weight: bold; color: #4b5563; }
+        .value { margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+        th { background-color: #f3f4f6; }
+        @media print {
+          button { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Work Order: ${selectedWO.wo_number || 'N/A'}</h1>
+        <p><strong>Created:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      
+      <div class="section">
+        <h2>Work Order Details</h2>
+        <div class="value"><span class="label">Building:</span> ${selectedWO.building || 'N/A'}</div>
+        <div class="value"><span class="label">Priority:</span> ${selectedWO.priority || 'N/A'}</div>
+        <div class="value"><span class="label">Status:</span> ${(selectedWO.status || '').replace('_', ' ').toUpperCase()}</div>
+        <div class="value"><span class="label">Age:</span> ${age} days</div>
+        <div class="value"><span class="label">Date Entered:</span> ${formatDate(selectedWO.date_entered)}</div>
+        <div class="value"><span class="label">Requestor:</span> ${selectedWO.requestor || 'N/A'}</div>
+        <div class="value"><span class="label">NTE:</span> $${(selectedWO.nte || 0).toFixed(2)}</div>
+      </div>
+      
+      <div class="section">
+        <h2>Description</h2>
+        <p>${selectedWO.work_order_description || 'N/A'}</p>
+      </div>
+      
+      <div class="section">
+        <h2>Team</h2>
+        <div class="value"><span class="label">Lead Tech:</span> ${selectedWO.lead_tech?.first_name || ''} ${selectedWO.lead_tech?.last_name || ''}</div>
+        ${currentTeamList.map((member, idx) => 
+          `<div class="value"><span class="label">Helper ${idx + 1}:</span> ${member.user?.first_name || ''} ${member.user?.last_name || ''}</div>`
+        ).join('')}
+      </div>
+      
+      <div class="section">
+        <h2>Time & Costs</h2>
+        <table>
+          <tr>
+            <th>Item</th>
+            <th>Amount</th>
+          </tr>
+          <tr>
+            <td>Regular Hours</td>
+            <td>${selectedWO.hours_regular || 0} hrs</td>
+          </tr>
+          <tr>
+            <td>Overtime Hours</td>
+            <td>${selectedWO.hours_overtime || 0} hrs</td>
+          </tr>
+          <tr>
+            <td>Miles</td>
+            <td>${selectedWO.miles || 0} mi</td>
+          </tr>
+          <tr>
+            <td>Material Cost</td>
+            <td>$${(selectedWO.material_cost || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Equipment Cost</td>
+            <td>$${(selectedWO.emf_equipment_cost || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Trailer Cost</td>
+            <td>$${(selectedWO.trailer_cost || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Rental Cost</td>
+            <td>$${(selectedWO.rental_cost || 0).toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+      
+      ${selectedWO.comments ? `
+        <div class="section">
+          <h2>Comments</h2>
+          <p style="white-space: pre-wrap;">${selectedWO.comments}</p>
+        </div>
+      ` : ''}
+      
+      <div class="section" style="margin-top: 40px;">
+        <p><strong>Signature:</strong> ___________________________ <strong>Date:</strong> _______________</p>
+      </div>
+      
+      <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #1e40af; color: white; border: none; cursor: pointer; border-radius: 5px;">
+        Print
+      </button>
+    </body>
+    </html>
+  `);
+  
+  printWindow.document.close();
+}
   // SECTION 5: UI COMPONENTS & RENDERING
 
   // Availability Modal Component

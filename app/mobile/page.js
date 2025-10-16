@@ -22,6 +22,14 @@ export default function MobilePage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [currentTeamList, setCurrentTeamList] = useState([]);
   const [editingField, setEditingField] = useState({});
+  
+  // NEW: Availability states
+const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+const [availabilityBlocked, setAvailabilityBlocked] = useState(false);
+const [scheduledWork, setScheduledWork] = useState(false);
+const [emergencyWork, setEmergencyWork] = useState(false);
+const [notAvailable, setNotAvailable] = useState(false);
+const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
 
   const supabase = createClientComponentClient();
 
@@ -30,9 +38,38 @@ export default function MobilePage() {
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      loadWorkOrders();
-      loadCompletedWorkOrders();
+  if (currentUser) {
+    loadWorkOrders();
+    loadCompletedWorkOrders();
+    checkAvailabilityStatus(); // ADD THIS LINE
+    
+    // ADD THESE LINES - Check availability every minute
+    const availabilityInterval = setInterval(() => {
+      checkAvailabilityStatus();
+    }, 60000);
+
+    const channel = supabase
+      .channel('work-orders-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'work_orders'
+        },
+        () => {
+          loadWorkOrders();
+          loadCompletedWorkOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(availabilityInterval); // ADD THIS LINE
+    };
+  }
+}, [currentUser]);
       const channel = supabase
         .channel('work-orders-changes')
         .on(
@@ -169,6 +206,123 @@ export default function MobilePage() {
         .eq('user_id', currentUser.user_id);
 
       if (error) throw error;
+	  
+	  // NEW: Check availability status function
+async function checkAvailabilityStatus() {
+  if (!currentUser) return;
+
+  // Check if user is tech, helper, or lead_tech
+  const eligibleRoles = ['tech', 'helper', 'lead_tech'];
+  if (!eligibleRoles.includes(currentUser.role)) {
+    return; // Not required for this role
+  }
+
+  const now = new Date();
+  
+  // Convert to EST
+  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const hour = estTime.getHours();
+  const today = estTime.toISOString().split('T')[0];
+
+  // Check if already submitted today
+  const { data: todaySubmission } = await supabase
+    .from('daily_availability')
+    .select('*')
+    .eq('user_id', currentUser.user_id)
+    .eq('availability_date', today)
+    .single();
+
+  if (todaySubmission) {
+    setHasSubmittedToday(true);
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+    return;
+  }
+
+  // Between 6 PM and 8 PM - show modal
+  if (hour >= 18 && hour < 20) {
+    setShowAvailabilityModal(true);
+    setAvailabilityBlocked(false);
+  }
+  // After 8 PM and not submitted - block app
+  else if (hour >= 20) {
+    setAvailabilityBlocked(true);
+    setShowAvailabilityModal(true);
+  }
+  // Before 6 PM - normal operation
+  else {
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+  }
+}
+
+// NEW: Handle availability submission
+async function handleAvailabilitySubmit() {
+  if (!currentUser) return;
+
+  // Validate: must select at least one option
+  if (!scheduledWork && !emergencyWork && !notAvailable) {
+    alert('Please select at least one availability option');
+    return;
+  }
+
+  try {
+    setSaving(true);
+    const today = new Date().toISOString().split('T')[0];
+
+    const { error } = await supabase
+      .from('daily_availability')
+      .insert({
+        user_id: currentUser.user_id,
+        availability_date: today,
+        scheduled_work: scheduledWork,
+        emergency_work: emergencyWork,
+        not_available: notAvailable,
+        submitted_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+
+    setHasSubmittedToday(true);
+    setShowAvailabilityModal(false);
+    setAvailabilityBlocked(false);
+    
+    // Reset selections
+    setScheduledWork(false);
+    setEmergencyWork(false);
+    setNotAvailable(false);
+
+    alert('✅ Availability submitted successfully!');
+  } catch (err) {
+    alert('Error submitting availability: ' + err.message);
+  } finally {
+    setSaving(false);
+  }
+}
+
+// NEW: Handle availability checkbox changes
+function handleAvailabilityChange(option) {
+  if (option === 'notAvailable') {
+    if (!notAvailable) {
+      // Turning on "not available" - disable others
+      setNotAvailable(true);
+      setScheduledWork(false);
+      setEmergencyWork(false);
+    } else {
+      // Turning off "not available"
+      setNotAvailable(false);
+    }
+  } else {
+    // Can't select work options if "not available" is checked
+    if (notAvailable) return;
+
+    if (option === 'scheduledWork') {
+      setScheduledWork(!scheduledWork);
+    } else if (option === 'emergencyWork') {
+      setEmergencyWork(!emergencyWork);
+    }
+  }
+}
 
       // Update local storage with new PIN
       localStorage.setItem('mobilePin', newPin);
@@ -815,6 +969,133 @@ export default function MobilePage() {
     );
   }
 
+// NEW: Availability Modal Component
+const AvailabilityModal = () => {
+  const estNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const hour = estNow.getHours();
+  const isAfter8PM = hour >= 20;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50">
+      <div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full border-4 border-yellow-500">
+        <div className="text-center mb-6">
+          <div className="text-5xl mb-3">⏰</div>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {isAfter8PM ? '🚨 AVAILABILITY OVERDUE' : 'Daily Availability'}
+          </h2>
+          <p className="text-gray-300">
+            {isAfter8PM 
+              ? 'You must submit your availability to continue using the app!'
+              : 'Please submit your availability for tomorrow (Deadline: 8:00 PM EST)'}
+          </p>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          <button
+            onClick={() => handleAvailabilityChange('scheduledWork')}
+            disabled={notAvailable}
+            className={`w-full p-4 rounded-lg border-2 transition ${
+              scheduledWork
+                ? 'bg-green-600 border-green-400 text-white'
+                : notAvailable
+                ? 'bg-gray-700 border-gray-600 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-700 border-gray-500 text-white hover:bg-gray-600'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
+                  scheduledWork ? 'bg-green-500 border-green-400' : 'border-gray-400'
+                }`}>
+                  {scheduledWork && <span className="text-white font-bold">✓</span>}
+                </div>
+                <div className="text-left">
+                  <div className="font-bold">📅 Scheduled Work</div>
+                  <div className="text-xs opacity-75">Available for planned jobs</div>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handleAvailabilityChange('emergencyWork')}
+            disabled={notAvailable}
+            className={`w-full p-4 rounded-lg border-2 transition ${
+              emergencyWork
+                ? 'bg-red-600 border-red-400 text-white'
+                : notAvailable
+                ? 'bg-gray-700 border-gray-600 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-700 border-gray-500 text-white hover:bg-gray-600'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
+                  emergencyWork ? 'bg-red-500 border-red-400' : 'border-gray-400'
+                }`}>
+                  {emergencyWork && <span className="text-white font-bold">✓</span>}
+                </div>
+                <div className="text-left">
+                  <div className="font-bold">🚨 Emergency Work</div>
+                  <div className="text-xs opacity-75">Available for urgent calls</div>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handleAvailabilityChange('notAvailable')}
+            className={`w-full p-4 rounded-lg border-2 transition ${
+              notAvailable
+                ? 'bg-gray-600 border-gray-400 text-white'
+                : 'bg-gray-700 border-gray-500 text-white hover:bg-gray-600'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
+                  notAvailable ? 'bg-gray-500 border-gray-400' : 'border-gray-400'
+                }`}>
+                  {notAvailable && <span className="text-white font-bold">✓</span>}
+                </div>
+                <div className="text-left">
+                  <div className="font-bold">🚫 Not Available</div>
+                  <div className="text-xs opacity-75">Cannot work tomorrow</div>
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div className="bg-blue-900 rounded-lg p-3 mb-4 text-sm text-blue-200">
+          <p className="font-semibold mb-1">ℹ️ Selection Rules:</p>
+          <ul className="text-xs space-y-1 ml-4">
+            <li>• Select Scheduled, Emergency, or both</li>
+            <li>• OR select Not Available</li>
+            <li>• Cannot combine work options with Not Available</li>
+          </ul>
+        </div>
+
+        <button
+          onClick={handleAvailabilitySubmit}
+          disabled={saving || (!scheduledWork && !emergencyWork && !notAvailable)}
+          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-lg font-bold text-lg text-white transition"
+        >
+          {saving ? 'Submitting...' : '✅ Submit Availability'}
+        </button>
+
+        {isAfter8PM && (
+          <div className="mt-4 bg-red-900 rounded-lg p-3 text-center">
+            <p className="text-red-200 text-sm font-bold">
+              ⚠️ App is locked until you submit
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -873,7 +1154,9 @@ export default function MobilePage() {
       </div>
     );
   }
-
+  if (showAvailabilityModal && (availabilityBlocked || !hasSubmittedToday)) {
+    return <AvailabilityModal />;
+  }
   if (selectedWO) {
     try {
       console.log('Rendering selectedWO view:', selectedWO);

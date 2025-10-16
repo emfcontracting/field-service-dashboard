@@ -300,8 +300,6 @@ async function handleChangePin() {
   }
 }
 
-async function loadWorkOrders() {
-
   async function loadWorkOrders() {
     if (!currentUser) return;
 

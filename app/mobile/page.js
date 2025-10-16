@@ -34,6 +34,10 @@ const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
   const supabase = createClientComponentClient();
 
 useEffect(() => {
+  checkAuth();
+}, []);
+
+useEffect(() => {
   if (!currentUser) return;
   
   loadWorkOrders();
@@ -66,38 +70,17 @@ useEffect(() => {
     clearInterval(availabilityInterval);
   };
 }, [currentUser]);
-      const channel = supabase
-        .channel('work-orders-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'work_orders'
-          },
-          () => {
-            loadWorkOrders();
-            loadCompletedWorkOrders();
-          }
-        )
-        .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [currentUser]);
-
-  // Load team members when work order is selected
-  useEffect(() => {
-    if (selectedWO && selectedWO.wo_id) {
-      console.log('Loading team for work order:', selectedWO.wo_id);
-      loadTeamForWorkOrder(selectedWO.wo_id).catch(err => {
-        console.error('Error in useEffect loading team:', err);
-      });
-      setEditingField({}); // Clear editing state when work order changes
-    }
-  }, [selectedWO?.wo_id]);
+// Load team members when work order is selected
+useEffect(() => {
+  if (selectedWO && selectedWO.wo_id) {
+    console.log('Loading team for work order:', selectedWO.wo_id);
+    loadTeamForWorkOrder(selectedWO.wo_id).catch(err => {
+      console.error('Error in useEffect loading team:', err);
+    });
+    setEditingField({});
+  }
+}, [selectedWO?.wo_id]);
 
   async function checkAuth() {
     const savedEmail = localStorage.getItem('mobileEmail');

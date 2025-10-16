@@ -301,23 +301,28 @@ async function handleChangePin() {
       if (error) throw error;
 	  
 	  // NEW: Check availability status function
+function handleLogout() {
+  localStorage.removeItem('mobileEmail');
+  localStorage.removeItem('mobilePin');
+  setCurrentUser(null);
+  setEmail('');
+  setPin('');
+  setSelectedWO(null);
+}
+
 async function checkAvailabilityStatus() {
   if (!currentUser) return;
 
-  // Check if user is tech, helper, or lead_tech
   const eligibleRoles = ['tech', 'helper', 'lead_tech'];
   if (!eligibleRoles.includes(currentUser.role)) {
-    return; // Not required for this role
+    return;
   }
 
   const now = new Date();
-  
-  // Convert to EST
   const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const hour = estTime.getHours();
   const today = estTime.toISOString().split('T')[0];
 
-  // Check if already submitted today
   const { data: todaySubmission } = await supabase
     .from('daily_availability')
     .select('*')
@@ -332,28 +337,21 @@ async function checkAvailabilityStatus() {
     return;
   }
 
-  // Between 6 PM and 8 PM - show modal
   if (hour >= 18 && hour < 20) {
     setShowAvailabilityModal(true);
     setAvailabilityBlocked(false);
-  }
-  // After 8 PM and not submitted - block app
-  else if (hour >= 20) {
+  } else if (hour >= 20) {
     setAvailabilityBlocked(true);
     setShowAvailabilityModal(true);
-  }
-  // Before 6 PM - normal operation
-  else {
+  } else {
     setShowAvailabilityModal(false);
     setAvailabilityBlocked(false);
   }
 }
 
-// NEW: Handle availability submission
 async function handleAvailabilitySubmit() {
   if (!currentUser) return;
 
-  // Validate: must select at least one option
   if (!scheduledWork && !emergencyWork && !notAvailable) {
     alert('Please select at least one availability option');
     return;
@@ -380,7 +378,6 @@ async function handleAvailabilitySubmit() {
     setShowAvailabilityModal(false);
     setAvailabilityBlocked(false);
     
-    // Reset selections
     setScheduledWork(false);
     setEmergencyWork(false);
     setNotAvailable(false);
@@ -393,20 +390,16 @@ async function handleAvailabilitySubmit() {
   }
 }
 
-// NEW: Handle availability checkbox changes
 function handleAvailabilityChange(option) {
   if (option === 'notAvailable') {
     if (!notAvailable) {
-      // Turning on "not available" - disable others
       setNotAvailable(true);
       setScheduledWork(false);
       setEmergencyWork(false);
     } else {
-      // Turning off "not available"
       setNotAvailable(false);
     }
   } else {
-    // Can't select work options if "not available" is checked
     if (notAvailable) return;
 
     if (option === 'scheduledWork') {
@@ -416,6 +409,9 @@ function handleAvailabilityChange(option) {
     }
   }
 }
+
+async function handleChangePin() {
+  // Your existing code continues here...
 
       // Update local storage with new PIN
       localStorage.setItem('mobilePin', newPin);

@@ -33,38 +33,38 @@ const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
 
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-  if (currentUser) {
-    loadWorkOrders();
-    loadCompletedWorkOrders();
+useEffect(() => {
+  if (!currentUser) return;
+  
+  loadWorkOrders();
+  loadCompletedWorkOrders();
+  checkAvailabilityStatus();
+  
+  // Check availability every minute
+  const availabilityInterval = setInterval(() => {
     checkAvailabilityStatus();
-    
-    // Check availability every minute
-    const availabilityInterval = setInterval(() => {
-      checkAvailabilityStatus();
-    }, 60000);
+  }, 60000);
 
-    const channel = supabase
-      .channel('work-orders-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'work_orders'
-        },
-        () => {
-          loadWorkOrders();
-          loadCompletedWorkOrders();
-        }
-      )
-      .subscribe();
+  const channel = supabase
+    .channel('work-orders-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'work_orders'
+      },
+      () => {
+        loadWorkOrders();
+        loadCompletedWorkOrders();
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(availabilityInterval);
-    };
-  }
+  return () => {
+    supabase.removeChannel(channel);
+    clearInterval(availabilityInterval);
+  };
 }, [currentUser]);
       const channel = supabase
         .channel('work-orders-changes')

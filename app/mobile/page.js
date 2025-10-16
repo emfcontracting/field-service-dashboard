@@ -34,16 +34,12 @@ const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
   const supabase = createClientComponentClient();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
   if (currentUser) {
     loadWorkOrders();
     loadCompletedWorkOrders();
-    checkAvailabilityStatus(); // ADD THIS LINE
+    checkAvailabilityStatus();
     
-    // ADD THESE LINES - Check availability every minute
+    // Check availability every minute
     const availabilityInterval = setInterval(() => {
       checkAvailabilityStatus();
     }, 60000);
@@ -66,7 +62,7 @@ const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(availabilityInterval); // ADD THIS LINE
+      clearInterval(availabilityInterval);
     };
   }
 }, [currentUser]);

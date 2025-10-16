@@ -161,12 +161,9 @@ function handleLogout() {
   setSelectedWO(null);
 }
 
-// ✅ ADD THESE THREE FUNCTIONS HERE ✅
-
 async function checkAvailabilityStatus() {
   if (!currentUser) return;
 
-  // Check if user is tech, helper, or lead_tech
   const eligibleRoles = ['tech', 'helper', 'lead_tech'];
   if (!eligibleRoles.includes(currentUser.role)) {
     return;
@@ -177,7 +174,6 @@ async function checkAvailabilityStatus() {
   const hour = estTime.getHours();
   const today = estTime.toISOString().split('T')[0];
 
-  // Check if already submitted today
   const { data: todaySubmission } = await supabase
     .from('daily_availability')
     .select('*')
@@ -192,18 +188,13 @@ async function checkAvailabilityStatus() {
     return;
   }
 
-  // Between 6 PM and 8 PM - show modal
   if (hour >= 18 && hour < 20) {
     setShowAvailabilityModal(true);
     setAvailabilityBlocked(false);
-  }
-  // After 8 PM and not submitted - block app
-  else if (hour >= 20) {
+  } else if (hour >= 20) {
     setAvailabilityBlocked(true);
     setShowAvailabilityModal(true);
-  }
-  // Before 6 PM - normal operation
-  else {
+  } else {
     setShowAvailabilityModal(false);
     setAvailabilityBlocked(false);
   }
@@ -269,8 +260,6 @@ function handleAvailabilityChange(option) {
     }
   }
 }
-
-// ✅ END OF NEW FUNCTIONS ✅
 
 async function handleChangePin() {
   if (!newPin || !confirmPin) {

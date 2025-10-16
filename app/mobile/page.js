@@ -273,162 +273,45 @@ function handleAvailabilityChange(option) {
 // ✅ END OF NEW FUNCTIONS ✅
 
 async function handleChangePin() {
-  // ... your existing handleChangePin code continues here
-
-  async function handleChangePin() {
-    if (!newPin || !confirmPin) {
-      alert('Please enter both PIN fields');
-      return;
-    }
-
-    if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
-      alert('PIN must be exactly 4 digits');
-      return;
-    }
-
-    if (newPin !== confirmPin) {
-      alert('PINs do not match');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const { error } = await supabase
-        .from('users')
-        .update({ pin: newPin })
-        .eq('user_id', currentUser.user_id);
-
-      if (error) throw error;
-	  
-	  // NEW: Check availability status function
-function handleLogout() {
-  localStorage.removeItem('mobileEmail');
-  localStorage.removeItem('mobilePin');
-  setCurrentUser(null);
-  setEmail('');
-  setPin('');
-  setSelectedWO(null);
-}
-
-async function checkAvailabilityStatus() {
-  if (!currentUser) return;
-
-  const eligibleRoles = ['tech', 'helper', 'lead_tech'];
-  if (!eligibleRoles.includes(currentUser.role)) {
+  if (!newPin || !confirmPin) {
+    alert('Please enter both PIN fields');
     return;
   }
 
-  const now = new Date();
-  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const hour = estTime.getHours();
-  const today = estTime.toISOString().split('T')[0];
-
-  const { data: todaySubmission } = await supabase
-    .from('daily_availability')
-    .select('*')
-    .eq('user_id', currentUser.user_id)
-    .eq('availability_date', today)
-    .single();
-
-  if (todaySubmission) {
-    setHasSubmittedToday(true);
-    setShowAvailabilityModal(false);
-    setAvailabilityBlocked(false);
+  if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+    alert('PIN must be exactly 4 digits');
     return;
   }
 
-  if (hour >= 18 && hour < 20) {
-    setShowAvailabilityModal(true);
-    setAvailabilityBlocked(false);
-  } else if (hour >= 20) {
-    setAvailabilityBlocked(true);
-    setShowAvailabilityModal(true);
-  } else {
-    setShowAvailabilityModal(false);
-    setAvailabilityBlocked(false);
-  }
-}
-
-async function handleAvailabilitySubmit() {
-  if (!currentUser) return;
-
-  if (!scheduledWork && !emergencyWork && !notAvailable) {
-    alert('Please select at least one availability option');
+  if (newPin !== confirmPin) {
+    alert('PINs do not match');
     return;
   }
 
   try {
     setSaving(true);
-    const today = new Date().toISOString().split('T')[0];
-
     const { error } = await supabase
-      .from('daily_availability')
-      .insert({
-        user_id: currentUser.user_id,
-        availability_date: today,
-        scheduled_work: scheduledWork,
-        emergency_work: emergencyWork,
-        not_available: notAvailable,
-        submitted_at: new Date().toISOString()
-      });
+      .from('users')
+      .update({ pin: newPin })
+      .eq('user_id', currentUser.user_id);
 
     if (error) throw error;
 
-    setHasSubmittedToday(true);
-    setShowAvailabilityModal(false);
-    setAvailabilityBlocked(false);
-    
-    setScheduledWork(false);
-    setEmergencyWork(false);
-    setNotAvailable(false);
+    localStorage.setItem('mobilePin', newPin);
+    setCurrentUser({ ...currentUser, pin: newPin });
 
-    alert('✅ Availability submitted successfully!');
+    alert('PIN changed successfully!');
+    setShowChangePinModal(false);
+    setNewPin('');
+    setConfirmPin('');
   } catch (err) {
-    alert('Error submitting availability: ' + err.message);
+    alert('Error changing PIN: ' + err.message);
   } finally {
     setSaving(false);
   }
 }
 
-function handleAvailabilityChange(option) {
-  if (option === 'notAvailable') {
-    if (!notAvailable) {
-      setNotAvailable(true);
-      setScheduledWork(false);
-      setEmergencyWork(false);
-    } else {
-      setNotAvailable(false);
-    }
-  } else {
-    if (notAvailable) return;
-
-    if (option === 'scheduledWork') {
-      setScheduledWork(!scheduledWork);
-    } else if (option === 'emergencyWork') {
-      setEmergencyWork(!emergencyWork);
-    }
-  }
-}
-
-async function handleChangePin() {
-  // Your existing code continues here...
-
-      // Update local storage with new PIN
-      localStorage.setItem('mobilePin', newPin);
-      
-      // Update current user state
-      setCurrentUser({ ...currentUser, pin: newPin });
-
-      alert('PIN changed successfully!');
-      setShowChangePinModal(false);
-      setNewPin('');
-      setConfirmPin('');
-    } catch (err) {
-      alert('Error changing PIN: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+async function loadWorkOrders() {
 
   async function loadWorkOrders() {
     if (!currentUser) return;

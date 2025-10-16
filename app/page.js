@@ -1151,26 +1151,567 @@ return (
 
       {/* ALL YOUR EXISTING MODALS STAY HERE UNCHANGED */}
       {/* Work Order Detail Modal */}
+      {/* Work Order Detail Modal */}
       {selectedWO && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          {/* Your entire existing modal code stays exactly the same */}
-          {/* I'm not including it here to save space but it all stays */}
+          <div className="bg-gray-800 rounded-lg max-w-6xl w-full my-8">
+            
+            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
+              <div>
+                <h2 className="text-2xl font-bold">{selectedWO.wo_number}</h2>
+                {selectedWO.acknowledged && (
+                  <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm mt-2 inline-block">
+                    ✅ Acknowledged
+                  </div>
+                )}
+                {selectedWO.is_locked && (
+                  <div className="bg-red-900 text-red-200 px-3 py-1 rounded-lg text-sm mt-2 inline-block ml-2">
+                    🔒 Locked
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedWO(null);
+                  setShowInvoiceButton(false);
+                }}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Work Order #</label>
+                  <input
+                    type="text"
+                    value={selectedWO.wo_number}
+                    onChange={(e) => setSelectedWO({ ...selectedWO, wo_number: e.target.value })}
+                    onBlur={() => updateWorkOrder(selectedWO.wo_id, { wo_number: selectedWO.wo_number })}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  />
+                </div>
+                <div>
+  <label className="block text-sm text-gray-400 mb-1">Date & Time Entered</label>
+  <input
+    type="datetime-local"
+    value={(() => {
+      if (!selectedWO.date_entered && !selectedWO.date_entered) return '';
+      const date = new Date(selectedWO.date_entered || selectedWO.date_entered);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
+    })()}
+    onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: new Date(e.target.value).toISOString() })}
+    onBlur={() => updateWorkOrder(selectedWO.wo_id, { date_entered: selectedWO.date_entered })}
+    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+  />
+</div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Building</label>
+                <input
+                  type="text"
+                  value={selectedWO.building}
+                  onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
+                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { building: selectedWO.building })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea
+                  value={selectedWO.work_order_description}
+                  onChange={(e) => setSelectedWO({ ...selectedWO, work_order_description: e.target.value })}
+                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { work_order_description: selectedWO.work_order_description })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  rows="3"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+                <input
+                  type="text"
+                  value={selectedWO.requestor || ''}
+                  onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
+                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { requestor: selectedWO.requestor })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Status</label>
+                  <select
+                    value={selectedWO.status}
+                    onChange={(e) => {
+                      setSelectedWO({ ...selectedWO, status: e.target.value });
+                      updateWorkOrderStatus(selectedWO.wo_id, e.target.value);
+                    }}
+                    disabled={selectedWO.is_locked || selectedWO.acknowledged}
+                    className={`w-full px-4 py-2 rounded-lg font-semibold ${getStatusColor(selectedWO.status)} ${
+                      (selectedWO.is_locked || selectedWO.acknowledged) ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="needs_return">Needs Return</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Priority</label>
+                  <select
+                    value={selectedWO.priority}
+                    onChange={(e) => {
+                      setSelectedWO({ ...selectedWO, priority: e.target.value });
+                      updateWorkOrder(selectedWO.wo_id, { priority: e.target.value });
+                    }}
+                    className={`w-full px-4 py-2 rounded-lg font-semibold ${getPriorityColor(selectedWO.priority)}`}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Lead Tech</label>
+                  <select
+                    value={selectedWO.lead_tech_id || ''}
+                    onChange={(e) => {
+                      setSelectedWO({ ...selectedWO, lead_tech_id: e.target.value });
+                      updateWorkOrder(selectedWO.wo_id, { lead_tech_id: e.target.value || null });
+                    }}
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    <option value="">Unassigned</option>
+                    {users.filter(u => u.role === 'lead_tech' || u.role === 'admin').map(user => (
+                      <option key={user.user_id} value={user.user_id}>
+                        {user.first_name} {user.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Team Members Section */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold text-lg">Team Members</h3>
+                  <button
+                    onClick={() => {
+                      const availableUsers = users.filter(u => 
+                        (u.role === 'lead_tech' || u.role === 'tech' || u.role === 'helper') &&
+                        u.user_id !== selectedWO.lead_tech_id &&
+                        !(selectedWO.teamMembers || []).some(tm => tm.user_id === u.user_id)
+                      );
+                      
+                      if (availableUsers.length === 0) {
+                        alert('No available team members to add. Make sure you have active users with tech, helper, or lead_tech roles.');
+                        return;
+                      }
+                      
+                      setShowAddTeamModal(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
+                  >
+                    + Add Team Member
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {(selectedWO.teamMembers || []).length === 0 ? (
+                    <div className="text-center text-gray-400 py-4 text-sm">
+                      No additional team members yet
+                    </div>
+                  ) : (
+                    (selectedWO.teamMembers || []).map(member => (
+                      <div key={member.assignment_id} className="bg-gray-600 rounded-lg p-3">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="font-bold">
+                              {member.user?.first_name} {member.user?.last_name}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {member.user?.email} • {member.user?.role?.replace('_', ' ').toUpperCase()}
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Remove this team member?')) return;
+                              
+                              const { error } = await supabase
+                                .from('work_order_assignments')
+                                .delete()
+                                .eq('assignment_id', member.assignment_id);
+                              
+                              if (!error) {
+                                alert('✅ Team member removed');
+                                const wo = workOrders.find(w => w.wo_id === selectedWO.wo_id);
+                                if (wo) selectWorkOrderEnhanced(wo);
+                              }
+                            }}
+                            className="text-red-400 hover:text-red-300 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div>
+                            <label className="text-xs text-gray-400">RT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_regular || 0}
+                              onChange={async (e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                await supabase
+                                  .from('work_order_assignments')
+                                  .update({ hours_regular: value })
+                                  .eq('assignment_id', member.assignment_id);
+                                
+                                const updatedMembers = selectedWO.teamMembers.map(m => 
+                                  m.assignment_id === member.assignment_id 
+                                    ? { ...m, hours_regular: value }
+                                    : m
+                                );
+                                setSelectedWO({ ...selectedWO, teamMembers: updatedMembers });
+                              }}
+                              className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-400">OT Hours</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={member.hours_overtime || 0}
+                              onChange={async (e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                await supabase
+                                  .from('work_order_assignments')
+                                  .update({ hours_overtime: value })
+                                  .eq('assignment_id', member.assignment_id);
+                                
+                                const updatedMembers = selectedWO.teamMembers.map(m => 
+                                  m.assignment_id === member.assignment_id 
+                                    ? { ...m, hours_overtime: value }
+                                    : m
+                                );
+                                setSelectedWO({ ...selectedWO, teamMembers: updatedMembers });
+                              }}
+                              className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-400">Miles</label>
+                            <input
+                              type="number"
+                              value={member.miles || 0}
+                              onChange={async (e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                await supabase
+                                  .from('work_order_assignments')
+                                  .update({ miles: value })
+                                  .eq('assignment_id', member.assignment_id);
+                                
+                                const updatedMembers = selectedWO.teamMembers.map(m => 
+                                  m.assignment_id === member.assignment_id 
+                                    ? { ...m, miles: value }
+                                    : m
+                                );
+                                setSelectedWO({ ...selectedWO, teamMembers: updatedMembers });
+                              }}
+                              className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-gray-400 mt-2">
+                          Labor: ${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Primary Tech Field Data */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="font-bold mb-3 text-lg">Primary Tech Field Data</h3>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Regular Hours (RT)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={selectedWO.hours_regular || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, hours_regular: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_regular: selectedWO.hours_regular })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Overtime Hours (OT)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={selectedWO.hours_overtime || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, hours_overtime: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { hours_overtime: selectedWO.hours_overtime })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Miles</label>
+                    <input
+                      type="number"
+                      value={selectedWO.miles || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, miles: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { miles: selectedWO.miles })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">@ $1.00/mile</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Material Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={selectedWO.material_cost || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, material_cost: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { material_cost: selectedWO.material_cost })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Equipment Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={selectedWO.emf_equipment_cost || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { emf_equipment_cost: selectedWO.emf_equipment_cost })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Trailer Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={selectedWO.trailer_cost || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, trailer_cost: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { trailer_cost: selectedWO.trailer_cost })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Rental Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={selectedWO.rental_cost || 0}
+                      onChange={(e) => setSelectedWO({ ...selectedWO, rental_cost: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => updateWorkOrder(selectedWO.wo_id, { rental_cost: selectedWO.rental_cost })}
+                      className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Budget & Cost Summary */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h3 className="font-bold mb-3 text-lg">💰 Budget & Cost Summary</h3>
+                
+                {/* All the cost calculation content here */}
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Comments / Notes</label>
+                <textarea
+                  value={selectedWO.comments || ''}
+                  onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
+                  onBlur={() => updateWorkOrder(selectedWO.wo_id, { comments: selectedWO.comments })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  rows="4"
+                  placeholder="Add any notes or comments..."
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
+                
+                {selectedWO.status === 'completed' && !selectedWO.acknowledged && !selectedWO.is_locked && (
+                  <button
+                    onClick={() => acknowledgeWorkOrder(selectedWO.wo_id)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                  >
+                    ✅ Acknowledge Completion & Lock
+                  </button>
+                )}
+
+                {/* Field Assignment Buttons */}
+                {selectedWO.lead_tech_id && !selectedWO.assigned_to_field && (
+                  <button
+                    onClick={() => assignToField(selectedWO.wo_id)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                  >
+                    📱 Assign to Field Workers
+                  </button>
+                )}
+
+                {selectedWO.assigned_to_field && (
+                  <div className="space-y-2">
+                    <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
+                      <div className="font-bold">📱 Assigned to Field Workers</div>
+                      <div className="text-sm mt-1">
+                        {selectedWO.assigned_to_field_at && (
+                          <>Assigned on {new Date(selectedWO.assigned_to_field_at).toLocaleString()}</>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => unassignFromField(selectedWO.wo_id)}
+                      className="w-full bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
+                    >
+                      ❌ Remove from Field Workers
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => deleteWorkOrder(selectedWO.wo_id)}
+                  className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+
+            </div>
+          </div>
         </div>
       )}
 
-      {/* New Work Order Modal */}
-      {showNewWOModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          {/* Your entire existing modal code stays exactly the same */}
+      {/* ADD TEAM MEMBER MODAL */}
+      {showAddTeamModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-600 p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-white mb-4">Add Team Member</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Select Team Member
+                </label>
+                <select
+                  value={selectedTeamUserId}
+                  onChange={(e) => setSelectedTeamUserId(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg"
+                >
+                  <option value="">Choose a person...</option>
+                  {users
+                    .filter(u => 
+                      (u.role === 'lead_tech' || u.role === 'tech' || u.role === 'helper') &&
+                      u.user_id !== selectedWO.lead_tech_id &&
+                      !(selectedWO.teamMembers || []).some(tm => tm.user_id === u.user_id)
+                    )
+                    .map(user => (
+                      <option key={user.user_id} value={user.user_id}>
+                        {user.first_name} {user.last_name} ({user.role?.replace('_', ' ').toUpperCase()})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Role on this Job
+                </label>
+                <select
+                  value={selectedTeamRole}
+                  onChange={(e) => setSelectedTeamRole(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg"
+                >
+                  <option value="helper">Helper</option>
+                  <option value="lead_tech">Co-Lead Tech</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddTeamModal(false);
+                  setSelectedTeamUserId('');
+                  setSelectedTeamRole('helper');
+                }}
+                className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 border border-gray-500 text-white rounded-lg font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedTeamUserId) {
+                    alert('Please select a team member');
+                    return;
+                  }
+
+                  const { error } = await supabase
+                    .from('work_order_assignments')
+                    .insert({
+                      wo_id: selectedWO.wo_id,
+                      user_id: selectedTeamUserId,
+                      role: selectedTeamRole,
+                      hours_regular: 0,
+                      hours_overtime: 0,
+                      miles: 0
+                    });
+                  
+                  if (error) {
+                    console.error('Error adding team member:', error);
+                    alert('Failed to add team member: ' + error.message);
+                  } else {
+                    const selectedUser = users.find(u => u.user_id === selectedTeamUserId);
+                    alert(`✅ ${selectedUser.first_name} ${selectedUser.last_name} added to team!`);
+                    
+                    // Refresh the work order with team members
+                    const wo = workOrders.find(w => w.wo_id === selectedWO.wo_id);
+                    if (wo) await selectWorkOrderEnhanced(wo);
+                    
+                    // Close modal and reset
+                    setShowAddTeamModal(false);
+                    setSelectedTeamUserId('');
+                    setSelectedTeamRole('helper');
+                  }
+                }}
+                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
+              >
+                Add Member
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Import Modal */}
-      <ImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImportComplete={() => fetchWorkOrders()}
-      />
-    </div>
-  );
-}

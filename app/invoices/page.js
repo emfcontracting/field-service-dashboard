@@ -230,11 +230,11 @@ if (totalMiles > 0) {
   });
 }
 
-// Materials WITH 25% MARKUP
+// Materials WITH 25% MARKUP (but don't show it)
 if (wo.material_cost > 0) {
   const markedUpMaterials = wo.material_cost * 1.25;
   items.push({
-    description: `Materials (Base: $${wo.material_cost.toFixed(2)} + 25% markup)`,
+    description: 'Materials',
     quantity: 1,
     unit_price: markedUpMaterials,
     amount: markedUpMaterials,
@@ -243,11 +243,11 @@ if (wo.material_cost > 0) {
   });
 }
 
-// Equipment WITH 15% MARKUP
+// Equipment WITH 25% MARKUP (but don't show it)
 if (wo.emf_equipment_cost > 0) {
-  const markedUpEquipment = wo.emf_equipment_cost * 1.15;
+  const markedUpEquipment = wo.emf_equipment_cost * 1.25;
   items.push({
-    description: `Equipment (Base: $${wo.emf_equipment_cost.toFixed(2)} + 15% markup)`,
+    description: 'Equipment',
     quantity: 1,
     unit_price: markedUpEquipment,
     amount: markedUpEquipment,
@@ -256,8 +256,9 @@ if (wo.emf_equipment_cost > 0) {
   });
 }
 
-// Trailer (NO MARKUP)
-if (wo.trailer_cost > 0) {
+// Trailer WITH 25% MARKUP (but don't show it)
+if (wo.emf_equipment_cost > 0) {
+  const markedUpTrailer = wo.trailer_cost * 1.25;
   items.push({
     description: 'Trailer',
     quantity: 1,
@@ -268,11 +269,11 @@ if (wo.trailer_cost > 0) {
   });
 }
 
-// Rental WITH 15% MARKUP
+// Rental WITH 15% MARKUP (but don't show it)
 if (wo.rental_cost > 0) {
   const markedUpRental = wo.rental_cost * 1.15;
   items.push({
-    description: `Rental (Base: $${wo.rental_cost.toFixed(2)} + 15% markup)`,
+    description: 'Rental',
     quantity: 1,
     unit_price: markedUpRental,
     amount: markedUpRental,

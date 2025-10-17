@@ -1,8 +1,9 @@
 // app/dashboard/components/WorkOrdersTable.js
 'use client';
 
-import { getStatusColor, getPriorityColor } from '../utils/styleHelpers';
+import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
+import { getPriorityBadge } from '../utils/priorityHelpers';
 
 export default function WorkOrdersTable({ 
   workOrders, 
@@ -12,6 +13,20 @@ export default function WorkOrdersTable({
   statusFilter,
   priorityFilter 
 }) {
+  
+  // Check if work order is "new" (unassigned and less than 24 hours old)
+  const isNewWorkOrder = (wo) => {
+    // Must be unassigned
+    if (wo.lead_tech_id) return false;
+    
+    // Check if created within last 24 hours
+    const createdDate = new Date(wo.date_entered || wo.created_at);
+    const now = new Date();
+    const hoursSinceCreation = (now - createdDate) / (1000 * 60 * 60);
+    
+    return hoursSinceCreation <= 24;
+  };
+
   if (loading) {
     return (
       <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
@@ -53,6 +68,7 @@ export default function WorkOrdersTable({
             {workOrders.map(wo => {
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
+              const isNew = isNewWorkOrder(wo);
 
               return (
                 <tr
@@ -60,7 +76,16 @@ export default function WorkOrdersTable({
                   onClick={() => onSelectWorkOrder(wo)}
                   className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
                 >
-                  <td className="px-2 py-2 font-semibold">{wo.wo_number}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{wo.wo_number}</span>
+                      {isNew && (
+                        <span className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+                          NEW
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-2 py-2">
                     {(() => {
                       const dateValue = wo.date_entered;
@@ -97,10 +122,22 @@ export default function WorkOrdersTable({
                     </div>
                   </td>
                   <td className="px-2 py-2 text-center">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(wo.priority)}`}>
-                      {wo.priority.charAt(0).toUpperCase()}
-                    </span>
-                  </td>
+  {(() => {
+    const badge = getPriorityBadge(wo.priority);
+    
+    // Compact version - just show emoji and code (e.g. "🔴 P1")
+    const compactText = badge.text.split(' ')[0] + ' ' + badge.text.split(' ')[1];
+    
+    return (
+      <span 
+        className={`px-2 py-1 rounded text-xs font-semibold text-white ${badge.color} whitespace-nowrap`}
+        title={badge.text} // Full text on hover
+      >
+        {compactText}
+      </span>
+    );
+  })()}
+</td>
                   <td className="px-2 py-2">
                     {wo.lead_tech ? (
                       <div className="truncate" title={`${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`}>

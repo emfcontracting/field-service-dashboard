@@ -1,3 +1,5 @@
+//Mobile App file
+
 'use client';
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -1268,19 +1270,29 @@ function handlePrintWO() {
             </button>
             <h1 className="text-xl font-bold">{woNumber}</h1>
             <div className="flex gap-2">
-              <button
-                onClick={() => setShowChangePinModal(true)}
-                className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
-              >
-                🔐
-              </button>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
-              >
-                Logout
-              </button>
-            </div>
+  {/* Only show Dashboard for admin/office */}
+  {(currentUser.role === 'admin' || currentUser.role === 'office') && (
+    <button
+      onClick={() => window.location.href = '/dashboard'}
+      className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm"
+      title="Dashboard"
+    >
+      💻
+    </button>
+  )}
+  <button
+    onClick={() => setShowChangePinModal(true)}
+    className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
+  >
+    🔑
+  </button>
+  <button
+    onClick={handleLogout}
+    className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+  >
+    Logout
+  </button>
+</div>
           </div>
 
           <div className="space-y-4">
@@ -1820,25 +1832,34 @@ function handlePrintWO() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowCompletedPage(true)}
-              className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
-            >
-              ✅ Completed
-            </button>
-            <button
-              onClick={() => setShowChangePinModal(true)}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
-            >
-              🔐 PIN
-            </button>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
-            >
-              Logout
-            </button>
-          </div>
+  {/* Only show Dashboard button for admin and office roles */}
+  {(currentUser.role === 'admin' || currentUser.role === 'office') && (
+    <button
+      onClick={() => window.location.href = '/dashboard'}
+      className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+    >
+      💻 Dashboard
+    </button>
+  )}
+  <button
+    onClick={() => setShowCompletedPage(true)}
+    className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
+  >
+    ✅ Completed
+  </button>
+  <button
+    onClick={() => setShowChangePinModal(true)}
+    className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
+  >
+    🔑 PIN
+  </button>
+  <button
+    onClick={handleLogout}
+    className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
+  >
+    Logout
+  </button>
+</div>
         </div>
 
         <div className="mb-6">

@@ -9,7 +9,7 @@ export default function WorkOrdersFilters({
   priorityFilter,
   setPriorityFilter,
   onNewWorkOrder,
-  onImport
+  onImport,     
   exportDropdown
 }) {
   return (

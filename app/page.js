@@ -18,10 +18,6 @@ export default function Dashboard() {
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState('workorders');
-  const [availabilityData, setAvailabilityData] = useState([]);
-  const [selectedAvailDate, setSelectedAvailDate] = useState(new Date());
-  const [availLoading, setAvailLoading] = useState(false);
   
   // NEW: Team Member Modal States
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
@@ -84,13 +80,6 @@ export default function Dashboard() {
       checkCanGenerateInvoice(selectedWO.wo_id);
     }
   }, [selectedWO]); // eslint-disable-line react-hooks/exhaustive-deps
-  
-  // ADD THIS useEffect (after your other useEffects):
-useEffect(() => {
-  if (activeView === 'availability') {
-    loadAvailabilityData();
-  }
-}, [activeView, selectedAvailDate]);
 
   // Fetch Work Orders
   const fetchWorkOrders = async () => {
@@ -480,47 +469,6 @@ const importFromSheets = async () => {
     const csvText = await response.text();
 
     console.log('Raw CSV (first 500 chars):', csvText.substring(0, 500));
-	
-	// ADD THIS FUNCTION (after your other functions, before the return statement):
-const loadAvailabilityData = async () => {
-  setAvailLoading(true);
-  try {
-    // Get all techs and helpers
-    const { data: techUsers } = await supabase
-      .from('users')
-      .select('user_id, first_name, last_name, role, email')
-      .in('role', ['tech', 'helper', 'lead_tech'])
-      .eq('is_active', true)
-      .order('role')
-      .order('first_name');
-
-    // Get availability for selected date
-    const dateStr = selectedAvailDate.toISOString().split('T')[0];
-    const { data: availability } = await supabase
-      .from('daily_availability')
-      .select('*')
-      .eq('availability_date', dateStr);
-
-    // Combine the data
-    const combined = (techUsers || []).map(user => {
-      const userAvail = availability?.find(a => a.user_id === user.user_id);
-      return {
-        ...user,
-        submitted: !!userAvail,
-        scheduled_work: userAvail?.scheduled_work || false,
-        emergency_work: userAvail?.emergency_work || false,
-        not_available: userAvail?.not_available || false,
-        submitted_at: userAvail?.submitted_at
-      };
-    });
-
-    setAvailabilityData(combined);
-  } catch (err) {
-    console.error('Error loading availability:', err);
-  } finally {
-    setAvailLoading(false);
-  }
-};
 
     // Split into lines
     const lines = csvText.split('\n');
@@ -692,158 +640,6 @@ return (
             </button>
           </div>
         </div>
-		// WRAP YOUR MAIN CONTENT in a conditional (after the header, before Statistics Cards):
-{activeView === 'availability' ? (
-  // AVAILABILITY VIEW
-  <div className="space-y-6">
-    {/* Date Selector */}
-    <div className="bg-gray-800 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">Daily Availability Tracker</h2>
-        <div className="flex items-center gap-4">
-          <input
-            type="date"
-            value={selectedAvailDate.toISOString().split('T')[0]}
-            onChange={(e) => setSelectedAvailDate(new Date(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded-lg"
-          />
-          <button
-            onClick={loadAvailabilityData}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-      
-      {/* Day of Week Indicator */}
-      <div className="text-sm text-gray-400">
-        {selectedAvailDate.toLocaleDateString('en-US', { weekday: 'long' })}
-        {[0, 6].includes(selectedAvailDate.getDay()) && (
-          <span className="ml-2 text-yellow-400">(Weekend - No tracking)</span>
-        )}
-      </div>
-    </div>
-
-    {/* Stats Summary */}
-    <div className="grid grid-cols-5 gap-4">
-      <div className="bg-gray-800 rounded-lg p-4 text-center">
-        <div className="text-2xl font-bold">{availabilityData.length}</div>
-        <div className="text-sm text-gray-400">Total</div>
-      </div>
-      <div className="bg-green-900 rounded-lg p-4 text-center">
-        <div className="text-2xl font-bold text-green-400">
-          {availabilityData.filter(u => u.submitted).length}
-        </div>
-        <div className="text-sm text-green-300">Submitted</div>
-      </div>
-      <div className="bg-blue-900 rounded-lg p-4 text-center">
-        <div className="text-2xl font-bold text-blue-400">
-          {availabilityData.filter(u => u.scheduled_work).length}
-        </div>
-        <div className="text-sm text-blue-300">Scheduled</div>
-      </div>
-      <div className="bg-orange-900 rounded-lg p-4 text-center">
-        <div className="text-2xl font-bold text-orange-400">
-          {availabilityData.filter(u => u.emergency_work).length}
-        </div>
-        <div className="text-sm text-orange-300">Emergency</div>
-      </div>
-      <div className="bg-red-900 rounded-lg p-4 text-center">
-        <div className="text-2xl font-bold text-red-400">
-          {availabilityData.filter(u => u.not_available).length}
-        </div>
-        <div className="text-sm text-red-300">Not Available</div>
-      </div>
-    </div>
-
-    {/* Availability List */}
-    <div className="bg-gray-800 rounded-lg overflow-hidden">
-      <table className="w-full">
-        <thead className="bg-gray-700">
-          <tr>
-            <th className="px-4 py-3 text-left">Name</th>
-            <th className="px-4 py-3 text-left">Role</th>
-            <th className="px-4 py-3 text-center">Status</th>
-            <th className="px-4 py-3 text-center">Scheduled</th>
-            <th className="px-4 py-3 text-center">Emergency</th>
-            <th className="px-4 py-3 text-center">Not Available</th>
-            <th className="px-4 py-3 text-left">Submitted At</th>
-          </tr>
-        </thead>
-        <tbody>
-          {availLoading ? (
-            <tr>
-              <td colSpan="7" className="text-center py-8 text-gray-400">
-                Loading availability data...
-              </td>
-            </tr>
-          ) : availabilityData.length === 0 ? (
-            <tr>
-              <td colSpan="7" className="text-center py-8 text-gray-400">
-                No users found
-              </td>
-            </tr>
-          ) : (
-            availabilityData.map(user => (
-              <tr key={user.user_id} className="border-t border-gray-700">
-                <td className="px-4 py-3">
-                  {user.first_name} {user.last_name}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    user.role === 'lead_tech' ? 'bg-purple-600' :
-                    user.role === 'tech' ? 'bg-blue-600' : 'bg-gray-600'
-                  }`}>
-                    {user.role.replace('_', ' ').toUpperCase()}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {user.submitted ? (
-                    <span className="text-green-400 font-bold">✅ Submitted</span>
-                  ) : (
-                    <span className="text-yellow-400">⏰ Pending</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {user.scheduled_work && <span className="text-blue-400 text-xl">✓</span>}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {user.emergency_work && <span className="text-orange-400 text-xl">✓</span>}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {user.not_available && <span className="text-red-400 text-xl">✓</span>}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-400">
-                  {user.submitted_at 
-                    ? new Date(user.submitted_at).toLocaleString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      })
-                    : '-'
-                  }
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-
-    {/* Info Box */}
-    <div className="bg-yellow-900 rounded-lg p-4">
-      <div className="text-yellow-300 font-bold mb-2">Availability Tracking Info</div>
-      <ul className="text-sm text-yellow-200 space-y-1">
-        <li>• Workers must submit availability by 8 PM EST daily (Sunday-Friday)</li>
-        <li>• Saturday submissions are not required</li>
-        <li>• Mobile app locks after 8 PM if not submitted</li>
-        <li>• Use the date picker to view historical availability</li>
-      </ul>
-    </div>
-  </div>
-) : (
-
 {/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
           <div className="bg-gray-800 rounded-lg p-4">
@@ -1412,12 +1208,6 @@ return (
                       >
                         Cancel
                       </button>
-					  <button
-  onClick={() => setActiveView(activeView === 'availability' ? 'workorders' : 'availability')}
-  className={`${activeView === 'availability' ? 'bg-green-700' : 'bg-green-600'} hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition`}
->
-  {activeView === 'availability' ? '← Back' : '📅 Availability'}
-</button>
                       <button
                         onClick={async () => {
                           if (!selectedTeamUserId) {

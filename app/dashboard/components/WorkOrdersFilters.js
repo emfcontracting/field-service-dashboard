@@ -10,6 +10,7 @@ export default function WorkOrdersFilters({
   setPriorityFilter,
   onNewWorkOrder,
   onImport
+  exportDropdown
 }) {
   return (
     <div className="bg-gray-800 rounded-lg p-4 mb-6">
@@ -60,6 +61,8 @@ export default function WorkOrdersFilters({
         >
           📥 Import
         </button>
+		
+		{exportDropdown}
       </div>
     </div>
   );

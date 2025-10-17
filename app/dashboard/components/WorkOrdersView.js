@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import WorkOrdersTable from './WorkOrdersTable';
 import StatsCards from './StatsCards';
 import WorkOrdersFilters from './WorkOrdersFilters';
+import ExportDropdown from './ExportDropdown';
 
 export default function WorkOrdersView({ 
   workOrders, 
@@ -77,6 +78,7 @@ export default function WorkOrdersView({
         setPriorityFilter={setPriorityFilter}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
+        exportDropdown={<ExportDropdown workOrders={workOrders} />}
       />
 
       <WorkOrdersTable

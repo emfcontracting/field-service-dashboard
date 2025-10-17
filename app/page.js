@@ -312,7 +312,7 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center">
               <div className="text-gray-400">
-                © 2024 EMF Contracting LLC. All rights reserved.
+                © 2025 PCS LLC. All rights reserved.
               </div>
               <div className="flex gap-6 text-gray-400">
                 {isAuthenticated && (
@@ -428,7 +428,7 @@ export default function LandingPage() {
             Forgot password? Contact your system administrator
           </p>
           <p className="text-gray-500 text-xs mt-2">
-            Default password: admin123
+            Default password: ask you administrator
           </p>
         </div>
       </div>

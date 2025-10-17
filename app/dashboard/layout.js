@@ -138,7 +138,7 @@ export default function DashboardLayout({ children }) {
 
   // User is authorized, show dashboard with user info
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* User info bar at the top */}
       <div className="bg-gray-800 border-b border-gray-700 px-6 py-2">
         <div className="max-w-7xl mx-auto flex justify-between items-center text-sm">
@@ -160,7 +160,18 @@ export default function DashboardLayout({ children }) {
       </div>
       
       {/* Render dashboard content */}
-      {children}
+      <main className="flex-1">
+        {children}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-gray-400 text-center py-4 text-sm border-t border-gray-700 mt-auto">
+        <div className="container mx-auto px-4">
+          <p className="text-xs text-gray-500">
+            © 2025 PCS LLC. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

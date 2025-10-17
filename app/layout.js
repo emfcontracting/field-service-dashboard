@@ -18,7 +18,7 @@ export default function RootLayout({ children }) {
           <div className="container mx-auto px-4">
             <p className="font-semibold">Created by Daniel Jones</p>
             <p className="text-xs text-gray-500 mt-1">
-              Field Service Management System © {new Date().getFullYear()}
+              © 2025 PCS LLC. All rights reserved.
             </p>
           </div>
         </footer>

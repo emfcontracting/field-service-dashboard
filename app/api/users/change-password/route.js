@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/supabase';
-
-const supabase = getSupabase();
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function POST(request) {
   try {
@@ -22,6 +21,23 @@ export async function POST(request) {
       );
     }
 
+    // Get cookies from request
+    const cookieStore = cookies();
+    
+    // Create Supabase client with cookies
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          get(name) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
@@ -31,6 +47,7 @@ export async function POST(request) {
       );
     }
 
+    // Verify current password
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: user.email,
       password: currentPassword
@@ -43,6 +60,7 @@ export async function POST(request) {
       );
     }
 
+    // Update to new password
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword
     });

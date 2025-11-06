@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { getSupabase } from '@/lib/supabase';
 
 const supabase = getSupabase();
 

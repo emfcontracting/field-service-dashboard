@@ -11,7 +11,6 @@ export async function POST(request) {
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
-    // Validate inputs
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
         { error: 'Current password and new password are required' },
@@ -26,7 +25,6 @@ export async function POST(request) {
       );
     }
 
-    // Get current user from session
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
@@ -36,7 +34,6 @@ export async function POST(request) {
       );
     }
 
-    // Verify current password by attempting to sign in
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: user.email,
       password: currentPassword
@@ -49,7 +46,6 @@ export async function POST(request) {
       );
     }
 
-    // Update to new password
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword
     });
@@ -75,26 +71,3 @@ export async function POST(request) {
     );
   }
 }
-```
-
----
-
-## 🔑 WHAT THIS API DOES
-
-1. **Validates inputs** - Checks passwords are provided and new password is 6+ chars
-2. **Authenticates user** - Gets current user from Supabase session
-3. **Verifies current password** - Attempts to sign in to confirm they know it
-4. **Updates password** - Uses Supabase to change to new password
-5. **Returns success/error** - JSON response for the frontend
-
----
-
-## 📊 FILE STRUCTURE
-
-After creating this, you'll have:
-```
-app/
-└── api/
-    └── users/
-        └── change-password/
-            └── route.js  ✅ (YOU JUST CREATED THIS!)

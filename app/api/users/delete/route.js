@@ -11,7 +11,6 @@ export async function POST(request) {
     const body = await request.json();
     const { userId, requestorEmail } = body;
 
-    // Verify the requestor is the superuser
     if (requestorEmail !== 'jones.emfcontracting@gmail.com') {
       return NextResponse.json(
         { error: 'Unauthorized. Only superuser can delete users.' },
@@ -19,7 +18,6 @@ export async function POST(request) {
       );
     }
 
-    // Validate input
     if (!userId) {
       return NextResponse.json(
         { error: 'User ID is required' },
@@ -27,7 +25,6 @@ export async function POST(request) {
       );
     }
 
-    // Get user's auth ID and email
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('auth_id, email, user_id')
@@ -41,7 +38,6 @@ export async function POST(request) {
       );
     }
 
-    // Prevent deleting yourself
     if (userData.email === 'jones.emfcontracting@gmail.com') {
       return NextResponse.json(
         { error: 'Cannot delete the superuser account' },
@@ -49,17 +45,14 @@ export async function POST(request) {
       );
     }
 
-    // Delete from Supabase Auth
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(
       userData.auth_id
     );
 
     if (authError) {
       console.error('Error deleting auth user:', authError);
-      // Continue anyway - user might not exist in auth
     }
 
-    // Delete from users table
     const { error: dbError } = await supabaseAdmin
       .from('users')
       .delete()

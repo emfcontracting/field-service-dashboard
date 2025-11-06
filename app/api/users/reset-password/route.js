@@ -11,7 +11,6 @@ export async function POST(request) {
     const body = await request.json();
     const { userId, newPassword, requestorEmail } = body;
 
-    // Verify the requestor is the superuser
     if (requestorEmail !== 'jones.emfcontracting@gmail.com') {
       return NextResponse.json(
         { error: 'Unauthorized. Only superuser can reset passwords.' },
@@ -19,7 +18,6 @@ export async function POST(request) {
       );
     }
 
-    // Validate inputs
     if (!userId || !newPassword) {
       return NextResponse.json(
         { error: 'User ID and new password are required' },
@@ -34,7 +32,6 @@ export async function POST(request) {
       );
     }
 
-    // Get user's auth ID from users table
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('auth_id, email')
@@ -48,7 +45,6 @@ export async function POST(request) {
       );
     }
 
-    // Reset the password using Supabase Admin API
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
       userData.auth_id,
       { password: newPassword }

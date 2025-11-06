@@ -1,175 +1,285 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-function SettingsContent() {
-  const [qbConnected, setQbConnected] = useState(false);
-  const [qbSettings, setQbSettings] = useState(null);
+export default function SettingsPage() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const searchParams = useSearchParams();
+  
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
 
   useEffect(() => {
-    checkQuickBooksConnection();
-
-    // Show success/error messages
-    if (searchParams.get('qb_success')) {
-      alert('✅ QuickBooks connected successfully!');
-    }
-    if (searchParams.get('qb_error')) {
-      alert('❌ QuickBooks connection failed. Please try again.');
-    }
+    fetchCurrentUser();
   }, []);
 
-  const checkQuickBooksConnection = async () => {
-    const { data, error } = await supabase
-      .from('quickbooks_settings')
-      .select('*')
-      .eq('is_active', true)
-      .single();
-
-    if (!error && data) {
-      setQbConnected(true);
-      setQbSettings(data);
-    }
-    setLoading(false);
-  };
-
-  const connectQuickBooks = async () => {
+  async function fetchCurrentUser() {
     try {
-      const response = await fetch('/api/quickbooks/auth');
-      const { authUri } = await response.json();
-      window.location.href = authUri;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', user.id)
+        .single();
+
+      setCurrentUser(userData);
     } catch (error) {
-      alert('Failed to connect to QuickBooks: ' + error.message);
+      console.error('Error fetching user:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const disconnectQuickBooks = async () => {
-    if (!confirm('Disconnect QuickBooks?\n\nYou can reconnect anytime.')) return;
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    setChangingPassword(true);
 
     try {
-      const response = await fetch('/api/quickbooks/disconnect', {
-        method: 'POST'
+      const response = await fetch('/api/users/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        })
       });
 
-      if (response.ok) {
-        alert('✅ QuickBooks disconnected');
-        setQbConnected(false);
-        setQbSettings(null);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change password');
       }
+
+      setPasswordSuccess('Password changed successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+
+      setTimeout(() => setPasswordSuccess(''), 5000);
+
     } catch (error) {
-      alert('Failed to disconnect: ' + error.message);
+      console.error('Password change error:', error);
+      setPasswordError(error.message);
+    } finally {
+      setChangingPassword(false);
     }
-  };
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">⚙️ Settings</h1>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition"
-          >
-            ← Back to Dashboard
-          </button>
-        </div>
-
-        {/* QuickBooks Integration */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <img 
-              src="https://plugin.intuitcdn.net/sbg-web-shell-ui/6.3.0/shell/harmony/images/QBOlogo.svg"
-              alt="QuickBooks"
-              className="h-8"
-            />
-            <h2 className="text-2xl font-bold">QuickBooks Online</h2>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <button 
+                onClick={() => router.push('/dashboard')}
+                className="text-gray-600 hover:text-gray-900 mb-2 flex items-center gap-2"
+              >
+                ← Back to Dashboard
+              </button>
+              <h1 className="text-3xl font-bold text-gray-900">⚙️ Settings</h1>
+              {isSuperuser && (
+                <p className="text-sm text-green-600 mt-1">🔑 Superuser Account</p>
+              )}
+            </div>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
+            >
+              Logout
+            </button>
           </div>
-
-          {loading ? (
-            <div className="text-gray-400">Loading...</div>
-          ) : qbConnected ? (
-            <div>
-              <div className="bg-green-900 text-green-200 p-4 rounded-lg mb-4">
-                <div className="font-bold mb-2">✅ Connected to QuickBooks</div>
-                <div className="text-sm">
-                  <div>Company ID: {qbSettings.realm_id}</div>
-                  <div>Connected: {new Date(qbSettings.connected_at).toLocaleString()}</div>
-                  {qbSettings.last_sync_at && (
-                    <div>Last Sync: {new Date(qbSettings.last_sync_at).toLocaleString()}</div>
-                  )}
-                </div>
-              </div>
-
-              <button
-                onClick={disconnectQuickBooks}
-                className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-bold transition"
-              >
-                Disconnect QuickBooks
-              </button>
-            </div>
-          ) : (
-            <div>
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg mb-4">
-                <div className="font-bold mb-2">Connect to QuickBooks Online</div>
-                <div className="text-sm">
-                  Sync your invoices directly to QuickBooks Online. You'll need:
-                  <ul className="list-disc list-inside mt-2 ml-4">
-                    <li>QuickBooks Online account (not Desktop)</li>
-                    <li>Admin access to your QuickBooks company</li>
-                  </ul>
-                </div>
-              </div>
-
-              <button
-                onClick={connectQuickBooks}
-                className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-              >
-                🔗 Connect QuickBooks
-              </button>
-            </div>
-          )}
         </div>
+      </header>
 
-        {/* Setup Instructions */}
-        {!qbConnected && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h3 className="font-bold text-lg mb-3">📋 Setup Instructions</h3>
-            <div className="text-sm text-gray-300 space-y-2">
-              <p><strong>Don't have QuickBooks yet?</strong></p>
-              <ol className="list-decimal list-inside space-y-2 ml-4">
-                <li>Sign up for QuickBooks Online at <a href="https://quickbooks.intuit.com" target="_blank" className="text-blue-400 underline">quickbooks.intuit.com</a></li>
-                <li>Complete your company setup</li>
-                <li>Return here and click "Connect QuickBooks"</li>
-                <li>Log in with your QuickBooks credentials</li>
-                <li>Authorize the connection</li>
-              </ol>
-              <p className="mt-4 text-yellow-400">
-                ⚠️ <strong>Note:</strong> This integration requires QuickBooks Online, not QuickBooks Desktop.
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">👤 Profile Information</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Name</p>
+              <p className="text-lg font-medium text-gray-900">
+                {currentUser?.first_name} {currentUser?.last_name}
               </p>
             </div>
+            <div>
+              <p className="text-sm text-gray-500">Email</p>
+              <p className="text-lg font-medium text-gray-900">{currentUser?.email}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Role</p>
+              <p className="text-lg font-medium text-gray-900 capitalize">
+                {currentUser?.role?.replace('_', ' ')}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Status</p>
+              <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${
+                currentUser?.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              }`}>
+                {currentUser?.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">🔒 Change Password</h2>
+          <p className="text-gray-600 mb-6">
+            Update your password to keep your account secure. Your new password must be at least 6 characters.
+          </p>
+
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Current Password *
+              </label>
+              <input
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your current password"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                New Password *
+              </label>
+              <input
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter new password (min 6 characters)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Confirm New Password *
+              </label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Confirm your new password"
+              />
+            </div>
+
+            {passwordError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-600 text-sm">{passwordError}</p>
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-600 text-sm">✓ {passwordSuccess}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              {changingPassword ? 'Changing Password...' : 'Change Password'}
+            </button>
+          </form>
+
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="font-medium text-blue-900 mb-2">💡 Password Tips:</h3>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• Use at least 6 characters</li>
+              <li>• Mix letters, numbers, and symbols</li>
+              <li>• Don't use common passwords</li>
+              <li>• Change your password regularly</li>
+            </ul>
+          </div>
+        </div>
+
+        {isSuperuser && (
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-lg shadow p-6 mt-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">🔧 Admin Tools</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => router.push('/users')}
+                className="bg-white hover:bg-gray-50 border-2 border-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg transition"
+              >
+                👥 Manage Users
+              </button>
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="bg-white hover:bg-gray-50 border-2 border-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg transition"
+              >
+                📊 Dashboard
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mt-4">
+              As superuser, you can reset any user's password from the User Management page.
+            </p>
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-2xl">Loading settings...</div>
-      </div>
-    }>
-      <SettingsContent />
-    </Suspense>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -9,13 +10,19 @@ const supabase = createClient(
 );
 
 export default function UserManagement() {
+  const router = useRouter();
   const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  
+  const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -23,14 +30,31 @@ export default function UserManagement() {
     email: '',
     phone: '',
     role: 'lead_tech',
-    is_active: true,
-    hourly_rate_regular: 64.00,
-    hourly_rate_overtime: 96.00
+    regular_rate: 64,
+    overtime_rate: 96,
+    is_active: true
   });
 
   useEffect(() => {
+    checkAuth();
     fetchUsers();
   }, []);
+
+  async function checkAuth() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
+
+    setCurrentUser(userData);
+  }
 
   async function fetchUsers() {
     try {
@@ -50,30 +74,34 @@ export default function UserManagement() {
 
   function openNewUserModal() {
     setEditingUser(null);
+    setNewPassword('');
+    setShowPasswordReset(false);
     setFormData({
       first_name: '',
       last_name: '',
       email: '',
       phone: '',
       role: 'lead_tech',
-      is_active: true,
-      hourly_rate_regular: 64.00,
-      hourly_rate_overtime: 96.00
+      regular_rate: 64,
+      overtime_rate: 96,
+      is_active: true
     });
     setShowModal(true);
   }
 
   function openEditModal(user) {
     setEditingUser(user);
+    setNewPassword('');
+    setShowPasswordReset(false);
     setFormData({
       first_name: user.first_name,
       last_name: user.last_name,
       email: user.email,
       phone: user.phone || '',
       role: user.role,
-      is_active: user.is_active,
-      hourly_rate_regular: user.hourly_rate_regular || 64.00,
-      hourly_rate_overtime: user.hourly_rate_overtime || 96.00
+      regular_rate: user.regular_rate || 64,
+      overtime_rate: user.overtime_rate || 96,
+      is_active: user.is_active
     });
     setShowModal(true);
   }
@@ -90,6 +118,11 @@ export default function UserManagement() {
           .eq('user_id', editingUser.user_id);
 
         if (error) throw error;
+
+        if (isSuperuser && showPasswordReset && newPassword) {
+          await handlePasswordReset(editingUser.user_id);
+        }
+
         alert('User updated successfully!');
       } else {
         const { error } = await supabase
@@ -97,7 +130,7 @@ export default function UserManagement() {
           .insert([formData]);
 
         if (error) throw error;
-        alert('User created successfully!');
+        alert('User created successfully! They can log in with email and PIN: 5678');
       }
 
       setShowModal(false);
@@ -107,6 +140,76 @@ export default function UserManagement() {
       alert('Error saving user: ' + error.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePasswordReset(userId) {
+    if (!newPassword || newPassword.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userId,
+          newPassword: newPassword,
+          requestorEmail: currentUser.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password');
+      }
+
+      alert('Password reset successfully!');
+      setNewPassword('');
+      setShowPasswordReset(false);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      alert('Error resetting password: ' + error.message);
+    }
+  }
+
+  async function handleDeleteUser(user) {
+    if (!isSuperuser) {
+      alert('Only superuser can delete users');
+      return;
+    }
+
+    const confirmMessage = `⚠️ WARNING: This will PERMANENTLY DELETE ${user.first_name} ${user.last_name} (${user.email}).\n\nThis action cannot be undone!\n\nType "DELETE" to confirm:`;
+    const confirmation = prompt(confirmMessage);
+
+    if (confirmation !== 'DELETE') {
+      alert('Deletion cancelled');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.user_id,
+          requestorEmail: currentUser.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+
+      alert('User deleted successfully!');
+      fetchUsers();
+    } catch (error) {
+      console.error('Delete user error:', error);
+      alert('Error deleting user: ' + error.message);
     }
   }
 
@@ -139,6 +242,13 @@ export default function UserManagement() {
     
     return matchesSearch && matchesRole;
   });
+
+  const stats = {
+    total: users.length,
+    leadTechs: users.filter(u => u.role === 'lead_tech').length,
+    helpers: users.filter(u => u.role === 'helper').length,
+    active: users.filter(u => u.is_active).length
+  };
 
   function getRoleBadgeColor(role) {
     switch (role) {
@@ -176,18 +286,21 @@ export default function UserManagement() {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
+            <div>
               <button 
-                onClick={() => window.location.href = '/'}
-                className="text-gray-600 hover:text-gray-900"
+                onClick={() => router.push('/dashboard')}
+                className="text-gray-600 hover:text-gray-900 mb-2 flex items-center gap-2"
               >
                 ← Back to Dashboard
               </button>
               <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+              {isSuperuser && (
+                <p className="text-sm text-green-600 mt-1">🔑 Superuser Access</p>
+              )}
             </div>
             <button 
               onClick={openNewUserModal}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
             >
               + Add User
             </button>
@@ -195,33 +308,27 @@ export default function UserManagement() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-500 text-sm font-medium">Total Users</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">{users.length}</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-500 text-sm">Total Users</p>
+            <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-500 text-sm font-medium">Lead Techs</p>
-            <p className="text-3xl font-bold text-green-600 mt-2">
-              {users.filter(u => u.role === 'lead_tech').length}
-            </p>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-500 text-sm">Lead Techs</p>
+            <p className="text-3xl font-bold text-green-600">{stats.leadTechs}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-500 text-sm font-medium">Helpers</p>
-            <p className="text-3xl font-bold text-gray-600 mt-2">
-              {users.filter(u => u.role === 'helper').length}
-            </p>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-500 text-sm">Helpers</p>
+            <p className="text-3xl font-bold text-gray-600">{stats.helpers}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-500 text-sm font-medium">Active Users</p>
-            <p className="text-3xl font-bold text-blue-600 mt-2">
-              {users.filter(u => u.is_active).length}
-            </p>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-500 text-sm">Active Users</p>
+            <p className="text-3xl font-bold text-blue-600">{stats.active}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
@@ -241,111 +348,115 @@ export default function UserManagement() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Roles</option>
-                <option value="admin">Admin</option>
+                <option value="lead_tech">Lead Techs</option>
+                <option value="helper">Helpers</option>
                 <option value="office_staff">Office Staff</option>
-                <option value="lead_tech">Lead Tech</option>
-                <option value="helper">Helper</option>
+                <option value="admin">Admins</option>
               </select>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rates (RT/OT)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rates (RT/OT)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
                 <tr key={user.user_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="font-medium text-gray-900">
                       {user.first_name} {user.last_name}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.email}</div>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {user.email}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {user.phone || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.phone || 'N/A'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
                       {getRoleDisplayName(user.role)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      ${user.hourly_rate_regular?.toFixed(2) || '64.00'} / ${user.hourly_rate_overtime?.toFixed(2) || '96.00'}
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${user.regular_rate || 64}.00 / ${user.overtime_rate || 96}.00
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
                       {user.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                    <button
-                      onClick={() => openEditModal(user)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => toggleUserStatus(user)}
-                      className={user.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
-                    >
-                      {user.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => toggleUserStatus(user)}
+                        className={user.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}
+                      >
+                        {user.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      {isSuperuser && user.email !== 'jones.emfcontracting@gmail.com' && (
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          className="text-red-600 hover:text-red-800 font-semibold"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No users found matching your filters.</p>
-            </div>
-          )}
         </div>
 
-        <div className="mt-4 text-sm text-gray-600 text-center">
-          Showing {filteredUsers.length} of {users.length} users
-        </div>
-      </main>
+        {filteredUsers.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No users found matching your filters.</p>
+          </div>
+        )}
+      </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-gray-900">
                   {editingUser ? 'Edit User' : 'Add New User'}
                 </h2>
-                <button 
+                <button
                   onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="text-gray-400 hover:text-gray-600"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      First Name <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name *
                     </label>
                     <input
                       type="text"
@@ -355,9 +466,10 @@ export default function UserManagement() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Last Name <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Name *
                     </label>
                     <input
                       type="text"
@@ -370,8 +482,8 @@ export default function UserManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email *
                   </label>
                   <input
                     type="email"
@@ -383,7 +495,7 @@ export default function UserManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Phone
                   </label>
                   <input
@@ -391,13 +503,12 @@ export default function UserManagement() {
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="(555) 123-4567"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Role <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Role *
                   </label>
                   <select
                     required
@@ -414,35 +525,63 @@ export default function UserManagement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Regular Rate ($/hr) {formData.role === 'lead_tech' && <span className="text-red-500">*</span>}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Regular Rate ($/hr)
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      required={formData.role === 'lead_tech'}
-                      value={formData.hourly_rate_regular}
-                      onChange={(e) => setFormData({...formData, hourly_rate_regular: parseFloat(e.target.value) || 64.00})}
+                      value={formData.regular_rate}
+                      onChange={(e) => setFormData({...formData, regular_rate: parseFloat(e.target.value)})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="64.00"
                     />
                     <p className="text-xs text-gray-500 mt-1">RT (up to 8 hrs)</p>
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Overtime Rate ($/hr)
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      value={formData.hourly_rate_overtime}
-                      onChange={(e) => setFormData({...formData, hourly_rate_overtime: parseFloat(e.target.value) || 96.00})}
+                      value={formData.overtime_rate}
+                      onChange={(e) => setFormData({...formData, overtime_rate: parseFloat(e.target.value)})}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="96.00"
                     />
                     <p className="text-xs text-gray-500 mt-1">OT (over 8 hrs)</p>
                   </div>
                 </div>
+
+                {isSuperuser && editingUser && (
+                  <div className="border-t pt-4 mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        🔑 Reset Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordReset(!showPasswordReset)}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        {showPasswordReset ? 'Cancel' : 'Change Password'}
+                      </button>
+                    </div>
+                    
+                    {showPasswordReset && (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Enter new password (min 6 characters)"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-gray-500">
+                          New password will be saved when you click "Update User"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center">
                   <input

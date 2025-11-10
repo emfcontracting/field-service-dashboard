@@ -3,6 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import CheckInOutCard from './CheckInOutCard';
+import TeamMembersSection from './TeamMembersSection';
+import PrimaryTechFieldData from './PrimaryTechFieldData';
+import EmailPhotosSection from './EmailPhotosSection';
+import CostSummarySection from './CostSummarySection';
 import MaterialsSection from './MaterialsSection';
 import EquipmentSection from './EquipmentSection';
 import CommentsSection from './CommentsSection';
@@ -33,8 +37,8 @@ export default function WorkOrderDetail({
 }) {
   const [saving, setSaving] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
-  const [editingField, setEditingField] = useState({});
   const [localWO, setLocalWO] = useState(workOrder);
+  const [teamMembers, setTeamMembers] = useState([]);
 
   useEffect(() => {
     setLocalWO(workOrder);
@@ -111,12 +115,15 @@ export default function WorkOrderDetail({
     const result = await updateWorkOrder(supabase, workOrder.wo_id, { [field]: value });
     
     if (result.success) {
-      setEditingField({});
       await onRefresh();
     } else {
       alert('Error updating field: ' + result.error);
     }
     setSaving(false);
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    await handleUpdateField('status', newStatus);
   };
 
   const wo = localWO;
@@ -214,77 +221,52 @@ export default function WorkOrderDetail({
             />
           )}
 
-          {/* Hours & Miles */}
-          {wo.time_in && (
-            <div className="bg-gray-800 rounded-lg p-4 mb-4">
-              <h3 className="font-bold mb-3">📊 Hours & Mileage</h3>
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <label className="block text-gray-400 mb-1">Regular Hours</label>
-                  {editingField.hours_regular ? (
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={wo.hours_regular || 0}
-                      onChange={(e) => setLocalWO({...wo, hours_regular: parseFloat(e.target.value)})}
-                      onBlur={() => handleUpdateField('hours_regular', wo.hours_regular)}
-                      className="w-full px-2 py-1 bg-gray-700 rounded"
-                      autoFocus
-                    />
-                  ) : (
-                    <div 
-                      onClick={() => setEditingField({hours_regular: true})}
-                      className="bg-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-600"
-                    >
-                      {wo.hours_regular || 0}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-gray-400 mb-1">Overtime Hours</label>
-                  {editingField.hours_overtime ? (
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={wo.hours_overtime || 0}
-                      onChange={(e) => setLocalWO({...wo, hours_overtime: parseFloat(e.target.value)})}
-                      onBlur={() => handleUpdateField('hours_overtime', wo.hours_overtime)}
-                      className="w-full px-2 py-1 bg-gray-700 rounded"
-                      autoFocus
-                    />
-                  ) : (
-                    <div 
-                      onClick={() => setEditingField({hours_overtime: true})}
-                      className="bg-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-600"
-                    >
-                      {wo.hours_overtime || 0}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-gray-400 mb-1">Miles</label>
-                  {editingField.miles ? (
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={wo.miles || 0}
-                      onChange={(e) => setLocalWO({...wo, miles: parseFloat(e.target.value)})}
-                      onBlur={() => handleUpdateField('miles', wo.miles)}
-                      className="w-full px-2 py-1 bg-gray-700 rounded"
-                      autoFocus
-                    />
-                  ) : (
-                    <div 
-                      onClick={() => setEditingField({miles: true})}
-                      className="bg-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-600"
-                    >
-                      {wo.miles || 0}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Team Members Section */}
+          <TeamMembersSection
+            workOrder={wo}
+            supabase={supabase}
+            saving={saving}
+            setSaving={setSaving}
+            onTeamChange={setTeamMembers}
+            onAddTeamMember={() => setShowTeamModal(true)}
+          />
+
+          {/* Update Status */}
+          <div className="bg-gray-800 rounded-lg p-4 mb-4">
+            <h3 className="font-bold mb-3">Update Status</h3>
+            <select
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              disabled={saving || status === 'completed'}
+              className="w-full px-4 py-3 bg-blue-600 rounded-lg text-white font-semibold text-center"
+            >
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="pending">Pending</option>
+              <option value="needs_return">Needs Return</option>
+              <option value="return_trip">Return Trip</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          {/* Primary Tech Field Data */}
+          <PrimaryTechFieldData
+            workOrder={wo}
+            onUpdate={handleUpdateField}
+            saving={saving}
+          />
+
+          {/* Email Photos Section */}
+          <EmailPhotosSection
+            workOrder={wo}
+            currentUser={currentUser}
+          />
+
+          {/* Cost Summary */}
+          <CostSummarySection
+            workOrder={wo}
+            teamMembers={teamMembers}
+          />
 
           {/* Materials Section */}
           {(status === 'in_progress' || status === 'in-progress' || status === 'completed') && (

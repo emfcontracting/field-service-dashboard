@@ -6,6 +6,7 @@ export async function checkAvailabilityStatus(supabase, userId, userRole) {
     return {
       isBlocked: false,
       hasSubmitted: true,
+      canSubmit: false,
       message: null
     };
   }
@@ -14,15 +15,24 @@ export async function checkAvailabilityStatus(supabase, userId, userRole) {
   const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const hour = estTime.getHours();
   const dayOfWeek = estTime.getDay(); // 0 = Sunday, 6 = Saturday
-  const today = estTime.toISOString().split('T')[0];
+  
+  // FIX: Format date correctly for Supabase (YYYY-MM-DD)
+  const year = estTime.getFullYear();
+  const month = String(estTime.getMonth() + 1).padStart(2, '0');
+  const day = String(estTime.getDate()).padStart(2, '0');
+  const today = `${year}-${month}-${day}`;
 
   // Check if already submitted today
-  const { data: todaySubmission } = await supabase
+  const { data: todaySubmission, error } = await supabase
     .from('daily_availability')
     .select('*')
     .eq('user_id', userId)
     .eq('date', today)
-    .single();
+    .maybeSingle(); // Use maybeSingle() instead of single() to handle no results
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error checking availability:', error);
+  }
 
   const hasSubmitted = !!todaySubmission;
 
@@ -55,10 +65,14 @@ export async function submitAvailability(
     const now = new Date();
     const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     
-    // Get tomorrow's date in EST
+    // Get tomorrow's date in EST - FIX: Format correctly
     const tomorrow = new Date(estTime);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowDate = tomorrow.toISOString().split('T')[0];
+    
+    const year = tomorrow.getFullYear();
+    const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const day = String(tomorrow.getDate()).padStart(2, '0');
+    const tomorrowDate = `${year}-${month}-${day}`;
 
     const { error } = await supabase
       .from('daily_availability')
@@ -92,14 +106,19 @@ export async function getTodayAvailability(supabase, userId) {
   try {
     const now = new Date();
     const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const today = estTime.toISOString().split('T')[0];
+    
+    // FIX: Format date correctly
+    const year = estTime.getFullYear();
+    const month = String(estTime.getMonth() + 1).padStart(2, '0');
+    const day = String(estTime.getDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`;
 
     const { data, error } = await supabase
       .from('daily_availability')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .single();
+      .maybeSingle(); // Use maybeSingle() to handle no results gracefully
 
     if (error && error.code !== 'PGRST116') throw error;
 

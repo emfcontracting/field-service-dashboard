@@ -1,4 +1,4 @@
-// mobile/components/WorkOrderDetail.js
+// app/mobile/components/WorkOrderDetail.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -227,8 +227,13 @@ export default function WorkOrderDetail({
             supabase={supabase}
             saving={saving}
             setSaving={setSaving}
-            onTeamChange={setTeamMembers}
-            onAddTeamMember={() => setShowTeamModal(true)}
+          />
+
+          {/* Primary Tech Field Data */}
+          <PrimaryTechFieldData
+            workOrder={wo}
+            onUpdate={handleUpdateField}
+            saving={saving}
           />
 
           {/* Update Status */}
@@ -248,13 +253,6 @@ export default function WorkOrderDetail({
               <option value="completed">Completed</option>
             </select>
           </div>
-
-          {/* Primary Tech Field Data */}
-          <PrimaryTechFieldData
-            workOrder={wo}
-            onUpdate={handleUpdateField}
-            saving={saving}
-          />
 
           {/* Email Photos Section */}
           <EmailPhotosSection

@@ -742,6 +742,19 @@ async function checkAvailabilityStatus() {
     }
   }
 
+  // Team member editing state functions
+  function handleTeamFieldChange(assignmentId, field, value) {
+    setEditingField({ 
+      ...editingField, 
+      [`team_${assignmentId}_${field}`]: value 
+    });
+  }
+
+  function getTeamFieldValue(member, field) {
+    const key = `team_${member.assignment_id}_${field}`;
+    return editingField.hasOwnProperty(key) ? editingField[key] : (member[field] || '');
+  }
+
   async function handleUpdateTeamMemberField(assignmentId, field, value) {
     try {
       setSaving(true);
@@ -752,7 +765,17 @@ async function checkAvailabilityStatus() {
 
       if (error) throw error;
 
-      await loadTeamForWorkOrder(selectedWO.wo_id);
+      // Update the currentTeamList locally without refetching
+      setCurrentTeamList(currentTeamList.map(member => 
+        member.assignment_id === assignmentId 
+          ? { ...member, [field]: value }
+          : member
+      ));
+
+      // Clear the editing field for this specific team member field
+      const key = `team_${assignmentId}_${field}`;
+      const { [key]: removed, ...rest } = editingField;
+      setEditingField(rest);
     } catch (err) {
       alert('Error updating team member: ' + err.message);
     } finally {
@@ -1579,8 +1602,9 @@ async function checkAvailabilityStatus() {
                           <input
                             type="number"
                             step="0.5"
-                            value={member.hours_regular || ''}
-                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                            value={getTeamFieldValue(member, 'hours_regular')}
+                            onChange={(e) => handleTeamFieldChange(member.assignment_id, 'hours_regular', e.target.value)}
+                            onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
                             disabled={saving || status === 'completed'}
                             placeholder="0"
@@ -1591,8 +1615,9 @@ async function checkAvailabilityStatus() {
                           <input
                             type="number"
                             step="0.5"
-                            value={member.hours_overtime || ''}
-                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                            value={getTeamFieldValue(member, 'hours_overtime')}
+                            onChange={(e) => handleTeamFieldChange(member.assignment_id, 'hours_overtime', e.target.value)}
+                            onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
                             disabled={saving || status === 'completed'}
                             placeholder="0"
@@ -1603,8 +1628,9 @@ async function checkAvailabilityStatus() {
                           <input
                             type="number"
                             step="0.1"
-                            value={member.miles || ''}
-                            onChange={(e) => handleUpdateTeamMemberField(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
+                            value={getTeamFieldValue(member, 'miles')}
+                            onChange={(e) => handleTeamFieldChange(member.assignment_id, 'miles', e.target.value)}
+                            onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
                             className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
                             disabled={saving || status === 'completed'}
                             placeholder="0"

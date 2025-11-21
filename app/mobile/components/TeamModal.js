@@ -18,7 +18,7 @@ export default function TeamModal({
             onClick={() => setShowTeamModal(false)}
             className="text-gray-400 hover:text-white text-2xl"
           >
-            ×
+            Ã—
           </button>
         </div>
         <div className="space-y-2">

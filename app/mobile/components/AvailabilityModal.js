@@ -1,6 +1,5 @@
-// components/AvailabilityModal.js
-
-export default function AvailabilityModal({ 
+// Availability Modal Component - SPANISH VERSION
+export default function AvailabilityModal({
   showAvailabilityModal,
   availabilityBlocked,
   scheduledWork,
@@ -8,7 +7,7 @@ export default function AvailabilityModal({
   notAvailable,
   saving,
   handleAvailabilityChange,
-  handleAvailabilitySubmit
+  submitAvailability
 }) {
   if (!showAvailabilityModal) return null;
 
@@ -17,7 +16,7 @@ export default function AvailabilityModal({
   const dayOfWeek = estNow.getDay();
   const isAfter8PM = hour >= 20;
 
-  // Determine what day we're asking about
+  // Determine what day we're asking about - SPANISH DAYS
   let targetDay = '';
   let showScheduledOption = true;
   let headerText = '';
@@ -25,25 +24,25 @@ export default function AvailabilityModal({
 
   if (dayOfWeek === 5) {
     // Friday - asking about TODAY's emergencies only
-    targetDay = 'today (Friday)';
+    targetDay = 'hoy (viernes)';
     showScheduledOption = false;
-    headerText = 'Friday Emergency Availability';
-    subHeaderText = 'Are you available for emergency calls today?';
+    headerText = 'Disponibilidad de Emergencia Viernes';
+    subHeaderText = '¿Está disponible para llamadas de emergencia hoy?';
   } else if (dayOfWeek === 0) {
     // Sunday - asking about TOMORROW (Monday)
-    targetDay = 'tomorrow (Monday)';
+    targetDay = 'mañana (lunes)';
     showScheduledOption = true;
-    headerText = 'Monday Availability';
-    subHeaderText = 'Are you available for scheduled work tomorrow (Monday) and emergency calls today?';
+    headerText = 'Disponibilidad Lunes';
+    subHeaderText = '¿Está disponible para trabajo programado mañana (lunes) y llamadas de emergencia hoy?';
   } else {
     // Monday-Thursday - asking about TOMORROW's scheduled + TODAY's emergency
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     const tomorrowDay = days[(dayOfWeek + 1) % 7];
     const todayDay = days[dayOfWeek];
-    targetDay = `tomorrow (${tomorrowDay})`;
+    targetDay = `mañana (${tomorrowDay})`;
     showScheduledOption = true;
-    headerText = `${tomorrowDay} Availability`;
-    subHeaderText = `Are you available for scheduled work tomorrow (${tomorrowDay}) and emergency calls today (${todayDay})?`;
+    headerText = `Disponibilidad ${tomorrowDay.charAt(0).toUpperCase() + tomorrowDay.slice(1)}`;
+    subHeaderText = `¿Está disponible para trabajo programado mañana (${tomorrowDay}) y llamadas de emergencia hoy (${todayDay})?`;
   }
 
   return (
@@ -52,15 +51,15 @@ export default function AvailabilityModal({
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">⏰</div>
           <h2 className="text-2xl font-bold text-white mb-2">
-            {isAfter8PM ? '🚨 AVAILABILITY OVERDUE' : headerText}
+            {isAfter8PM ? '🚨 DISPONIBILIDAD VENCIDA' : headerText}
           </h2>
           <p className="text-gray-300">
             {isAfter8PM 
-              ? 'You must submit your availability to continue using the app!'
+              ? '¡Debe enviar su disponibilidad para continuar usando la aplicación!'
               : subHeaderText}
           </p>
           <p className="text-sm text-yellow-400 mt-2">
-            Deadline: 8:00 PM EST
+            Fecha límite: 8:00 PM EST
           </p>
         </div>
 
@@ -85,8 +84,8 @@ export default function AvailabilityModal({
                     {scheduledWork && <span className="text-white font-bold">✓</span>}
                   </div>
                   <div className="text-left">
-                    <div className="font-bold">📅 Scheduled Work</div>
-                    <div className="text-xs opacity-75">Available for planned jobs {targetDay}</div>
+                    <div className="font-bold">📅 Trabajo Programado</div>
+                    <div className="text-xs opacity-75">Disponible para trabajos planificados {targetDay}</div>
                   </div>
                 </div>
               </div>
@@ -112,9 +111,9 @@ export default function AvailabilityModal({
                   {emergencyWork && <span className="text-white font-bold">✓</span>}
                 </div>
                 <div className="text-left">
-                  <div className="font-bold">🚨 Emergency Work</div>
+                  <div className="font-bold">🚨 Trabajo de Emergencia</div>
                   <div className="text-xs opacity-75">
-                    Available for urgent calls TODAY
+                    Disponible para llamadas urgentes HOY
                   </div>
                 </div>
               </div>
@@ -137,9 +136,9 @@ export default function AvailabilityModal({
                   {notAvailable && <span className="text-white font-bold">✓</span>}
                 </div>
                 <div className="text-left">
-                  <div className="font-bold">🚫 Not Available</div>
+                  <div className="font-bold">🚫 No Disponible</div>
                   <div className="text-xs opacity-75">
-                    Cannot work {dayOfWeek === 5 ? 'today' : 'today or tomorrow'}
+                    No puedo trabajar {dayOfWeek === 5 ? 'hoy' : 'hoy ni mañana'}
                   </div>
                 </div>
               </div>
@@ -148,35 +147,35 @@ export default function AvailabilityModal({
         </div>
 
         <div className="bg-blue-900 rounded-lg p-3 mb-4 text-sm text-blue-200">
-          <p className="font-semibold mb-1">ℹ️ Selection Rules:</p>
+          <p className="font-semibold mb-1">ℹ️ Reglas de Selección:</p>
           <ul className="text-xs space-y-1 ml-4">
             {showScheduledOption ? (
               <>
-                <li>• Select Scheduled, Emergency, or both</li>
-                <li>• OR select Not Available</li>
-                <li>• Cannot combine work options with Not Available</li>
+                <li>• Seleccione Programado, Emergencia, o ambos</li>
+                <li>• O seleccione No Disponible</li>
+                <li>• No puede combinar opciones de trabajo con No Disponible</li>
               </>
             ) : (
               <>
-                <li>• Select Emergency Work if available</li>
-                <li>• OR select Not Available</li>
+                <li>• Seleccione Trabajo de Emergencia si está disponible</li>
+                <li>• O seleccione No Disponible</li>
               </>
             )}
           </ul>
         </div>
 
         <button
-          onClick={handleAvailabilitySubmit}
+          onClick={submitAvailability}
           disabled={saving || (!scheduledWork && !emergencyWork && !notAvailable)}
           className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-lg font-bold text-lg text-white transition"
         >
-          {saving ? 'Submitting...' : '✅ Submit Availability'}
+          {saving ? 'Enviando...' : '✅ Enviar Disponibilidad'}
         </button>
 
         {isAfter8PM && (
           <div className="mt-4 bg-red-900 rounded-lg p-3 text-center">
             <p className="text-red-200 text-sm font-bold">
-              ⚠️ App is locked until you submit
+              ⚠️ La aplicación está bloqueada hasta que envíe
             </p>
           </div>
         )}

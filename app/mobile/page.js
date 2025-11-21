@@ -1,6 +1,9 @@
-//Mobile App - Refactored & Modular
+//Mobile App - Refactored & Modular with Bilingual Support
 'use client';
 import { useState } from 'react';
+
+// Language Provider
+import { LanguageProvider } from './contexts/LanguageContext';
 
 // Custom Hooks
 import { useAuth } from './hooks/useAuth';
@@ -96,6 +99,106 @@ export default function MobilePage() {
     );
   }
 
+  // Wrap entire app with LanguageProvider
+  return (
+    <LanguageProvider>
+      <MobileAppContent
+        currentUser={currentUser}
+        error={error}
+        setError={setError}
+        handleLogin={handleLogin}
+        handleLogout={handleLogout}
+        workOrders={workOrders}
+        completedWorkOrders={completedWorkOrders}
+        selectedWO={selectedWO}
+        setSelectedWO={setSelectedWO}
+        saving={saving}
+        teamSaving={teamSaving}
+        newComment={newComment}
+        setNewComment={setNewComment}
+        checkIn={checkIn}
+        checkOut={checkOut}
+        completeWorkOrder={completeWorkOrder}
+        updateField={updateField}
+        addComment={addComment}
+        handleFieldChange={handleFieldChange}
+        getFieldValue={getFieldValue}
+        teamMembers={teamMembers}
+        currentTeamList={currentTeamList}
+        showTeamModal={showTeamModal}
+        setShowTeamModal={setShowTeamModal}
+        loadAllTeamMembers={loadAllTeamMembers}
+        handleTeamMemberAdd={handleTeamMemberAdd}
+        updateTeamMemberField={updateTeamMemberField}
+        handleTeamFieldChange={handleTeamFieldChange}
+        getTeamFieldValue={getTeamFieldValue}
+        showAvailabilityModal={showAvailabilityModal}
+        availabilityBlocked={availabilityBlocked}
+        scheduledWork={scheduledWork}
+        emergencyWork={emergencyWork}
+        notAvailable={notAvailable}
+        hasSubmittedToday={hasSubmittedToday}
+        availabilitySaving={availabilitySaving}
+        submitAvailability={submitAvailability}
+        handleAvailabilityChange={handleAvailabilityChange}
+        showCompletedPage={showCompletedPage}
+        setShowCompletedPage={setShowCompletedPage}
+        showChangePinModal={showChangePinModal}
+        setShowChangePinModal={setShowChangePinModal}
+        changePin={changePin}
+        loadWorkOrders={loadWorkOrders}
+      />
+    </LanguageProvider>
+  );
+}
+
+// Separate component to use language context
+function MobileAppContent({
+  currentUser,
+  error,
+  setError,
+  handleLogin,
+  handleLogout,
+  workOrders,
+  completedWorkOrders,
+  selectedWO,
+  setSelectedWO,
+  saving,
+  teamSaving,
+  newComment,
+  setNewComment,
+  checkIn,
+  checkOut,
+  completeWorkOrder,
+  updateField,
+  addComment,
+  handleFieldChange,
+  getFieldValue,
+  teamMembers,
+  currentTeamList,
+  showTeamModal,
+  setShowTeamModal,
+  loadAllTeamMembers,
+  handleTeamMemberAdd,
+  updateTeamMemberField,
+  handleTeamFieldChange,
+  getTeamFieldValue,
+  showAvailabilityModal,
+  availabilityBlocked,
+  scheduledWork,
+  emergencyWork,
+  notAvailable,
+  hasSubmittedToday,
+  availabilitySaving,
+  submitAvailability,
+  handleAvailabilityChange,
+  showCompletedPage,
+  setShowCompletedPage,
+  showChangePinModal,
+  setShowChangePinModal,
+  changePin,
+  loadWorkOrders
+}) {
   // Login Screen
   if (!currentUser) {
     return (

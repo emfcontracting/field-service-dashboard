@@ -1,4 +1,7 @@
-// Work Orders List Component
+// components/WorkOrdersList.js - Bilingual Work Orders List
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../utils/translations';
+import LanguageToggle from './LanguageToggle';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 
 export default function WorkOrdersList({
@@ -9,6 +12,9 @@ export default function WorkOrdersList({
   onShowChangePin,
   onLogout
 }) {
+  const { language } = useLanguage();
+  const t = (key) => translations[language][key];
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
       <div className="max-w-2xl mx-auto">
@@ -29,48 +35,51 @@ export default function WorkOrdersList({
             </div>
           </div>
           <div className="flex gap-2">
+            {/* Language Toggle */}
+            <LanguageToggle />
+            
             {/* Only show Dashboard button for admin and office roles */}
             {(currentUser.role === 'admin' || currentUser.role === 'office') && (
               <button
                 onClick={() => window.location.href = '/dashboard'}
                 className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
               >
-                💻 Dashboard
+                💻 {t('dashboard')}
               </button>
             )}
             <button
               onClick={onShowCompleted}
               className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
             >
-              ✅ Completed
+              ✅ {t('completed')}
             </button>
             <button
               onClick={onShowChangePin}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
             >
-              🔑 PIN
+              🔒 {t('pin')}
             </button>
             <button
               onClick={onLogout}
               className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg text-sm"
             >
-              Logout
+              {t('logout')}
             </button>
           </div>
         </div>
 
         <div className="mb-6">
-          <h2 className="text-2xl font-bold mb-2">My Work Orders</h2>
+          <h2 className="text-2xl font-bold mb-2">{t('myWorkOrders')}</h2>
           <p className="text-gray-400">
-            {workOrders.length} active work {workOrders.length === 1 ? 'order' : 'orders'}
+            {workOrders.length} {t('activeWork')} {workOrders.length === 1 ? t('order') : t('orders')}
           </p>
         </div>
 
         <div className="space-y-4">
           {workOrders.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <p className="text-gray-400 text-lg">No active work orders</p>
-              <p className="text-gray-500 text-sm mt-2">Check back later for new assignments</p>
+              <p className="text-gray-400 text-lg">{t('noActiveWorkOrders')}</p>
+              <p className="text-gray-500 text-sm mt-2">{t('checkBackLater')}</p>
             </div>
           ) : (
             workOrders.map(wo => (
@@ -96,12 +105,12 @@ export default function WorkOrdersList({
                 
                 <div className="flex justify-between items-center text-xs text-gray-500">
                   <div>
-                    <span>Entered: {formatDate(wo.date_entered)}</span>
+                    <span>{t('entered')}: {formatDate(wo.date_entered)}</span>
                     <span className="ml-2 text-orange-500 font-semibold">
-                      {calculateAge(wo.date_entered)} days old
+                      {calculateAge(wo.date_entered)} {t('daysOld')}
                     </span>
                   </div>
-                  <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
+                  <span className="text-green-500 font-bold">{t('nte')}: ${(wo.nte || 0).toFixed(2)}</span>
                 </div>
               </div>
             ))

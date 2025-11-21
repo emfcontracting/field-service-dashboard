@@ -1,4 +1,7 @@
-// Completed Work Orders Page Component
+// components/CompletedWorkOrders.js - Bilingual Completed Work Orders
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../utils/translations';
+import LanguageToggle from './LanguageToggle';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge } from '../utils/helpers';
 
 export default function CompletedWorkOrders({
@@ -9,6 +12,9 @@ export default function CompletedWorkOrders({
   onShowChangePin,
   onLogout
 }) {
+  const { language } = useLanguage();
+  const t = (key) => translations[language][key];
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
       <div className="max-w-2xl mx-auto">
@@ -17,21 +23,24 @@ export default function CompletedWorkOrders({
             onClick={onBack}
             className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
           >
-            ← Back
+            ← {t('back')}
           </button>
-          <h1 className="text-2xl font-bold">Completed Work Orders</h1>
+          <h1 className="text-2xl font-bold">{t('completedWorkOrders')}</h1>
           <div className="flex gap-2">
+            {/* Language Toggle */}
+            <LanguageToggle />
+            
             <button
               onClick={onShowChangePin}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
             >
-              🔐
+              🔒
             </button>
             <button
               onClick={onLogout}
               className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg"
             >
-              Logout
+              {t('logout')}
             </button>
           </div>
         </div>
@@ -39,13 +48,13 @@ export default function CompletedWorkOrders({
         <div className="space-y-4">
           {completedWorkOrders.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <p className="text-gray-400">No completed work orders</p>
+              <p className="text-gray-400">{t('noCompletedWorkOrders')}</p>
             </div>
           ) : (
             <>
               <div className="bg-blue-900 rounded-lg p-3 mb-4 text-center">
                 <p className="text-sm text-blue-200">
-                  👆 Tap any completed work order to view details
+                  👆 {t('tapToView')}
                 </p>
               </div>
               {completedWorkOrders.map(wo => (
@@ -62,23 +71,23 @@ export default function CompletedWorkOrders({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-green-500 text-sm">✅ Completed</span>
+                      <span className="text-green-500 text-sm">✅ {t('completedLabel')}</span>
                     </div>
                   </div>
                   
                   <div className="text-sm space-y-1">
                     <p className="font-semibold">{wo.building}</p>
                     <p className="text-gray-400">{wo.work_order_description}</p>
-                    <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} days old</p>
-                    <p className="text-gray-500">Completed: {formatDate(wo.date_completed)}</p>
+                    <p className="text-orange-500 text-xs">{calculateAge(wo.date_entered)} {t('days')}</p>
+                    <p className="text-gray-500">{t('completedDate')} {formatDate(wo.date_completed)}</p>
                     {wo.lead_tech && (
-                      <p className="text-gray-500">Tech: {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
+                      <p className="text-gray-500">{t('tech')} {wo.lead_tech.first_name} {wo.lead_tech.last_name}</p>
                     )}
                   </div>
 
                   {wo.hours_regular || wo.hours_overtime ? (
                     <div className="mt-2 text-xs text-gray-400">
-                      Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
+                      {t('hrs')}: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | {t('miles')}: {wo.miles || 0}
                     </div>
                   ) : null}
                 </div>

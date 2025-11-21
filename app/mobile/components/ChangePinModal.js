@@ -25,7 +25,7 @@ export default function ChangePinModal({
             }}
             className="text-gray-400 hover:text-white text-2xl"
           >
-            ×
+            Ã—
           </button>
         </div>
         <div className="space-y-4">

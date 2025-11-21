@@ -1,4 +1,7 @@
-// Primary Tech Field Data Section Component
+// components/PrimaryTechFieldData.js - Bilingual Primary Tech Field Data
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../utils/translations';
+
 export default function PrimaryTechFieldData({
   workOrder,
   status,
@@ -7,14 +10,17 @@ export default function PrimaryTechFieldData({
   handleFieldChange,
   handleUpdateField
 }) {
+  const { language } = useLanguage();
+  const t = (key) => translations[language][key];
+  
   const wo = workOrder || {};
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
-      <h3 className="font-bold mb-3">Primary Tech Field Data</h3>
+      <h3 className="font-bold mb-3">{t('primaryTechFieldData')}</h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Regular Hours (RT)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('regularHours')}</label>
           <input
             type="number"
             step="0.5"
@@ -23,11 +29,11 @@ export default function PrimaryTechFieldData({
             onBlur={(e) => handleUpdateField(wo.wo_id, 'hours_regular', parseFloat(e.target.value) || 0)}
             className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
             disabled={saving || status === 'completed'}
-            placeholder="0 hrs @ $64/hr"
+            placeholder={`0 ${t('hrs')} @ $64/${t('hrs')}`}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Overtime Hours (OT)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('overtimeHours')}</label>
           <input
             type="number"
             step="0.5"
@@ -36,11 +42,11 @@ export default function PrimaryTechFieldData({
             onBlur={(e) => handleUpdateField(wo.wo_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
             className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
             disabled={saving || status === 'completed'}
-            placeholder="0 hrs @ $96/hr"
+            placeholder={`0 ${t('hrs')} @ $96/${t('hrs')}`}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Miles</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('miles')}</label>
           <input
             type="number"
             step="0.1"
@@ -53,7 +59,7 @@ export default function PrimaryTechFieldData({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Material Cost ($)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('materialCost')}</label>
           <input
             type="number"
             step="0.01"
@@ -66,7 +72,7 @@ export default function PrimaryTechFieldData({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">EMF Equipment ($)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('emfEquipment')}</label>
           <input
             type="number"
             step="0.01"
@@ -79,7 +85,7 @@ export default function PrimaryTechFieldData({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Trailer Cost ($)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('trailerCost')}</label>
           <input
             type="number"
             step="0.01"
@@ -92,7 +98,7 @@ export default function PrimaryTechFieldData({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Rental Cost ($)</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('rentalCost')}</label>
           <input
             type="number"
             step="0.01"

@@ -1,4 +1,7 @@
-// Team Members Section Component
+// components/TeamMembersSection.js - Bilingual Team Members Section
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../utils/translations';
+
 export default function TeamMembersSection({
   currentTeamList,
   status,
@@ -8,16 +11,19 @@ export default function TeamMembersSection({
   handleTeamFieldChange,
   handleUpdateTeamMemberField
 }) {
+  const { language } = useLanguage();
+  const t = (key) => translations[language][key];
+
   return (
     <div className="bg-gray-800 rounded-lg p-4">
       <div className="flex justify-between items-center mb-3">
-        <h3 className="font-bold">Team Members</h3>
+        <h3 className="font-bold">{t('teamMembers')}</h3>
         {status !== 'completed' && (
           <button
             onClick={onLoadTeamMembers}
             className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
           >
-            + Add Helper/Tech
+            {t('addHelperTech')}
           </button>
         )}
       </div>
@@ -26,11 +32,11 @@ export default function TeamMembersSection({
           {currentTeamList.map((member) => (
             <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
               <p className="font-semibold mb-3">
-                {member.user?.first_name || 'Unknown'} {member.user?.last_name || ''}
+                {member.user?.first_name || t('unknown')} {member.user?.last_name || ''}
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">RT (hrs)</label>
+                  <label className="block text-xs text-gray-400 mb-1">RT ({t('hrs')})</label>
                   <input
                     type="number"
                     step="0.5"
@@ -43,7 +49,7 @@ export default function TeamMembersSection({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">OT (hrs)</label>
+                  <label className="block text-xs text-gray-400 mb-1">OT ({t('hrs')})</label>
                   <input
                     type="number"
                     step="0.5"
@@ -56,7 +62,7 @@ export default function TeamMembersSection({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Miles</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('miles')}</label>
                   <input
                     type="number"
                     step="0.1"
@@ -73,7 +79,7 @@ export default function TeamMembersSection({
           ))}
         </div>
       ) : (
-        <p className="text-gray-400 text-sm text-center py-2">No additional team members yet</p>
+        <p className="text-gray-400 text-sm text-center py-2">{t('noTeamMembers')}</p>
       )}
     </div>
   );

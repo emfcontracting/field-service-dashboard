@@ -1,13 +1,6 @@
-// components/TeamModal.js
-
-export default function TeamModal({
-  showTeamModal,
-  setShowTeamModal,
-  teamMembers,
-  handleAddTeamMember,
-  saving
-}) {
-  if (!showTeamModal) return null;
+// Team Modal Component
+export default function TeamModal({ show, onClose, teamMembers, onAddMember, saving }) {
+  if (!show) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
@@ -15,7 +8,7 @@ export default function TeamModal({
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-bold">Add Helper</h3>
           <button
-            onClick={() => setShowTeamModal(false)}
+            onClick={onClose}
             className="text-gray-400 hover:text-white text-2xl"
           >
             ×
@@ -25,7 +18,7 @@ export default function TeamModal({
           {teamMembers.map(member => (
             <button
               key={member.user_id}
-              onClick={() => handleAddTeamMember(member.user_id)}
+              onClick={() => onAddMember(member.user_id)}
               disabled={saving}
               className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-left transition"
             >

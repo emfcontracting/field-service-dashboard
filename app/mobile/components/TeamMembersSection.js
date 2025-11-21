@@ -1,91 +1,80 @@
-// app/mobile/components/TeamMembersSection.js
-'use client';
-
-import { useState, useEffect } from 'react';
-import { loadTeamForWorkOrder } from '../utils/timeTracking';
-
-export default function TeamMembersSection({ workOrder, supabase, saving, setSaving }) {
-  const [teamMembers, setTeamMembers] = useState([]);
-
-  useEffect(() => {
-    if (workOrder?.wo_id) {
-      fetchTeamMembers();
-    }
-  }, [workOrder?.wo_id]);
-
-  const fetchTeamMembers = async () => {
-    const result = await loadTeamForWorkOrder(supabase, workOrder.wo_id);
-    if (result.success) {
-      setTeamMembers(result.data);
-    }
-  };
-
-  if (teamMembers.length === 0) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-white">👥 Team Members</h3>
-          <span className="text-gray-500 text-sm">No team members</span>
-        </div>
-        <p className="text-gray-400 text-sm text-center py-3">
-          Use the Team button above to add team members
-        </p>
-      </div>
-    );
-  }
-
+// Team Members Section Component
+export default function TeamMembersSection({
+  currentTeamList,
+  status,
+  saving,
+  onLoadTeamMembers,
+  getTeamFieldValue,
+  handleTeamFieldChange,
+  handleUpdateTeamMemberField
+}) {
   return (
-    <div className="bg-gray-800 rounded-lg p-4 mb-4">
+    <div className="bg-gray-800 rounded-lg p-4">
       <div className="flex justify-between items-center mb-3">
-        <h3 className="font-bold text-white">👥 Team Members</h3>
-        <span className="text-blue-400 text-sm">{teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''}</span>
-      </div>
-
-      <div className="space-y-2">
-        {teamMembers.map((member) => (
-          <div
-            key={member.team_id}
-            className="bg-gray-700 rounded p-3"
+        <h3 className="font-bold">Team Members</h3>
+        {status !== 'completed' && (
+          <button
+            onClick={onLoadTeamMembers}
+            className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
           >
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="text-white font-medium">
-                  {member.user?.first_name} {member.user?.last_name}
+            + Add Helper/Tech
+          </button>
+        )}
+      </div>
+      {currentTeamList.length > 0 ? (
+        <div className="space-y-4">
+          {currentTeamList.map((member) => (
+            <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
+              <p className="font-semibold mb-3">
+                {member.user?.first_name || 'Unknown'} {member.user?.last_name || ''}
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">RT (hrs)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={getTeamFieldValue(member, 'hours_regular')}
+                    onChange={(e) => handleTeamFieldChange(member.assignment_id, 'hours_regular', e.target.value)}
+                    onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                    className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                    disabled={saving || status === 'completed'}
+                    placeholder="0"
+                  />
                 </div>
-                <div className="text-gray-400 text-sm capitalize">
-                  {member.user?.role?.replace('_', ' ')}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">OT (hrs)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={getTeamFieldValue(member, 'hours_overtime')}
+                    onChange={(e) => handleTeamFieldChange(member.assignment_id, 'hours_overtime', e.target.value)}
+                    onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                    className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                    disabled={saving || status === 'completed'}
+                    placeholder="0"
+                  />
                 </div>
-                {member.time_in && (
-                  <div className="text-green-500 text-xs mt-1">
-                    ✓ Checked in
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                {member.hours_regular > 0 && (
-                  <div className="text-xs text-gray-400">
-                    RT: {member.hours_regular.toFixed(2)}h
-                  </div>
-                )}
-                {member.hours_overtime > 0 && (
-                  <div className="text-xs text-gray-400">
-                    OT: {member.hours_overtime.toFixed(2)}h
-                  </div>
-                )}
-                {member.miles > 0 && (
-                  <div className="text-xs text-gray-400">
-                    Miles: {member.miles}
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Miles</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={getTeamFieldValue(member, 'miles')}
+                    onChange={(e) => handleTeamFieldChange(member.assignment_id, 'miles', e.target.value)}
+                    onBlur={(e) => handleUpdateTeamMemberField(member.assignment_id, 'miles', parseFloat(e.target.value) || 0)}
+                    className="w-full px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                    disabled={saving || status === 'completed'}
+                    placeholder="0"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 text-xs text-gray-500 text-center">
-        Use Team button to add or remove members
-      </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-gray-400 text-sm text-center py-2">No additional team members yet</p>
+      )}
     </div>
   );
 }

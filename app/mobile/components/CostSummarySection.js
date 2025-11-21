@@ -1,90 +1,119 @@
-// app/mobile/components/TeamMembersSection.js
-'use client';
+// Cost Summary Section Component
+export default function CostSummarySection({ workOrder, currentTeamList }) {
+  const wo = workOrder || {};
+  const nte = wo.nte || 0;
+  
+  // Calculate team totals
+  const primaryRT = parseFloat(wo.hours_regular) || 0;
+  const primaryOT = parseFloat(wo.hours_overtime) || 0;
+  const primaryMiles = parseFloat(wo.miles) || 0;
 
-import { useState, useEffect } from 'react';
-import { loadTeamForWorkOrder } from '../utils/timeTracking';
+  let teamRT = 0;
+  let teamOT = 0;
+  let teamMiles = 0;
 
-export default function TeamMembersSection({ workOrder, supabase, saving, setSaving }) {
-  const [teamMembers, setTeamMembers] = useState([]);
-
-  useEffect(() => {
-    if (workOrder?.wo_id) {
-      fetchTeamMembers();
-    }
-  }, [workOrder?.wo_id]);
-
-  const fetchTeamMembers = async () => {
-    const result = await loadTeamForWorkOrder(supabase, workOrder.wo_id);
-    if (result.success) {
-      setTeamMembers(result.data);
-    }
-  };
-
-  if (teamMembers.length === 0) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-white">👥 Team Members</h3>
-          <span className="text-gray-500 text-sm">No team members</span>
-        </div>
-        <p className="text-gray-400 text-sm text-center py-3">
-          Use the Team button above to add team members
-        </p>
-      </div>
-    );
+  if (currentTeamList && Array.isArray(currentTeamList)) {
+    currentTeamList.forEach(member => {
+      if (member) {
+        teamRT += parseFloat(member.hours_regular) || 0;
+        teamOT += parseFloat(member.hours_overtime) || 0;
+        teamMiles += parseFloat(member.miles) || 0;
+      }
+    });
   }
 
+  const totalRT = primaryRT + teamRT;
+  const totalOT = primaryOT + teamOT;
+  const totalMiles = primaryMiles + teamMiles;
+  const adminHours = 2;
+
+  const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+  const materialBase = parseFloat(wo.material_cost) || 0;
+  const materialWithMarkup = materialBase * 1.25;
+  const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+  const equipmentWithMarkup = equipmentBase * 1.25;
+  const trailerBase = parseFloat(wo.trailer_cost) || 0;
+  const trailerWithMarkup = trailerBase * 1.25;
+  const rentalBase = parseFloat(wo.rental_cost) || 0;
+  const rentalWithMarkup = rentalBase * 1.25;
+  const mileageCost = totalMiles * 1.00;
+  const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+  const remaining = nte - grandTotal;
+
   return (
-    <div className="bg-gray-800 rounded-lg p-4 mb-4">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="font-bold text-white">👥 Team Members</h3>
-        <span className="text-blue-400 text-sm">{teamMembers.length} member{teamMembers.length !== 1 ? 's' : ''}</span>
+    <div className="bg-gray-800 rounded-lg p-4">
+      <h3 className="font-bold mb-3 text-blue-400">💰 Cost Summary</h3>
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">TEAM RT Hours</span>
+          <span>{totalRT.toFixed(2)} hrs × $64</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-400">TEAM OT Hours</span>
+          <span>{totalOT.toFixed(2)} hrs × $96</span>
+        </div>
+        <div className="flex justify-between text-sm text-yellow-400">
+          <span>+ Admin Hours</span>
+          <span>2 hrs × $64 = $128.00</span>
+        </div>
+        <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
+          <span>Total Labor:</span>
+          <span className="text-green-500">${laborCost.toFixed(2)}</span>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {teamMembers.map((member) => (
-          <div
-            key={member.team_id}
-            className="bg-gray-700 rounded p-3"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="text-white font-medium">
-                  {member.user?.first_name} {member.user?.last_name}
-                </div>
-                <div className="text-gray-400 text-sm capitalize">
-                  {member.user?.role?.replace('_', ' ')}
-                </div>
-                {member.time_in && (
-                  <div className="text-green-500 text-xs mt-1">
-                    ✓ Checked in
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                {member.hours_regular > 0 && (
-                  <div className="text-xs text-gray-400">
-                    RT: {member.hours_regular.toFixed(2)}h
-                  </div>
-                )}
-                {member.hours_overtime > 0 && (
-                  <div className="text-xs text-gray-400">
-                    OT: {member.hours_overtime.toFixed(2)}h
-                  </div>
-                )}
-                {member.miles > 0 && (
-                  <div className="text-xs text-gray-400">
-                    Miles: {member.miles}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="border-t border-gray-600 my-4"></div>
+
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-400">Materials:</span>
+        <span>${materialBase.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-sm text-yellow-400 mb-3">
+        <span className="ml-4">+ 25% Markup:</span>
+        <span>+ ${(materialBase * 0.25).toFixed(2)}</span>
       </div>
 
-      <div className="mt-3 text-xs text-gray-500 text-center">
-        Use Team button to add or remove members
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-400">Equipment:</span>
+        <span>${equipmentBase.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-sm text-yellow-400 mb-3">
+        <span className="ml-4">+ 25% Markup:</span>
+        <span>+ ${(equipmentBase * 0.25).toFixed(2)}</span>
+      </div>
+
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-400">Trailer:</span>
+        <span>${trailerBase.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-sm text-yellow-400 mb-3">
+        <span className="ml-4">+ 25% Markup:</span>
+        <span>+ ${(trailerBase * 0.25).toFixed(2)}</span>
+      </div>
+
+      <div className="flex justify-between text-sm mb-2">
+        <span className="text-gray-400">Rental:</span>
+        <span>${rentalBase.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-sm text-yellow-400 mb-3">
+        <span className="ml-4">+ 25% Markup:</span>
+        <span>+ ${(rentalBase * 0.25).toFixed(2)}</span>
+      </div>
+
+      <div className="flex justify-between text-sm mb-4">
+        <span className="text-gray-400">Total Mileage (All Team):</span>
+        <span>{totalMiles.toFixed(1)} mi × $1.00 = ${mileageCost.toFixed(2)}</span>
+      </div>
+
+      <div className="border-t-2 border-gray-700 pt-3">
+        <div className="flex justify-between text-sm mb-2">
+          <span className="text-gray-400">NTE Budget:</span>
+          <span>${nte.toFixed(2)}</span>
+        </div>
+        <div className={`flex justify-between font-bold text-lg ${remaining >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          <span>Remaining:</span>
+          <span>${remaining.toFixed(2)}</span>
+        </div>
       </div>
     </div>
   );

@@ -1,101 +1,123 @@
-// mobile/utils/calculations.js
+// Cost Calculation Functions
 
-export function calculateTotalHours(timeIn, timeOut) {
-  if (!timeIn || !timeOut) return { regular: 0, overtime: 0 };
-  
-  const start = new Date(timeIn);
-  const end = new Date(timeOut);
-  const totalMinutes = (end - start) / (1000 * 60);
-  const totalHours = totalMinutes / 60;
-  
-  if (totalHours <= 8) {
-    return {
-      regular: parseFloat(totalHours.toFixed(2)),
-      overtime: 0
-    };
-  } else {
-    return {
-      regular: 8,
-      overtime: parseFloat((totalHours - 8).toFixed(2))
-    };
-  }
-}
+export function calculateTotalCosts(workOrder, currentTeamList = []) {
+  const laborCosts = calculateLaborCosts(workOrder, currentTeamList);
+  const materialCosts = calculateMaterialCosts(workOrder);
+  const equipmentCosts = calculateEquipmentCosts(workOrder);
+  const mileageCosts = calculateMileageCosts(workOrder);
 
-export function calculateLaborCost(hoursRegular, hoursOvertime, rate = 64, overtimeRate = 96) {
-  const regularCost = (hoursRegular || 0) * rate;
-  const overtimeCost = (hoursOvertime || 0) * overtimeRate;
-  return regularCost + overtimeCost;
-}
-
-export function calculateMileageCost(miles, rate = 1.00) {
-  return (miles || 0) * rate;
-}
-
-export function calculateMaterialsCost(materials) {
-  if (!materials || materials.length === 0) return 0;
-  
-  return materials.reduce((total, material) => {
-    const cost = parseFloat(material.unit_cost || 0);
-    const quantity = parseFloat(material.quantity || 0);
-    const markup = parseFloat(material.markup_percentage || 25) / 100;
-    return total + (cost * quantity * (1 + markup));
-  }, 0);
-}
-
-export function calculateEquipmentCost(equipment) {
-  if (!equipment || equipment.length === 0) return 0;
-  
-  return equipment.reduce((total, item) => {
-    const cost = parseFloat(item.cost || 0);
-    const markup = parseFloat(item.markup_percentage || 15) / 100;
-    return total + (cost * (1 + markup));
-  }, 0);
-}
-
-export function calculateTotalCost(workOrder, materials = [], equipment = [], teamMembers = []) {
-  // Calculate primary worker costs
-  const primaryLabor = calculateLaborCost(
-    workOrder.hours_regular,
-    workOrder.hours_overtime
-  );
-  
-  const primaryMileage = calculateMileageCost(workOrder.miles);
-  
-  // Calculate team member costs
-  let teamLabor = 0;
-  let teamMileage = 0;
-  
-  if (teamMembers && teamMembers.length > 0) {
-    teamMembers.forEach(member => {
-      teamLabor += calculateLaborCost(
-        member.hours_regular,
-        member.hours_overtime
-      );
-      teamMileage += calculateMileageCost(member.miles);
-    });
-  }
-  
-  // Calculate materials and equipment
-  const materialsCost = calculateMaterialsCost(materials);
-  const equipmentCost = calculateEquipmentCost(equipment);
-  
-  // Admin hours (5 hours at $64/hr)
-  const adminCost = 5 * 64;
+  const subtotal = laborCosts.total + materialCosts.total + equipmentCosts.total + mileageCosts;
   
   return {
-    labor: primaryLabor + teamLabor,
-    mileage: primaryMileage + teamMileage,
-    materials: materialsCost,
-    equipment: equipmentCost,
-    admin: adminCost,
-    total: primaryLabor + teamLabor + primaryMileage + teamMileage + 
-           materialsCost + equipmentCost + adminCost
+    labor: laborCosts,
+    materials: materialCosts,
+    equipment: equipmentCosts,
+    mileage: mileageCosts,
+    subtotal,
+    remaining: (workOrder.nte || 0) - subtotal
   };
 }
 
-export function formatCurrency(amount) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(amount || 0);
+export function calculateLaborCosts(workOrder, currentTeamList = []) {
+  const RT_RATE = 64;
+  const OT_RATE = 96;
+  
+  let totalRT = 0;
+  let totalOT = 0;
+  let teamBreakdown = [];
+
+  if (currentTeamList && currentTeamList.length > 0) {
+    currentTeamList.forEach(member => {
+      const rt = parseFloat(member.hours_regular || 0);
+      const ot = parseFloat(member.hours_overtime || 0);
+      totalRT += rt;
+      totalOT += ot;
+      
+      teamBreakdown.push({
+        name: `${member.first_name} ${member.last_name}`,
+        rt,
+        ot,
+        rtCost: rt * RT_RATE,
+        otCost: ot * OT_RATE,
+        total: (rt * RT_RATE) + (ot * OT_RATE)
+      });
+    });
+  } else {
+    totalRT = parseFloat(workOrder.hours_regular || 0);
+    totalOT = parseFloat(workOrder.hours_overtime || 0);
+  }
+
+  const rtCost = totalRT * RT_RATE;
+  const otCost = totalOT * OT_RATE;
+  const total = rtCost + otCost;
+
+  return {
+    totalRT,
+    totalOT,
+    rtCost,
+    otCost,
+    total,
+    teamBreakdown
+  };
+}
+
+export function calculateMaterialCosts(workOrder) {
+  const materials = parseFloat(workOrder.cost_material || 0);
+  const markup = materials * 0.25;
+  const total = materials + markup;
+
+  return {
+    base: materials,
+    markup,
+    total
+  };
+}
+
+export function calculateEquipmentCosts(workOrder) {
+  const equipment = parseFloat(workOrder.cost_equipment || 0);
+  const rental = parseFloat(workOrder.cost_rental || 0);
+  const base = equipment + rental;
+  
+  let markupRate = 0.25;
+  if (base > 2000) markupRate = 0.15;
+  
+  const markup = base * markupRate;
+  const total = base + markup;
+
+  return {
+    equipment,
+    rental,
+    base,
+    markup,
+    markupRate,
+    total
+  };
+}
+
+export function calculateMileageCosts(workOrder) {
+  const miles = parseFloat(workOrder.miles || 0);
+  return miles * 1.0;
+}
+
+export function validateHours(rt, ot, laborCosts) {
+  const totalHours = rt + ot;
+  
+  if (totalHours > 24) {
+    return {
+      valid: false,
+      message: 'Total hours cannot exceed 24 hours per day'
+    };
+  }
+
+  if (rt < 0 || ot < 0) {
+    return {
+      valid: false,
+      message: 'Hours cannot be negative'
+    };
+  }
+
+  return {
+    valid: true,
+    message: ''
+  };
 }

@@ -1,21 +1,12 @@
-// mobile/components/CompletedWorkOrders.js
-'use client';
+// Completed Work Orders Page Component
+import { formatDate, calculateAge, getPriorityColor, getPriorityBadge } from '../utils/helpers';
 
-import MobileHeader from './MobileHeader';
-import WorkOrderCard from './WorkOrderCard';
-import { 
-  formatDate, 
-  getPriorityBadge, 
-  getPriorityColor,
-  calculateAge 
-} from '../utils/formatters';
-
-export default function CompletedWorkOrders({ 
-  completedWorkOrders, 
+export default function CompletedWorkOrders({
   currentUser,
+  completedWorkOrders,
   onBack,
   onSelectWO,
-  onChangePinClick,
+  onShowChangePin,
   onLogout
 }) {
   return (
@@ -31,7 +22,7 @@ export default function CompletedWorkOrders({
           <h1 className="text-2xl font-bold">Completed Work Orders</h1>
           <div className="flex gap-2">
             <button
-              onClick={onChangePinClick}
+              onClick={onShowChangePin}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
             >
               🔐
@@ -85,11 +76,11 @@ export default function CompletedWorkOrders({
                     )}
                   </div>
 
-                  {(wo.hours_regular || wo.hours_overtime) && (
+                  {wo.hours_regular || wo.hours_overtime ? (
                     <div className="mt-2 text-xs text-gray-400">
                       Hours: RT {wo.hours_regular || 0} / OT {wo.hours_overtime || 0} | Miles: {wo.miles || 0}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
             </>

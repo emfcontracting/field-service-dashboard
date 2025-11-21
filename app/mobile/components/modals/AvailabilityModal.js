@@ -1,6 +1,5 @@
-// components/AvailabilityModal.js
-
-export default function AvailabilityModal({ 
+// Availability Modal Component
+export default function AvailabilityModal({
   showAvailabilityModal,
   availabilityBlocked,
   scheduledWork,
@@ -8,7 +7,7 @@ export default function AvailabilityModal({
   notAvailable,
   saving,
   handleAvailabilityChange,
-  handleAvailabilitySubmit
+  submitAvailability
 }) {
   if (!showAvailabilityModal) return null;
 
@@ -166,7 +165,7 @@ export default function AvailabilityModal({
         </div>
 
         <button
-          onClick={handleAvailabilitySubmit}
+          onClick={submitAvailability}
           disabled={saving || (!scheduledWork && !emergencyWork && !notAvailable)}
           className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 py-4 rounded-lg font-bold text-lg text-white transition"
         >

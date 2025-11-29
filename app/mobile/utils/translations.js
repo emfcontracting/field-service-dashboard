@@ -169,6 +169,8 @@ export const translations = {
     saving: 'Saving...',
     unknown: 'Unknown',
     na: 'N/A'
+	  },
+};
 	
 	export const englishAdditions = {
   // Daily Hours Logging

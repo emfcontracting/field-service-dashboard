@@ -8,13 +8,13 @@ export const translations = {
     fourDigitPin: '4-digit PIN',
     emailPlaceholder: 'your.email@example.com',
     fieldServiceMobile: 'Field Service Mobile',
-    
+
     // Navigation & Actions
     back: 'Back',
     logout: 'Logout',
     dashboard: 'Dashboard',
     completed: 'Completed',
-    
+
     // Work Orders List
     myWorkOrders: 'My Work Orders',
     activeWork: 'active work',
@@ -24,7 +24,7 @@ export const translations = {
     checkBackLater: 'Check back later for new assignments',
     entered: 'Entered',
     daysOld: 'days old',
-    
+
     // Work Order Detail
     workOrderDetails: 'Work Order Details',
     building: 'Building',
@@ -41,14 +41,14 @@ export const translations = {
     firstCheckIn: 'First Check-In',
     firstCheckOut: 'First Check-Out',
     seeCommentsForHistory: 'See Comments below for full check-in/out history',
-    
+
     // Team
     primaryAssignment: 'Primary Assignment',
     teamMembers: 'Team Members',
     addHelperTech: '+ Add Helper/Tech',
     addHelper: 'Add Helper',
     noTeamMembers: 'No additional team members yet',
-    
+
     // Status
     updateStatus: 'Update Status',
     assigned: 'Assigned',
@@ -57,7 +57,7 @@ export const translations = {
     needsReturn: 'Needs Return',
     returnTrip: 'Return Trip',
     completedStatus: 'Completed',
-    
+
     // Field Data
     primaryTechFieldData: 'Primary Tech Field Data',
     regularHours: 'Regular Hours (RT)',
@@ -68,7 +68,7 @@ export const translations = {
     trailerCost: 'Trailer Cost ($)',
     rentalCost: 'Rental Cost ($)',
     hrs: 'hrs',
-    
+
     // Cost Summary
     costSummary: 'Cost Summary',
     teamRTHours: 'TEAM RT Hours',
@@ -83,23 +83,23 @@ export const translations = {
     totalMileage: 'Total Mileage (All Team):',
     nteBudget: 'NTE Budget:',
     remaining: 'Remaining:',
-    
+
     // Photos
     sendPhotos: 'Send Photos',
     takePhotosEmail: 'Take photos and email them for this work order',
     emailPhotosToOffice: 'Email Photos to Office',
-    
+
     // Comments
     commentsAndNotes: 'Comments & Notes',
     noCommentsYet: 'No comments yet',
     addComment: 'Add a comment...',
     addCommentButton: 'Add Comment',
-    
+
     // Complete Work Order
     completeWorkOrder: 'Complete Work Order',
     completeConfirmation: 'Are you sure you want to mark this work order as completed? This action cannot be undone from the mobile app.',
     workOrderCompleted: 'Work order marked as completed!',
-    
+
     // Completed Work Orders
     completedWorkOrders: 'Completed Work Orders',
     noCompletedWorkOrders: 'No completed work orders',
@@ -107,7 +107,7 @@ export const translations = {
     completedLabel: 'Completed',
     completedDate: 'Completed:',
     tech: 'Tech:',
-    
+
     // PIN Management
     changePIN: 'Change PIN',
     newPIN: 'New PIN',
@@ -116,7 +116,7 @@ export const translations = {
     changePINButton: 'Change PIN',
     changing: 'Changing...',
     pinChangedSuccess: 'PIN changed successfully!',
-    
+
     // Availability Modal
     availabilityOverdue: 'AVAILABILITY OVERDUE',
     availability: 'Availability',
@@ -138,7 +138,7 @@ export const translations = {
     submitting: 'Submitting...',
     appLockedUntilSubmit: 'App is locked until you submit',
     availabilitySubmittedSuccess: 'Availability submitted successfully!',
-    
+
     // Error Messages
     errorCheckingIn: 'Error checking in:',
     errorCheckingOut: 'Error checking out:',
@@ -157,63 +157,59 @@ export const translations = {
     pinMustBeFourDigits: 'PIN must be exactly 4 digits',
     pinsDoNotMatch: 'PINs do not match',
     selectAtLeastOne: 'Please select at least one availability option',
-    
+
     // Status Labels
     statusNew: 'New',
     statusInProgress: 'In Progress',
     statusCompleted: 'Completed',
     statusOnHold: 'On Hold',
-    
+
     // Other
     loading: 'Loading...',
     saving: 'Saving...',
     unknown: 'Unknown',
-    na: 'N/A'
-	  },
-};
-	
-	export const englishAdditions = {
-  // Daily Hours Logging
-  dailyHoursLog: 'Daily Hours Log',
-  downloadCSV: 'Download CSV',
-  myTotals: 'My Totals',
-  teamTotals: 'Team Totals',
-  addHoursForToday: 'Add Hours for Today',
-  logHours: 'Log Hours',
-  workDate: 'Work Date',
-  loggingFor: 'Logging For',
-  me: 'Me',
-  notes: 'Notes',
-  optional: 'optional',
-  addNotesHere: 'Add notes here...',
-  noHoursLogged: 'No hours logged yet',
-  clickAboveToStart: 'Click above to start logging',
-  you: 'You',
-  loggedAt: 'Logged at',
-  hoursAddedSuccess: '✅ Hours logged successfully!',
-  errorLoadingDailyHours: 'Error loading daily hours',
-  errorAddingHours: 'Error adding hours',
-  errorDownloadingCSV: 'Error downloading CSV',
-  
-  // Validation Messages
-  hoursCannotBeNegative: 'Hours cannot be negative',
-  totalHoursExceed24: 'Total hours cannot exceed 24 hours per day',
-  mustEnterHoursOrMiles: 'Must enter at least hours or miles',
-  milesCannotBeNegative: 'Miles cannot be negative',
-  hoursAlreadyLogged: 'Hours already logged for this date. Please edit the existing entry.',
-  
-  // CSV Export
-  dateColumn: 'Date',
-  techNameColumn: 'Tech Name',
-  roleColumn: 'Role',
-  regularHoursColumn: 'Regular Hours',
-  overtimeHoursColumn: 'Overtime Hours',
-  milesColumn: 'Miles',
-  notesColumn: 'Notes',
-  loggedAtColumn: 'Logged At',
-};
+    na: 'N/A',
+
+    // Daily Hours Logging
+    dailyHoursLog: 'Daily Hours Log',
+    downloadCSV: 'Download CSV',
+    myTotals: 'My Totals',
+    teamTotals: 'Team Totals',
+    addHoursForToday: 'Add Hours for Today',
+    logHours: 'Log Hours',
+    workDate: 'Work Date',
+    loggingFor: 'Logging For',
+    me: 'Me',
+    notes: 'Notes',
+    optional: 'optional',
+    addNotesHere: 'Add notes here...',
+    noHoursLogged: 'No hours logged yet',
+    clickAboveToStart: 'Click above to start logging',
+    you: 'You',
+    loggedAt: 'Logged at',
+    hoursAddedSuccess: '✓ Hours logged successfully!',
+    errorLoadingDailyHours: 'Error loading daily hours',
+    errorAddingHours: 'Error adding hours',
+    errorDownloadingCSV: 'Error downloading CSV',
+
+    // Validation Messages
+    hoursCannotBeNegative: 'Hours cannot be negative',
+    totalHoursExceed24: 'Total hours cannot exceed 24 hours per day',
+    mustEnterHoursOrMiles: 'Must enter at least hours or miles',
+    milesCannotBeNegative: 'Miles cannot be negative',
+    hoursAlreadyLogged: 'Hours already logged for this date. Please edit the existing entry.',
+
+    // CSV Export
+    dateColumn: 'Date',
+    techNameColumn: 'Tech Name',
+    roleColumn: 'Role',
+    regularHoursColumn: 'Regular Hours',
+    overtimeHoursColumn: 'Overtime Hours',
+    milesColumn: 'Miles',
+    notesColumn: 'Notes',
+    loggedAtColumn: 'Logged At'
   },
-  
+
   es: {
     // Login Screen
     login: 'Iniciar sesión',
@@ -222,13 +218,13 @@ export const translations = {
     fourDigitPin: 'PIN de 4 dígitos',
     emailPlaceholder: 'tucorreo@ejemplo.com',
     fieldServiceMobile: 'Servicio de Campo Móvil',
-    
+
     // Navigation & Actions
     back: 'Atrás',
     logout: 'Cerrar sesión',
     dashboard: 'Panel',
     completed: 'Completadas',
-    
+
     // Work Orders List
     myWorkOrders: 'Mis Órdenes de Trabajo',
     activeWork: 'trabajo activo',
@@ -238,7 +234,7 @@ export const translations = {
     checkBackLater: 'Vuelva más tarde para nuevas asignaciones',
     entered: 'Ingresado',
     daysOld: 'días',
-    
+
     // Work Order Detail
     workOrderDetails: 'Detalles de la Orden de Trabajo',
     building: 'Edificio',
@@ -255,14 +251,14 @@ export const translations = {
     firstCheckIn: 'Primera Entrada',
     firstCheckOut: 'Primera Salida',
     seeCommentsForHistory: 'Ver Comentarios abajo para historial completo de entrada/salida',
-    
+
     // Team
     primaryAssignment: 'Asignación Principal',
     teamMembers: 'Miembros del Equipo',
     addHelperTech: '+ Agregar Ayudante/Técnico',
     addHelper: 'Agregar Ayudante',
     noTeamMembers: 'Aún no hay miembros adicionales del equipo',
-    
+
     // Status
     updateStatus: 'Actualizar Estado',
     assigned: 'Asignado',
@@ -271,7 +267,7 @@ export const translations = {
     needsReturn: 'Necesita Retorno',
     returnTrip: 'Viaje de Retorno',
     completedStatus: 'Completado',
-    
+
     // Field Data
     primaryTechFieldData: 'Datos de Campo del Técnico Principal',
     regularHours: 'Horas Regulares (RT)',
@@ -282,7 +278,7 @@ export const translations = {
     trailerCost: 'Costo de Remolque ($)',
     rentalCost: 'Costo de Alquiler ($)',
     hrs: 'hrs',
-    
+
     // Cost Summary
     costSummary: 'Resumen de Costos',
     teamRTHours: 'Horas RT del EQUIPO',
@@ -297,23 +293,23 @@ export const translations = {
     totalMileage: 'Kilometraje Total (Todo el Equipo):',
     nteBudget: 'Presupuesto NTE:',
     remaining: 'Restante:',
-    
+
     // Photos
     sendPhotos: 'Enviar Fotos',
     takePhotosEmail: 'Tome fotos y envíelas por correo para esta orden de trabajo',
     emailPhotosToOffice: 'Enviar Fotos a la Oficina',
-    
+
     // Comments
     commentsAndNotes: 'Comentarios y Notas',
     noCommentsYet: 'Aún no hay comentarios',
     addComment: 'Agregar un comentario...',
     addCommentButton: 'Agregar Comentario',
-    
+
     // Complete Work Order
     completeWorkOrder: 'Completar Orden de Trabajo',
     completeConfirmation: '¿Está seguro de que desea marcar esta orden de trabajo como completada? Esta acción no se puede deshacer desde la aplicación móvil.',
     workOrderCompleted: '¡Orden de trabajo marcada como completada!',
-    
+
     // Completed Work Orders
     completedWorkOrders: 'Órdenes de Trabajo Completadas',
     noCompletedWorkOrders: 'No hay órdenes de trabajo completadas',
@@ -321,7 +317,7 @@ export const translations = {
     completedLabel: 'Completado',
     completedDate: 'Completado:',
     tech: 'Técnico:',
-    
+
     // PIN Management
     changePIN: 'Cambiar PIN',
     newPIN: 'Nuevo PIN',
@@ -330,7 +326,7 @@ export const translations = {
     changePINButton: 'Cambiar PIN',
     changing: 'Cambiando...',
     pinChangedSuccess: '¡PIN cambiado exitosamente!',
-    
+
     // Availability Modal
     availabilityOverdue: 'DISPONIBILIDAD VENCIDA',
     availability: 'Disponibilidad',
@@ -352,7 +348,7 @@ export const translations = {
     submitting: 'Enviando...',
     appLockedUntilSubmit: 'La aplicación está bloqueada hasta que envíe',
     availabilitySubmittedSuccess: '¡Disponibilidad enviada exitosamente!',
-    
+
     // Error Messages
     errorCheckingIn: 'Error al registrar entrada:',
     errorCheckingOut: 'Error al registrar salida:',
@@ -371,60 +367,58 @@ export const translations = {
     pinMustBeFourDigits: 'El PIN debe ser exactamente de 4 dígitos',
     pinsDoNotMatch: 'Los PINs no coinciden',
     selectAtLeastOne: 'Por favor seleccione al menos una opción de disponibilidad',
-    
+
     // Status Labels
     statusNew: 'Nuevo',
     statusInProgress: 'En Progreso',
     statusCompleted: 'Completado',
     statusOnHold: 'En Espera',
-    
+
     // Other
     loading: 'Cargando...',
     saving: 'Guardando...',
     unknown: 'Desconocido',
-    na: 'N/D'
+    na: 'N/D',
+
+    // Daily Hours Logging
+    dailyHoursLog: 'Registro Diario de Horas',
+    downloadCSV: 'Descargar CSV',
+    myTotals: 'Mis Totales',
+    teamTotals: 'Totales del Equipo',
+    addHoursForToday: 'Agregar Horas para Hoy',
+    logHours: 'Registrar Horas',
+    workDate: 'Fecha de Trabajo',
+    loggingFor: 'Registrando Para',
+    me: 'Yo',
+    notes: 'Notas',
+    optional: 'opcional',
+    addNotesHere: 'Agregar notas aquí...',
+    noHoursLogged: 'Aún no hay horas registradas',
+    clickAboveToStart: 'Haga clic arriba para comenzar a registrar',
+    you: 'Tú',
+    loggedAt: 'Registrado el',
+    hoursAddedSuccess: '✓ ¡Horas registradas exitosamente!',
+    errorLoadingDailyHours: 'Error al cargar horas diarias',
+    errorAddingHours: 'Error al agregar horas',
+    errorDownloadingCSV: 'Error al descargar CSV',
+
+    // Validation Messages
+    hoursCannotBeNegative: 'Las horas no pueden ser negativas',
+    totalHoursExceed24: 'El total de horas no puede exceder 24 horas por día',
+    mustEnterHoursOrMiles: 'Debe ingresar al menos horas o millas',
+    milesCannotBeNegative: 'Las millas no pueden ser negativas',
+    hoursAlreadyLogged: 'Las horas ya están registradas para esta fecha. Por favor edite la entrada existente.',
+
+    // CSV Export
+    dateColumn: 'Fecha',
+    techNameColumn: 'Nombre del Técnico',
+    roleColumn: 'Rol',
+    regularHoursColumn: 'Horas Regulares',
+    overtimeHoursColumn: 'Horas Extra',
+    milesColumn: 'Millas',
+    notesColumn: 'Notas',
+    loggedAtColumn: 'Registrado el'
   }
-  
-  export const spanishAdditions = {
-  // Daily Hours Logging
-  dailyHoursLog: 'Registro Diario de Horas',
-  downloadCSV: 'Descargar CSV',
-  myTotals: 'Mis Totales',
-  teamTotals: 'Totales del Equipo',
-  addHoursForToday: 'Agregar Horas para Hoy',
-  logHours: 'Registrar Horas',
-  workDate: 'Fecha de Trabajo',
-  loggingFor: 'Registrando Para',
-  me: 'Yo',
-  notes: 'Notas',
-  optional: 'opcional',
-  addNotesHere: 'Agregar notas aquí...',
-  noHoursLogged: 'Aún no hay horas registradas',
-  clickAboveToStart: 'Haga clic arriba para comenzar a registrar',
-  you: 'Tú',
-  loggedAt: 'Registrado el',
-  hoursAddedSuccess: '✅ ¡Horas registradas exitosamente!',
-  errorLoadingDailyHours: 'Error al cargar horas diarias',
-  errorAddingHours: 'Error al agregar horas',
-  errorDownloadingCSV: 'Error al descargar CSV',
-  
-  // Validation Messages
-  hoursCannotBeNegative: 'Las horas no pueden ser negativas',
-  totalHoursExceed24: 'El total de horas no puede exceder 24 horas por día',
-  mustEnterHoursOrMiles: 'Debe ingresar al menos horas o millas',
-  milesCannotBeNegative: 'Las millas no pueden ser negativas',
-  hoursAlreadyLogged: 'Las horas ya están registradas para esta fecha. Por favor edite la entrada existente.',
-  
-  // CSV Export
-  dateColumn: 'Fecha',
-  techNameColumn: 'Nombre del Técnico',
-  roleColumn: 'Rol',
-  regularHoursColumn: 'Horas Regulares',
-  overtimeHoursColumn: 'Horas Extra',
-  milesColumn: 'Millas',
-  notesColumn: 'Notas',
-  loggedAtColumn: 'Registrado el',
-};
 };
 
 // Translation helper function

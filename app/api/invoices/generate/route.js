@@ -15,7 +15,7 @@ export async function POST(request) {
       );
     }
 
-    // Get work order details with team assignments and comments
+    // Get work order details with team assignments
     const { data: workOrder, error: woError } = await supabase
       .from('work_orders')
       .select(`
@@ -70,28 +70,16 @@ export async function POST(request) {
       `)
       .eq('wo_id', wo_id);
 
-    // Get comments to include as work performed
-    const { data: comments } = await supabase
-      .from('work_order_comments')
-      .select(`
-        comment,
-        comment_type,
-        created_at,
-        user:users(first_name, last_name)
-      `)
-      .eq('wo_id', wo_id)
-      .eq('comment_type', 'note')
-      .order('created_at', { ascending: true });
-
-    // Compile work performed description from comments
-    let workPerformedDescription = workOrder.work_order_description;
+    // *** CHANGED: Use comments_english field from work_orders table as Work Performed ***
+    // The comments_english field contains all the work notes from field techs
+    let workPerformedDescription = '';
     
-    if (comments && comments.length > 0) {
-      workPerformedDescription += '\n\nWork Notes:\n';
-      comments.forEach(comment => {
-        const timestamp = new Date(comment.created_at).toLocaleString();
-        workPerformedDescription += `\n[${timestamp}] ${comment.user?.first_name} ${comment.user?.last_name}:\n${comment.comment}\n`;
-      });
+    if (workOrder.comments_english && workOrder.comments_english.trim()) {
+      // Use comments_english as the primary work performed description
+      workPerformedDescription = workOrder.comments_english;
+    } else {
+      // Fallback to work order description if no comments exist
+      workPerformedDescription = workOrder.work_order_description || 'Work completed as requested.';
     }
 
     // Calculate lead tech labor
@@ -109,24 +97,24 @@ export async function POST(request) {
     }
 
     // Total labor (NO admin hours added)
-const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor;
+    const totalLabor = leadTechRegular + leadTechOvertime + teamMemberLabor;
 
-// Calculate mileage
-const leadTechMiles = workOrder.miles || 0;
-const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
-const totalMiles = leadTechMiles + teamMemberMiles;
-const mileageCost = totalMiles * 1.00;
+    // Calculate mileage
+    const leadTechMiles = workOrder.miles || 0;
+    const teamMemberMiles = teamAssignments?.reduce((sum, m) => sum + (m.miles || 0), 0) || 0;
+    const totalMiles = leadTechMiles + teamMemberMiles;
+    const mileageCost = totalMiles * 1.00;
 
-// NO MARKUPS - Use actual costs
-const materialCost = workOrder.material_cost || 0;
-const equipmentCost = workOrder.emf_equipment_cost || 0;
-const trailerCost = workOrder.trailer_cost || 0;
-const rentalCost = workOrder.rental_cost || 0;
+    // NO MARKUPS - Use actual costs
+    const materialCost = workOrder.material_cost || 0;
+    const equipmentCost = workOrder.emf_equipment_cost || 0;
+    const trailerCost = workOrder.trailer_cost || 0;
+    const rentalCost = workOrder.rental_cost || 0;
 
-// Calculate totals
-const subtotal = totalLabor + mileageCost + materialCost + equipmentCost + trailerCost + rentalCost;
-const tax = 0; // NO TAX
-const total = subtotal + tax;
+    // Calculate totals
+    const subtotal = totalLabor + mileageCost + materialCost + equipmentCost + trailerCost + rentalCost;
+    const tax = 0; // NO TAX
+    const total = subtotal + tax;
 
     // Generate invoice number (format: INV-YYYY-XXXXX)
     const year = new Date().getFullYear();
@@ -158,7 +146,7 @@ const total = subtotal + tax;
         tax: tax,
         total: total,
         status: 'draft',
-        notes: 'Auto-generated invoice with standard markups applied'
+        notes: 'Auto-generated invoice'
       })
       .select()
       .single();
@@ -198,53 +186,52 @@ const total = subtotal + tax;
     }
 
     // Team member labor (by title, not name)
-if (teamAssignments && teamAssignments.length > 0) {
-  // Group by role and sum hours
-  const laborByRole = {};
-  
-  teamAssignments.forEach(member => {
-    const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
-                      member.role === 'tech' ? 'Tech' : 
-                      'Helper';
-    
-    if (!laborByRole[roleTitle]) {
-      laborByRole[roleTitle] = {
-        regular_hours: 0,
-        overtime_hours: 0,
-        regular_rate: member.user?.hourly_rate_regular || 64,
-        overtime_rate: member.user?.hourly_rate_overtime || 96
-      };
-    }
-    
-    laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
-    laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
-  });
-  
-  // Create line items for each role
-  Object.entries(laborByRole).forEach(([role, data]) => {
-    if (data.regular_hours > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
-        quantity: data.regular_hours,
-        unit_price: data.regular_rate,
-        amount: data.regular_hours * data.regular_rate,
-        line_type: 'labor'
+    if (teamAssignments && teamAssignments.length > 0) {
+      // Group by role and sum hours
+      const laborByRole = {};
+      
+      teamAssignments.forEach(member => {
+        const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
+                          member.role === 'tech' ? 'Tech' : 
+                          'Helper';
+        
+        if (!laborByRole[roleTitle]) {
+          laborByRole[roleTitle] = {
+            regular_hours: 0,
+            overtime_hours: 0,
+            regular_rate: member.user?.hourly_rate_regular || 64,
+            overtime_rate: member.user?.hourly_rate_overtime || 96
+          };
+        }
+        
+        laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
+        laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+      });
+      
+      // Create line items for each role
+      Object.entries(laborByRole).forEach(([role, data]) => {
+        if (data.regular_hours > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
+            quantity: data.regular_hours,
+            unit_price: data.regular_rate,
+            amount: data.regular_hours * data.regular_rate,
+            line_type: 'labor'
+          });
+        }
+        if (data.overtime_hours > 0) {
+          lineItems.push({
+            invoice_id: invoice.invoice_id,
+            description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
+            quantity: data.overtime_hours,
+            unit_price: data.overtime_rate,
+            amount: data.overtime_hours * data.overtime_rate,
+            line_type: 'labor'
+          });
+        }
       });
     }
-    if (data.overtime_hours > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
-        quantity: data.overtime_hours,
-        unit_price: data.overtime_rate,
-        amount: data.overtime_hours * data.overtime_rate,
-        line_type: 'labor'
-      });
-    }
-  });
-}
-
 
     // Mileage
     if (totalMiles > 0) {
@@ -259,28 +246,28 @@ if (teamAssignments && teamAssignments.length > 0) {
     }
 
     // Materials (no markup)
-if (materialCost > 0) {
-  lineItems.push({
-    invoice_id: invoice.invoice_id,
-    description: 'Materials',
-    quantity: 1,
-    unit_price: materialCost,
-    amount: materialCost,
-    line_type: 'material'
-  });
-}
+    if (materialCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Materials',
+        quantity: 1,
+        unit_price: materialCost,
+        amount: materialCost,
+        line_type: 'material'
+      });
+    }
 
     // Equipment (no markup)
-if (equipmentCost > 0) {
-  lineItems.push({
-    invoice_id: invoice.invoice_id,
-    description: 'Equipment',
-    quantity: 1,
-    unit_price: equipmentCost,
-    amount: equipmentCost,
-    line_type: 'equipment'
-  });
-}
+    if (equipmentCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Equipment',
+        quantity: 1,
+        unit_price: equipmentCost,
+        amount: equipmentCost,
+        line_type: 'equipment'
+      });
+    }
 
     // Trailer (no markup)
     if (trailerCost > 0) {
@@ -295,18 +282,18 @@ if (equipmentCost > 0) {
     }
 
     // Rental (no markup)
-if (rentalCost > 0) {
-  lineItems.push({
-    invoice_id: invoice.invoice_id,
-    description: 'Rental',
-    quantity: 1,
-    unit_price: rentalCost,
-    amount: rentalCost,
-    line_type: 'rental'
-  });
-}
+    if (rentalCost > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Rental',
+        quantity: 1,
+        unit_price: rentalCost,
+        amount: rentalCost,
+        line_type: 'rental'
+      });
+    }
 
-    // Work Performed Description
+    // Work Performed Description (uses comments from work_orders table)
     lineItems.push({
       invoice_id: invoice.invoice_id,
       description: workPerformedDescription,
@@ -332,34 +319,34 @@ if (rentalCost > 0) {
     }
 
     // Lock the work order
-const { error: lockError } = await supabase
-  .from('work_orders')
-  .update({
-    is_locked: true,
-    locked_at: new Date().toISOString(),
-    locked_by: null  // <-- FIXED!
-  })
-  .eq('wo_id', wo_id);
+    const { error: lockError } = await supabase
+      .from('work_orders')
+      .update({
+        is_locked: true,
+        locked_at: new Date().toISOString(),
+        locked_by: null
+      })
+      .eq('wo_id', wo_id);
 
-if (lockError) {
-  console.error('Error locking work order:', lockError);
-  
-  // Rollback the invoice if lock fails
-  await supabase.from('invoice_line_items').delete().eq('invoice_id', invoice.invoice_id);
-  await supabase.from('invoices').delete().eq('invoice_id', invoice.invoice_id);
-  
-  return NextResponse.json(
-    { success: false, error: 'Failed to lock work order: ' + lockError.message },
-    { status: 500 }
-  );
-}
+    if (lockError) {
+      console.error('Error locking work order:', lockError);
+      
+      // Rollback the invoice if lock fails
+      await supabase.from('invoice_line_items').delete().eq('invoice_id', invoice.invoice_id);
+      await supabase.from('invoices').delete().eq('invoice_id', invoice.invoice_id);
+      
+      return NextResponse.json(
+        { success: false, error: 'Failed to lock work order: ' + lockError.message },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
-  success: true,
-  invoice_id: invoice.invoice_id,
-  invoice_number: invoiceNumber,
-  total: total
-});
+      success: true,
+      invoice_id: invoice.invoice_id,
+      invoice_number: invoiceNumber,
+      total: total
+    });
 
   } catch (error) {
     console.error('Invoice generation error:', error);

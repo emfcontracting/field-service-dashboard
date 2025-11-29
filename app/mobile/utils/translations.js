@@ -169,6 +169,47 @@ export const translations = {
     saving: 'Saving...',
     unknown: 'Unknown',
     na: 'N/A'
+	
+	export const englishAdditions = {
+  // Daily Hours Logging
+  dailyHoursLog: 'Daily Hours Log',
+  downloadCSV: 'Download CSV',
+  myTotals: 'My Totals',
+  teamTotals: 'Team Totals',
+  addHoursForToday: 'Add Hours for Today',
+  logHours: 'Log Hours',
+  workDate: 'Work Date',
+  loggingFor: 'Logging For',
+  me: 'Me',
+  notes: 'Notes',
+  optional: 'optional',
+  addNotesHere: 'Add notes here...',
+  noHoursLogged: 'No hours logged yet',
+  clickAboveToStart: 'Click above to start logging',
+  you: 'You',
+  loggedAt: 'Logged at',
+  hoursAddedSuccess: '✅ Hours logged successfully!',
+  errorLoadingDailyHours: 'Error loading daily hours',
+  errorAddingHours: 'Error adding hours',
+  errorDownloadingCSV: 'Error downloading CSV',
+  
+  // Validation Messages
+  hoursCannotBeNegative: 'Hours cannot be negative',
+  totalHoursExceed24: 'Total hours cannot exceed 24 hours per day',
+  mustEnterHoursOrMiles: 'Must enter at least hours or miles',
+  milesCannotBeNegative: 'Miles cannot be negative',
+  hoursAlreadyLogged: 'Hours already logged for this date. Please edit the existing entry.',
+  
+  // CSV Export
+  dateColumn: 'Date',
+  techNameColumn: 'Tech Name',
+  roleColumn: 'Role',
+  regularHoursColumn: 'Regular Hours',
+  overtimeHoursColumn: 'Overtime Hours',
+  milesColumn: 'Miles',
+  notesColumn: 'Notes',
+  loggedAtColumn: 'Logged At',
+};
   },
   
   es: {
@@ -341,6 +382,47 @@ export const translations = {
     unknown: 'Desconocido',
     na: 'N/D'
   }
+  
+  export const spanishAdditions = {
+  // Daily Hours Logging
+  dailyHoursLog: 'Registro Diario de Horas',
+  downloadCSV: 'Descargar CSV',
+  myTotals: 'Mis Totales',
+  teamTotals: 'Totales del Equipo',
+  addHoursForToday: 'Agregar Horas para Hoy',
+  logHours: 'Registrar Horas',
+  workDate: 'Fecha de Trabajo',
+  loggingFor: 'Registrando Para',
+  me: 'Yo',
+  notes: 'Notas',
+  optional: 'opcional',
+  addNotesHere: 'Agregar notas aquí...',
+  noHoursLogged: 'Aún no hay horas registradas',
+  clickAboveToStart: 'Haga clic arriba para comenzar a registrar',
+  you: 'Tú',
+  loggedAt: 'Registrado el',
+  hoursAddedSuccess: '✅ ¡Horas registradas exitosamente!',
+  errorLoadingDailyHours: 'Error al cargar horas diarias',
+  errorAddingHours: 'Error al agregar horas',
+  errorDownloadingCSV: 'Error al descargar CSV',
+  
+  // Validation Messages
+  hoursCannotBeNegative: 'Las horas no pueden ser negativas',
+  totalHoursExceed24: 'El total de horas no puede exceder 24 horas por día',
+  mustEnterHoursOrMiles: 'Debe ingresar al menos horas o millas',
+  milesCannotBeNegative: 'Las millas no pueden ser negativas',
+  hoursAlreadyLogged: 'Las horas ya están registradas para esta fecha. Por favor edite la entrada existente.',
+  
+  // CSV Export
+  dateColumn: 'Fecha',
+  techNameColumn: 'Nombre del Técnico',
+  roleColumn: 'Rol',
+  regularHoursColumn: 'Horas Regulares',
+  overtimeHoursColumn: 'Horas Extra',
+  milesColumn: 'Millas',
+  notesColumn: 'Notas',
+  loggedAtColumn: 'Registrado el',
+};
 };
 
 // Translation helper function

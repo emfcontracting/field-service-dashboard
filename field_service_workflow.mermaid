@@ -1,0 +1,51 @@
+flowchart TD
+    Start([Google Sheet Ticket Data]) --> Import[Import via API]
+    Import --> DB[(Central Database)]
+    
+    DB --> Create[New Work Order Created]
+    Create --> Assign[Office Staff Assigns to Lead Tech]
+    
+    Assign --> Push[Push Notification Sent]
+    Push --> Mobile[Mobile App - Lead Tech]
+    
+    Mobile --> Review{Lead Reviews Ticket & NTE}
+    Review -->|Estimate > NTE| Flag[Flag for Office Review]
+    Review -->|Estimate ≤ NTE| Accept[Accept Job]
+    
+    Flag --> Office[Office Adjusts NTE or Scope]
+    Office --> Accept
+    
+    Accept --> ClockIn[Lead Clocks In - GPS Logged]
+    ClockIn --> SelectHelpers[Select Helpers 1-4]
+    SelectHelpers --> WorkInProgress[Work in Progress]
+    
+    WorkInProgress --> LogData[Log During Job:<br/>- Materials Used<br/>- Equipment/Rentals<br/>- Mileage<br/>- Photos<br/>- Status Updates]
+    
+    LogData --> Complete{Job Status?}
+    Complete -->|Needs Return Visit| Schedule[Update Status - Incomplete]
+    Complete -->|Job Done| ClockOut[Clock Out - GPS Logged]
+    
+    Schedule --> DB
+    ClockOut --> CalcHours[Auto Calculate:<br/>- Total Hours<br/>- Helper Hours<br/>- Age of WO<br/>- Total Costs]
+    
+    CalcHours --> MarkComplete[Mark as Completed]
+    MarkComplete --> DB
+    
+    DB --> InvoiceGen[Auto-Generate Draft Invoice]
+    InvoiceGen --> AdminReview[Admin Reviews Invoice]
+    
+    AdminReview --> Edit{Edits Needed?}
+    Edit -->|Yes| ManualEdit[Admin Edits Invoice]
+    Edit -->|No| Approve[Approve Invoice]
+    
+    ManualEdit --> Approve
+    Approve --> QB[Sync to QuickBooks via API]
+    
+    QB --> End([Invoice Finalized])
+    
+    style Start fill:#e1f5ff
+    style End fill:#c8e6c9
+    style DB fill:#fff9c4
+    style Mobile fill:#f8bbd0
+    style AdminReview fill:#ffe0b2
+    style QB fill:#b2dfdb

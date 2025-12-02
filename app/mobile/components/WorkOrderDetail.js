@@ -1,11 +1,11 @@
-// Work Order Detail View Component - FIXED COMMENT FUNCTIONALITY
+// Work Order Detail View Component - WITH DAILY HOURS & FIXED COMMENTS
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
-import PrimaryTechFieldData from './PrimaryTechFieldData';
+import DailyHoursSection from './DailyHoursSection';
 import TeamMembersSection from './TeamMembersSection';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
@@ -67,7 +67,6 @@ export default function WorkOrderDetail({
     if (!newComment || !newComment.trim()) {
       return;
     }
-    // Call onAddComment with the comment text
     await onAddComment(newComment.trim(), 'en', null);
   }
 
@@ -232,7 +231,6 @@ export default function WorkOrderDetail({
       return;
     }
     
-    // Include signature in print if available
     const signatureSection = wo.customer_signature ? `
       <div class="section">
         <h2>${language === 'en' ? 'Customer Signature' : 'Firma del Cliente'}</h2>
@@ -257,9 +255,7 @@ export default function WorkOrderDetail({
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
           th { background-color: #f3f4f6; }
-          @media print {
-            button { display: none; }
-          }
+          @media print { button { display: none; } }
         </style>
       </head>
       <body>
@@ -290,44 +286,6 @@ export default function WorkOrderDetail({
           ${(currentTeamList || []).map((member, idx) => 
             `<div class="value"><span class="label">${language === 'en' ? 'Helper' : 'Ayudante'} ${idx + 1}:</span> ${member.user?.first_name || ''} ${member.user?.last_name || ''}</div>`
           ).join('')}
-        </div>
-        
-        <div class="section">
-          <h2>${language === 'en' ? 'Time & Costs' : 'Tiempo y Costos'}</h2>
-          <table>
-            <tr>
-              <th>${language === 'en' ? 'Item' : 'Artículo'}</th>
-              <th>${language === 'en' ? 'Amount' : 'Cantidad'}</th>
-            </tr>
-            <tr>
-              <td>${t('regularHours')}</td>
-              <td>${wo.hours_regular || 0} ${t('hrs')}</td>
-            </tr>
-            <tr>
-              <td>${t('overtimeHours')}</td>
-              <td>${wo.hours_overtime || 0} ${t('hrs')}</td>
-            </tr>
-            <tr>
-              <td>${t('miles')}</td>
-              <td>${wo.miles || 0} mi</td>
-            </tr>
-            <tr>
-              <td>${t('materialCost')}</td>
-              <td>$${(wo.material_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>${t('emfEquipment')}</td>
-              <td>$${(wo.emf_equipment_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>${t('trailerCost')}</td>
-              <td>$${(wo.trailer_cost || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>${t('rentalCost')}</td>
-              <td>$${(wo.rental_cost || 0).toFixed(2)}</td>
-            </tr>
-          </table>
         </div>
         
         ${signatureSection}
@@ -367,7 +325,6 @@ export default function WorkOrderDetail({
           </button>
           <h1 className="text-xl font-bold">{woNumber}</h1>
           <div className="flex gap-2">
-            {/* Only show Dashboard for admin/office */}
             {(currentUser.role === 'admin' || currentUser.role === 'office') && (
               <button
                 onClick={() => window.location.href = '/dashboard'}
@@ -529,14 +486,12 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* Primary Tech Field Data */}
-          <PrimaryTechFieldData
+          {/* DAILY HOURS SECTION - Replaced PrimaryTechFieldData */}
+          <DailyHoursSection
             workOrder={wo}
+            currentUser={currentUser}
             status={status}
             saving={saving}
-            getFieldValue={getFieldValue}
-            handleFieldChange={handleFieldChange}
-            handleUpdateField={onUpdateField}
           />
 
           {/* Email Photos Section */}

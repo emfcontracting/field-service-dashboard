@@ -7,7 +7,6 @@ import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
 import AdditionalCostsSection from './AdditionalCostsSection';
 import PrimaryTechDailyHours from './PrimaryTechDailyHours';
-import TeamMembersSection from './TeamMembersSection';
 import TeamMembersDailyHours from './TeamMembersDailyHours';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
@@ -416,18 +415,6 @@ export default function WorkOrderDetail({
             saving={saving}
             onAddDailyHours={onAddDailyHours}
             onDownloadLogs={onDownloadLogs}
-          />
-
-          {/* TEAM MEMBERS SECTION - Add team members with field data */}
-          <TeamMembersSection
-            currentTeamList={currentTeamList}
-            status={status}
-            saving={saving}
-            onLoadTeamMembers={onLoadTeamMembers}
-            onRemoveTeamMember={onRemoveTeamMember}
-            getTeamFieldValue={getTeamFieldValue}
-            handleTeamFieldChange={handleTeamFieldChange}
-            handleUpdateTeamMemberField={handleUpdateTeamMemberField}
           />
 
           {/* TEAM MEMBERS DAILY HOURS SECTION - view all, log own only */}

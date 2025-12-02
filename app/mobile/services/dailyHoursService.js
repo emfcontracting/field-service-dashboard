@@ -343,8 +343,8 @@ export function validateHoursEntry(hoursData) {
     errors.push('Work date is required');
   }
 
-  // Check for future dates
-  const workDate = new Date(hoursData.workDate);
+  // Check for future dates - fix timezone issue by using local date
+  const workDate = new Date(hoursData.workDate + 'T12:00:00');
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
@@ -355,10 +355,12 @@ export function validateHoursEntry(hoursData) {
   // Check hours
   const rt = parseFloat(hoursData.hoursRegular) || 0;
   const ot = parseFloat(hoursData.hoursOvertime) || 0;
+  const miles = parseFloat(hoursData.miles) || 0;
   const totalHours = rt + ot;
 
-  if (totalHours === 0) {
-    errors.push('Must enter at least one hour');
+  // Must enter at least hours OR miles
+  if (totalHours === 0 && miles === 0) {
+    errors.push('Must enter at least hours or miles');
   }
 
   if (totalHours > 24) {
@@ -370,7 +372,6 @@ export function validateHoursEntry(hoursData) {
   }
 
   // Check miles
-  const miles = parseFloat(hoursData.miles) || 0;
   if (miles < 0) {
     errors.push('Miles cannot be negative');
   }

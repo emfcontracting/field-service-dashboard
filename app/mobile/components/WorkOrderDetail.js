@@ -1,11 +1,11 @@
-// components/WorkOrderDetail.js - Bilingual Work Order Detail View (Part 1 of 2)
+// components/WorkOrderDetail.js - Bilingual Work Order Detail View with Daily Hours
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
-import PrimaryTechFieldData from './PrimaryTechFieldData';
+import DailyHoursSection from './DailyHoursSection';
 import TeamMembersSection from './TeamMembersSection';
 
 export default function WorkOrderDetail({
@@ -31,7 +31,7 @@ export default function WorkOrderDetail({
   handleUpdateTeamMemberField
 }) {
   const { language } = useLanguage();
-  const t = (key) => translations[language][key];
+  const t = (key) => translations[language][key] || key;
   
   const wo = workOrder || {};
   const woNumber = wo.wo_number || t('unknown');
@@ -128,6 +128,7 @@ export default function WorkOrderDetail({
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
       <div className="max-w-2xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <button
             onClick={onBack}
@@ -137,10 +138,7 @@ export default function WorkOrderDetail({
           </button>
           <h1 className="text-xl font-bold">{woNumber}</h1>
           <div className="flex gap-2">
-            {/* Language Toggle */}
             <LanguageToggle />
-            
-            {/* Only show Dashboard for admin/office */}
             {(currentUser.role === 'admin' || currentUser.role === 'office') && (
               <button
                 onClick={() => window.location.href = '/dashboard'}
@@ -284,15 +282,72 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* Primary Tech Field Data */}
-          <PrimaryTechFieldData
+          {/* ⭐ NEW: Daily Hours Section - Main hours/mileage tracking */}
+          <DailyHoursSection
             workOrder={wo}
+            currentUser={currentUser}
+            currentTeamList={currentTeamList}
             status={status}
-            saving={saving}
-            getFieldValue={getFieldValue}
-            handleFieldChange={handleFieldChange}
-            handleUpdateField={onUpdateField}
           />
+
+          {/* Materials & Equipment Costs - Simplified section for costs only */}
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h3 className="font-bold mb-3 text-purple-400">💰 {language === 'en' ? 'Materials & Equipment' : 'Materiales y Equipo'}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('materialCost')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={getFieldValue('material_cost')}
+                  onChange={(e) => handleFieldChange('material_cost', e.target.value)}
+                  onBlur={(e) => onUpdateField(wo.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                  disabled={saving || status === 'completed'}
+                  placeholder="$0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('emfEquipment')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={getFieldValue('emf_equipment_cost')}
+                  onChange={(e) => handleFieldChange('emf_equipment_cost', e.target.value)}
+                  onBlur={(e) => onUpdateField(wo.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                  disabled={saving || status === 'completed'}
+                  placeholder="$0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('trailerCost')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={getFieldValue('trailer_cost')}
+                  onChange={(e) => handleFieldChange('trailer_cost', e.target.value)}
+                  onBlur={(e) => onUpdateField(wo.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                  disabled={saving || status === 'completed'}
+                  placeholder="$0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">{t('rentalCost')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={getFieldValue('rental_cost')}
+                  onChange={(e) => handleFieldChange('rental_cost', e.target.value)}
+                  onBlur={(e) => onUpdateField(wo.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
+                  disabled={saving || status === 'completed'}
+                  placeholder="$0.00"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Email Photos Section */}
           <EmailPhotosSection

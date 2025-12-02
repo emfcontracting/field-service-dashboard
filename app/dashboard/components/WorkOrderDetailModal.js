@@ -26,11 +26,47 @@ export default function WorkOrderDetailModal({
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showInvoiceButton, setShowInvoiceButton] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
-  const adminPassword = 'admin123'; // Should be in environment variable
+  const [dailyHoursLog, setDailyHoursLog] = useState([]);
+  const [loadingHours, setLoadingHours] = useState(true);
+  const [dailyTotals, setDailyTotals] = useState({ totalRT: 0, totalOT: 0, totalMiles: 0 });
+  const adminPassword = 'admin123';
 
   useEffect(() => {
     checkCanGenerateInvoice();
+    loadDailyHoursLog();
   }, [selectedWO]);
+
+  const loadDailyHoursLog = async () => {
+    try {
+      setLoadingHours(true);
+      const { data, error } = await supabase
+        .from('daily_hours_log')
+        .select(`
+          *,
+          user:users(first_name, last_name)
+        `)
+        .eq('wo_id', selectedWO.wo_id)
+        .order('work_date', { ascending: false });
+
+      if (error) throw error;
+
+      setDailyHoursLog(data || []);
+
+      // Calculate totals
+      let totalRT = 0, totalOT = 0, totalMiles = 0;
+      (data || []).forEach(entry => {
+        totalRT += parseFloat(entry.hours_regular) || 0;
+        totalOT += parseFloat(entry.hours_overtime) || 0;
+        totalMiles += parseFloat(entry.miles) || 0;
+      });
+      setDailyTotals({ totalRT, totalOT, totalMiles });
+
+    } catch (err) {
+      console.error('Error loading daily hours:', err);
+    } finally {
+      setLoadingHours(false);
+    }
+  };
 
   const checkCanGenerateInvoice = async () => {
     const { data: invoice } = await supabase
@@ -182,7 +218,266 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  const costSummary = calculateInvoiceTotal(selectedWO, selectedWO.teamMembers);
+  // Format date/time helper
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Download Completion Certificate
+  const downloadCompletionCertificate = () => {
+    const leadTech = selectedWO.lead_tech || {};
+    const completionDate = selectedWO.date_completed ? formatDateTime(selectedWO.date_completed) : formatDateTime(new Date().toISOString());
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Work Order Completion - ${selectedWO.wo_number}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 40px; background: white; color: #333; }
+          .certificate { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 40px; background: white; }
+          .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 20px; margin-bottom: 30px; }
+          .header h1 { color: #1e40af; font-size: 28px; margin-bottom: 10px; }
+          .header .company { font-size: 18px; color: #666; }
+          .badge { display: inline-block; background: #22c55e; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; margin-top: 15px; }
+          .section { margin-bottom: 25px; }
+          .section-title { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+          .section-content { font-size: 16px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+          .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+          .info-label { color: #666; font-weight: 500; }
+          .info-value { font-weight: bold; color: #333; }
+          .signature-section { margin-top: 40px; padding-top: 30px; border-top: 2px solid #1e40af; }
+          .signature-box { display: flex; align-items: flex-start; gap: 30px; margin-top: 20px; }
+          .signature-image { border: 2px solid #e5e7eb; padding: 10px; background: #f9fafb; border-radius: 8px; }
+          .signature-image img { max-width: 300px; height: auto; }
+          .signature-details { flex: 1; }
+          .signature-details p { margin-bottom: 10px; }
+          .verification { background: #f0fdf4; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center; }
+          .verification-text { color: #166534; font-weight: bold; }
+          .hours-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          .hours-table th, .hours-table td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+          .hours-table th { background: #f3f4f6; }
+          .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+          @media print { body { padding: 20px; } .certificate { border: 2px solid #1e40af; } .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="certificate">
+          <div class="header">
+            <h1>WORK ORDER COMPLETION CERTIFICATE</h1>
+            <div class="company">EMF Contracting LLC</div>
+            <div class="badge">✓ COMPLETED</div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Work Order Information</div>
+            <div class="grid">
+              <div>
+                <div class="info-row">
+                  <span class="info-label">Work Order #:</span>
+                  <span class="info-value">${selectedWO.wo_number}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Building:</span>
+                  <span class="info-value">${selectedWO.building || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Requestor:</span>
+                  <span class="info-value">${selectedWO.requestor || 'N/A'}</span>
+                </div>
+              </div>
+              <div>
+                <div class="info-row">
+                  <span class="info-label">Date Entered:</span>
+                  <span class="info-value">${formatDate(selectedWO.date_entered)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Date Completed:</span>
+                  <span class="info-value">${completionDate}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">NTE Budget:</span>
+                  <span class="info-value">$${(selectedWO.nte || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Work Description</div>
+            <div class="section-content">${selectedWO.work_order_description || 'N/A'}</div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Service Team</div>
+            <div class="info-row">
+              <span class="info-label">Lead Technician:</span>
+              <span class="info-value">${leadTech.first_name || ''} ${leadTech.last_name || ''}</span>
+            </div>
+            ${(selectedWO.teamMembers || []).map((member, idx) => `
+              <div class="info-row">
+                <span class="info-label">Team Member ${idx + 1}:</span>
+                <span class="info-value">${member.user?.first_name || ''} ${member.user?.last_name || ''}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="section">
+            <div class="section-title">Hours Summary</div>
+            <table class="hours-table">
+              <tr>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Rate</th>
+                <th>Total</th>
+              </tr>
+              <tr>
+                <td>Regular Hours</td>
+                <td>${dailyTotals.totalRT.toFixed(2)} hrs</td>
+                <td>$64.00/hr</td>
+                <td>$${(dailyTotals.totalRT * 64).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Overtime Hours</td>
+                <td>${dailyTotals.totalOT.toFixed(2)} hrs</td>
+                <td>$96.00/hr</td>
+                <td>$${(dailyTotals.totalOT * 96).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Mileage</td>
+                <td>${dailyTotals.totalMiles.toFixed(1)} mi</td>
+                <td>$1.00/mi</td>
+                <td>$${dailyTotals.totalMiles.toFixed(2)}</td>
+              </tr>
+            </table>
+          </div>
+          
+          ${selectedWO.customer_signature ? `
+            <div class="signature-section">
+              <div class="section-title">Customer Acceptance & Signature</div>
+              <div class="signature-box">
+                <div class="signature-image">
+                  <img src="${selectedWO.customer_signature}" alt="Customer Signature" />
+                </div>
+                <div class="signature-details">
+                  <p><strong>Signed By:</strong> ${selectedWO.customer_name || 'N/A'}</p>
+                  <p><strong>Date Signed:</strong> ${formatDateTime(selectedWO.signature_date)}</p>
+                  <p><strong>Work Order:</strong> ${selectedWO.wo_number}</p>
+                </div>
+              </div>
+              <div class="verification">
+                <span class="verification-text">✓ This work order has been verified and signed by the customer</span>
+              </div>
+            </div>
+          ` : `
+            <div class="signature-section">
+              <div class="section-title">Customer Signature</div>
+              <p style="color: #666; margin: 20px 0;">No signature collected</p>
+              <div style="margin-top: 30px;">
+                <p><strong>Signature:</strong> _________________________________</p>
+                <p style="margin-top: 20px;"><strong>Printed Name:</strong> _________________________________</p>
+                <p style="margin-top: 20px;"><strong>Date:</strong> _________________________________</p>
+              </div>
+            </div>
+          `}
+          
+          <div class="footer">
+            <p>EMF Contracting LLC - Field Service Management</p>
+            <p>This document serves as proof of work completion</p>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        
+        <div class="no-print" style="text-align: center; margin-top: 30px;">
+          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-right: 10px;">
+            🖨️ Print Certificate
+          </button>
+          <button onclick="window.close()" style="background: #6b7280; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer;">
+            Close
+          </button>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Unable to open window. Please check popup settings.');
+      return;
+    }
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  // Calculate cost summary with daily hours
+  const calculateCostSummaryWithDailyHours = () => {
+    // Legacy hours from work_orders table
+    const legacyRT = parseFloat(selectedWO.hours_regular) || 0;
+    const legacyOT = parseFloat(selectedWO.hours_overtime) || 0;
+    const legacyMiles = parseFloat(selectedWO.miles) || 0;
+
+    // Legacy team hours
+    let legacyTeamRT = 0, legacyTeamOT = 0, legacyTeamMiles = 0;
+    (selectedWO.teamMembers || []).forEach(m => {
+      legacyTeamRT += parseFloat(m.hours_regular) || 0;
+      legacyTeamOT += parseFloat(m.hours_overtime) || 0;
+      legacyTeamMiles += parseFloat(m.miles) || 0;
+    });
+
+    // Combined totals
+    const totalRT = legacyRT + legacyTeamRT + dailyTotals.totalRT;
+    const totalOT = legacyOT + legacyTeamOT + dailyTotals.totalOT;
+    const totalMiles = legacyMiles + legacyTeamMiles + dailyTotals.totalMiles;
+
+    const adminHours = 2;
+    const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
+
+    const materialBase = parseFloat(selectedWO.material_cost) || 0;
+    const materialWithMarkup = materialBase * 1.25;
+    const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
+    const equipmentWithMarkup = equipmentBase * 1.25;
+    const trailerBase = parseFloat(selectedWO.trailer_cost) || 0;
+    const trailerWithMarkup = trailerBase * 1.25;
+    const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
+    const rentalWithMarkup = rentalBase * 1.25;
+    const mileageCost = totalMiles * 1.00;
+
+    const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+    const remaining = (selectedWO.nte || 0) - grandTotal;
+
+    return {
+      totalRT,
+      totalOT,
+      totalMiles,
+      laborCost,
+      materialBase,
+      materialWithMarkup,
+      equipmentBase,
+      equipmentWithMarkup,
+      trailerBase,
+      trailerWithMarkup,
+      rentalBase,
+      rentalWithMarkup,
+      mileageCost,
+      grandTotal,
+      remaining,
+      isOverBudget: remaining < 0,
+      hasLegacy: (legacyRT + legacyOT + legacyMiles + legacyTeamRT + legacyTeamOT + legacyTeamMiles) > 0,
+      hasDaily: dailyTotals.totalRT + dailyTotals.totalOT + dailyTotals.totalMiles > 0
+    };
+  };
+
+  const costSummary = calculateCostSummaryWithDailyHours();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -191,7 +486,7 @@ export default function WorkOrderDetailModal({
         <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
           <div>
             <h2 className="text-2xl font-bold">{selectedWO.wo_number}</h2>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
               {selectedWO.acknowledged && (
                 <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm inline-block">
                   ✅ Acknowledged
@@ -202,14 +497,27 @@ export default function WorkOrderDetailModal({
                   🔒 Locked
                 </div>
               )}
+              {selectedWO.customer_signature && (
+                <div className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm inline-block">
+                  ✍️ Signed
+                </div>
+              )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-3xl leading-none"
-          >
-            ×
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={downloadCompletionCertificate}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
+            >
+              📄 Completion Cert
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white text-3xl leading-none"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -327,10 +635,113 @@ export default function WorkOrderDetailModal({
             </div>
           </div>
 
+          {/* Customer Signature Section */}
+          {selectedWO.customer_signature && (
+            <div className="bg-green-900 rounded-lg p-4">
+              <h3 className="font-bold mb-3 text-lg text-green-300">✍️ Customer Signature</h3>
+              <div className="flex gap-4 items-start">
+                <div className="bg-white rounded-lg p-3 flex-shrink-0">
+                  <img 
+                    src={selectedWO.customer_signature} 
+                    alt="Customer Signature" 
+                    className="max-w-[250px] h-auto"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-gray-400 text-sm">Signed By:</span>
+                    <p className="font-semibold text-white">{selectedWO.customer_name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-sm">Signed On:</span>
+                    <p className="font-semibold text-white">{formatDateTime(selectedWO.signature_date)}</p>
+                  </div>
+                  <div className="bg-green-800 rounded-lg p-2 mt-2">
+                    <p className="text-green-200 text-sm">✓ Work verified and signed by customer</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Daily Hours Log Section */}
+          <div className="bg-gray-700 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-lg">📅 Daily Hours Log</h3>
+              <div className="flex items-center gap-4">
+                <div className="text-sm">
+                  <span className="text-gray-400">Total: </span>
+                  <span className="text-green-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
+                  <span className="text-gray-500 mx-1">|</span>
+                  <span className="text-orange-400 font-bold">{dailyTotals.totalOT.toFixed(1)} OT</span>
+                  <span className="text-gray-500 mx-1">|</span>
+                  <span className="text-blue-400 font-bold">{dailyTotals.totalMiles.toFixed(1)} mi</span>
+                </div>
+                <button
+                  onClick={loadDailyHoursLog}
+                  className="text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
+
+            {loadingHours ? (
+              <div className="text-center py-4 text-gray-400">Loading hours...</div>
+            ) : dailyHoursLog.length === 0 ? (
+              <div className="text-center py-4 text-gray-400">
+                No daily hours logged yet. Field workers can log hours from the mobile app.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {dailyHoursLog.map((entry) => (
+                  <div key={entry.id} className="bg-gray-600 rounded-lg p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="font-semibold text-white">
+                          {entry.user?.first_name} {entry.user?.last_name}
+                        </span>
+                        <span className="text-gray-400 text-sm ml-2">
+                          {new Date(entry.work_date).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            month: 'short', 
+                            day: 'numeric' 
+                          })}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {entry.notes?.includes('[MIGRATED]') ? '📋 Migrated' : ''}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-400">RT:</span>
+                        <span className="text-green-400 font-semibold ml-1">{entry.hours_regular || 0} hrs</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">OT:</span>
+                        <span className="text-orange-400 font-semibold ml-1">{entry.hours_overtime || 0} hrs</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Miles:</span>
+                        <span className="text-blue-400 font-semibold ml-1">{entry.miles || 0} mi</span>
+                      </div>
+                    </div>
+                    {entry.notes && !entry.notes.includes('[MIGRATED]') && (
+                      <div className="mt-2 text-xs text-gray-400">
+                        📝 {entry.notes}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Team Members */}
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg">Team Members</h3>
+              <h3 className="font-bold text-lg">👥 Team Members</h3>
               <button
                 onClick={() => setShowTeamModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
@@ -342,12 +753,12 @@ export default function WorkOrderDetailModal({
             <div className="space-y-3">
               {(!selectedWO.teamMembers || selectedWO.teamMembers.length === 0) ? (
                 <div className="text-center text-gray-400 py-4 text-sm">
-                  No additional team members yet
+                  No additional team members assigned
                 </div>
               ) : (
                 selectedWO.teamMembers.map(member => (
                   <div key={member.assignment_id} className="bg-gray-600 rounded-lg p-3">
-                    <div className="flex justify-between items-start mb-2">
+                    <div className="flex justify-between items-start">
                       <div>
                         <div className="font-bold">
                           {member.user?.first_name} {member.user?.last_name}
@@ -363,105 +774,17 @@ export default function WorkOrderDetailModal({
                         Remove
                       </button>
                     </div>
-
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div>
-                        <label className="text-xs text-gray-400">RT Hours</label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={member.hours_regular || 0}
-                          onChange={(e) => handleUpdateTeamMemberField(
-                            member.assignment_id, 
-                            'hours_regular', 
-                            parseFloat(e.target.value) || 0
-                          )}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">OT Hours</label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={member.hours_overtime || 0}
-                          onChange={(e) => handleUpdateTeamMemberField(
-                            member.assignment_id, 
-                            'hours_overtime', 
-                            parseFloat(e.target.value) || 0
-                          )}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">Miles</label>
-                        <input
-                          type="number"
-                          value={member.miles || 0}
-                          onChange={(e) => handleUpdateTeamMemberField(
-                            member.assignment_id, 
-                            'miles', 
-                            parseFloat(e.target.value) || 0
-                          )}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="text-xs text-gray-400 mt-2">
-                      Labor: ${(((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96)).toFixed(2)}
-                    </div>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* Primary Tech Field Data */}
+          {/* Materials & Equipment */}
           <div className="bg-gray-700 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-lg">Primary Tech Field Data</h3>
+            <h3 className="font-bold mb-3 text-lg">🛠️ Materials & Equipment</h3>
             
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Regular Hours (RT)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={selectedWO.hours_regular || 0}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, hours_regular: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => handleUpdateField('hours_regular', selectedWO.hours_regular)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
-                />
-                <div className="text-xs text-gray-500 mt-1">Up to 8 hrs @ $64/hr</div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Overtime Hours (OT)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={selectedWO.hours_overtime || 0}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, hours_overtime: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => handleUpdateField('hours_overtime', selectedWO.hours_overtime)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
-                />
-                <div className="text-xs text-gray-500 mt-1">Over 8 hrs @ $96/hr</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Miles</label>
-                <input
-                  type="number"
-                  value={selectedWO.miles || 0}
-                  onChange={(e) => setSelectedWO({ ...selectedWO, miles: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => handleUpdateField('miles', selectedWO.miles)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
-                />
-                <div className="text-xs text-gray-500 mt-1">@ $1.00/mile</div>
-              </div>
-
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Material Cost ($)</label>
                 <input
@@ -517,6 +840,12 @@ export default function WorkOrderDetailModal({
           {/* Budget & Cost Summary */}
           <div className="bg-gray-700 rounded-lg p-4">
             <h3 className="font-bold mb-3 text-lg">💰 Budget & Cost Summary</h3>
+
+            {(costSummary.hasLegacy && costSummary.hasDaily) && (
+              <div className="bg-blue-900 text-blue-200 rounded-lg p-2 mb-3 text-sm text-center">
+                ℹ️ Includes legacy hours + daily log entries
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
@@ -545,12 +874,12 @@ export default function WorkOrderDetailModal({
               <div className="font-bold mb-2">LABOR (with 2 Admin Hours)</div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>Lead Tech Labor</span>
-                  <span>${(costSummary.leadRegular + costSummary.leadOvertime).toFixed(2)}</span>
+                  <span>Regular Hours ({costSummary.totalRT.toFixed(1)} hrs × $64)</span>
+                  <span>${(costSummary.totalRT * 64).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Team Labor</span>
-                  <span>${costSummary.teamLabor.toFixed(2)}</span>
+                  <span>Overtime Hours ({costSummary.totalOT.toFixed(1)} hrs × $96)</span>
+                  <span>${(costSummary.totalOT * 96).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-yellow-300">
                   <span>+ Admin Hours</span>
@@ -558,7 +887,7 @@ export default function WorkOrderDetailModal({
                 </div>
                 <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
                   <span>Total Labor:</span>
-                  <span>${costSummary.totalLabor.toFixed(2)}</span>
+                  <span>${costSummary.laborCost.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -566,11 +895,11 @@ export default function WorkOrderDetailModal({
             <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div className="flex justify-between">
                 <span className="text-gray-400">Materials:</span>
-                <span>${costSummary.materialsBase.toFixed(2)}</span>
+                <span>${costSummary.materialBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-yellow-300">
                 <span className="text-gray-400">+ 25% Markup:</span>
-                <span>= ${costSummary.materialsWithMarkup.toFixed(2)}</span>
+                <span>= ${costSummary.materialWithMarkup.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between">
@@ -602,7 +931,7 @@ export default function WorkOrderDetailModal({
               
               <div className="flex justify-between col-span-2">
                 <span className="text-gray-400">Total Mileage:</span>
-                <span>{costSummary.totalMiles} mi × $1.00 = ${costSummary.mileageCost.toFixed(2)}</span>
+                <span>{costSummary.totalMiles.toFixed(1)} mi × $1.00 = ${costSummary.mileageCost.toFixed(2)}</span>
               </div>
             </div>
 

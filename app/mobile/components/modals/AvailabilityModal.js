@@ -20,7 +20,6 @@ export default function AvailabilityModal({
   const estNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const hour = estNow.getHours();
   const dayOfWeek = estNow.getDay();
-  const isAfter8PM = hour >= 20;
 
   // Determine what day we're asking about
   let targetDay = '';
@@ -64,15 +63,13 @@ export default function AvailabilityModal({
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">⏰</div>
           <h2 className="text-2xl font-bold text-white mb-2">
-            {isAfter8PM ? '🚨 ' + t('availabilityOverdue') : headerText}
+            {headerText}
           </h2>
           <p className="text-gray-300">
-            {isAfter8PM 
-              ? t('mustSubmitAvailability')
-              : subHeaderText}
+            {subHeaderText}
           </p>
           <p className="text-sm text-yellow-400 mt-2">
-            {t('deadline')}
+            {language === 'en' ? 'Please respond to continue using the app' : 'Por favor responda para continuar usando la app'}
           </p>
         </div>
 
@@ -184,14 +181,6 @@ export default function AvailabilityModal({
         >
           {saving ? t('submitting') : '✅ ' + t('submitAvailability')}
         </button>
-
-        {isAfter8PM && (
-          <div className="mt-4 bg-red-900 rounded-lg p-3 text-center">
-            <p className="text-red-200 text-sm font-bold">
-              ⚠️ {t('appLockedUntilSubmit')}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

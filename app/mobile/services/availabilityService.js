@@ -28,31 +28,25 @@ export function shouldShowAvailabilityModal(hour, dayOfWeek, hasSubmittedToday) 
     return { show: false, blocked: false };
   }
 
-  // Friday (5): Only ask about TODAY's emergencies (6pm-8pm window)
+  // Friday (5): Only ask about TODAY's emergencies (5pm onwards, blocked until reply)
   if (dayOfWeek === 5) {
-    if (hour >= 18 && hour < 20) {
-      return { show: true, blocked: false };
-    } else if (hour >= 20) {
+    if (hour >= 17) {
       return { show: true, blocked: true };
     }
     return { show: false, blocked: false };
   }
 
-  // Sunday (0): Ask about TOMORROW (Monday) - scheduled and emergency work
+  // Sunday (0): Ask about TOMORROW (Monday) - scheduled and emergency work (5pm onwards, blocked until reply)
   if (dayOfWeek === 0) {
-    if (hour >= 18 && hour < 20) {
-      return { show: true, blocked: false };
-    } else if (hour >= 20) {
+    if (hour >= 17) {
       return { show: true, blocked: true };
     }
     return { show: false, blocked: false };
   }
 
-  // Monday-Thursday (1-4): Ask about TOMORROW and TODAY's emergencies
+  // Monday-Thursday (1-4): Ask about TOMORROW and TODAY's emergencies (5pm onwards, blocked until reply)
   if (dayOfWeek >= 1 && dayOfWeek <= 4) {
-    if (hour >= 18 && hour < 20) {
-      return { show: true, blocked: false };
-    } else if (hour >= 20) {
+    if (hour >= 17) {
       return { show: true, blocked: true };
     }
     return { show: false, blocked: false };

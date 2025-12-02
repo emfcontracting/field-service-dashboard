@@ -1,4 +1,4 @@
-// useWorkOrders.js - Work Orders Management Hook (WITH SIGNATURE SUPPORT)
+// useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS & SIGNATURE SUPPORT)
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -10,6 +10,10 @@ export function useWorkOrders(currentUser) {
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [editingField, setEditingField] = useState({});
+  
+  // DAILY HOURS LOG STATE
+  const [dailyLogs, setDailyLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   
   const supabase = createClientComponentClient();
 
@@ -39,6 +43,15 @@ export function useWorkOrders(currentUser) {
       supabase.removeChannel(channel);
     };
   }, [currentUser]);
+
+  // Load daily logs when selected work order changes
+  useEffect(() => {
+    if (selectedWO?.wo_id) {
+      loadDailyLogs(selectedWO.wo_id);
+    } else {
+      setDailyLogs([]);
+    }
+  }, [selectedWO?.wo_id]);
 
   async function loadWorkOrders() {
     if (!currentUser) return;
@@ -138,6 +151,144 @@ export function useWorkOrders(currentUser) {
       console.error('Error loading completed work orders:', err);
     }
   }
+
+  // ==================== DAILY HOURS LOG FUNCTIONS ====================
+  
+  async function loadDailyLogs(woId) {
+    if (!woId) return;
+    
+    try {
+      setLoadingLogs(true);
+      
+      const { data, error } = await supabase
+        .from('daily_hours_log')
+        .select(`
+          *,
+          user:users(first_name, last_name)
+        `)
+        .eq('wo_id', woId)
+        .order('work_date', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading daily logs:', error);
+        setDailyLogs([]);
+        return;
+      }
+      
+      // Transform data to include log_id as id for compatibility
+      const transformedData = (data || []).map(log => ({
+        ...log,
+        log_id: log.id || log.log_id
+      }));
+      
+      setDailyLogs(transformedData);
+    } catch (err) {
+      console.error('Error in loadDailyLogs:', err);
+      setDailyLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }
+
+  async function addDailyHours(hoursData) {
+    if (!selectedWO?.wo_id) {
+      throw new Error('No work order selected');
+    }
+
+    try {
+      setSaving(true);
+      
+      // Check for duplicate entry on same date for same user
+      const { data: existing } = await supabase
+        .from('daily_hours_log')
+        .select('id')
+        .eq('wo_id', selectedWO.wo_id)
+        .eq('user_id', hoursData.userId)
+        .eq('work_date', hoursData.workDate)
+        .single();
+
+      if (existing) {
+        throw new Error('Hours already logged for this date. Edit the existing entry instead.');
+      }
+
+      const { error } = await supabase
+        .from('daily_hours_log')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: hoursData.userId,
+          assignment_id: hoursData.assignmentId || null,
+          work_date: hoursData.workDate,
+          hours_regular: hoursData.hoursRegular || 0,
+          hours_overtime: hoursData.hoursOvertime || 0,
+          miles: hoursData.miles || 0,
+          notes: hoursData.notes || null,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      // Reload daily logs
+      await loadDailyLogs(selectedWO.wo_id);
+      
+      return true;
+    } catch (err) {
+      console.error('Error adding daily hours:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function downloadLogs(userId = null) {
+    if (!selectedWO || dailyLogs.length === 0) {
+      alert('No logs to download');
+      return;
+    }
+
+    // Filter logs if userId specified
+    const logsToExport = userId 
+      ? dailyLogs.filter(log => log.user_id === userId)
+      : dailyLogs;
+
+    if (logsToExport.length === 0) {
+      alert('No logs found for this user');
+      return;
+    }
+
+    // Create CSV content
+    const headers = ['Date', 'User', 'Regular Hours', 'Overtime Hours', 'Miles', 'Notes', 'Created At'];
+    const rows = logsToExport.map(log => [
+      log.work_date,
+      log.user ? `${log.user.first_name} ${log.user.last_name}` : 'Unknown',
+      log.hours_regular || 0,
+      log.hours_overtime || 0,
+      log.miles || 0,
+      `"${(log.notes || '').replace(/"/g, '""')}"`,
+      new Date(log.created_at).toLocaleString()
+    ]);
+
+    const csvContent = [
+      `Work Order: ${selectedWO.wo_number}`,
+      `Building: ${selectedWO.building}`,
+      `Generated: ${new Date().toLocaleString()}`,
+      '',
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${selectedWO.wo_number}_hours_log.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // ==================== CHECK IN/OUT FUNCTIONS ====================
 
   async function checkIn(woId) {
     try {
@@ -359,7 +510,7 @@ export function useWorkOrders(currentUser) {
     }
   }
 
-  // Add comment with bilingual support
+  // Add comment
   async function addComment(commentText) {
     if (!commentText || !commentText.trim() || !selectedWO) return;
 
@@ -423,6 +574,12 @@ export function useWorkOrders(currentUser) {
     handleFieldChange,
     getFieldValue,
     addComment,
-    saveSignature  // ADD THIS EXPORT
+    saveSignature,
+    // DAILY HOURS EXPORTS
+    dailyLogs,
+    loadingLogs,
+    loadDailyLogs,
+    addDailyHours,
+    downloadLogs
   };
 }

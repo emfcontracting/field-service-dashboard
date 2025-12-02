@@ -1,4 +1,4 @@
-// components/TeamMembersDailyHours.js - Bilingual Team Members Daily Hours with Logging
+// components/TeamMembersDailyHours.js - Team Members Daily Hours (VIEW ALL, LOG OWN ONLY)
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -6,6 +6,7 @@ import AddDailyHoursModal from './modals/AddDailyHoursModal';
 
 export default function TeamMembersDailyHours({
   currentTeamList,
+  currentUser,  // ADDED: Current logged-in user
   dailyLogs,
   status,
   saving,
@@ -14,12 +15,20 @@ export default function TeamMembersDailyHours({
   onDownloadLogs
 }) {
   const { language } = useLanguage();
-  const t = (key) => translations[language][key];
+  const t = (key) => translations[language]?.[key] || key;
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
 
+  // Only allow adding hours for yourself
   function handleOpenAddModal(member) {
+    // Check if this member is the current user
+    if (member.user_id !== currentUser?.user_id) {
+      alert(language === 'en' 
+        ? 'You can only log your own hours' 
+        : 'Solo puede registrar sus propias horas');
+      return;
+    }
     setSelectedMember(member);
     setShowAddModal(true);
   }
@@ -51,7 +60,7 @@ export default function TeamMembersDailyHours({
     <>
       <div className="bg-gray-800 rounded-lg p-4">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold">{t('teamMembers') || 'Team Members'}</h3>
+          <h3 className="font-bold">👥 {t('teamMembers') || 'Team Members'}</h3>
           {status !== 'completed' && (
             <button
               onClick={onLoadTeamMembers}
@@ -68,14 +77,20 @@ export default function TeamMembersDailyHours({
               const memberLogs = getMemberLogs(member.user_id);
               const totals = calculateMemberTotals(member.user_id);
               const totalHours = totals.totalRT + totals.totalOT;
+              const isCurrentUser = member.user_id === currentUser?.user_id;
 
               return (
-                <div key={member.assignment_id} className="bg-gray-700 rounded-lg p-3">
+                <div key={member.assignment_id} className={`bg-gray-700 rounded-lg p-3 ${isCurrentUser ? 'border-2 border-blue-500' : ''}`}>
                   {/* Member Header */}
                   <div className="flex justify-between items-center mb-3">
                     <div>
-                      <p className="font-semibold">
+                      <p className="font-semibold flex items-center gap-2">
                         {member.user?.first_name || t('unknown') || 'Unknown'} {member.user?.last_name || ''}
+                        {isCurrentUser && (
+                          <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">
+                            {language === 'en' ? 'YOU' : 'TÚ'}
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-gray-400">
                         {totals.totalRT.toFixed(1)} RT • {totals.totalOT.toFixed(1)} OT • {totals.totalMiles.toFixed(1)} mi
@@ -91,7 +106,8 @@ export default function TeamMembersDailyHours({
                           📥
                         </button>
                       )}
-                      {status !== 'completed' && (
+                      {/* Only show Log button if this is the current user AND not completed */}
+                      {status !== 'completed' && isCurrentUser && (
                         <button
                           onClick={() => handleOpenAddModal(member)}
                           className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs font-semibold"
@@ -124,7 +140,7 @@ export default function TeamMembersDailyHours({
                     </div>
                   </div>
 
-                  {/* Member Daily Logs */}
+                  {/* Member Daily Logs - VIEWABLE BY ALL */}
                   {memberLogs.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs text-gray-400 font-semibold">
@@ -132,7 +148,7 @@ export default function TeamMembersDailyHours({
                       </p>
                       {memberLogs.slice(0, 3).map((log) => (
                         <div
-                          key={log.log_id}
+                          key={log.log_id || log.id}
                           className="bg-gray-800 rounded p-2 text-xs"
                         >
                           <div className="flex justify-between items-start">
@@ -181,9 +197,16 @@ export default function TeamMembersDailyHours({
             {t('noTeamMembers') || 'No additional team members yet'}
           </p>
         )}
+
+        {/* Info note about logging */}
+        <div className="mt-3 bg-blue-900/50 rounded p-2 text-xs text-blue-200">
+          💡 {language === 'en' 
+            ? 'Each person can only log their own hours. You can view everyone\'s logged hours.' 
+            : 'Cada persona solo puede registrar sus propias horas. Puede ver las horas de todos.'}
+        </div>
       </div>
 
-      {/* Add Daily Hours Modal */}
+      {/* Add Daily Hours Modal - Only for current user */}
       {selectedMember && (
         <AddDailyHoursModal
           show={showAddModal}

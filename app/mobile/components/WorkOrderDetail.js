@@ -1,12 +1,12 @@
-// Work Order Detail View Component - WITH DAILY HOURS, TEAM, FIXED COMMENTS
+// Work Order Detail View Component - WITH DAILY HOURS LOG (ORIGINAL VERSION RESTORED)
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
-import DailyHoursSection from './DailyHoursSection';
-import TeamMembersSection from './TeamMembersSection';
+import PrimaryTechDailyHours from './PrimaryTechDailyHours';
+import TeamMembersDailyHours from './TeamMembersDailyHours';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
 
@@ -27,11 +27,10 @@ export default function WorkOrderDetail({
   onShowChangePin,
   onLogout,
   onSaveSignature,
-  getFieldValue,
-  handleFieldChange,
-  getTeamFieldValue,
-  handleTeamFieldChange,
-  handleUpdateTeamMemberField
+  // DAILY HOURS PROPS
+  dailyLogs = [],
+  onAddDailyHours,
+  onDownloadLogs
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
@@ -68,7 +67,7 @@ export default function WorkOrderDetail({
       return;
     }
     // Pass the comment text to the parent handler
-    await onAddComment(newComment.trim(), 'en', null);
+    await onAddComment(newComment.trim());
   }
 
   function downloadCompletionCertificate() {
@@ -370,14 +369,6 @@ export default function WorkOrderDetail({
             </div>
           </div>
 
-          {/* Team Members Section (Simplified - just names) */}
-          <TeamMembersSection
-            currentTeamList={currentTeamList}
-            status={status}
-            saving={saving}
-            onLoadTeamMembers={onLoadTeamMembers}
-          />
-
           {/* Update Status */}
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('updateStatus')}</h3>
@@ -396,11 +387,27 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* MY DAILY HOURS SECTION */}
-          <DailyHoursSection
+          {/* PRIMARY TECH DAILY HOURS SECTION - with CSV download */}
+          <PrimaryTechDailyHours
             workOrder={wo}
             currentUser={currentUser}
+            dailyLogs={dailyLogs}
             status={status}
+            saving={saving}
+            onAddDailyHours={onAddDailyHours}
+            onDownloadLogs={onDownloadLogs}
+          />
+
+          {/* TEAM MEMBERS DAILY HOURS SECTION - view all, log own only */}
+          <TeamMembersDailyHours
+            currentTeamList={currentTeamList}
+            currentUser={currentUser}
+            dailyLogs={dailyLogs}
+            status={status}
+            saving={saving}
+            onLoadTeamMembers={onLoadTeamMembers}
+            onAddDailyHours={onAddDailyHours}
+            onDownloadLogs={onDownloadLogs}
           />
 
           {/* Email Photos Section */}
@@ -409,7 +416,7 @@ export default function WorkOrderDetail({
             currentUser={currentUser}
           />
 
-          {/* Cost Summary Section */}
+          {/* Cost Summary Section - includes legacy + daily hours */}
           <CostSummarySection
             workOrder={wo}
             currentTeamList={currentTeamList}

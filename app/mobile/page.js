@@ -1,4 +1,4 @@
-//Mobile App - Refactored & Modular with Bilingual Support
+//Mobile App - Refactored & Modular with Bilingual Support (WITH DAILY HOURS)
 'use client';
 import { useState } from 'react';
 
@@ -26,7 +26,7 @@ export default function MobilePage() {
   // Authentication
   const { currentUser, loading, error, setError, login, logout, changePin } = useAuth();
   
-  // Work Orders
+  // Work Orders - INCLUDING DAILY HOURS
   const {
     workOrders,
     completedWorkOrders,
@@ -43,7 +43,12 @@ export default function MobilePage() {
     handleFieldChange,
     getFieldValue,
     loadWorkOrders,
-    saveSignature  // ADD THIS
+    saveSignature,
+    // DAILY HOURS EXPORTS
+    dailyLogs,
+    loadingLogs,
+    addDailyHours,
+    downloadLogs
   } = useWorkOrders(currentUser);
 
   // Team Management
@@ -150,7 +155,11 @@ export default function MobilePage() {
         setShowChangePinModal={setShowChangePinModal}
         changePin={changePin}
         loadWorkOrders={loadWorkOrders}
-        saveSignature={saveSignature}  // ADD THIS
+        saveSignature={saveSignature}
+        // DAILY HOURS PROPS
+        dailyLogs={dailyLogs}
+        addDailyHours={addDailyHours}
+        downloadLogs={downloadLogs}
       />
     </LanguageProvider>
   );
@@ -203,7 +212,11 @@ function MobileAppContent({
   setShowChangePinModal,
   changePin,
   loadWorkOrders,
-  saveSignature  // ADD THIS
+  saveSignature,
+  // DAILY HOURS PROPS
+  dailyLogs,
+  addDailyHours,
+  downloadLogs
 }) {
   // Login Screen
   if (!currentUser) {
@@ -258,12 +271,16 @@ function MobileAppContent({
           onRemoveTeamMember={removeTeamMember}
           onShowChangePin={() => setShowChangePinModal(true)}
           onLogout={handleLogout}
-          onSaveSignature={saveSignature}  // ADD THIS
+          onSaveSignature={saveSignature}
           getFieldValue={getFieldValue}
           handleFieldChange={handleFieldChange}
           getTeamFieldValue={getTeamFieldValue}
           handleTeamFieldChange={handleTeamFieldChange}
           handleUpdateTeamMemberField={updateTeamMemberField}
+          // DAILY HOURS PROPS
+          dailyLogs={dailyLogs}
+          onAddDailyHours={addDailyHours}
+          onDownloadLogs={downloadLogs}
         />
         
         {/* Modals */}

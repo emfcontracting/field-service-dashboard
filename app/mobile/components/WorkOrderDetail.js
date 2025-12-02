@@ -5,7 +5,7 @@ import { translations } from '../utils/translations';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
-import PrimaryTechFieldData from './PrimaryTechFieldData';
+import AdditionalCostsSection from './AdditionalCostsSection';
 import PrimaryTechDailyHours from './PrimaryTechDailyHours';
 import TeamMembersSection from './TeamMembersSection';
 import TeamMembersDailyHours from './TeamMembersDailyHours';
@@ -397,8 +397,8 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* PRIMARY TECH FIELD DATA - Materials, Equipment, Trailer, Rental */}
-          <PrimaryTechFieldData
+          {/* ADDITIONAL COSTS - Materials, Equipment, Trailer, Rental */}
+          <AdditionalCostsSection
             workOrder={wo}
             status={status}
             saving={saving}

@@ -1,4 +1,4 @@
-// useWorkOrders.js - Work Orders Management Hook (UPDATED WITH TRANSLATION SUPPORT)
+// useWorkOrders.js - Work Orders Management Hook (WITH SIGNATURE SUPPORT)
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -178,7 +178,7 @@ export function useWorkOrders(currentUser) {
       if (selectedWO && selectedWO.wo_id === woId) {
         const { data: updated } = await supabase
           .from('work_orders')
-          .select('*')
+          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
           .eq('wo_id', woId)
           .single();
         setSelectedWO(updated);
@@ -228,7 +228,7 @@ export function useWorkOrders(currentUser) {
       if (selectedWO && selectedWO.wo_id === woId) {
         const { data: updated } = await supabase
           .from('work_orders')
-          .select('*')
+          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
           .eq('wo_id', woId)
           .single();
         setSelectedWO(updated);
@@ -318,56 +318,80 @@ export function useWorkOrders(currentUser) {
     return editingField.hasOwnProperty(field) ? editingField[field] : (selectedWO[field] || '');
   }
 
-  // UPDATED: Enhanced addComment with bilingual support
-  async function addComment(translatedText, originalLanguage = 'en', originalText = null) {
-    if (!translatedText.trim() || !selectedWO) return;
+  // SIGNATURE SAVE FUNCTION
+  async function saveSignature(signatureData) {
+    if (!selectedWO) {
+      throw new Error('No work order selected');
+    }
 
     try {
       setSaving(true);
       
-      // Get existing comments
-      const { data: wo } = await supabase
-        .from('work_orders')
-        .select('comments, comments_spanish')
-        .eq('wo_id', selectedWO.wo_id)
-        .single();
-
-      const existingCommentsEnglish = wo.comments || '';
-      const existingCommentsSpanish = wo.comments_spanish || '';
-      const timestamp = new Date().toLocaleString();
-      
-      // Add to English comments (always - either original English or translated)
-      const updatedCommentsEnglish = existingCommentsEnglish 
-        ? `${existingCommentsEnglish}\n\n[${timestamp}] ${currentUser.first_name}: ${translatedText}`
-        : `[${timestamp}] ${currentUser.first_name}: ${translatedText}`;
-      
-      // If comment was in Spanish, also store original Spanish version
-      let updatedCommentsSpanish = existingCommentsSpanish;
-      if (originalLanguage === 'es' && originalText) {
-        updatedCommentsSpanish = existingCommentsSpanish
-          ? `${existingCommentsSpanish}\n\n[${timestamp}] ${currentUser.first_name}: ${originalText}`
-          : `[${timestamp}] ${currentUser.first_name}: ${originalText}`;
-      }
-
-      // Update database with both versions
       const { error } = await supabase
         .from('work_orders')
-        .update({ 
-          comments: updatedCommentsEnglish,
-          comments_spanish: originalLanguage === 'es' ? updatedCommentsSpanish : existingCommentsSpanish,
-          comments_original_language: originalLanguage
+        .update({
+          customer_signature: signatureData.signature,
+          customer_name: signatureData.customerName,
+          signature_date: signatureData.signedAt
         })
         .eq('wo_id', selectedWO.wo_id);
 
       if (error) throw error;
 
-      setNewComment('');
+      // Reload the work order to get updated data
+      const { data: updated, error: fetchError } = await supabase
+        .from('work_orders')
+        .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      setSelectedWO(updated);
       await loadWorkOrders();
+      
+      return true;
+    } catch (err) {
+      console.error('Error saving signature:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Add comment with bilingual support
+  async function addComment(commentText) {
+    if (!commentText || !commentText.trim() || !selectedWO) return;
+
+    try {
+      setSaving(true);
+      
+      const { data: wo } = await supabase
+        .from('work_orders')
+        .select('comments')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+
+      const existingComments = wo.comments || '';
+      const timestamp = new Date().toLocaleString();
+      
+      const updatedComments = existingComments 
+        ? `${existingComments}\n\n[${timestamp}] ${currentUser.first_name}: ${commentText}`
+        : `[${timestamp}] ${currentUser.first_name}: ${commentText}`;
+
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ comments: updatedComments })
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
+      setNewComment('');
       
       // Reload the selected work order
       const { data: updated } = await supabase
         .from('work_orders')
-        .select('*')
+        .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
         .eq('wo_id', selectedWO.wo_id)
         .single();
       
@@ -398,6 +422,7 @@ export function useWorkOrders(currentUser) {
     updateField,
     handleFieldChange,
     getFieldValue,
-    addComment
+    addComment,
+    saveSignature  // ADD THIS EXPORT
   };
 }

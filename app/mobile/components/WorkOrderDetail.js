@@ -1,4 +1,4 @@
-// Work Order Detail View Component - Updated with Daily Hours Integration
+// Work Order Detail View Component - Updated with Daily Hours & Signature Support
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -60,6 +60,261 @@ export default function WorkOrderDetail({
     }
   }
 
+  // Generate and download completion certificate
+  function downloadCompletionCertificate() {
+    const age = calculateAge(dateEntered);
+    const completionDate = wo.date_completed ? formatDateTime(wo.date_completed) : formatDateTime(new Date().toISOString());
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Work Order Completion - ${woNumber}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: Arial, sans-serif; 
+            padding: 40px; 
+            background: white;
+            color: #333;
+          }
+          .certificate {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 3px solid #1e40af;
+            padding: 40px;
+            background: white;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #1e40af;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .header h1 {
+            color: #1e40af;
+            font-size: 28px;
+            margin-bottom: 10px;
+          }
+          .header .company {
+            font-size: 18px;
+            color: #666;
+          }
+          .badge {
+            display: inline-block;
+            background: #22c55e;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 15px;
+          }
+          .section {
+            margin-bottom: 25px;
+          }
+          .section-title {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 5px;
+          }
+          .section-content {
+            font-size: 16px;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+          }
+          .info-label {
+            color: #666;
+            font-weight: 500;
+          }
+          .info-value {
+            font-weight: bold;
+            color: #333;
+          }
+          .signature-section {
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 2px solid #1e40af;
+          }
+          .signature-box {
+            display: flex;
+            align-items: flex-start;
+            gap: 30px;
+            margin-top: 20px;
+          }
+          .signature-image {
+            border: 2px solid #e5e7eb;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 8px;
+          }
+          .signature-image img {
+            max-width: 300px;
+            height: auto;
+          }
+          .signature-details {
+            flex: 1;
+          }
+          .signature-details p {
+            margin-bottom: 10px;
+          }
+          .verification {
+            background: #f0fdf4;
+            border: 1px solid #22c55e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+          }
+          .verification-text {
+            color: #166534;
+            font-weight: bold;
+          }
+          .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+          }
+          @media print {
+            body { padding: 20px; }
+            .certificate { border: 2px solid #1e40af; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="certificate">
+          <div class="header">
+            <h1>WORK ORDER COMPLETION CERTIFICATE</h1>
+            <div class="company">EMF Contracting LLC</div>
+            <div class="badge">✓ COMPLETED</div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Work Order Information</div>
+            <div class="grid">
+              <div>
+                <div class="info-row">
+                  <span class="info-label">Work Order #:</span>
+                  <span class="info-value">${woNumber}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Building:</span>
+                  <span class="info-value">${building}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Requestor:</span>
+                  <span class="info-value">${requestor}</span>
+                </div>
+              </div>
+              <div>
+                <div class="info-row">
+                  <span class="info-label">Date Entered:</span>
+                  <span class="info-value">${formatDate(dateEntered)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Date Completed:</span>
+                  <span class="info-value">${completionDate}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Days to Complete:</span>
+                  <span class="info-value">${age} days</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Work Description</div>
+            <div class="section-content">${description}</div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Service Team</div>
+            <div class="info-row">
+              <span class="info-label">Lead Technician:</span>
+              <span class="info-value">${leadTech.first_name || ''} ${leadTech.last_name || ''}</span>
+            </div>
+            ${currentTeamList.map((member, idx) => `
+              <div class="info-row">
+                <span class="info-label">Team Member ${idx + 1}:</span>
+                <span class="info-value">${member.user?.first_name || ''} ${member.user?.last_name || ''}</span>
+              </div>
+            `).join('')}
+          </div>
+          
+          ${wo.customer_signature ? `
+            <div class="signature-section">
+              <div class="section-title">Customer Acceptance & Signature</div>
+              <div class="signature-box">
+                <div class="signature-image">
+                  <img src="${wo.customer_signature}" alt="Customer Signature" />
+                </div>
+                <div class="signature-details">
+                  <p><strong>Signed By:</strong> ${wo.customer_name || 'N/A'}</p>
+                  <p><strong>Date Signed:</strong> ${formatDateTime(wo.signature_date)}</p>
+                  <p><strong>Work Order:</strong> ${woNumber}</p>
+                </div>
+              </div>
+              <div class="verification">
+                <span class="verification-text">✓ This work order has been verified and signed by the customer</span>
+              </div>
+            </div>
+          ` : `
+            <div class="signature-section">
+              <div class="section-title">Customer Signature</div>
+              <p style="color: #666; margin: 20px 0;">No signature collected</p>
+              <div style="margin-top: 30px;">
+                <p><strong>Signature:</strong> _________________________________</p>
+                <p style="margin-top: 20px;"><strong>Printed Name:</strong> _________________________________</p>
+                <p style="margin-top: 20px;"><strong>Date:</strong> _________________________________</p>
+              </div>
+            </div>
+          `}
+          
+          <div class="footer">
+            <p>EMF Contracting LLC - Field Service Management</p>
+            <p>This document serves as proof of work completion</p>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        
+        <div class="no-print" style="text-align: center; margin-top: 30px;">
+          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-right: 10px;">
+            🖨️ Print Certificate
+          </button>
+          <button onclick="window.close()" style="background: #6b7280; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer;">
+            Close
+          </button>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert(language === 'en' ? 'Unable to open window. Please check popup settings.' : 'No se puede abrir la ventana. Verifique los popups.');
+      return;
+    }
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  }
+
   function handlePrintWO() {
     const age = calculateAge(dateEntered);
     
@@ -72,9 +327,14 @@ export default function WorkOrderDetail({
     const signatureSection = wo.customer_signature ? `
       <div class="section">
         <h2>Customer Signature</h2>
-        <img src="${wo.customer_signature}" alt="Customer Signature" style="max-width: 400px; border: 1px solid #ccc; padding: 10px;">
+        <div style="border: 2px solid #e5e7eb; padding: 15px; border-radius: 8px; background: #f9fafb; margin: 15px 0;">
+          <img src="${wo.customer_signature}" alt="Customer Signature" style="max-width: 350px; height: auto;">
+        </div>
         <div class="value"><span class="label">Signed By:</span> ${wo.customer_name || 'N/A'}</div>
         <div class="value"><span class="label">Signed On:</span> ${formatDateTime(wo.signature_date)}</div>
+        <div style="background: #f0fdf4; border: 1px solid #22c55e; padding: 10px; border-radius: 5px; margin-top: 10px;">
+          <strong style="color: #166534;">✓ Customer verified and signed</strong>
+        </div>
       </div>
     ` : '';
     
@@ -230,6 +490,14 @@ export default function WorkOrderDetail({
                   ✍️ {language === 'en' ? 'Get Signature' : 'Obtener Firma'}
                 </button>
               )}
+              {wo.customer_signature && (
+                <button
+                  onClick={downloadCompletionCertificate}
+                  className="bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold"
+                >
+                  📄 {language === 'en' ? 'Completion Cert' : 'Cert. Completado'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -281,7 +549,7 @@ export default function WorkOrderDetail({
             </div>
           </div>
 
-          {/* Team Members Section - Simplified (no hours inputs) */}
+          {/* Team Members Section */}
           <TeamMembersSection
             currentTeamList={currentTeamList}
             status={status}
@@ -308,7 +576,7 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* Daily Hours Section - NEW */}
+          {/* Daily Hours Section */}
           <DailyHoursSection
             workOrder={wo}
             currentUser={currentUser}
@@ -412,7 +680,7 @@ export default function WorkOrderDetail({
                   disabled={saving}
                 />
                 <button
-                  onClick={onAddComment}
+                  onClick={() => onAddComment(newComment)}
                   disabled={saving || !newComment.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold disabled:bg-gray-600"
                 >

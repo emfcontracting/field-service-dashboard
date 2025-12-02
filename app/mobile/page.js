@@ -42,7 +42,8 @@ export default function MobilePage() {
     addComment,
     handleFieldChange,
     getFieldValue,
-    loadWorkOrders
+    loadWorkOrders,
+    saveSignature  // ADD THIS
   } = useWorkOrders(currentUser);
 
   // Team Management
@@ -56,7 +57,8 @@ export default function MobilePage() {
     addTeamMember,
     updateTeamMemberField,
     handleTeamFieldChange,
-    getTeamFieldValue
+    getTeamFieldValue,
+    removeTeamMember
   } = useTeam(selectedWO);
 
   // Availability
@@ -129,6 +131,7 @@ export default function MobilePage() {
         setShowTeamModal={setShowTeamModal}
         loadAllTeamMembers={loadAllTeamMembers}
         handleTeamMemberAdd={handleTeamMemberAdd}
+        removeTeamMember={removeTeamMember}
         updateTeamMemberField={updateTeamMemberField}
         handleTeamFieldChange={handleTeamFieldChange}
         getTeamFieldValue={getTeamFieldValue}
@@ -147,6 +150,7 @@ export default function MobilePage() {
         setShowChangePinModal={setShowChangePinModal}
         changePin={changePin}
         loadWorkOrders={loadWorkOrders}
+        saveSignature={saveSignature}  // ADD THIS
       />
     </LanguageProvider>
   );
@@ -180,6 +184,7 @@ function MobileAppContent({
   setShowTeamModal,
   loadAllTeamMembers,
   handleTeamMemberAdd,
+  removeTeamMember,
   updateTeamMemberField,
   handleTeamFieldChange,
   getTeamFieldValue,
@@ -197,7 +202,8 @@ function MobileAppContent({
   showChangePinModal,
   setShowChangePinModal,
   changePin,
-  loadWorkOrders
+  loadWorkOrders,
+  saveSignature  // ADD THIS
 }) {
   // Login Screen
   if (!currentUser) {
@@ -249,8 +255,10 @@ function MobileAppContent({
           onUpdateField={updateField}
           onAddComment={addComment}
           onLoadTeamMembers={loadAllTeamMembers}
+          onRemoveTeamMember={removeTeamMember}
           onShowChangePin={() => setShowChangePinModal(true)}
           onLogout={handleLogout}
+          onSaveSignature={saveSignature}  // ADD THIS
           getFieldValue={getFieldValue}
           handleFieldChange={handleFieldChange}
           getTeamFieldValue={getTeamFieldValue}

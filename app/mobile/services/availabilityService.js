@@ -1,7 +1,17 @@
 // Availability Service - Daily availability management
 
+// Helper to get today's date in EST timezone as YYYY-MM-DD
+function getTodayEST() {
+  const now = new Date();
+  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const year = estTime.getFullYear();
+  const month = String(estTime.getMonth() + 1).padStart(2, '0');
+  const day = String(estTime.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export async function checkTodaySubmission(supabase, userId) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayEST();
   
   const { data: todaySubmission } = await supabase
     .from('daily_availability')
@@ -18,7 +28,7 @@ export function calculateAvailabilityWindow() {
   const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const hour = estTime.getHours();
   const dayOfWeek = estTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const today = estTime.toISOString().split('T')[0];
+  const today = getTodayEST();
 
   return { hour, dayOfWeek, today };
 }
@@ -57,17 +67,21 @@ export function shouldShowAvailabilityModal(hour, dayOfWeek, hasSubmittedToday) 
 }
 
 export async function submitAvailability(supabase, userId, scheduledWork, emergencyWork, notAvailable) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayEST();
 
+  // Use upsert to handle cases where a record might already exist
+  // This will update if exists, insert if not
   const { error } = await supabase
     .from('daily_availability')
-    .insert({
+    .upsert({
       user_id: userId,
       availability_date: today,
       scheduled_work: scheduledWork,
       emergency_work: emergencyWork,
       not_available: notAvailable,
       submitted_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id,availability_date'
     });
 
   if (error) throw error;

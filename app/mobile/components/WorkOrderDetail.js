@@ -81,34 +81,61 @@ export default function WorkOrderDetail({
 
   function downloadCompletionCertificate() {
     const completionDate = wo.date_completed ? formatDateTime(wo.date_completed) : formatDateTime(new Date().toISOString());
+    const signatureDateTime = wo.signature_date ? formatDateTime(wo.signature_date) : t('na');
+    
+    // Parse location if available
+    let locationDisplay = '';
+    if (wo.signature_location) {
+      const [lat, lng] = wo.signature_location.split(',');
+      locationDisplay = `${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`;
+    }
+    
+    // Escape HTML in comments to prevent XSS
+    const escapedComments = (wo.comments || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    const escapedDescription = (description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${language === 'en' ? 'Work Order Completion' : 'Orden de Trabajo Completada'} - ${woNumber}</title>
+        <title>${language === 'en' ? 'Work Order Completion Certificate' : 'Certificado de Orden de Trabajo Completada'} - ${woNumber}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; padding: 40px; background: white; color: #333; }
           .certificate { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 40px; background: white; }
           .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 20px; margin-bottom: 30px; }
-          .header h1 { color: #1e40af; font-size: 28px; margin-bottom: 10px; }
+          .header h1 { color: #1e40af; font-size: 24px; margin-bottom: 10px; }
           .header .company { font-size: 18px; color: #666; }
           .badge { display: inline-block; background: #22c55e; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; margin-top: 15px; }
           .section { margin-bottom: 25px; }
-          .section-title { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-          .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
-          .info-label { color: #666; font-weight: 500; }
-          .info-value { font-weight: bold; color: #333; }
-          .signature-section { margin-top: 40px; padding-top: 30px; border-top: 2px solid #1e40af; }
-          .signature-box { display: flex; align-items: flex-start; gap: 30px; margin-top: 20px; }
+          .section-title { font-size: 14px; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 2px solid #e5e7eb; padding-bottom: 5px; font-weight: bold; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+          .info-item { padding: 10px; background: #f9fafb; border-radius: 6px; }
+          .info-label { font-size: 11px; color: #666; text-transform: uppercase; margin-bottom: 4px; }
+          .info-value { font-size: 14px; font-weight: 600; color: #333; }
+          .description-box { background: #f9fafb; border-radius: 8px; padding: 15px; margin-top: 10px; }
+          .description-text { font-size: 14px; line-height: 1.6; color: #333; }
+          .comments-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
+          .comments-text { font-size: 12px; line-height: 1.5; color: #333; white-space: pre-wrap; font-family: inherit; }
+          .signature-section { margin-top: 30px; padding-top: 25px; border-top: 2px solid #1e40af; }
+          .signature-grid { display: grid; grid-template-columns: auto 1fr; gap: 30px; align-items: start; }
           .signature-image { border: 2px solid #e5e7eb; padding: 10px; background: #f9fafb; border-radius: 8px; }
-          .signature-image img { max-width: 300px; height: auto; }
+          .signature-image img { max-width: 250px; height: auto; display: block; }
+          .signature-details { }
+          .signature-item { margin-bottom: 12px; }
+          .signature-label { font-size: 11px; color: #666; text-transform: uppercase; margin-bottom: 2px; }
+          .signature-value { font-size: 14px; font-weight: 600; color: #333; }
+          .location-link { color: #1e40af; text-decoration: none; }
+          .location-link:hover { text-decoration: underline; }
           .verification { background: #f0fdf4; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center; }
-          .verification-text { color: #166534; font-weight: bold; }
-          .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-          @media print { body { padding: 20px; } .certificate { border: 2px solid #1e40af; } .no-print { display: none; } }
+          .verification-text { color: #166534; font-weight: bold; font-size: 14px; }
+          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 11px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+          @media print { 
+            body { padding: 20px; } 
+            .certificate { border: 2px solid #1e40af; } 
+            .no-print { display: none; }
+            .comments-box { max-height: none; }
+          }
         </style>
       </head>
       <body>
@@ -119,58 +146,95 @@ export default function WorkOrderDetail({
             <div class="badge">✓ ${language === 'en' ? 'COMPLETED' : 'COMPLETADO'}</div>
           </div>
           
+          <!-- Work Order Info -->
           <div class="section">
             <div class="section-title">${language === 'en' ? 'Work Order Information' : 'Información de la Orden'}</div>
-            <div class="grid">
-              <div>
-                <div class="info-row">
-                  <span class="info-label">${language === 'en' ? 'Work Order #' : 'Orden #'}:</span>
-                  <span class="info-value">${woNumber}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">${t('building')}:</span>
-                  <span class="info-value">${building}</span>
-                </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">${language === 'en' ? 'Work Order #' : 'Orden #'}</div>
+                <div class="info-value">${woNumber}</div>
               </div>
-              <div>
-                <div class="info-row">
-                  <span class="info-label">${t('dateEntered')}:</span>
-                  <span class="info-value">${formatDate(dateEntered)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">${language === 'en' ? 'Date Completed' : 'Fecha Completada'}:</span>
-                  <span class="info-value">${completionDate}</span>
-                </div>
+              <div class="info-item">
+                <div class="info-label">${t('building')}</div>
+                <div class="info-value">${building}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">${t('requestor')}</div>
+                <div class="info-value">${requestor}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">${language === 'en' ? 'Date Completed' : 'Fecha Completada'}</div>
+                <div class="info-value">${completionDate}</div>
               </div>
             </div>
           </div>
           
+          <!-- Job Description -->
+          <div class="section">
+            <div class="section-title">${language === 'en' ? 'Job Description' : 'Descripción del Trabajo'}</div>
+            <div class="description-box">
+              <p class="description-text">${escapedDescription || (language === 'en' ? 'No description provided' : 'Sin descripción')}</p>
+            </div>
+          </div>
+          
+          <!-- Comments/Notes -->
+          ${wo.comments ? `
+          <div class="section">
+            <div class="section-title">${language === 'en' ? 'Work Notes & Comments' : 'Notas y Comentarios del Trabajo'}</div>
+            <div class="comments-box">
+              <div class="comments-text">${escapedComments}</div>
+            </div>
+          </div>
+          ` : ''}
+          
+          <!-- Signature Section -->
           ${wo.customer_signature ? `
             <div class="signature-section">
-              <div class="section-title">${language === 'en' ? 'Customer Signature' : 'Firma del Cliente'}</div>
-              <div class="signature-box">
+              <div class="section-title">${language === 'en' ? 'Customer Verification & Signature' : 'Verificación y Firma del Cliente'}</div>
+              <div class="signature-grid">
                 <div class="signature-image">
                   <img src="${wo.customer_signature}" alt="Customer Signature" />
                 </div>
-                <div>
-                  <p><strong>${language === 'en' ? 'Signed By' : 'Firmado Por'}:</strong> ${wo.customer_name || t('na')}</p>
-                  <p><strong>${language === 'en' ? 'Date Signed' : 'Fecha de Firma'}:</strong> ${formatDateTime(wo.signature_date)}</p>
+                <div class="signature-details">
+                  <div class="signature-item">
+                    <div class="signature-label">${language === 'en' ? 'Signed By' : 'Firmado Por'}</div>
+                    <div class="signature-value">${wo.customer_name || t('na')}</div>
+                  </div>
+                  <div class="signature-item">
+                    <div class="signature-label">${language === 'en' ? 'Date & Time Signed' : 'Fecha y Hora de Firma'}</div>
+                    <div class="signature-value">${signatureDateTime}</div>
+                  </div>
+                  ${locationDisplay ? `
+                  <div class="signature-item">
+                    <div class="signature-label">${language === 'en' ? 'Location (GPS)' : 'Ubicación (GPS)'}</div>
+                    <div class="signature-value">
+                      <a href="https://www.google.com/maps?q=${wo.signature_location}" target="_blank" class="location-link">
+                        📍 ${locationDisplay}
+                      </a>
+                    </div>
+                  </div>
+                  ` : ''}
                 </div>
               </div>
               <div class="verification">
-                <span class="verification-text">✓ ${language === 'en' ? 'Verified and signed by customer' : 'Verificado y firmado por el cliente'}</span>
+                <span class="verification-text">✓ ${language === 'en' ? 'Work completed and verified by customer signature' : 'Trabajo completado y verificado por firma del cliente'}</span>
               </div>
             </div>
-          ` : ''}
+          ` : `
+            <div class="section">
+              <div class="section-title">${language === 'en' ? 'Signature' : 'Firma'}</div>
+              <p style="color: #666; font-style: italic;">${language === 'en' ? 'No customer signature on file' : 'Sin firma del cliente en archivo'}</p>
+            </div>
+          `}
           
           <div class="footer">
-            <p>EMF Contracting LLC</p>
-            <p>${language === 'en' ? 'Generated' : 'Generado'}: ${new Date().toLocaleString()}</p>
+            <p><strong>EMF Contracting LLC</strong></p>
+            <p>${language === 'en' ? 'Certificate Generated' : 'Certificado Generado'}: ${new Date().toLocaleString()}</p>
           </div>
         </div>
         
         <div class="no-print" style="text-align: center; margin-top: 30px;">
-          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer;">
+          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 15px 40px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-right: 10px;">
             🖨️ ${language === 'en' ? 'Print Certificate' : 'Imprimir Certificado'}
           </button>
         </div>

@@ -469,7 +469,7 @@ export function useWorkOrders(currentUser) {
     return editingField.hasOwnProperty(field) ? editingField[field] : (selectedWO[field] || '');
   }
 
-  // SIGNATURE SAVE FUNCTION
+  // SIGNATURE SAVE FUNCTION - with location support
   async function saveSignature(signatureData) {
     if (!selectedWO) {
       throw new Error('No work order selected');
@@ -478,12 +478,19 @@ export function useWorkOrders(currentUser) {
     try {
       setSaving(true);
       
+      // Build location string if available
+      let locationStr = null;
+      if (signatureData.location) {
+        locationStr = `${signatureData.location.latitude},${signatureData.location.longitude}`;
+      }
+      
       const { error } = await supabase
         .from('work_orders')
         .update({
           customer_signature: signatureData.signature,
           customer_name: signatureData.customerName,
-          signature_date: signatureData.signedAt
+          signature_date: signatureData.signedAt,
+          signature_location: locationStr // Store as "lat,lng" string
         })
         .eq('wo_id', selectedWO.wo_id);
 

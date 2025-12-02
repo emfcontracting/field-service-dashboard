@@ -29,6 +29,17 @@ export default function WorkOrderDetailModal({
   const [dailyHoursLog, setDailyHoursLog] = useState([]);
   const [loadingHours, setLoadingHours] = useState(true);
   const [dailyTotals, setDailyTotals] = useState({ totalRT: 0, totalOT: 0, totalMiles: 0 });
+  const [editingHours, setEditingHours] = useState({}); // Track editing state for each entry
+  const [savingHours, setSavingHours] = useState(false);
+  const [showAddHoursForm, setShowAddHoursForm] = useState(false);
+  const [newHoursEntry, setNewHoursEntry] = useState({
+    user_id: '',
+    work_date: new Date().toISOString().split('T')[0],
+    hours_regular: 0,
+    hours_overtime: 0,
+    miles: 0,
+    notes: ''
+  });
   const adminPassword = 'admin123';
 
   useEffect(() => {
@@ -51,21 +62,23 @@ export default function WorkOrderDetailModal({
       if (error) throw error;
 
       setDailyHoursLog(data || []);
-
-      // Calculate totals
-      let totalRT = 0, totalOT = 0, totalMiles = 0;
-      (data || []).forEach(entry => {
-        totalRT += parseFloat(entry.hours_regular) || 0;
-        totalOT += parseFloat(entry.hours_overtime) || 0;
-        totalMiles += parseFloat(entry.miles) || 0;
-      });
-      setDailyTotals({ totalRT, totalOT, totalMiles });
+      calculateTotals(data || []);
 
     } catch (err) {
       console.error('Error loading daily hours:', err);
     } finally {
       setLoadingHours(false);
     }
+  };
+
+  const calculateTotals = (data) => {
+    let totalRT = 0, totalOT = 0, totalMiles = 0;
+    (data || []).forEach(entry => {
+      totalRT += parseFloat(entry.hours_regular) || 0;
+      totalOT += parseFloat(entry.hours_overtime) || 0;
+      totalMiles += parseFloat(entry.miles) || 0;
+    });
+    setDailyTotals({ totalRT, totalOT, totalMiles });
   };
 
   const checkCanGenerateInvoice = async () => {
@@ -76,6 +89,128 @@ export default function WorkOrderDetailModal({
       .single();
 
     setShowInvoiceButton(selectedWO?.acknowledged && !invoice && !selectedWO?.is_locked);
+  };
+
+  // Handle updating a daily hours entry
+  const handleUpdateDailyHours = async (entryId, field, value) => {
+    try {
+      setSavingHours(true);
+      
+      const { error } = await supabase
+        .from('daily_hours_log')
+        .update({ [field]: value })
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedLog = dailyHoursLog.map(entry => 
+        entry.id === entryId ? { ...entry, [field]: value } : entry
+      );
+      setDailyHoursLog(updatedLog);
+      calculateTotals(updatedLog);
+
+      // Clear editing state for this field
+      setEditingHours(prev => {
+        const key = `${entryId}_${field}`;
+        const { [key]: removed, ...rest } = prev;
+        return rest;
+      });
+
+    } catch (err) {
+      alert('Error updating hours: ' + err.message);
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  // Handle deleting a daily hours entry
+  const handleDeleteDailyHours = async (entryId) => {
+    if (!confirm('Delete this hours entry? This cannot be undone.')) return;
+
+    try {
+      setSavingHours(true);
+      
+      const { error } = await supabase
+        .from('daily_hours_log')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedLog = dailyHoursLog.filter(entry => entry.id !== entryId);
+      setDailyHoursLog(updatedLog);
+      calculateTotals(updatedLog);
+
+      alert('✅ Hours entry deleted');
+    } catch (err) {
+      alert('Error deleting hours: ' + err.message);
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  // Handle adding new hours entry
+  const handleAddHoursEntry = async () => {
+    if (!newHoursEntry.user_id) {
+      alert('Please select a team member');
+      return;
+    }
+
+    try {
+      setSavingHours(true);
+
+      const { data, error } = await supabase
+        .from('daily_hours_log')
+        .insert({
+          wo_id: selectedWO.wo_id,
+          user_id: newHoursEntry.user_id,
+          work_date: newHoursEntry.work_date,
+          hours_regular: parseFloat(newHoursEntry.hours_regular) || 0,
+          hours_overtime: parseFloat(newHoursEntry.hours_overtime) || 0,
+          miles: parseFloat(newHoursEntry.miles) || 0,
+          notes: newHoursEntry.notes || '[Added by Admin]'
+        })
+        .select(`*, user:users(first_name, last_name)`)
+        .single();
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedLog = [data, ...dailyHoursLog];
+      setDailyHoursLog(updatedLog);
+      calculateTotals(updatedLog);
+
+      // Reset form
+      setNewHoursEntry({
+        user_id: '',
+        work_date: new Date().toISOString().split('T')[0],
+        hours_regular: 0,
+        hours_overtime: 0,
+        miles: 0,
+        notes: ''
+      });
+      setShowAddHoursForm(false);
+
+      alert('✅ Hours entry added');
+    } catch (err) {
+      alert('Error adding hours: ' + err.message);
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  // Get field value for editing
+  const getHoursFieldValue = (entryId, field, originalValue) => {
+    const key = `${entryId}_${field}`;
+    return editingHours.hasOwnProperty(key) ? editingHours[key] : originalValue;
+  };
+
+  // Handle field change for editing
+  const handleHoursFieldChange = (entryId, field, value) => {
+    const key = `${entryId}_${field}`;
+    setEditingHours(prev => ({ ...prev, [key]: value }));
   };
 
   const handleUpdateField = async (field, value) => {
@@ -176,18 +311,6 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  const handleUpdateTeamMemberField = async (assignmentId, field, value) => {
-    try {
-      await updateTeamMember(supabase, assignmentId, { [field]: value });
-      const updatedMembers = selectedWO.teamMembers.map(m => 
-        m.assignment_id === assignmentId ? { ...m, [field]: value } : m
-      );
-      setSelectedWO({ ...selectedWO, teamMembers: updatedMembers });
-    } catch (error) {
-      alert('Failed to update team member: ' + error.message);
-    }
-  };
-
   const handleGenerateInvoice = async () => {
     if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Send to invoicing for review\n\nContinue?')) {
       return;
@@ -229,6 +352,40 @@ export default function WorkOrderDetailModal({
       minute: '2-digit',
       hour12: true
     });
+  };
+
+  // Get all available team members (lead tech + team members)
+  const getAvailableWorkers = () => {
+    const workers = [];
+    
+    // Add lead tech if exists
+    if (selectedWO.lead_tech_id) {
+      const leadTech = users.find(u => u.user_id === selectedWO.lead_tech_id);
+      if (leadTech) {
+        workers.push({ ...leadTech, role_label: 'Lead Tech' });
+      }
+    }
+    
+    // Add team members
+    (selectedWO.teamMembers || []).forEach(member => {
+      if (member.user) {
+        workers.push({ 
+          user_id: member.user_id, 
+          first_name: member.user.first_name, 
+          last_name: member.user.last_name,
+          role_label: 'Team Member'
+        });
+      }
+    });
+
+    // Also add all techs/helpers from users list for flexibility
+    users.filter(u => ['tech', 'helper', 'lead_tech'].includes(u.role)).forEach(user => {
+      if (!workers.find(w => w.user_id === user.user_id)) {
+        workers.push({ ...user, role_label: user.role.replace('_', ' ') });
+      }
+    });
+
+    return workers;
   };
 
   // Download Completion Certificate
@@ -664,12 +821,12 @@ export default function WorkOrderDetailModal({
             </div>
           )}
 
-          {/* Daily Hours Log Section */}
+          {/* Daily Hours Log Section - EDITABLE */}
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg">📅 Daily Hours Log</h3>
-              <div className="flex items-center gap-4">
-                <div className="text-sm">
+              <h3 className="font-bold text-lg">📅 Daily Hours Log (Admin Editable)</h3>
+              <div className="flex items-center gap-2">
+                <div className="text-sm mr-4">
                   <span className="text-gray-400">Total: </span>
                   <span className="text-green-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
                   <span className="text-gray-500 mx-1">|</span>
@@ -678,22 +835,121 @@ export default function WorkOrderDetailModal({
                   <span className="text-blue-400 font-bold">{dailyTotals.totalMiles.toFixed(1)} mi</span>
                 </div>
                 <button
+                  onClick={() => setShowAddHoursForm(!showAddHoursForm)}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm font-semibold"
+                >
+                  + Add Hours
+                </button>
+                <button
                   onClick={loadDailyHoursLog}
                   className="text-blue-400 hover:text-blue-300 text-sm"
                 >
-                  🔄 Refresh
+                  🔄
                 </button>
               </div>
             </div>
+
+            {/* Add New Hours Form */}
+            {showAddHoursForm && (
+              <div className="bg-gray-600 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold mb-3 text-yellow-400">➕ Add New Hours Entry</h4>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-gray-400">Team Member</label>
+                    <select
+                      value={newHoursEntry.user_id}
+                      onChange={(e) => setNewHoursEntry({ ...newHoursEntry, user_id: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                    >
+                      <option value="">Select Worker...</option>
+                      {getAvailableWorkers().map(worker => (
+                        <option key={worker.user_id} value={worker.user_id}>
+                          {worker.first_name} {worker.last_name} ({worker.role_label})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">Work Date</label>
+                    <input
+                      type="date"
+                      value={newHoursEntry.work_date}
+                      onChange={(e) => setNewHoursEntry({ ...newHoursEntry, work_date: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-gray-400">RT Hours</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={newHoursEntry.hours_regular}
+                      onChange={(e) => setNewHoursEntry({ ...newHoursEntry, hours_regular: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">OT Hours</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={newHoursEntry.hours_overtime}
+                      onChange={(e) => setNewHoursEntry({ ...newHoursEntry, hours_overtime: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400">Miles</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={newHoursEntry.miles}
+                      onChange={(e) => setNewHoursEntry({ ...newHoursEntry, miles: e.target.value })}
+                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="text-xs text-gray-400">Notes (optional)</label>
+                  <input
+                    type="text"
+                    value={newHoursEntry.notes}
+                    onChange={(e) => setNewHoursEntry({ ...newHoursEntry, notes: e.target.value })}
+                    className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                    placeholder="Add notes..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddHoursEntry}
+                    disabled={savingHours}
+                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold disabled:bg-gray-500"
+                  >
+                    {savingHours ? 'Saving...' : '✓ Add Entry'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddHoursForm(false)}
+                    className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {loadingHours ? (
               <div className="text-center py-4 text-gray-400">Loading hours...</div>
             ) : dailyHoursLog.length === 0 ? (
               <div className="text-center py-4 text-gray-400">
-                No daily hours logged yet. Field workers can log hours from the mobile app.
+                No daily hours logged yet. Use "Add Hours" button above or field workers can log from mobile app.
               </div>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-80 overflow-y-auto">
                 {dailyHoursLog.map((entry) => (
                   <div key={entry.id} className="bg-gray-600 rounded-lg p-3">
                     <div className="flex justify-between items-start mb-2">
@@ -708,30 +964,71 @@ export default function WorkOrderDetailModal({
                             day: 'numeric' 
                           })}
                         </span>
+                        {entry.notes?.includes('[MIGRATED]') && (
+                          <span className="text-yellow-400 text-xs ml-2">📋 Migrated</span>
+                        )}
+                        {entry.notes?.includes('[Added by Admin]') && (
+                          <span className="text-blue-400 text-xs ml-2">👤 Admin Added</span>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {entry.notes?.includes('[MIGRATED]') ? '📋 Migrated' : ''}
+                      <button
+                        onClick={() => handleDeleteDailyHours(entry.id)}
+                        disabled={savingHours}
+                        className="text-red-400 hover:text-red-300 text-sm"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    
+                    {/* Editable Fields */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-400">RT Hours</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={getHoursFieldValue(entry.id, 'hours_regular', entry.hours_regular || 0)}
+                          onChange={(e) => handleHoursFieldChange(entry.id, 'hours_regular', e.target.value)}
+                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                          disabled={savingHours}
+                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">OT Hours</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={getHoursFieldValue(entry.id, 'hours_overtime', entry.hours_overtime || 0)}
+                          onChange={(e) => handleHoursFieldChange(entry.id, 'hours_overtime', e.target.value)}
+                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                          disabled={savingHours}
+                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Miles</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={getHoursFieldValue(entry.id, 'miles', entry.miles || 0)}
+                          onChange={(e) => handleHoursFieldChange(entry.id, 'miles', e.target.value)}
+                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'miles', parseFloat(e.target.value) || 0)}
+                          disabled={savingHours}
+                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                        />
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-400">RT:</span>
-                        <span className="text-green-400 font-semibold ml-1">{entry.hours_regular || 0} hrs</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">OT:</span>
-                        <span className="text-orange-400 font-semibold ml-1">{entry.hours_overtime || 0} hrs</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Miles:</span>
-                        <span className="text-blue-400 font-semibold ml-1">{entry.miles || 0} mi</span>
-                      </div>
+
+                    {/* Labor Cost Display */}
+                    <div className="mt-2 flex justify-between text-xs">
+                      <span className="text-gray-400">
+                        Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
+                      </span>
+                      {entry.notes && !entry.notes.includes('[MIGRATED]') && !entry.notes.includes('[Added by Admin]') && (
+                        <span className="text-gray-400">📝 {entry.notes}</span>
+                      )}
                     </div>
-                    {entry.notes && !entry.notes.includes('[MIGRATED]') && (
-                      <div className="mt-2 text-xs text-gray-400">
-                        📝 {entry.notes}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

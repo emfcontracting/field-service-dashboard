@@ -14,22 +14,40 @@ export default function PrimaryTechDailyHours({
   onDownloadLogs
 }) {
   const { language } = useLanguage();
-  const t = (key) => translations[language][key];
+  const t = (key) => translations[language]?.[key] || key;
   
   const [showAddModal, setShowAddModal] = useState(false);
   const wo = workOrder || {};
+  
+  // Get the PRIMARY TECH (lead tech) from the work order - NOT the current user
+  const leadTechId = wo.lead_tech_id;
+  const leadTech = wo.lead_tech || {};
+  const leadTechName = leadTech.first_name 
+    ? `${leadTech.first_name} ${leadTech.last_name || ''}`.trim()
+    : (language === 'en' ? 'Primary Tech' : 'Técnico Principal');
+  
+  // Check if current user IS the primary tech
+  const isCurrentUserPrimaryTech = currentUser?.user_id === leadTechId;
 
-  // Calculate totals from daily logs for current user
-  const userLogs = dailyLogs.filter(log => log.user_id === currentUser.user_id);
-  const totalRT = userLogs.reduce((sum, log) => sum + (parseFloat(log.hours_regular) || 0), 0);
-  const totalOT = userLogs.reduce((sum, log) => sum + (parseFloat(log.hours_overtime) || 0), 0);
-  const totalMiles = userLogs.reduce((sum, log) => sum + (parseFloat(log.miles) || 0), 0);
+  // Filter logs for the PRIMARY TECH (lead_tech_id), not current user
+  const primaryTechLogs = dailyLogs.filter(log => log.user_id === leadTechId);
+  const totalRT = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.hours_regular) || 0), 0);
+  const totalOT = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.hours_overtime) || 0), 0);
+  const totalMiles = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.miles) || 0), 0);
   const totalHours = totalRT + totalOT;
 
   async function handleSaveDailyHours(hoursData) {
+    // Only allow if current user is the primary tech
+    if (!isCurrentUserPrimaryTech) {
+      alert(language === 'en' 
+        ? 'Only the primary tech can log hours in this section' 
+        : 'Solo el técnico principal puede registrar horas en esta sección');
+      return;
+    }
+    
     await onAddDailyHours({
       ...hoursData,
-      userId: currentUser.user_id,
+      userId: leadTechId, // Use lead tech ID, not current user
       assignmentId: null // Primary tech doesn't have assignment_id
     });
   }
@@ -38,18 +56,21 @@ export default function PrimaryTechDailyHours({
     <>
       <div className="bg-gray-800 rounded-lg p-4">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold">{t('primaryTechDailyHours') || 'Primary Tech Daily Hours'}</h3>
+          <div>
+            <h3 className="font-bold">🔧 {language === 'en' ? 'Primary Tech Hours' : 'Horas del Técnico Principal'}</h3>
+            <p className="text-sm text-gray-400">{leadTechName}</p>
+          </div>
           <div className="flex gap-2">
-            {userLogs.length > 0 && (
+            {primaryTechLogs.length > 0 && (
               <button
-                onClick={() => onDownloadLogs(currentUser.user_id)}
+                onClick={() => onDownloadLogs(leadTechId)}
                 className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-semibold"
-                title={t('downloadMyLogs') || 'Download My Logs'}
+                title={language === 'en' ? 'Download Logs' : 'Descargar Registros'}
               >
                 📥 CSV
               </button>
             )}
-            {status !== 'completed' && (
+            {status !== 'completed' && isCurrentUserPrimaryTech && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
@@ -60,9 +81,18 @@ export default function PrimaryTechDailyHours({
           </div>
         </div>
 
+        {/* Show message if viewing as non-primary tech */}
+        {!isCurrentUserPrimaryTech && status !== 'completed' && (
+          <div className="bg-blue-900/30 rounded-lg p-2 mb-3 text-xs text-blue-300">
+            💡 {language === 'en' 
+              ? `Only ${leadTechName} can log hours here. Your hours go in Team Members below.`
+              : `Solo ${leadTechName} puede registrar horas aquí. Tus horas van en Miembros del Equipo abajo.`}
+          </div>
+        )}
+
         {/* Summary Totals */}
         <div className="bg-gray-700 rounded-lg p-3 mb-4">
-          <p className="text-xs text-gray-400 mb-2">{t('totalsSummary') || 'Totals Summary'}</p>
+          <p className="text-xs text-gray-400 mb-2">{language === 'en' ? 'Totals Summary' : 'Resumen de Totales'}</p>
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center">
               <p className="text-xs text-gray-400">RT {t('hrs') || 'hrs'}</p>
@@ -81,7 +111,7 @@ export default function PrimaryTechDailyHours({
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-gray-600 text-center">
-            <p className="text-xs text-gray-400">{t('totalHours') || 'Total Hours'}</p>
+            <p className="text-xs text-gray-400">{language === 'en' ? 'Total Hours' : 'Total de Horas'}</p>
             <p className="text-2xl font-bold text-white">{totalHours.toFixed(1)} {t('hrs') || 'hrs'}</p>
           </div>
         </div>
@@ -89,19 +119,21 @@ export default function PrimaryTechDailyHours({
         {/* Daily Hours Log */}
         <div className="space-y-2">
           <p className="text-xs text-gray-400 font-semibold mb-2">
-            📅 {t('dailyBreakdown') || 'Daily Breakdown'} ({userLogs.length} {t('entries') || 'entries'})
+            📅 {language === 'en' ? 'Daily Breakdown' : 'Desglose Diario'} ({primaryTechLogs.length} {language === 'en' ? 'entries' : 'registros'})
           </p>
           
-          {userLogs.length === 0 ? (
+          {primaryTechLogs.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p className="text-4xl mb-2">📝</p>
               <p>{t('noHoursLogged') || 'No hours logged yet'}</p>
-              <p className="text-xs mt-1">{t('clickAboveToStart') || 'Click "Log Hours" above to start'}</p>
+              {isCurrentUserPrimaryTech && (
+                <p className="text-xs mt-1">{language === 'en' ? 'Click "Log Hours" above to start' : 'Haga clic en "Registrar Horas" arriba para comenzar'}</p>
+              )}
             </div>
           ) : (
-            userLogs.map((log) => (
+            primaryTechLogs.map((log) => (
               <div
-                key={log.log_id}
+                key={log.log_id || log.id}
                 className="bg-blue-900 border-l-4 border-blue-500 rounded-lg p-3"
               >
                 <div className="flex justify-between items-start mb-2">
@@ -145,16 +177,18 @@ export default function PrimaryTechDailyHours({
         </div>
       </div>
 
-      {/* Add Daily Hours Modal */}
-      <AddDailyHoursModal
-        show={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSave={handleSaveDailyHours}
-        saving={saving}
-        userId={currentUser.user_id}
-        userName={`${currentUser.first_name} ${currentUser.last_name}`}
-        isTeamMember={false}
-      />
+      {/* Add Daily Hours Modal - only for primary tech */}
+      {isCurrentUserPrimaryTech && (
+        <AddDailyHoursModal
+          show={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onSave={handleSaveDailyHours}
+          saving={saving}
+          userId={leadTechId}
+          userName={leadTechName}
+          isTeamMember={false}
+        />
+      )}
     </>
   );
 }

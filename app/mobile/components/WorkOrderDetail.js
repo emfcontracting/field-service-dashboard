@@ -1,12 +1,14 @@
-// components/WorkOrderDetail.js - Bilingual Work Order Detail View with Daily Hours
+// Work Order Detail View Component - Updated with Daily Hours Integration
+import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
-import LanguageToggle from './LanguageToggle';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
 import DailyHoursSection from './DailyHoursSection';
 import TeamMembersSection from './TeamMembersSection';
+import SignatureDisplay from './SignatureDisplay';
+import SignatureModal from './modals/SignatureModal';
 
 export default function WorkOrderDetail({
   workOrder,
@@ -22,16 +24,18 @@ export default function WorkOrderDetail({
   onUpdateField,
   onAddComment,
   onLoadTeamMembers,
+  onRemoveTeamMember,
   onShowChangePin,
   onLogout,
+  onSaveSignature,
   getFieldValue,
-  handleFieldChange,
-  getTeamFieldValue,
-  handleTeamFieldChange,
-  handleUpdateTeamMemberField
+  handleFieldChange
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language][key] || key;
+  
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
   
   const wo = workOrder || {};
   const woNumber = wo.wo_number || t('unknown');
@@ -43,22 +47,42 @@ export default function WorkOrderDetail({
   const requestor = wo.requestor || t('na');
   const leadTech = wo.lead_tech || {};
 
+  async function handleSignatureSave(signatureData) {
+    setSignatureSaving(true);
+    try {
+      await onSaveSignature(signatureData);
+      setShowSignatureModal(false);
+      alert(language === 'en' ? '✅ Signature saved successfully!' : '✅ ¡Firma guardada exitosamente!');
+    } catch (err) {
+      alert((language === 'en' ? 'Error saving signature: ' : 'Error al guardar firma: ') + err.message);
+    } finally {
+      setSignatureSaving(false);
+    }
+  }
+
   function handlePrintWO() {
     const age = calculateAge(dateEntered);
     
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert(language === 'en' 
-        ? 'Unable to open print window. Please check your popup settings.' 
-        : 'No se puede abrir la ventana de impresión. Verifique la configuración de ventanas emergentes.');
+      alert(language === 'en' ? 'Unable to open print window.' : 'No se puede abrir ventana de impresión.');
       return;
     }
+    
+    const signatureSection = wo.customer_signature ? `
+      <div class="section">
+        <h2>Customer Signature</h2>
+        <img src="${wo.customer_signature}" alt="Customer Signature" style="max-width: 400px; border: 1px solid #ccc; padding: 10px;">
+        <div class="value"><span class="label">Signed By:</span> ${wo.customer_name || 'N/A'}</div>
+        <div class="value"><span class="label">Signed On:</span> ${formatDateTime(wo.signature_date)}</div>
+      </div>
+    ` : '';
     
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${language === 'en' ? 'Work Order' : 'Orden de Trabajo'} ${woNumber}</title>
+        <title>Work Order ${woNumber}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; }
           h1 { color: #1e40af; }
@@ -67,61 +91,53 @@ export default function WorkOrderDetail({
           .label { font-weight: bold; color: #4b5563; }
           .value { margin-bottom: 10px; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #d1d5db; padding: 8px; text-left; }
+          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
           th { background-color: #f3f4f6; }
-          @media print {
-            button { display: none; }
-          }
+          @media print { button { display: none; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>${language === 'en' ? 'Work Order' : 'Orden de Trabajo'}: ${woNumber}</h1>
-          <p><strong>${language === 'en' ? 'Created' : 'Creado'}:</strong> ${new Date().toLocaleString()}</p>
+          <h1>Work Order: ${woNumber}</h1>
+          <p><strong>Created:</strong> ${new Date().toLocaleString()}</p>
         </div>
-        
         <div class="section">
-          <h2>${t('workOrderDetails')}</h2>
-          <div class="value"><span class="label">${t('building')}:</span> ${building}</div>
-          <div class="value"><span class="label">${language === 'en' ? 'Priority' : 'Prioridad'}:</span> ${wo.priority || t('na')}</div>
-          <div class="value"><span class="label">${language === 'en' ? 'Status' : 'Estado'}:</span> ${(status || '').replace('_', ' ').toUpperCase()}</div>
-          <div class="value"><span class="label">${t('age')}:</span> ${age} ${t('days')}</div>
-          <div class="value"><span class="label">${t('dateEntered')}:</span> ${formatDate(dateEntered)}</div>
-          <div class="value"><span class="label">${t('requestor')}:</span> ${requestor}</div>
-          <div class="value"><span class="label">${t('nte')}:</span> $${nte.toFixed(2)}</div>
+          <h2>Work Order Details</h2>
+          <div class="value"><span class="label">Building:</span> ${building}</div>
+          <div class="value"><span class="label">Priority:</span> ${wo.priority || 'N/A'}</div>
+          <div class="value"><span class="label">Status:</span> ${(status || '').replace('_', ' ').toUpperCase()}</div>
+          <div class="value"><span class="label">Age:</span> ${age} days</div>
+          <div class="value"><span class="label">Date Entered:</span> ${formatDate(dateEntered)}</div>
+          <div class="value"><span class="label">Requestor:</span> ${requestor}</div>
+          <div class="value"><span class="label">NTE:</span> $${nte.toFixed(2)}</div>
         </div>
-        
         <div class="section">
-          <h2>${t('description')}</h2>
+          <h2>Description</h2>
           <p>${description}</p>
         </div>
-        
         <div class="section">
-          <h2>${language === 'en' ? 'Team' : 'Equipo'}</h2>
-          <div class="value"><span class="label">${language === 'en' ? 'Lead Tech' : 'Técnico Principal'}:</span> ${leadTech.first_name || ''} ${leadTech.last_name || ''}</div>
+          <h2>Team</h2>
+          <div class="value"><span class="label">Lead Tech:</span> ${leadTech.first_name || ''} ${leadTech.last_name || ''}</div>
           ${currentTeamList.map((member, idx) => 
-            `<div class="value"><span class="label">${language === 'en' ? 'Helper' : 'Ayudante'} ${idx + 1}:</span> ${member.user?.first_name || ''} ${member.user?.last_name || ''}</div>`
+            `<div class="value"><span class="label">Helper ${idx + 1}:</span> ${member.user?.first_name || ''} ${member.user?.last_name || ''}</div>`
           ).join('')}
         </div>
-        
+        ${signatureSection}
         ${wo.comments ? `
           <div class="section">
-            <h2>${t('commentsAndNotes')}</h2>
+            <h2>Comments</h2>
             <p style="white-space: pre-wrap;">${wo.comments}</p>
           </div>
         ` : ''}
-        
-        <div class="section" style="margin-top: 40px;">
-          <p><strong>${language === 'en' ? 'Signature' : 'Firma'}:</strong> ___________________________ <strong>${language === 'en' ? 'Date' : 'Fecha'}:</strong> _______________</p>
-        </div>
-        
-        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #1e40af; color: white; border: none; cursor: pointer; border-radius: 5px;">
-          ${language === 'en' ? 'Print' : 'Imprimir'}
-        </button>
+        ${!wo.customer_signature ? `
+          <div class="section" style="margin-top: 40px;">
+            <p><strong>Signature:</strong> ___________________________ <strong>Date:</strong> _______________</p>
+          </div>
+        ` : ''}
+        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #1e40af; color: white; border: none; cursor: pointer; border-radius: 5px;">Print</button>
       </body>
       </html>
     `);
-    
     printWindow.document.close();
   }
 
@@ -138,12 +154,11 @@ export default function WorkOrderDetail({
           </button>
           <h1 className="text-xl font-bold">{woNumber}</h1>
           <div className="flex gap-2">
-            <LanguageToggle />
             {(currentUser.role === 'admin' || currentUser.role === 'office') && (
               <button
                 onClick={() => window.location.href = '/dashboard'}
                 className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm"
-                title={t('dashboard')}
+                title="Dashboard"
               >
                 💻
               </button>
@@ -166,7 +181,7 @@ export default function WorkOrderDetail({
         <div className="space-y-4">
           {/* Work Order Details */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-blue-400">{t('workOrderDetails')}</h3>
+            <h3 className="font-bold mb-3 text-blue-400">📋 {t('workOrderDetails')}</h3>
             <div className="space-y-2 text-sm">
               <div>
                 <span className="text-gray-400">{t('building')}:</span>
@@ -191,7 +206,7 @@ export default function WorkOrderDetail({
                 </div>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                <span className="text-gray-400">{t('nte')}</span>
+                <span className="text-gray-400">{t('nte')}:</span>
                 <span className="text-green-500 font-bold text-lg">${nte.toFixed(2)}</span>
               </div>
             </div>
@@ -200,12 +215,22 @@ export default function WorkOrderDetail({
           {/* Quick Actions */}
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('quickActions')}</h3>
-            <button
-              onClick={handlePrintWO}
-              className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
-            >
-              🖨️ {t('printWO')}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handlePrintWO}
+                className="bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
+              >
+                🖨️ {t('printWO')}
+              </button>
+              {status !== 'completed' && !wo.customer_signature && (
+                <button
+                  onClick={() => setShowSignatureModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold"
+                >
+                  ✍️ {language === 'en' ? 'Get Signature' : 'Obtener Firma'}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Check In/Out */}
@@ -245,28 +270,29 @@ export default function WorkOrderDetail({
 
           {/* Primary Assignment */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">{t('primaryAssignment')}</h3>
+            <h3 className="font-bold mb-3">👷 {t('primaryAssignment')}</h3>
             <div className="bg-gray-700 rounded-lg p-3">
               <p className="font-semibold">
                 {leadTech.first_name || t('unknown')} {leadTech.last_name || ''}
               </p>
+              <p className="text-xs text-gray-400">
+                {language === 'en' ? 'Lead Tech' : 'Técnico Principal'}
+              </p>
             </div>
           </div>
 
-          {/* Team Members Section */}
+          {/* Team Members Section - Simplified (no hours inputs) */}
           <TeamMembersSection
             currentTeamList={currentTeamList}
             status={status}
             saving={saving}
             onLoadTeamMembers={onLoadTeamMembers}
-            getTeamFieldValue={getTeamFieldValue}
-            handleTeamFieldChange={handleTeamFieldChange}
-            handleUpdateTeamMemberField={handleUpdateTeamMemberField}
+            onRemoveTeamMember={onRemoveTeamMember}
           />
 
           {/* Update Status */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">{t('updateStatus')}</h3>
+            <h3 className="font-bold mb-3">📊 {t('updateStatus')}</h3>
             <select
               value={status}
               onChange={(e) => onUpdateField(wo.wo_id, 'status', e.target.value)}
@@ -282,17 +308,16 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
-          {/* ⭐ NEW: Daily Hours Section - Main hours/mileage tracking */}
+          {/* Daily Hours Section - NEW */}
           <DailyHoursSection
             workOrder={wo}
             currentUser={currentUser}
             currentTeamList={currentTeamList}
-            status={status}
           />
 
-          {/* Materials & Equipment Costs - Simplified section for costs only */}
+          {/* Materials & Equipment Section */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-purple-400">💰 {language === 'en' ? 'Materials & Equipment' : 'Materiales y Equipo'}</h3>
+            <h3 className="font-bold mb-3">🛠️ {language === 'en' ? 'Materials & Equipment' : 'Materiales y Equipo'}</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">{t('materialCost')}</label>
@@ -304,7 +329,7 @@ export default function WorkOrderDetail({
                   onBlur={(e) => onUpdateField(wo.wo_id, 'material_cost', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
                   disabled={saving || status === 'completed'}
-                  placeholder="$0.00"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -317,7 +342,7 @@ export default function WorkOrderDetail({
                   onBlur={(e) => onUpdateField(wo.wo_id, 'emf_equipment_cost', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
                   disabled={saving || status === 'completed'}
-                  placeholder="$0.00"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -330,7 +355,7 @@ export default function WorkOrderDetail({
                   onBlur={(e) => onUpdateField(wo.wo_id, 'trailer_cost', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
                   disabled={saving || status === 'completed'}
-                  placeholder="$0.00"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -343,7 +368,7 @@ export default function WorkOrderDetail({
                   onBlur={(e) => onUpdateField(wo.wo_id, 'rental_cost', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg text-white text-sm"
                   disabled={saving || status === 'completed'}
-                  placeholder="$0.00"
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -361,16 +386,19 @@ export default function WorkOrderDetail({
             currentTeamList={currentTeamList}
           />
 
+          {/* Signature Display */}
+          <SignatureDisplay workOrder={wo} />
+
           {/* Comments */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">{t('commentsAndNotes')}</h3>
+            <h3 className="font-bold mb-3">💬 {language === 'en' ? 'Comments & Notes' : 'Comentarios y Notas'}</h3>
             <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
               {wo.comments ? (
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
                   {wo.comments}
                 </pre>
               ) : (
-                <p className="text-gray-500 text-sm">{t('noCommentsYet')}</p>
+                <p className="text-gray-500 text-sm">{language === 'en' ? 'No comments yet' : 'Aún no hay comentarios'}</p>
               )}
             </div>
             {status !== 'completed' && (
@@ -378,7 +406,7 @@ export default function WorkOrderDetail({
                 <textarea
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  placeholder={t('addComment')}
+                  placeholder={language === 'en' ? 'Add a comment...' : 'Agregar un comentario...'}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg mb-2 text-sm text-white"
                   rows="3"
                   disabled={saving}
@@ -388,7 +416,7 @@ export default function WorkOrderDetail({
                   disabled={saving || !newComment.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold disabled:bg-gray-600"
                 >
-                  {t('addCommentButton')}
+                  {language === 'en' ? 'Add Comment' : 'Agregar Comentario'}
                 </button>
               </>
             )}
@@ -406,6 +434,14 @@ export default function WorkOrderDetail({
           )}
         </div>
       </div>
+
+      {/* Signature Modal */}
+      <SignatureModal
+        show={showSignatureModal}
+        onClose={() => setShowSignatureModal(false)}
+        onSave={handleSignatureSave}
+        saving={signatureSaving}
+      />
     </div>
   );
 }

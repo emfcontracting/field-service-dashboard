@@ -1,4 +1,4 @@
-// components/CostSummarySection.js - Bilingual Cost Summary (Updated for Daily Hours)
+// components/CostSummarySection.js - Bilingual Cost Summary (Fixed Calculations)
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -14,21 +14,54 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
     totalOT: 0,
     totalMiles: 0
   });
+  const [legacyTotals, setLegacyTotals] = useState({
+    totalRT: 0,
+    totalOT: 0,
+    totalMiles: 0
+  });
   const [loading, setLoading] = useState(true);
   
   const wo = workOrder || {};
   const nte = wo.nte || 0;
 
-  // Load daily hours totals
+  // Load all totals
   useEffect(() => {
     if (wo.wo_id) {
-      loadDailyTotals();
+      loadAllTotals();
     }
-  }, [wo.wo_id]);
+  }, [wo.wo_id, currentTeamList]);
 
-  async function loadDailyTotals() {
+  async function loadAllTotals() {
     try {
       setLoading(true);
+      
+      // 1. Calculate legacy totals from work_orders and assignments
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+
+      let teamRT = 0;
+      let teamOT = 0;
+      let teamMiles = 0;
+
+      if (currentTeamList && Array.isArray(currentTeamList)) {
+        currentTeamList.forEach(member => {
+          if (member) {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
+          }
+        });
+      }
+
+      const legacyTotal = {
+        totalRT: primaryRT + teamRT,
+        totalOT: primaryOT + teamOT,
+        totalMiles: primaryMiles + teamMiles
+      };
+      setLegacyTotals(legacyTotal);
+
+      // 2. Load daily hours totals from daily_hours_log table
       const { data, error } = await supabase
         .from('daily_hours_log')
         .select('hours_regular, hours_overtime, miles')
@@ -36,59 +69,32 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
 
       if (error) {
         console.error('Error loading daily totals:', error);
-        // Fall back to legacy totals from work_orders table
-        setDailyTotals({
-          totalRT: parseFloat(wo.hours_regular) || 0,
-          totalOT: parseFloat(wo.hours_overtime) || 0,
-          totalMiles: parseFloat(wo.miles) || 0
-        });
+        // If table doesn't exist or error, just use legacy totals
+        setDailyTotals({ totalRT: 0, totalOT: 0, totalMiles: 0 });
         return;
       }
 
       // Calculate totals from daily logs
-      const totals = (data || []).reduce((acc, log) => ({
+      const dailyTotal = (data || []).reduce((acc, log) => ({
         totalRT: acc.totalRT + (parseFloat(log.hours_regular) || 0),
         totalOT: acc.totalOT + (parseFloat(log.hours_overtime) || 0),
         totalMiles: acc.totalMiles + (parseFloat(log.miles) || 0)
       }), { totalRT: 0, totalOT: 0, totalMiles: 0 });
 
-      // If no daily logs exist, fall back to legacy totals
-      if (data.length === 0) {
-        // Calculate from work_orders and assignments (legacy method)
-        const primaryRT = parseFloat(wo.hours_regular) || 0;
-        const primaryOT = parseFloat(wo.hours_overtime) || 0;
-        const primaryMiles = parseFloat(wo.miles) || 0;
+      setDailyTotals(dailyTotal);
 
-        let teamRT = 0;
-        let teamOT = 0;
-        let teamMiles = 0;
-
-        if (currentTeamList && Array.isArray(currentTeamList)) {
-          currentTeamList.forEach(member => {
-            if (member) {
-              teamRT += parseFloat(member.hours_regular) || 0;
-              teamOT += parseFloat(member.hours_overtime) || 0;
-              teamMiles += parseFloat(member.miles) || 0;
-            }
-          });
-        }
-
-        setDailyTotals({
-          totalRT: primaryRT + teamRT,
-          totalOT: primaryOT + teamOT,
-          totalMiles: primaryMiles + teamMiles
-        });
-      } else {
-        setDailyTotals(totals);
-      }
     } catch (err) {
-      console.error('Error in loadDailyTotals:', err);
+      console.error('Error in loadAllTotals:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  const { totalRT, totalOT, totalMiles } = dailyTotals;
+  // Combined totals = legacy + daily hours
+  const totalRT = legacyTotals.totalRT + dailyTotals.totalRT;
+  const totalOT = legacyTotals.totalOT + dailyTotals.totalOT;
+  const totalMiles = legacyTotals.totalMiles + dailyTotals.totalMiles;
+  
   const adminHours = 2;
 
   const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
@@ -104,6 +110,10 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
   const remaining = nte - grandTotal;
 
+  // Check if there's legacy data to show
+  const hasLegacyData = legacyTotals.totalRT > 0 || legacyTotals.totalOT > 0 || legacyTotals.totalMiles > 0;
+  const hasDailyData = dailyTotals.totalRT > 0 || dailyTotals.totalOT > 0 || dailyTotals.totalMiles > 0;
+
   return (
     <div className="bg-gray-800 rounded-lg p-4">
       <h3 className="font-bold mb-3 text-blue-400">💰 {t('costSummary')}</h3>
@@ -112,15 +122,22 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
         <div className="text-center text-gray-400 py-4">{t('loading')}...</div>
       ) : (
         <>
+          {/* Source breakdown info */}
+          {(hasLegacyData && hasDailyData) && (
+            <div className="bg-blue-900/30 rounded-lg p-2 mb-3 text-xs text-blue-300">
+              <p>📊 {language === 'en' ? 'Includes legacy hours + daily log entries' : 'Incluye horas anteriores + registros diarios'}</p>
+            </div>
+          )}
+
           {/* Labor Section */}
           <div className="space-y-2 mb-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">{t('teamRTHours')}</span>
-              <span>{totalRT.toFixed(2)} {t('hrs')} × $64</span>
+              <span>{totalRT.toFixed(2)} {t('hrs')} × $64 = ${(totalRT * 64).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">{t('teamOTHours')}</span>
-              <span>{totalOT.toFixed(2)} {t('hrs')} × $96</span>
+              <span>{totalOT.toFixed(2)} {t('hrs')} × $96 = ${(totalOT * 96).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-yellow-400">
               <span>{t('adminHours')}</span>

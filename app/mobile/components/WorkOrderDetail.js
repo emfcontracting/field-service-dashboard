@@ -1,11 +1,13 @@
-// Work Order Detail View Component - WITH DAILY HOURS LOG (ORIGINAL VERSION RESTORED)
+// Work Order Detail View Component - WITH DAILY HOURS LOG AND FIELD DATA
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { formatDate, formatDateTime, calculateAge, getStatusBadge } from '../utils/helpers';
 import CostSummarySection from './CostSummarySection';
 import EmailPhotosSection from './EmailPhotosSection';
+import PrimaryTechFieldData from './PrimaryTechFieldData';
 import PrimaryTechDailyHours from './PrimaryTechDailyHours';
+import TeamMembersSection from './TeamMembersSection';
 import TeamMembersDailyHours from './TeamMembersDailyHours';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
@@ -24,9 +26,17 @@ export default function WorkOrderDetail({
   onUpdateField,
   onAddComment,
   onLoadTeamMembers,
+  onRemoveTeamMember,
   onShowChangePin,
   onLogout,
   onSaveSignature,
+  // FIELD DATA PROPS
+  getFieldValue,
+  handleFieldChange,
+  // TEAM MEMBER FIELD DATA PROPS
+  getTeamFieldValue,
+  handleTeamFieldChange,
+  handleUpdateTeamMemberField,
   // DAILY HOURS PROPS
   dailyLogs = [],
   onAddDailyHours,
@@ -387,6 +397,16 @@ export default function WorkOrderDetail({
             </select>
           </div>
 
+          {/* PRIMARY TECH FIELD DATA - Materials, Equipment, Trailer, Rental */}
+          <PrimaryTechFieldData
+            workOrder={wo}
+            status={status}
+            saving={saving}
+            getFieldValue={getFieldValue}
+            handleFieldChange={handleFieldChange}
+            handleUpdateField={onUpdateField}
+          />
+
           {/* PRIMARY TECH DAILY HOURS SECTION - with CSV download */}
           <PrimaryTechDailyHours
             workOrder={wo}
@@ -396,6 +416,18 @@ export default function WorkOrderDetail({
             saving={saving}
             onAddDailyHours={onAddDailyHours}
             onDownloadLogs={onDownloadLogs}
+          />
+
+          {/* TEAM MEMBERS SECTION - Add team members with field data */}
+          <TeamMembersSection
+            currentTeamList={currentTeamList}
+            status={status}
+            saving={saving}
+            onLoadTeamMembers={onLoadTeamMembers}
+            onRemoveTeamMember={onRemoveTeamMember}
+            getTeamFieldValue={getTeamFieldValue}
+            handleTeamFieldChange={handleTeamFieldChange}
+            handleUpdateTeamMemberField={handleUpdateTeamMemberField}
           />
 
           {/* TEAM MEMBERS DAILY HOURS SECTION - view all, log own only */}

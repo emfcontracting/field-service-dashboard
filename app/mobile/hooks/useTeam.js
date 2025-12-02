@@ -47,6 +47,23 @@ export function useTeam(selectedWO) {
     }
   }
 
+  async function removeTeamMember(assignmentId) {
+    if (!selectedWO?.wo_id) return;
+    
+    const confirmed = window.confirm('Are you sure you want to remove this team member?');
+    if (!confirmed) return;
+
+    try {
+      setSaving(true);
+      await teamService.removeTeamMember(supabase, assignmentId);
+      await loadTeamForWorkOrder(selectedWO.wo_id);
+    } catch (err) {
+      alert('Error removing team member: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function updateTeamMemberField(assignmentId, field, value) {
     try {
       setSaving(true);
@@ -77,9 +94,15 @@ export function useTeam(selectedWO) {
     });
   }
 
-  function getTeamFieldValue(member, field) {
-    const key = `team_${member.assignment_id}_${field}`;
-    return editingField.hasOwnProperty(key) ? editingField[key] : (member[field] || '');
+  // Updated to accept assignmentId directly for easier use in components
+  function getTeamFieldValue(assignmentId, field) {
+    const key = `team_${assignmentId}_${field}`;
+    if (editingField.hasOwnProperty(key)) {
+      return editingField[key];
+    }
+    // Find the member in currentTeamList
+    const member = currentTeamList.find(m => m.assignment_id === assignmentId);
+    return member ? (member[field] || '') : '';
   }
 
   return {
@@ -90,6 +113,7 @@ export function useTeam(selectedWO) {
     saving,
     loadAllTeamMembers,
     addTeamMember,
+    removeTeamMember,
     updateTeamMemberField,
     handleTeamFieldChange,
     getTeamFieldValue,

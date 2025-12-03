@@ -1,4 +1,5 @@
 // components/TeamMembersDailyHours.js - Team Members Daily Hours (VIEW ALL, LOG OWN ONLY)
+// FIXED: Improved user matching and added self-add capability
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -6,7 +7,7 @@ import AddDailyHoursModal from './modals/AddDailyHoursModal';
 
 export default function TeamMembersDailyHours({
   currentTeamList,
-  currentUser,  // ADDED: Current logged-in user
+  currentUser,
   dailyLogs,
   status,
   saving,
@@ -20,10 +21,21 @@ export default function TeamMembersDailyHours({
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
 
-  // Only allow adding hours for yourself
+  // Check if current user is in the team list
+  // Use string comparison to handle potential type mismatches
+  const currentUserInTeam = currentTeamList.find(member => 
+    String(member.user_id) === String(currentUser?.user_id)
+  );
+
+  // Check if member is the current user (with type-safe comparison)
+  function isCurrentUserMember(member) {
+    return String(member.user_id) === String(currentUser?.user_id);
+  }
+
+  // Open modal for logging hours
   function handleOpenAddModal(member) {
     // Check if this member is the current user
-    if (member.user_id !== currentUser?.user_id) {
+    if (!isCurrentUserMember(member)) {
       alert(language === 'en' 
         ? 'You can only log your own hours' 
         : 'Solo puede registrar sus propias horas');
@@ -33,18 +45,36 @@ export default function TeamMembersDailyHours({
     setShowAddModal(true);
   }
 
+  // Allow current user to log hours even if viewing someone else's card
+  function handleLogOwnHours() {
+    if (!currentUserInTeam) {
+      alert(language === 'en' 
+        ? 'You must be added to the team first. Ask the lead tech to add you.' 
+        : 'Primero debe ser agregado al equipo. Pídale al técnico principal que lo agregue.');
+      return;
+    }
+    setSelectedMember(currentUserInTeam);
+    setShowAddModal(true);
+  }
+
   async function handleSaveDailyHours(hoursData) {
-    await onAddDailyHours({
-      ...hoursData,
-      userId: selectedMember.user_id,
-      assignmentId: selectedMember.assignment_id
-    });
-    setShowAddModal(false);
-    setSelectedMember(null);
+    try {
+      await onAddDailyHours({
+        ...hoursData,
+        userId: selectedMember.user_id,
+        assignmentId: selectedMember.assignment_id
+      });
+      setShowAddModal(false);
+      setSelectedMember(null);
+    } catch (err) {
+      // Error is handled in parent
+      console.error('Error saving daily hours:', err);
+    }
   }
 
   function getMemberLogs(userId) {
-    return dailyLogs.filter(log => log.user_id === userId);
+    // Use string comparison for safety
+    return dailyLogs.filter(log => String(log.user_id) === String(userId));
   }
 
   function calculateMemberTotals(userId) {
@@ -61,15 +91,35 @@ export default function TeamMembersDailyHours({
       <div className="bg-gray-800 rounded-lg p-4">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-bold">👥 {t('teamMembers') || 'Team Members'}</h3>
-          {status !== 'completed' && (
-            <button
-              onClick={onLoadTeamMembers}
-              className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
-            >
-              + {t('addHelperTech') || 'Add Helper/Tech'}
-            </button>
-          )}
+          <div className="flex gap-2">
+            {/* Quick Log Button for current user if they're in team */}
+            {status !== 'completed' && currentUserInTeam && (
+              <button
+                onClick={handleLogOwnHours}
+                className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-sm font-semibold"
+              >
+                + {language === 'en' ? 'Log My Hours' : 'Registrar Mis Horas'}
+              </button>
+            )}
+            {status !== 'completed' && (
+              <button
+                onClick={onLoadTeamMembers}
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm font-semibold"
+              >
+                + {t('addHelperTech') || 'Add Helper'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Show message if current user is NOT in team list */}
+        {status !== 'completed' && !currentUserInTeam && currentTeamList.length === 0 && (
+          <div className="bg-yellow-900/30 rounded-lg p-3 mb-3 text-sm text-yellow-200">
+            ⚠️ {language === 'en' 
+              ? 'No team members assigned yet. If you are helping on this job, ask the lead tech to add you to the team.' 
+              : 'No hay miembros del equipo asignados todavía. Si está ayudando en este trabajo, pídale al técnico principal que lo agregue al equipo.'}
+          </div>
+        )}
 
         {currentTeamList.length > 0 ? (
           <div className="space-y-4">
@@ -77,7 +127,7 @@ export default function TeamMembersDailyHours({
               const memberLogs = getMemberLogs(member.user_id);
               const totals = calculateMemberTotals(member.user_id);
               const totalHours = totals.totalRT + totals.totalOT;
-              const isCurrentUser = member.user_id === currentUser?.user_id;
+              const isCurrentUser = isCurrentUserMember(member);
 
               return (
                 <div key={member.assignment_id} className={`bg-gray-700 rounded-lg p-3 ${isCurrentUser ? 'border-2 border-blue-500' : ''}`}>

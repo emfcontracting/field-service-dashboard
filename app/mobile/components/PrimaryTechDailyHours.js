@@ -1,4 +1,5 @@
 // components/PrimaryTechDailyHours.js - Bilingual Primary Tech Daily Hours with Logging
+// FIXED: Type-safe user ID comparison
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -26,11 +27,12 @@ export default function PrimaryTechDailyHours({
     ? `${leadTech.first_name} ${leadTech.last_name || ''}`.trim()
     : (language === 'en' ? 'Primary Tech' : 'Técnico Principal');
   
-  // Check if current user IS the primary tech
-  const isCurrentUserPrimaryTech = currentUser?.user_id === leadTechId;
+  // Check if current user IS the primary tech (type-safe comparison)
+  const isCurrentUserPrimaryTech = String(currentUser?.user_id) === String(leadTechId);
 
   // Filter logs for the PRIMARY TECH (lead_tech_id), not current user
-  const primaryTechLogs = dailyLogs.filter(log => log.user_id === leadTechId);
+  // Use string comparison for safety
+  const primaryTechLogs = dailyLogs.filter(log => String(log.user_id) === String(leadTechId));
   const totalRT = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.hours_regular) || 0), 0);
   const totalOT = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.hours_overtime) || 0), 0);
   const totalMiles = primaryTechLogs.reduce((sum, log) => sum + (parseFloat(log.miles) || 0), 0);
@@ -45,11 +47,17 @@ export default function PrimaryTechDailyHours({
       return;
     }
     
-    await onAddDailyHours({
-      ...hoursData,
-      userId: leadTechId, // Use lead tech ID, not current user
-      assignmentId: null // Primary tech doesn't have assignment_id
-    });
+    try {
+      await onAddDailyHours({
+        ...hoursData,
+        userId: leadTechId, // Use lead tech ID, not current user
+        assignmentId: null // Primary tech doesn't have assignment_id
+      });
+      setShowAddModal(false);
+    } catch (err) {
+      // Error handling is done in parent
+      console.error('Error saving daily hours:', err);
+    }
   }
 
   return (

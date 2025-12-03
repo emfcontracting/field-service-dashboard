@@ -1,6 +1,8 @@
 // components/quotes/NTEIncreasePage.js - Full Page NTE Increase/Quote Form
+// NOW INCLUDES EXISTING TICKET COSTS + ADDITIONAL ESTIMATED COSTS
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { RATES } from '../../services/quoteService';
 
 export default function NTEIncreasePage({
@@ -18,9 +20,30 @@ export default function NTEIncreasePage({
   calculateTotals
 }) {
   const { language } = useLanguage();
+  const supabase = createClientComponentClient();
   const wo = workOrder || {};
   
-  // Form state
+  // Existing costs from ticket
+  const [existingCosts, setExistingCosts] = useState({
+    laborRT: 0,
+    laborOT: 0,
+    laborTotal: 0,
+    materialCost: 0,
+    materialWithMarkup: 0,
+    equipmentCost: 0,
+    equipmentWithMarkup: 0,
+    trailerCost: 0,
+    trailerWithMarkup: 0,
+    rentalCost: 0,
+    rentalWithMarkup: 0,
+    mileage: 0,
+    mileageCost: 0,
+    adminFee: 128,
+    grandTotal: 0
+  });
+  const [loadingExisting, setLoadingExisting] = useState(true);
+  
+  // Form state for ADDITIONAL costs
   const [formData, setFormData] = useState({
     is_verbal_nte: false,
     verbal_approved_by: '',
@@ -44,7 +67,14 @@ export default function NTEIncreasePage({
     unit_cost: 0
   });
 
-  // Initialize form with existing quote data
+  // Load existing costs from work order
+  useEffect(() => {
+    if (wo.wo_id) {
+      loadExistingCosts();
+    }
+  }, [wo.wo_id]);
+
+  // Initialize form with existing quote data (for editing)
   useEffect(() => {
     if (selectedQuote) {
       setFormData({
@@ -64,23 +94,122 @@ export default function NTEIncreasePage({
     }
   }, [selectedQuote]);
 
-  // Calculate live totals
-  const totals = calculateTotals(formData);
+  async function loadExistingCosts() {
+    try {
+      setLoadingExisting(true);
+      
+      // Get legacy hours from work_orders
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
 
-  // Calculate material total from line items
+      // Get team member hours from assignments
+      const { data: assignments } = await supabase
+        .from('work_order_assignments')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let teamRT = 0, teamOT = 0, teamMiles = 0;
+      if (assignments) {
+        assignments.forEach(a => {
+          teamRT += parseFloat(a.hours_regular) || 0;
+          teamOT += parseFloat(a.hours_overtime) || 0;
+          teamMiles += parseFloat(a.miles) || 0;
+        });
+      }
+
+      // Get daily hours log totals
+      const { data: dailyLogs } = await supabase
+        .from('daily_hours_log')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
+      if (dailyLogs) {
+        dailyLogs.forEach(log => {
+          dailyRT += parseFloat(log.hours_regular) || 0;
+          dailyOT += parseFloat(log.hours_overtime) || 0;
+          dailyMiles += parseFloat(log.miles) || 0;
+        });
+      }
+
+      // Combine all hours
+      const totalRT = primaryRT + teamRT + dailyRT;
+      const totalOT = primaryOT + teamOT + dailyOT;
+      const totalMiles = primaryMiles + teamMiles + dailyMiles;
+
+      // Get costs from work order
+      const materialBase = parseFloat(wo.material_cost) || 0;
+      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+      const trailerBase = parseFloat(wo.trailer_cost) || 0;
+      const rentalBase = parseFloat(wo.rental_cost) || 0;
+
+      // Calculate totals
+      const laborTotal = (totalRT * RATES.RT_HOURLY) + (totalOT * RATES.OT_HOURLY);
+      const materialWithMarkup = materialBase * 1.25;
+      const equipmentWithMarkup = equipmentBase * 1.25;
+      const trailerWithMarkup = trailerBase * 1.25;
+      const rentalWithMarkup = rentalBase * 1.25;
+      const mileageCost = totalMiles * RATES.MILEAGE;
+      const adminFee = RATES.ADMIN_FEE;
+      
+      const grandTotal = laborTotal + materialWithMarkup + equipmentWithMarkup + 
+                         trailerWithMarkup + rentalWithMarkup + mileageCost + adminFee;
+
+      setExistingCosts({
+        laborRT: totalRT,
+        laborOT: totalOT,
+        laborTotal,
+        materialCost: materialBase,
+        materialWithMarkup,
+        equipmentCost: equipmentBase,
+        equipmentWithMarkup,
+        trailerCost: trailerBase,
+        trailerWithMarkup,
+        rentalCost: rentalBase,
+        rentalWithMarkup,
+        mileage: totalMiles,
+        mileageCost,
+        adminFee,
+        grandTotal
+      });
+
+    } catch (err) {
+      console.error('Error loading existing costs:', err);
+    } finally {
+      setLoadingExisting(false);
+    }
+  }
+
+  // Calculate ADDITIONAL costs from form
+  const additionalLaborTotal = 
+    (parseFloat(formData.estimated_rt_hours) * parseInt(formData.estimated_techs) * RATES.RT_HOURLY) +
+    (parseFloat(formData.estimated_ot_hours) * parseInt(formData.estimated_techs) * RATES.OT_HOURLY);
+
+  // Material from line items or manual entry
   const materialLineItemTotal = materials.reduce(
     (sum, mat) => sum + (parseFloat(mat.total_cost) || 0), 
     0
   );
+  const additionalMaterialCost = materials.length > 0 ? materialLineItemTotal : parseFloat(formData.material_cost) || 0;
+  const additionalMaterialWithMarkup = additionalMaterialCost * 1.25;
 
-  // Use line items total if we have materials, otherwise use manual entry
-  const effectiveMaterialCost = materials.length > 0 ? materialLineItemTotal : parseFloat(formData.material_cost) || 0;
-  
-  // Recalculate totals with effective material cost
-  const effectiveTotals = calculateTotals({
-    ...formData,
-    material_cost: effectiveMaterialCost
-  });
+  const additionalEquipmentWithMarkup = (
+    (parseFloat(formData.equipment_cost) || 0) + 
+    (parseFloat(formData.rental_cost) || 0) + 
+    (parseFloat(formData.trailer_cost) || 0)
+  ) * 1.25;
+
+  const additionalMileageCost = (parseFloat(formData.estimated_miles) || 0) * RATES.MILEAGE;
+
+  const additionalTotal = additionalLaborTotal + additionalMaterialWithMarkup + 
+                          additionalEquipmentWithMarkup + additionalMileageCost;
+
+  // COMBINED totals
+  const combinedTotal = existingCosts.grandTotal + additionalTotal;
+  const originalNTE = wo.nte || 0;
+  const newNTENeeded = combinedTotal;
+  const increaseNeeded = newNTENeeded - originalNTE;
 
   function handleChange(field, value) {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -103,7 +232,6 @@ export default function NTEIncreasePage({
   }
 
   async function handleSave() {
-    // Validation
     if (formData.is_verbal_nte && !formData.verbal_approved_by.trim()) {
       alert(language === 'en' 
         ? 'Please enter who approved the verbal NTE' 
@@ -114,7 +242,13 @@ export default function NTEIncreasePage({
     try {
       const dataToSave = {
         ...formData,
-        material_cost: effectiveMaterialCost
+        material_cost: additionalMaterialCost,
+        // Store the calculated totals for reference
+        existing_costs_total: existingCosts.grandTotal,
+        additional_costs_total: additionalTotal,
+        combined_total: combinedTotal,
+        original_nte: originalNTE,
+        increase_needed: increaseNeeded
       };
       
       await onSave(dataToSave);
@@ -133,28 +267,30 @@ export default function NTEIncreasePage({
         <title>NTE Increase - ${wo.wo_number}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; padding: 30px; background: white; color: #333; font-size: 12px; }
-          .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 15px; margin-bottom: 20px; }
-          .header h1 { color: #1e40af; font-size: 20px; margin-bottom: 5px; }
-          .header .company { font-size: 14px; color: #666; }
-          .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 11px; margin-top: 10px; }
+          body { font-family: Arial, sans-serif; padding: 20px; background: white; color: #333; font-size: 11px; }
+          .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 12px; margin-bottom: 15px; }
+          .header h1 { color: #1e40af; font-size: 18px; margin-bottom: 3px; }
+          .header .company { font-size: 12px; color: #666; }
+          .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-weight: bold; font-size: 10px; margin-top: 8px; }
           .badge-written { background: #3b82f6; color: white; }
           .badge-verbal { background: #f59e0b; color: white; }
-          .section { margin-bottom: 15px; }
-          .section-title { font-size: 12px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; margin-bottom: 8px; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-          .info-item { padding: 6px; background: #f9fafb; border-radius: 4px; }
-          .info-label { font-size: 9px; color: #666; text-transform: uppercase; }
-          .info-value { font-size: 11px; font-weight: 600; }
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
+          .section { margin-bottom: 12px; }
+          .section-title { font-size: 11px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 2px; margin-bottom: 6px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+          .info-item { padding: 4px; background: #f9fafb; border-radius: 3px; }
+          .info-label { font-size: 8px; color: #666; text-transform: uppercase; }
+          .info-value { font-size: 10px; font-weight: 600; }
+          table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+          th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 10px; }
           th { background: #f3f4f6; font-weight: 600; }
           .text-right { text-align: right; }
           .total-row { font-weight: bold; background: #f0f9ff; }
-          .grand-total { font-size: 14px; background: #1e40af; color: white; }
-          .notes-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 8px; margin-top: 8px; }
-          .footer { margin-top: 20px; text-align: center; color: #666; font-size: 10px; border-top: 1px solid #e5e7eb; padding-top: 10px; }
-          @media print { body { padding: 15px; } .no-print { display: none; } }
+          .grand-total { font-size: 12px; background: #1e40af; color: white; }
+          .increase-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 10px; margin: 12px 0; }
+          .new-nte-box { background: #d1fae5; border: 2px solid #10b981; border-radius: 6px; padding: 10px; margin: 12px 0; }
+          .notes-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 3px; padding: 6px; margin-top: 6px; font-size: 10px; }
+          .footer { margin-top: 15px; text-align: center; color: #666; font-size: 9px; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+          @media print { body { padding: 10px; } .no-print { display: none; } }
         </style>
       </head>
       <body>
@@ -179,7 +315,7 @@ export default function NTEIncreasePage({
             </div>
             <div class="info-item">
               <div class="info-label">Current NTE</div>
-              <div class="info-value">$${(wo.nte || 0).toFixed(2)}</div>
+              <div class="info-value">$${originalNTE.toFixed(2)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Date</div>
@@ -200,158 +336,107 @@ export default function NTEIncreasePage({
 
         ${formData.description ? `
         <div class="section">
-          <div class="section-title">Work Description</div>
-          <p style="font-size: 11px;">${formData.description}</p>
+          <div class="section-title">Additional Work Description</div>
+          <p style="font-size: 10px;">${formData.description}</p>
         </div>
         ` : ''}
 
+        <!-- EXISTING COSTS -->
         <div class="section">
-          <div class="section-title">Labor Estimate</div>
+          <div class="section-title">📋 Current Costs (Already on Ticket)</div>
           <table>
             <tr>
-              <th>Description</th>
-              <th class="text-right">Qty</th>
-              <th class="text-right">Rate</th>
-              <th class="text-right">Total</th>
+              <td>Labor (${existingCosts.laborRT.toFixed(1)} RT + ${existingCosts.laborOT.toFixed(1)} OT hrs)</td>
+              <td class="text-right">$${existingCosts.laborTotal.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>Regular Time (${formData.estimated_techs} tech${formData.estimated_techs > 1 ? 's' : ''})</td>
-              <td class="text-right">${formData.estimated_rt_hours} hrs</td>
-              <td class="text-right">$${RATES.RT_HOURLY}/hr</td>
-              <td class="text-right">$${(formData.estimated_rt_hours * formData.estimated_techs * RATES.RT_HOURLY).toFixed(2)}</td>
+              <td>Materials (with 25% markup)</td>
+              <td class="text-right">$${existingCosts.materialWithMarkup.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>Overtime (${formData.estimated_techs} tech${formData.estimated_techs > 1 ? 's' : ''})</td>
-              <td class="text-right">${formData.estimated_ot_hours} hrs</td>
-              <td class="text-right">$${RATES.OT_HOURLY}/hr</td>
-              <td class="text-right">$${(formData.estimated_ot_hours * formData.estimated_techs * RATES.OT_HOURLY).toFixed(2)}</td>
+              <td>Equipment/Rental/Trailer (with markup)</td>
+              <td class="text-right">$${(existingCosts.equipmentWithMarkup + existingCosts.rentalWithMarkup + existingCosts.trailerWithMarkup).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Mileage (${existingCosts.mileage.toFixed(1)} mi)</td>
+              <td class="text-right">$${existingCosts.mileageCost.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Admin Fee</td>
+              <td class="text-right">$${existingCosts.adminFee.toFixed(2)}</td>
             </tr>
             <tr class="total-row">
-              <td colspan="3">Labor Subtotal</td>
-              <td class="text-right">$${effectiveTotals.labor_total.toFixed(2)}</td>
+              <td><strong>Current Total</strong></td>
+              <td class="text-right"><strong>$${existingCosts.grandTotal.toFixed(2)}</strong></td>
             </tr>
           </table>
         </div>
 
-        ${materials.length > 0 ? `
+        <!-- ADDITIONAL COSTS -->
         <div class="section">
-          <div class="section-title">Materials (25% markup applied)</div>
+          <div class="section-title">➕ Additional Estimated Costs</div>
           <table>
             <tr>
-              <th>Description</th>
-              <th class="text-right">Qty</th>
-              <th class="text-right">Unit Cost</th>
-              <th class="text-right">Total</th>
+              <td>Additional Labor (${formData.estimated_rt_hours} RT + ${formData.estimated_ot_hours} OT × ${formData.estimated_techs} tech${formData.estimated_techs > 1 ? 's' : ''})</td>
+              <td class="text-right">$${additionalLaborTotal.toFixed(2)}</td>
             </tr>
-            ${materials.map(mat => `
-              <tr>
-                <td>${mat.description}</td>
-                <td class="text-right">${mat.quantity}</td>
-                <td class="text-right">$${parseFloat(mat.unit_cost).toFixed(2)}</td>
-                <td class="text-right">$${parseFloat(mat.total_cost).toFixed(2)}</td>
-              </tr>
-            `).join('')}
             <tr>
-              <td colspan="3">Materials Subtotal</td>
-              <td class="text-right">$${materialLineItemTotal.toFixed(2)}</td>
+              <td>Additional Materials (with markup)</td>
+              <td class="text-right">$${additionalMaterialWithMarkup.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Additional Equipment/Rental/Trailer (with markup)</td>
+              <td class="text-right">$${additionalEquipmentWithMarkup.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Additional Mileage (${formData.estimated_miles} mi)</td>
+              <td class="text-right">$${additionalMileageCost.toFixed(2)}</td>
             </tr>
             <tr class="total-row">
-              <td colspan="3">Materials with 25% Markup</td>
-              <td class="text-right">$${effectiveTotals.materials_with_markup.toFixed(2)}</td>
-            </tr>
-          </table>
-        </div>
-        ` : effectiveMaterialCost > 0 ? `
-        <div class="section">
-          <div class="section-title">Materials (25% markup applied)</div>
-          <table>
-            <tr>
-              <td>Materials Estimate</td>
-              <td class="text-right">$${effectiveMaterialCost.toFixed(2)}</td>
-            </tr>
-            <tr class="total-row">
-              <td>Materials with 25% Markup</td>
-              <td class="text-right">$${effectiveTotals.materials_with_markup.toFixed(2)}</td>
-            </tr>
-          </table>
-        </div>
-        ` : ''}
-
-        <div class="section">
-          <div class="section-title">Equipment & Other Costs (25% markup applied)</div>
-          <table>
-            <tr>
-              <th>Description</th>
-              <th class="text-right">Cost</th>
-              <th class="text-right">With Markup</th>
-            </tr>
-            <tr>
-              <td>Equipment</td>
-              <td class="text-right">$${parseFloat(formData.equipment_cost || 0).toFixed(2)}</td>
-              <td class="text-right">$${(parseFloat(formData.equipment_cost || 0) * 1.25).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Rentals</td>
-              <td class="text-right">$${parseFloat(formData.rental_cost || 0).toFixed(2)}</td>
-              <td class="text-right">$${(parseFloat(formData.rental_cost || 0) * 1.25).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Trailer</td>
-              <td class="text-right">$${parseFloat(formData.trailer_cost || 0).toFixed(2)}</td>
-              <td class="text-right">$${(parseFloat(formData.trailer_cost || 0) * 1.25).toFixed(2)}</td>
-            </tr>
-            <tr class="total-row">
-              <td colspan="2">Equipment/Rentals Subtotal</td>
-              <td class="text-right">$${effectiveTotals.equipment_with_markup.toFixed(2)}</td>
+              <td><strong>Additional Total</strong></td>
+              <td class="text-right"><strong>$${additionalTotal.toFixed(2)}</strong></td>
             </tr>
           </table>
         </div>
 
-        <div class="section">
-          <div class="section-title">Summary</div>
+        <!-- NTE INCREASE SUMMARY -->
+        <div class="increase-box">
           <table>
             <tr>
-              <td>Labor Total</td>
-              <td class="text-right">${effectiveTotals.labor_total.toFixed(2)}</td>
+              <td><strong>Current Costs</strong></td>
+              <td class="text-right">$${existingCosts.grandTotal.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>Materials (with markup)</td>
-              <td class="text-right">${effectiveTotals.materials_with_markup.toFixed(2)}</td>
+              <td><strong>+ Additional Costs</strong></td>
+              <td class="text-right">$${additionalTotal.toFixed(2)}</td>
             </tr>
-            <tr>
-              <td>Equipment/Rentals (with markup)</td>
-              <td class="text-right">${effectiveTotals.equipment_with_markup.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Mileage (${formData.estimated_miles} mi @ ${RATES.MILEAGE}/mi)</td>
-              <td class="text-right">${effectiveTotals.mileage_total.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Admin Fee (2 hrs @ ${RATES.RT_HOURLY}/hr)</td>
-              <td class="text-right">${effectiveTotals.admin_fee.toFixed(2)}</td>
-            </tr>
-            <tr class="total-row">
-              <td><strong>NTE INCREASE REQUESTED</strong></td>
-              <td class="text-right"><strong>${effectiveTotals.grand_total.toFixed(2)}</strong></td>
+            <tr style="font-size: 14px; border-top: 2px solid #f59e0b;">
+              <td><strong>= TOTAL NEEDED</strong></td>
+              <td class="text-right"><strong>$${combinedTotal.toFixed(2)}</strong></td>
             </tr>
           </table>
         </div>
 
-        <div class="section" style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; padding: 15px;">
-          <div class="section-title" style="color: #166534;">New NTE Total</div>
+        <div class="new-nte-box">
           <table>
             <tr>
               <td>Original NTE</td>
-              <td class="text-right">${(wo.nte || 0).toFixed(2)}</td>
+              <td class="text-right">$${originalNTE.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>This NTE Increase</td>
-              <td class="text-right">+ ${effectiveTotals.grand_total.toFixed(2)}</td>
+              <td>Total Costs Needed</td>
+              <td class="text-right">$${combinedTotal.toFixed(2)}</td>
             </tr>
-            <tr class="grand-total" style="background: #166534;">
-              <td><strong>NEW NTE TOTAL</strong></td>
-              <td class="text-right"><strong>${((wo.nte || 0) + effectiveTotals.grand_total).toFixed(2)}</strong></td>
+            <tr style="font-size: 14px; border-top: 2px solid #10b981; color: ${increaseNeeded > 0 ? '#dc2626' : '#10b981'};">
+              <td><strong>${increaseNeeded > 0 ? 'NTE INCREASE NEEDED' : 'WITHIN BUDGET'}</strong></td>
+              <td class="text-right"><strong>${increaseNeeded > 0 ? '+' : ''}$${increaseNeeded.toFixed(2)}</strong></td>
             </tr>
+            ${increaseNeeded > 0 ? `
+            <tr style="font-size: 16px; background: #10b981; color: white;">
+              <td><strong>NEW NTE REQUESTED</strong></td>
+              <td class="text-right"><strong>$${combinedTotal.toFixed(2)}</strong></td>
+            </tr>
+            ` : ''}
           </table>
         </div>
 
@@ -367,8 +452,8 @@ export default function NTEIncreasePage({
           <p>Generated: ${new Date().toLocaleString()} by ${currentUser?.first_name} ${currentUser?.last_name}</p>
         </div>
 
-        <div class="no-print" style="text-align: center; margin-top: 20px;">
-          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 12px 30px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;">
+        <div class="no-print" style="text-align: center; margin-top: 15px;">
+          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 10px 25px; border: none; border-radius: 5px; font-size: 12px; cursor: pointer;">
             🖨️ Print
           </button>
         </div>
@@ -413,8 +498,49 @@ export default function NTEIncreasePage({
           <p className="text-sm text-gray-400">{wo.building}</p>
           <p className="text-sm text-gray-400">
             {language === 'en' ? 'Current NTE' : 'NTE Actual'}: 
-            <span className="text-green-400 font-bold ml-2">${(wo.nte || 0).toFixed(2)}</span>
+            <span className="text-green-400 font-bold ml-2">${originalNTE.toFixed(2)}</span>
           </p>
+        </div>
+
+        {/* EXISTING COSTS SUMMARY */}
+        <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-blue-500">
+          <h3 className="font-bold mb-3 text-blue-400">
+            📋 {language === 'en' ? 'Current Costs (On Ticket)' : 'Costos Actuales (En Ticket)'}
+          </h3>
+          
+          {loadingExisting ? (
+            <div className="text-center text-gray-400 py-4">Loading...</div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">
+                  {language === 'en' ? 'Labor' : 'Mano de Obra'} 
+                  ({existingCosts.laborRT.toFixed(1)} RT + {existingCosts.laborOT.toFixed(1)} OT)
+                </span>
+                <span>${existingCosts.laborTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{language === 'en' ? 'Materials (w/ markup)' : 'Materiales (c/ margen)'}</span>
+                <span>${existingCosts.materialWithMarkup.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{language === 'en' ? 'Equip/Rental/Trailer' : 'Equipo/Alquiler/Trailer'}</span>
+                <span>${(existingCosts.equipmentWithMarkup + existingCosts.rentalWithMarkup + existingCosts.trailerWithMarkup).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{language === 'en' ? 'Mileage' : 'Millaje'} ({existingCosts.mileage.toFixed(1)} mi)</span>
+                <span>${existingCosts.mileageCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{language === 'en' ? 'Admin Fee' : 'Cargo Admin'}</span>
+                <span>${existingCosts.adminFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold border-t border-gray-600 pt-2 text-blue-400">
+                <span>{language === 'en' ? 'CURRENT TOTAL' : 'TOTAL ACTUAL'}</span>
+                <span>${existingCosts.grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quote Type Selection */}
@@ -462,7 +588,7 @@ export default function NTEIncreasePage({
 
         {/* Work Description */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="font-bold mb-3">{language === 'en' ? 'Work Description' : 'Descripción del Trabajo'}</h3>
+          <h3 className="font-bold mb-3">{language === 'en' ? 'Additional Work Description' : 'Descripción del Trabajo Adicional'}</h3>
           <textarea
             value={formData.description}
             onChange={(e) => handleChange('description', e.target.value)}
@@ -472,9 +598,19 @@ export default function NTEIncreasePage({
           />
         </div>
 
-        {/* Labor Estimate */}
+        {/* ADDITIONAL COSTS HEADER */}
+        <div className="bg-yellow-600 rounded-lg p-3 text-center">
+          <h3 className="font-bold text-lg">
+            ➕ {language === 'en' ? 'ADDITIONAL ESTIMATED COSTS' : 'COSTOS ADICIONALES ESTIMADOS'}
+          </h3>
+          <p className="text-xs opacity-75">
+            {language === 'en' ? 'Enter what you expect to need beyond current costs' : 'Ingrese lo que espera necesitar más allá de los costos actuales'}
+          </p>
+        </div>
+
+        {/* Additional Labor Estimate */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="font-bold mb-3">👷 {language === 'en' ? 'Labor Estimate' : 'Estimación de Mano de Obra'}</h3>
+          <h3 className="font-bold mb-3">👷 {language === 'en' ? 'Additional Labor' : 'Mano de Obra Adicional'}</h3>
           
           <div className="grid grid-cols-3 gap-3 mb-3">
             <div>
@@ -512,25 +648,17 @@ export default function NTEIncreasePage({
           </div>
           
           <div className="bg-gray-700 rounded p-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-400">RT: {formData.estimated_rt_hours}h × {formData.estimated_techs} × ${RATES.RT_HOURLY}</span>
-              <span className="text-green-400">${(formData.estimated_rt_hours * formData.estimated_techs * RATES.RT_HOURLY).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">OT: {formData.estimated_ot_hours}h × {formData.estimated_techs} × ${RATES.OT_HOURLY}</span>
-              <span className="text-yellow-400">${(formData.estimated_ot_hours * formData.estimated_techs * RATES.OT_HOURLY).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-bold border-t border-gray-600 mt-2 pt-2">
-              <span>{language === 'en' ? 'Labor Total' : 'Total Mano de Obra'}</span>
-              <span>${effectiveTotals.labor_total.toFixed(2)}</span>
+            <div className="flex justify-between font-bold text-yellow-400">
+              <span>{language === 'en' ? 'Additional Labor' : 'Mano de Obra Adicional'}</span>
+              <span>${additionalLaborTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        {/* Materials */}
+        {/* Additional Materials */}
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold">🔧 {language === 'en' ? 'Materials' : 'Materiales'}</h3>
+            <h3 className="font-bold">🔧 {language === 'en' ? 'Additional Materials' : 'Materiales Adicionales'}</h3>
             <button
               onClick={() => setShowMaterialForm(true)}
               className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm"
@@ -539,7 +667,6 @@ export default function NTEIncreasePage({
             </button>
           </div>
 
-          {/* Material Line Items */}
           {materials.length > 0 ? (
             <div className="space-y-2 mb-3">
               {materials.map((mat) => (
@@ -562,20 +689,16 @@ export default function NTEIncreasePage({
                 </div>
               ))}
               <div className="bg-gray-700 rounded p-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">{language === 'en' ? 'Subtotal' : 'Subtotal'}</span>
-                  <span>${materialLineItemTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-green-400">
-                  <span>+ 25% {language === 'en' ? 'Markup' : 'Margen'}</span>
-                  <span>${effectiveTotals.materials_with_markup.toFixed(2)}</span>
+                <div className="flex justify-between font-bold text-yellow-400">
+                  <span>+ 25% = {language === 'en' ? 'Additional Materials' : 'Materiales Adicionales'}</span>
+                  <span>${additionalMaterialWithMarkup.toFixed(2)}</span>
                 </div>
               </div>
             </div>
           ) : (
             <div>
               <label className="block text-xs text-gray-400 mb-1">
-                {language === 'en' ? 'Estimated Material Cost ($)' : 'Costo Estimado de Materiales ($)'}
+                {language === 'en' ? 'Estimated Additional Material Cost ($)' : 'Costo Estimado de Materiales Adicionales ($)'}
               </label>
               <input
                 type="number"
@@ -587,14 +710,13 @@ export default function NTEIncreasePage({
                 placeholder="0.00"
               />
               {formData.material_cost > 0 && (
-                <p className="text-xs text-green-400 mt-1">
+                <p className="text-xs text-yellow-400 mt-1">
                   + 25% = ${(formData.material_cost * 1.25).toFixed(2)}
                 </p>
               )}
             </div>
           )}
 
-          {/* Add Material Form */}
           {showMaterialForm && (
             <div className="bg-gray-700 rounded-lg p-3 mt-3 border-2 border-blue-500">
               <h4 className="font-bold text-sm mb-2">{language === 'en' ? 'Add Material' : 'Agregar Material'}</h4>
@@ -642,9 +764,9 @@ export default function NTEIncreasePage({
           )}
         </div>
 
-        {/* Equipment/Rentals */}
+        {/* Additional Equipment/Rentals */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="font-bold mb-3">🚛 {language === 'en' ? 'Equipment & Rentals' : 'Equipo y Alquileres'}</h3>
+          <h3 className="font-bold mb-3">🚛 {language === 'en' ? 'Additional Equipment & Rentals' : 'Equipo y Alquileres Adicionales'}</h3>
           
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -685,16 +807,16 @@ export default function NTEIncreasePage({
             </div>
           </div>
           
-          {effectiveTotals.equipment_with_markup > 0 && (
-            <p className="text-xs text-green-400 mt-2 text-right">
-              + 25% = ${effectiveTotals.equipment_with_markup.toFixed(2)}
+          {additionalEquipmentWithMarkup > 0 && (
+            <p className="text-xs text-yellow-400 mt-2 text-right">
+              + 25% = ${additionalEquipmentWithMarkup.toFixed(2)}
             </p>
           )}
         </div>
 
-        {/* Mileage */}
+        {/* Additional Mileage */}
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="font-bold mb-3">🚗 {language === 'en' ? 'Mileage' : 'Millaje'}</h3>
+          <h3 className="font-bold mb-3">🚗 {language === 'en' ? 'Additional Mileage' : 'Millaje Adicional'}</h3>
           
           <div className="flex items-center gap-3">
             <input
@@ -705,8 +827,8 @@ export default function NTEIncreasePage({
               className="flex-1 px-3 py-2 bg-gray-700 rounded-lg text-white text-center"
               placeholder="0"
             />
-            <span className="text-gray-400">× ${RATES.MILEAGE}/mi =</span>
-            <span className="font-bold text-blue-400">${effectiveTotals.mileage_total.toFixed(2)}</span>
+            <span className="text-gray-400">× $1/mi =</span>
+            <span className="font-bold text-yellow-400">${additionalMileageCost.toFixed(2)}</span>
           </div>
         </div>
 
@@ -722,55 +844,84 @@ export default function NTEIncreasePage({
           />
         </div>
 
-        {/* Grand Total Summary */}
-        <div className="bg-blue-900 rounded-lg p-4 border-2 border-blue-500">
-          <h3 className="font-bold mb-3 text-blue-300">💰 {language === 'en' ? 'Total Summary' : 'Resumen Total'}</h3>
+        {/* ADDITIONAL COSTS SUMMARY */}
+        <div className="bg-yellow-900 rounded-lg p-4 border-2 border-yellow-500">
+          <h3 className="font-bold mb-3 text-yellow-300">
+            ➕ {language === 'en' ? 'Additional Costs Summary' : 'Resumen de Costos Adicionales'}
+          </h3>
           
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Labor' : 'Mano de Obra'}</span>
-              <span>${effectiveTotals.labor_total.toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Labor' : 'Mano de Obra Adicional'}</span>
+              <span>${additionalLaborTotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Materials (w/ markup)' : 'Materiales (c/ margen)'}</span>
-              <span>${effectiveTotals.materials_with_markup.toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Materials' : 'Materiales Adicionales'}</span>
+              <span>${additionalMaterialWithMarkup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Equipment (w/ markup)' : 'Equipo (c/ margen)'}</span>
-              <span>${effectiveTotals.equipment_with_markup.toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Equip/Rental' : 'Equipo/Alquiler Adicional'}</span>
+              <span>${additionalEquipmentWithMarkup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Mileage' : 'Millaje'}</span>
-              <span>${effectiveTotals.mileage_total.toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Mileage' : 'Millaje Adicional'}</span>
+              <span>${additionalMileageCost.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Admin Fee' : 'Cargo Admin'}</span>
-              <span>${effectiveTotals.admin_fee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold border-t border-blue-400 pt-2 mt-2">
-              <span>{language === 'en' ? 'NTE INCREASE' : 'AUMENTO NTE'}</span>
-              <span className="text-yellow-400">${effectiveTotals.grand_total.toFixed(2)}</span>
+            <div className="flex justify-between text-lg font-bold border-t border-yellow-400 pt-2 mt-2">
+              <span>{language === 'en' ? 'ADDITIONAL TOTAL' : 'TOTAL ADICIONAL'}</span>
+              <span className="text-yellow-400">${additionalTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        {/* New NTE Total */}
+        {/* COMBINED TOTAL & NTE INCREASE */}
         <div className="bg-green-900 rounded-lg p-4 border-2 border-green-500">
-          <h3 className="font-bold mb-3 text-green-300">📊 {language === 'en' ? 'New NTE Total' : 'Nuevo NTE Total'}</h3>
+          <h3 className="font-bold mb-3 text-green-300">
+            📊 {language === 'en' ? 'NTE Increase Summary' : 'Resumen de Aumento NTE'}
+          </h3>
           
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Original NTE' : 'NTE Original'}</span>
-              <span className="text-white">${(wo.nte || 0).toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Current Costs (on ticket)' : 'Costos Actuales (en ticket)'}</span>
+              <span className="text-blue-400">${existingCosts.grandTotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'This NTE Increase' : 'Este Aumento NTE'}</span>
-              <span className="text-yellow-400">+ ${effectiveTotals.grand_total.toFixed(2)}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Costs' : 'Costos Adicionales'}</span>
+              <span className="text-yellow-400">+ ${additionalTotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-xl font-bold border-t border-green-400 pt-2 mt-2">
-              <span>{language === 'en' ? 'NEW NTE TOTAL' : 'NUEVO NTE TOTAL'}</span>
-              <span className="text-green-400">${((wo.nte || 0) + effectiveTotals.grand_total).toFixed(2)}</span>
+            <div className="flex justify-between font-bold border-t border-green-400 pt-2">
+              <span>{language === 'en' ? 'TOTAL COSTS NEEDED' : 'COSTOS TOTALES NECESARIOS'}</span>
+              <span className="text-white">${combinedTotal.toFixed(2)}</span>
             </div>
+            
+            <div className="border-t border-green-400 pt-2 mt-2">
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? 'Original NTE' : 'NTE Original'}</span>
+                <span>${originalNTE.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? 'Total Needed' : 'Total Necesario'}</span>
+                <span>${combinedTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {increaseNeeded > 0 ? (
+              <>
+                <div className="flex justify-between text-lg font-bold text-red-400 border-t border-green-400 pt-2">
+                  <span>{language === 'en' ? 'NTE INCREASE NEEDED' : 'AUMENTO NTE NECESARIO'}</span>
+                  <span>+${increaseNeeded.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-xl font-bold bg-green-600 -mx-4 px-4 py-3 mt-2 rounded-b-lg">
+                  <span>{language === 'en' ? 'NEW NTE REQUESTED' : 'NUEVO NTE SOLICITADO'}</span>
+                  <span>${combinedTotal.toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between text-lg font-bold text-green-400 border-t border-green-400 pt-2">
+                <span>✅ {language === 'en' ? 'WITHIN CURRENT NTE' : 'DENTRO DEL NTE ACTUAL'}</span>
+                <span>${Math.abs(increaseNeeded).toFixed(2)} {language === 'en' ? 'remaining' : 'restante'}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

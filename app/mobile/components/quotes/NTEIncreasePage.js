@@ -312,27 +312,45 @@ export default function NTEIncreasePage({
           <table>
             <tr>
               <td>Labor Total</td>
-              <td class="text-right">$${effectiveTotals.labor_total.toFixed(2)}</td>
+              <td class="text-right">${effectiveTotals.labor_total.toFixed(2)}</td>
             </tr>
             <tr>
               <td>Materials (with markup)</td>
-              <td class="text-right">$${effectiveTotals.materials_with_markup.toFixed(2)}</td>
+              <td class="text-right">${effectiveTotals.materials_with_markup.toFixed(2)}</td>
             </tr>
             <tr>
               <td>Equipment/Rentals (with markup)</td>
-              <td class="text-right">$${effectiveTotals.equipment_with_markup.toFixed(2)}</td>
+              <td class="text-right">${effectiveTotals.equipment_with_markup.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>Mileage (${formData.estimated_miles} mi @ $${RATES.MILEAGE}/mi)</td>
-              <td class="text-right">$${effectiveTotals.mileage_total.toFixed(2)}</td>
+              <td>Mileage (${formData.estimated_miles} mi @ ${RATES.MILEAGE}/mi)</td>
+              <td class="text-right">${effectiveTotals.mileage_total.toFixed(2)}</td>
             </tr>
             <tr>
-              <td>Admin Fee (2 hrs @ $${RATES.RT_HOURLY}/hr)</td>
-              <td class="text-right">$${effectiveTotals.admin_fee.toFixed(2)}</td>
+              <td>Admin Fee (2 hrs @ ${RATES.RT_HOURLY}/hr)</td>
+              <td class="text-right">${effectiveTotals.admin_fee.toFixed(2)}</td>
             </tr>
-            <tr class="grand-total">
-              <td><strong>TOTAL NTE INCREASE REQUESTED</strong></td>
-              <td class="text-right"><strong>$${effectiveTotals.grand_total.toFixed(2)}</strong></td>
+            <tr class="total-row">
+              <td><strong>NTE INCREASE REQUESTED</strong></td>
+              <td class="text-right"><strong>${effectiveTotals.grand_total.toFixed(2)}</strong></td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="section" style="background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px; padding: 15px;">
+          <div class="section-title" style="color: #166534;">New NTE Total</div>
+          <table>
+            <tr>
+              <td>Original NTE</td>
+              <td class="text-right">${(wo.nte || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>This NTE Increase</td>
+              <td class="text-right">+ ${effectiveTotals.grand_total.toFixed(2)}</td>
+            </tr>
+            <tr class="grand-total" style="background: #166534;">
+              <td><strong>NEW NTE TOTAL</strong></td>
+              <td class="text-right"><strong>${((wo.nte || 0) + effectiveTotals.grand_total).toFixed(2)}</strong></td>
             </tr>
           </table>
         </div>
@@ -729,9 +747,29 @@ export default function NTEIncreasePage({
               <span className="text-gray-300">{language === 'en' ? 'Admin Fee' : 'Cargo Admin'}</span>
               <span>${effectiveTotals.admin_fee.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-xl font-bold border-t border-blue-400 pt-2 mt-2">
-              <span>{language === 'en' ? 'TOTAL NTE INCREASE' : 'AUMENTO NTE TOTAL'}</span>
-              <span className="text-green-400">${effectiveTotals.grand_total.toFixed(2)}</span>
+            <div className="flex justify-between text-lg font-bold border-t border-blue-400 pt-2 mt-2">
+              <span>{language === 'en' ? 'NTE INCREASE' : 'AUMENTO NTE'}</span>
+              <span className="text-yellow-400">${effectiveTotals.grand_total.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* New NTE Total */}
+        <div className="bg-green-900 rounded-lg p-4 border-2 border-green-500">
+          <h3 className="font-bold mb-3 text-green-300">📊 {language === 'en' ? 'New NTE Total' : 'Nuevo NTE Total'}</h3>
+          
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-300">{language === 'en' ? 'Original NTE' : 'NTE Original'}</span>
+              <span className="text-white">${(wo.nte || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-300">{language === 'en' ? 'This NTE Increase' : 'Este Aumento NTE'}</span>
+              <span className="text-yellow-400">+ ${effectiveTotals.grand_total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-xl font-bold border-t border-green-400 pt-2 mt-2">
+              <span>{language === 'en' ? 'NEW NTE TOTAL' : 'NUEVO NTE TOTAL'}</span>
+              <span className="text-green-400">${((wo.nte || 0) + effectiveTotals.grand_total).toFixed(2)}</span>
             </div>
           </div>
         </div>

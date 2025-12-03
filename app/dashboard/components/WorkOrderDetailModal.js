@@ -639,43 +639,64 @@ export default function WorkOrderDetailModal({
   };
 
   // Download Completion Certificate
+  // Download Completion Certificate - MATCHES MOBILE APP VERSION
   const downloadCompletionCertificate = () => {
-    const leadTech = selectedWO.lead_tech || {};
     const completionDate = selectedWO.date_completed ? formatDateTime(selectedWO.date_completed) : formatDateTime(new Date().toISOString());
+    const signatureDateTime = selectedWO.signature_date ? formatDateTime(selectedWO.signature_date) : 'N/A';
+    
+    // Parse GPS location if available
+    let locationDisplay = '';
+    if (selectedWO.signature_location) {
+      const [lat, lng] = selectedWO.signature_location.split(',');
+      locationDisplay = `${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`;
+    }
+    
+    // Escape HTML in comments to prevent XSS
+    const escapedComments = (selectedWO.comments || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    const escapedDescription = (selectedWO.work_order_description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Work Order Completion - ${selectedWO.wo_number}</title>
+        <title>Work Order Completion Certificate - ${selectedWO.wo_number}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; padding: 40px; background: white; color: #333; }
           .certificate { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 40px; background: white; }
           .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 20px; margin-bottom: 30px; }
-          .header h1 { color: #1e40af; font-size: 28px; margin-bottom: 10px; }
+          .header h1 { color: #1e40af; font-size: 24px; margin-bottom: 10px; }
           .header .company { font-size: 18px; color: #666; }
           .badge { display: inline-block; background: #22c55e; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; margin-top: 15px; }
           .section { margin-bottom: 25px; }
-          .section-title { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
-          .section-content { font-size: 16px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-          .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
-          .info-label { color: #666; font-weight: 500; }
-          .info-value { font-weight: bold; color: #333; }
-          .signature-section { margin-top: 40px; padding-top: 30px; border-top: 2px solid #1e40af; }
-          .signature-box { display: flex; align-items: flex-start; gap: 30px; margin-top: 20px; }
+          .section-title { font-size: 14px; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 2px solid #e5e7eb; padding-bottom: 5px; font-weight: bold; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+          .info-item { padding: 10px; background: #f9fafb; border-radius: 6px; }
+          .info-label { font-size: 11px; color: #666; text-transform: uppercase; margin-bottom: 4px; }
+          .info-value { font-size: 14px; font-weight: 600; color: #333; }
+          .description-box { background: #f9fafb; border-radius: 8px; padding: 15px; margin-top: 10px; }
+          .description-text { font-size: 14px; line-height: 1.6; color: #333; }
+          .comments-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin-top: 10px; max-height: 200px; overflow-y: auto; }
+          .comments-text { font-size: 12px; line-height: 1.5; color: #333; white-space: pre-wrap; font-family: inherit; }
+          .signature-section { margin-top: 30px; padding-top: 25px; border-top: 2px solid #1e40af; }
+          .signature-grid { display: grid; grid-template-columns: auto 1fr; gap: 30px; align-items: start; }
           .signature-image { border: 2px solid #e5e7eb; padding: 10px; background: #f9fafb; border-radius: 8px; }
-          .signature-image img { max-width: 300px; height: auto; }
-          .signature-details { flex: 1; }
-          .signature-details p { margin-bottom: 10px; }
+          .signature-image img { max-width: 250px; height: auto; display: block; }
+          .signature-details { }
+          .signature-item { margin-bottom: 12px; }
+          .signature-label { font-size: 11px; color: #666; text-transform: uppercase; margin-bottom: 2px; }
+          .signature-value { font-size: 14px; font-weight: 600; color: #333; }
+          .location-link { color: #1e40af; text-decoration: none; }
+          .location-link:hover { text-decoration: underline; }
           .verification { background: #f0fdf4; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center; }
-          .verification-text { color: #166534; font-weight: bold; }
-          .hours-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-          .hours-table th, .hours-table td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
-          .hours-table th { background: #f3f4f6; }
-          .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-          @media print { body { padding: 20px; } .certificate { border: 2px solid #1e40af; } .no-print { display: none; } }
+          .verification-text { color: #166534; font-weight: bold; font-size: 14px; }
+          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 11px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+          @media print { 
+            body { padding: 20px; } 
+            .certificate { border: 2px solid #1e40af; } 
+            .no-print { display: none; }
+            .comments-box { max-height: none; }
+          }
         </style>
       </head>
       <body>
@@ -686,122 +707,90 @@ export default function WorkOrderDetailModal({
             <div class="badge">✓ COMPLETED</div>
           </div>
           
+          <!-- Work Order Info -->
           <div class="section">
             <div class="section-title">Work Order Information</div>
-            <div class="grid">
-              <div>
-                <div class="info-row">
-                  <span class="info-label">Work Order #:</span>
-                  <span class="info-value">${selectedWO.wo_number}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Building:</span>
-                  <span class="info-value">${selectedWO.building || 'N/A'}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Requestor:</span>
-                  <span class="info-value">${selectedWO.requestor || 'N/A'}</span>
-                </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Work Order #</div>
+                <div class="info-value">${selectedWO.wo_number}</div>
               </div>
-              <div>
-                <div class="info-row">
-                  <span class="info-label">Date Entered:</span>
-                  <span class="info-value">${formatDate(selectedWO.date_entered)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Date Completed:</span>
-                  <span class="info-value">${completionDate}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">NTE Budget:</span>
-                  <span class="info-value">$${(selectedWO.nte || 0).toFixed(2)}</span>
-                </div>
+              <div class="info-item">
+                <div class="info-label">Building</div>
+                <div class="info-value">${selectedWO.building || 'N/A'}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Requestor</div>
+                <div class="info-value">${selectedWO.requestor || 'N/A'}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Date Completed</div>
+                <div class="info-value">${completionDate}</div>
               </div>
             </div>
           </div>
           
+          <!-- Job Description -->
           <div class="section">
-            <div class="section-title">Work Description</div>
-            <div class="section-content">${selectedWO.work_order_description || 'N/A'}</div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Service Team</div>
-            <div class="info-row">
-              <span class="info-label">Lead Technician:</span>
-              <span class="info-value">${leadTech.first_name || ''} ${leadTech.last_name || ''}</span>
+            <div class="section-title">Job Description</div>
+            <div class="description-box">
+              <p class="description-text">${escapedDescription || 'No description provided'}</p>
             </div>
-            ${(selectedWO.teamMembers || []).map((member, idx) => `
-              <div class="info-row">
-                <span class="info-label">Team Member ${idx + 1}:</span>
-                <span class="info-value">${member.user?.first_name || ''} ${member.user?.last_name || ''}</span>
-              </div>
-            `).join('')}
-          </div>
-
-          <div class="section">
-            <div class="section-title">Hours Summary</div>
-            <table class="hours-table">
-              <tr>
-                <th>Category</th>
-                <th>Amount</th>
-                <th>Rate</th>
-                <th>Total</th>
-              </tr>
-              <tr>
-                <td>Regular Hours</td>
-                <td>${dailyTotals.totalRT.toFixed(2)} hrs</td>
-                <td>$64.00/hr</td>
-                <td>$${(dailyTotals.totalRT * 64).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Overtime Hours</td>
-                <td>${dailyTotals.totalOT.toFixed(2)} hrs</td>
-                <td>$96.00/hr</td>
-                <td>$${(dailyTotals.totalOT * 96).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Mileage</td>
-                <td>${dailyTotals.totalMiles.toFixed(1)} mi</td>
-                <td>$1.00/mi</td>
-                <td>$${dailyTotals.totalMiles.toFixed(2)}</td>
-              </tr>
-            </table>
           </div>
           
+          <!-- Comments/Notes -->
+          ${selectedWO.comments ? `
+          <div class="section">
+            <div class="section-title">Work Notes & Comments</div>
+            <div class="comments-box">
+              <div class="comments-text">${escapedComments}</div>
+            </div>
+          </div>
+          ` : ''}
+          
+          <!-- Signature Section -->
           ${selectedWO.customer_signature ? `
             <div class="signature-section">
-              <div class="section-title">Customer Acceptance & Signature</div>
-              <div class="signature-box">
+              <div class="section-title">Customer Verification & Signature</div>
+              <div class="signature-grid">
                 <div class="signature-image">
                   <img src="${selectedWO.customer_signature}" alt="Customer Signature" />
                 </div>
                 <div class="signature-details">
-                  <p><strong>Signed By:</strong> ${selectedWO.customer_name || 'N/A'}</p>
-                  <p><strong>Date Signed:</strong> ${formatDateTime(selectedWO.signature_date)}</p>
-                  <p><strong>Work Order:</strong> ${selectedWO.wo_number}</p>
+                  <div class="signature-item">
+                    <div class="signature-label">Signed By</div>
+                    <div class="signature-value">${selectedWO.customer_name || 'N/A'}</div>
+                  </div>
+                  <div class="signature-item">
+                    <div class="signature-label">Date & Time Signed</div>
+                    <div class="signature-value">${signatureDateTime}</div>
+                  </div>
+                  ${locationDisplay ? `
+                  <div class="signature-item">
+                    <div class="signature-label">Location (GPS)</div>
+                    <div class="signature-value">
+                      <a href="https://www.google.com/maps?q=${selectedWO.signature_location}" target="_blank" class="location-link">
+                        📍 ${locationDisplay}
+                      </a>
+                    </div>
+                  </div>
+                  ` : ''}
                 </div>
               </div>
               <div class="verification">
-                <span class="verification-text">✓ This work order has been verified and signed by the customer</span>
+                <span class="verification-text">✓ Work completed and verified by customer signature</span>
               </div>
             </div>
           ` : `
-            <div class="signature-section">
-              <div class="section-title">Customer Signature</div>
-              <p style="color: #666; margin: 20px 0;">No signature collected</p>
-              <div style="margin-top: 30px;">
-                <p><strong>Signature:</strong> _________________________________</p>
-                <p style="margin-top: 20px;"><strong>Printed Name:</strong> _________________________________</p>
-                <p style="margin-top: 20px;"><strong>Date:</strong> _________________________________</p>
-              </div>
+            <div class="section">
+              <div class="section-title">Signature</div>
+              <p style="color: #666; font-style: italic;">No customer signature on file</p>
             </div>
           `}
           
           <div class="footer">
-            <p>EMF Contracting LLC - Field Service Management</p>
-            <p>This document serves as proof of work completion</p>
-            <p>Generated: ${new Date().toLocaleString()}</p>
+            <p><strong>EMF Contracting LLC</strong></p>
+            <p>Certificate Generated: ${new Date().toLocaleString()}</p>
           </div>
         </div>
         

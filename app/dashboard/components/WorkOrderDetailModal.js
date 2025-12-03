@@ -40,8 +40,11 @@ export default function WorkOrderDetailModal({
     miles: 0,
     notes: ''
   });
+  // NTE Increases state
   const [nteIncreases, setNteIncreases] = useState([]);
   const [loadingNteIncreases, setLoadingNteIncreases] = useState(true);
+  const [editingNTE, setEditingNTE] = useState(null); // Track which NTE is being edited
+  const [savingNTE, setSavingNTE] = useState(false);
   const adminPassword = 'admin123';
 
   useEffect(() => {
@@ -102,6 +105,227 @@ export default function WorkOrderDetailModal({
       console.error('Error loading NTE increases:', err);
     } finally {
       setLoadingNteIncreases(false);
+    }
+  };
+
+  // Handle updating an NTE increase
+  const handleUpdateNTEIncrease = async (quoteId, updates) => {
+    try {
+      setSavingNTE(true);
+      
+      // Recalculate grand total if cost fields changed
+      const quote = nteIncreases.find(q => q.quote_id === quoteId);
+      const updatedQuote = { ...quote, ...updates };
+      
+      const laborTotal = parseFloat(updatedQuote.labor_total) || 0;
+      const materialsWithMarkup = parseFloat(updatedQuote.materials_with_markup) || 0;
+      const equipmentWithMarkup = parseFloat(updatedQuote.equipment_with_markup) || 0;
+      const mileageTotal = parseFloat(updatedQuote.mileage_total) || 0;
+      const adminFee = parseFloat(updatedQuote.admin_fee) || 0;
+      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal + adminFee;
+      
+      const finalUpdates = { ...updates, grand_total: grandTotal };
+      
+      const { error } = await supabase
+        .from('work_order_quotes')
+        .update(finalUpdates)
+        .eq('quote_id', quoteId);
+
+      if (error) throw error;
+
+      // Update local state
+      setNteIncreases(nteIncreases.map(q => 
+        q.quote_id === quoteId ? { ...q, ...finalUpdates } : q
+      ));
+      
+    } catch (err) {
+      alert('Error updating NTE: ' + err.message);
+    } finally {
+      setSavingNTE(false);
+    }
+  };
+
+  // Handle deleting an NTE increase
+  const handleDeleteNTEIncrease = async (quoteId) => {
+    if (!confirm('Delete this NTE increase request? This cannot be undone.')) return;
+
+    try {
+      setSavingNTE(true);
+      
+      const { error } = await supabase
+        .from('work_order_quotes')
+        .delete()
+        .eq('quote_id', quoteId);
+
+      if (error) throw error;
+
+      setNteIncreases(nteIncreases.filter(q => q.quote_id !== quoteId));
+      alert('✅ NTE increase deleted');
+    } catch (err) {
+      alert('Error deleting NTE: ' + err.message);
+    } finally {
+      setSavingNTE(false);
+    }
+  };
+
+  // Print NTE Increase
+  const printNTEIncrease = (quote) => {
+    const newNTE = (selectedWO.nte || 0) + (quote.grand_total || 0);
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>NTE Increase - ${selectedWO.wo_number}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 30px; background: white; color: #333; }
+          .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 15px; margin-bottom: 20px; }
+          .header h1 { color: #1e40af; font-size: 22px; margin-bottom: 5px; }
+          .header .company { font-size: 14px; color: #666; }
+          .badge { display: inline-block; padding: 5px 15px; border-radius: 15px; font-weight: bold; font-size: 12px; margin-top: 10px; }
+          .badge-written { background: #3b82f6; color: white; }
+          .badge-verbal { background: #f59e0b; color: white; }
+          .section { margin-bottom: 20px; }
+          .section-title { font-size: 14px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; text-transform: uppercase; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+          .info-item { padding: 8px; background: #f9fafb; border-radius: 5px; }
+          .info-label { font-size: 10px; color: #666; text-transform: uppercase; }
+          .info-value { font-size: 14px; font-weight: 600; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+          th { background: #f3f4f6; font-weight: 600; font-size: 12px; }
+          .text-right { text-align: right; }
+          .total-row { background: #f0f9ff; font-weight: bold; }
+          .grand-total { font-size: 16px; background: #1e40af; color: white; }
+          .summary-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0; }
+          .new-nte-box { background: #d1fae5; border: 2px solid #10b981; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center; }
+          .new-nte-value { font-size: 28px; font-weight: bold; color: #059669; }
+          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 15px; }
+          @media print { body { padding: 15px; } .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>NTE INCREASE REQUEST</h1>
+          <div class="company">EMF Contracting LLC</div>
+          <div class="badge ${quote.is_verbal_nte ? 'badge-verbal' : 'badge-written'}">
+            ${quote.is_verbal_nte ? '📞 VERBAL NTE' : '📄 WRITTEN NTE'}
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Work Order Information</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Work Order #</div>
+              <div class="info-value">${selectedWO.wo_number}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Building</div>
+              <div class="info-value">${selectedWO.building || 'N/A'}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Original NTE</div>
+              <div class="info-value">$${(selectedWO.nte || 0).toFixed(2)}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Date Submitted</div>
+              <div class="info-value">${new Date(quote.created_at).toLocaleDateString()}</div>
+            </div>
+          </div>
+        </div>
+
+        ${quote.is_verbal_nte && quote.verbal_approved_by ? `
+        <div class="section">
+          <div class="section-title">Verbal Approval</div>
+          <div class="info-item">
+            <div class="info-label">Approved By</div>
+            <div class="info-value">${quote.verbal_approved_by}</div>
+          </div>
+        </div>
+        ` : ''}
+
+        ${quote.description ? `
+        <div class="section">
+          <div class="section-title">Additional Work Description</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px;">${quote.description}</p>
+        </div>
+        ` : ''}
+
+        <div class="section">
+          <div class="section-title">Cost Breakdown</div>
+          <table>
+            <tr>
+              <th>Category</th>
+              <th class="text-right">Amount</th>
+            </tr>
+            <tr>
+              <td>Labor Total</td>
+              <td class="text-right">$${(quote.labor_total || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Materials (with 25% markup)</td>
+              <td class="text-right">$${(quote.materials_with_markup || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Equipment (with markup)</td>
+              <td class="text-right">$${(quote.equipment_with_markup || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Mileage</td>
+              <td class="text-right">$${(quote.mileage_total || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td>Admin Fee</td>
+              <td class="text-right">$${(quote.admin_fee || 0).toFixed(2)}</td>
+            </tr>
+            <tr class="grand-total">
+              <td><strong>NTE INCREASE AMOUNT</strong></td>
+              <td class="text-right"><strong>$${(quote.grand_total || 0).toFixed(2)}</strong></td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="new-nte-box">
+          <div style="margin-bottom: 10px;">
+            <span style="color: #666;">Original NTE: $${(selectedWO.nte || 0).toFixed(2)}</span>
+            <span style="margin: 0 10px;">+</span>
+            <span style="color: #666;">Increase: $${(quote.grand_total || 0).toFixed(2)}</span>
+          </div>
+          <div style="font-size: 12px; color: #666; margin-bottom: 5px;">NEW NTE TOTAL REQUESTED</div>
+          <div class="new-nte-value">$${newNTE.toFixed(2)}</div>
+        </div>
+
+        ${quote.notes ? `
+        <div class="section">
+          <div class="section-title">Additional Notes</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px;">${quote.notes}</p>
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <p><strong>EMF Contracting LLC</strong></p>
+          <p>Created by: ${quote.creator?.first_name || ''} ${quote.creator?.last_name || ''}</p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+
+        <div class="no-print" style="text-align: center; margin-top: 20px;">
+          <button onclick="window.print()" style="background: #1e40af; color: white; padding: 12px 30px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 10px;">
+            🖨️ Print
+          </button>
+          <button onclick="window.close()" style="background: #6b7280; color: white; padding: 12px 30px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;">
+            Close
+          </button>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
     }
   };
 
@@ -847,136 +1071,6 @@ export default function WorkOrderDetailModal({
             </div>
           )}
 
-          {/* NTE Increase Requests Section */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg">📈 NTE Increase Requests</h3>
-              <button
-                onClick={loadNteIncreases}
-                className="text-blue-400 hover:text-blue-300 text-sm"
-              >
-                🔄
-              </button>
-            </div>
-
-            {loadingNteIncreases ? (
-              <div className="text-center py-4 text-gray-400">Loading NTE increases...</div>
-            ) : nteIncreases.length === 0 ? (
-              <div className="text-center py-4 text-gray-400">
-                No NTE increase requests for this work order.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {nteIncreases.map((quote) => (
-                  <div key={quote.quote_id} className="bg-gray-600 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          {quote.is_verbal_nte ? (
-                            <span className="bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs font-semibold">
-                              📞 Verbal NTE
-                            </span>
-                          ) : (
-                            <span className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs font-semibold">
-                              📄 Written Quote
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-gray-400 text-sm mt-1">
-                          Created by {quote.creator?.first_name} {quote.creator?.last_name} on{' '}
-                          {new Date(quote.created_at).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                        {quote.is_verbal_nte && quote.verbal_approved_by && (
-                          <div className="text-yellow-400 text-sm mt-1">
-                            Approved by: {quote.verbal_approved_by}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-green-400">
-                          ${(parseFloat(quote.grand_total) || 0).toFixed(2)}
-                        </div>
-                        <div className="text-gray-400 text-xs">Increase Amount</div>
-                      </div>
-                    </div>
-
-                    {quote.description && (
-                      <div className="mb-3">
-                        <div className="text-xs text-gray-400 mb-1">Description:</div>
-                        <div className="text-white text-sm">{quote.description}</div>
-                      </div>
-                    )}
-
-                    {/* Cost Breakdown */}
-                    <div className="bg-gray-700 rounded-lg p-3">
-                      <div className="text-xs text-gray-400 mb-2 font-semibold">Cost Breakdown:</div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Labor:</span>
-                          <span className="text-white">${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Materials (w/ markup):</span>
-                          <span className="text-white">${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Equipment (w/ markup):</span>
-                          <span className="text-white">${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Mileage:</span>
-                          <span className="text-white">${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Admin Fee:</span>
-                          <span className="text-white">${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
-                        </div>
-                      </div>
-
-                      {/* Labor Details */}
-                      <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
-                        <span>{quote.estimated_techs || 1} tech(s) × </span>
-                        <span>{quote.estimated_rt_hours || 0} RT hrs + {quote.estimated_ot_hours || 0} OT hrs</span>
-                        {(parseFloat(quote.estimated_miles) || 0) > 0 && (
-                          <span> | {quote.estimated_miles} miles</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {quote.notes && (
-                      <div className="mt-3 text-sm">
-                        <span className="text-gray-400">Notes: </span>
-                        <span className="text-gray-300">{quote.notes}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* NTE Increases Summary */}
-                {nteIncreases.length > 0 && (
-                  <div className="bg-yellow-900 rounded-lg p-3 mt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-yellow-200">Total NTE Increases:</span>
-                      <span className="text-2xl font-bold text-yellow-400">
-                        ${nteIncreases.reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="text-yellow-300 text-sm mt-1">
-                      Original NTE: ${(selectedWO.nte || 0).toFixed(2)} → New Total NTE: $
-                      {((selectedWO.nte || 0) + nteIncreases.reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0)).toFixed(2)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Daily Hours Log Section - EDITABLE */}
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex justify-between items-center mb-3">
@@ -1192,6 +1286,246 @@ export default function WorkOrderDetailModal({
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* NTE INCREASES SECTION - NEW */}
+          <div className="bg-yellow-900 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-lg text-yellow-300">💰 NTE Increase Requests</h3>
+              <button
+                onClick={loadNteIncreases}
+                className="text-yellow-400 hover:text-yellow-300 text-sm"
+              >
+                🔄 Refresh
+              </button>
+            </div>
+
+            {loadingNteIncreases ? (
+              <div className="text-center py-4 text-gray-400">Loading NTE increases...</div>
+            ) : nteIncreases.length === 0 ? (
+              <div className="text-center py-4 text-gray-400">
+                No NTE increase requests for this work order.
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {nteIncreases.map((quote) => (
+                  <div key={quote.quote_id} className="bg-gray-700 rounded-lg p-4">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <span className={`inline-block px-3 py-1 rounded text-xs font-bold mr-2 ${
+                          quote.is_verbal_nte 
+                            ? 'bg-yellow-600 text-yellow-100' 
+                            : 'bg-blue-600 text-blue-100'
+                        }`}>
+                          {quote.is_verbal_nte ? '📞 Verbal NTE' : '📄 Written NTE'}
+                        </span>
+                        <span className="text-gray-400 text-sm">
+                          {new Date(quote.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => printNTEIncrease(quote)}
+                          className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs"
+                          title="Print"
+                        >
+                          🖨️
+                        </button>
+                        <button
+                          onClick={() => setEditingNTE(editingNTE === quote.quote_id ? null : quote.quote_id)}
+                          className="bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded text-xs"
+                          title="Edit"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDeleteNTEIncrease(quote.quote_id)}
+                          disabled={savingNTE}
+                          className="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs"
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Verbal Approval Info */}
+                    {quote.is_verbal_nte && (
+                      <div className="mb-3">
+                        <label className="text-xs text-gray-400">Approved By:</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="text"
+                            value={quote.verbal_approved_by || ''}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, verbal_approved_by: e.target.value } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { verbal_approved_by: e.target.value })}
+                            className="w-full bg-gray-600 text-white px-3 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-yellow-300">{quote.verbal_approved_by || 'Not specified'}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {(quote.description || editingNTE === quote.quote_id) && (
+                      <div className="mb-3">
+                        <label className="text-xs text-gray-400">Description:</label>
+                        {editingNTE === quote.quote_id ? (
+                          <textarea
+                            value={quote.description || ''}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, description: e.target.value } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { description: e.target.value })}
+                            className="w-full bg-gray-600 text-white px-3 py-2 rounded mt-1 text-sm"
+                            rows="2"
+                          />
+                        ) : (
+                          <p className="text-gray-300 text-sm">{quote.description}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Cost Fields */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                      <div>
+                        <label className="text-xs text-gray-400">Labor Total</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={quote.labor_total || 0}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, labor_total: parseFloat(e.target.value) || 0 } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { labor_total: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-white font-semibold">${(quote.labor_total || 0).toFixed(2)}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Materials (w/ markup)</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={quote.materials_with_markup || 0}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, materials_with_markup: parseFloat(e.target.value) || 0 } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { materials_with_markup: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-white font-semibold">${(quote.materials_with_markup || 0).toFixed(2)}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Equipment (w/ markup)</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={quote.equipment_with_markup || 0}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, equipment_with_markup: parseFloat(e.target.value) || 0 } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { equipment_with_markup: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-white font-semibold">${(quote.equipment_with_markup || 0).toFixed(2)}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Mileage</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={quote.mileage_total || 0}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, mileage_total: parseFloat(e.target.value) || 0 } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { mileage_total: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-white font-semibold">${(quote.mileage_total || 0).toFixed(2)}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">Admin Fee</label>
+                        {editingNTE === quote.quote_id ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={quote.admin_fee || 0}
+                            onChange={(e) => {
+                              const updated = nteIncreases.map(q => 
+                                q.quote_id === quote.quote_id ? { ...q, admin_fee: parseFloat(e.target.value) || 0 } : q
+                              );
+                              setNteIncreases(updated);
+                            }}
+                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { admin_fee: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        ) : (
+                          <p className="text-white font-semibold">${(quote.admin_fee || 0).toFixed(2)}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Totals */}
+                    <div className="border-t border-gray-600 pt-3 mt-3">
+                      <div className="flex justify-between items-center text-lg">
+                        <span className="text-yellow-400 font-bold">NTE Increase Amount:</span>
+                        <span className="text-yellow-400 font-bold">${(quote.grand_total || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm mt-2">
+                        <span className="text-gray-400">Original NTE + Increase:</span>
+                        <span className="text-green-400 font-bold">
+                          ${(selectedWO.nte || 0).toFixed(2)} + ${(quote.grand_total || 0).toFixed(2)} = ${((selectedWO.nte || 0) + (quote.grand_total || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Creator Info */}
+                    <div className="text-xs text-gray-400 mt-3">
+                      Created by: {quote.creator?.first_name} {quote.creator?.last_name}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

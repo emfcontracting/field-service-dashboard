@@ -92,27 +92,28 @@ export default function WorkOrderDetailModal({
   };
 
   // Handle updating a daily hours entry
-  const handleUpdateDailyHours = async (entryId, field, value) => {
+  // FIXED: Use log_id instead of id (matches database schema)
+  const handleUpdateDailyHours = async (logId, field, value) => {
     try {
       setSavingHours(true);
       
       const { error } = await supabase
         .from('daily_hours_log')
         .update({ [field]: value })
-        .eq('id', entryId);
+        .eq('log_id', logId);
 
       if (error) throw error;
 
-      // Update local state
+      // Update local state - use log_id for matching
       const updatedLog = dailyHoursLog.map(entry => 
-        entry.id === entryId ? { ...entry, [field]: value } : entry
+        (entry.log_id || entry.id) === logId ? { ...entry, [field]: value } : entry
       );
       setDailyHoursLog(updatedLog);
       calculateTotals(updatedLog);
 
       // Clear editing state for this field
       setEditingHours(prev => {
-        const key = `${entryId}_${field}`;
+        const key = `${logId}_${field}`;
         const { [key]: removed, ...rest } = prev;
         return rest;
       });
@@ -125,7 +126,8 @@ export default function WorkOrderDetailModal({
   };
 
   // Handle deleting a daily hours entry
-  const handleDeleteDailyHours = async (entryId) => {
+  // FIXED: Use log_id instead of id (matches database schema)
+  const handleDeleteDailyHours = async (logId) => {
     if (!confirm('Delete this hours entry? This cannot be undone.')) return;
 
     try {
@@ -134,12 +136,12 @@ export default function WorkOrderDetailModal({
       const { error } = await supabase
         .from('daily_hours_log')
         .delete()
-        .eq('id', entryId);
+        .eq('log_id', logId);
 
       if (error) throw error;
 
-      // Update local state
-      const updatedLog = dailyHoursLog.filter(entry => entry.id !== entryId);
+      // Update local state - use log_id for matching
+      const updatedLog = dailyHoursLog.filter(entry => (entry.log_id || entry.id) !== logId);
       setDailyHoursLog(updatedLog);
       calculateTotals(updatedLog);
 
@@ -201,15 +203,15 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Get field value for editing
-  const getHoursFieldValue = (entryId, field, originalValue) => {
-    const key = `${entryId}_${field}`;
+  // Get field value for editing - FIXED: use log_id consistently
+  const getHoursFieldValue = (logId, field, originalValue) => {
+    const key = `${logId}_${field}`;
     return editingHours.hasOwnProperty(key) ? editingHours[key] : originalValue;
   };
 
-  // Handle field change for editing
-  const handleHoursFieldChange = (entryId, field, value) => {
-    const key = `${entryId}_${field}`;
+  // Handle field change for editing - FIXED: use log_id consistently
+  const handleHoursFieldChange = (logId, field, value) => {
+    const key = `${logId}_${field}`;
     setEditingHours(prev => ({ ...prev, [key]: value }));
   };
 
@@ -950,87 +952,92 @@ export default function WorkOrderDetailModal({
               </div>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {dailyHoursLog.map((entry) => (
-                  <div key={entry.id} className="bg-gray-600 rounded-lg p-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="font-semibold text-white">
-                          {entry.user?.first_name} {entry.user?.last_name}
-                        </span>
-                        <span className="text-gray-400 text-sm ml-2">
-                          {new Date(entry.work_date).toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'short', 
-                            day: 'numeric' 
-                          })}
-                        </span>
-                        {entry.notes?.includes('[MIGRATED]') && (
-                          <span className="text-yellow-400 text-xs ml-2">📋 Migrated</span>
-                        )}
-                        {entry.notes?.includes('[Added by Admin]') && (
-                          <span className="text-blue-400 text-xs ml-2">👤 Admin Added</span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleDeleteDailyHours(entry.id)}
-                        disabled={savingHours}
-                        className="text-red-400 hover:text-red-300 text-sm"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                    
-                    {/* Editable Fields */}
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-xs text-gray-400">RT Hours</label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={getHoursFieldValue(entry.id, 'hours_regular', entry.hours_regular || 0)}
-                          onChange={(e) => handleHoursFieldChange(entry.id, 'hours_regular', e.target.value)}
-                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'hours_regular', parseFloat(e.target.value) || 0)}
+                {dailyHoursLog.map((entry) => {
+                  // FIXED: Use log_id as the unique identifier
+                  const entryId = entry.log_id || entry.id;
+                  
+                  return (
+                    <div key={entryId} className="bg-gray-600 rounded-lg p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="font-semibold text-white">
+                            {entry.user?.first_name} {entry.user?.last_name}
+                          </span>
+                          <span className="text-gray-400 text-sm ml-2">
+                            {new Date(entry.work_date).toLocaleDateString('en-US', { 
+                              weekday: 'short', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </span>
+                          {entry.notes?.includes('[MIGRATED]') && (
+                            <span className="text-yellow-400 text-xs ml-2">📋 Migrated</span>
+                          )}
+                          {entry.notes?.includes('[Added by Admin]') && (
+                            <span className="text-blue-400 text-xs ml-2">👤 Admin Added</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteDailyHours(entryId)}
                           disabled={savingHours}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
-                        />
+                          className="text-red-400 hover:text-red-300 text-sm"
+                        >
+                          🗑️
+                        </button>
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-400">OT Hours</label>
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={getHoursFieldValue(entry.id, 'hours_overtime', entry.hours_overtime || 0)}
-                          onChange={(e) => handleHoursFieldChange(entry.id, 'hours_overtime', e.target.value)}
-                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'hours_overtime', parseFloat(e.target.value) || 0)}
-                          disabled={savingHours}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
-                        />
+                      
+                      {/* Editable Fields - FIXED: Each entry uses its own log_id for state */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-400">RT Hours</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={getHoursFieldValue(entryId, 'hours_regular', entry.hours_regular || 0)}
+                            onChange={(e) => handleHoursFieldChange(entryId, 'hours_regular', e.target.value)}
+                            onBlur={(e) => handleUpdateDailyHours(entryId, 'hours_regular', parseFloat(e.target.value) || 0)}
+                            disabled={savingHours}
+                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">OT Hours</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={getHoursFieldValue(entryId, 'hours_overtime', entry.hours_overtime || 0)}
+                            onChange={(e) => handleHoursFieldChange(entryId, 'hours_overtime', e.target.value)}
+                            onBlur={(e) => handleUpdateDailyHours(entryId, 'hours_overtime', parseFloat(e.target.value) || 0)}
+                            disabled={savingHours}
+                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400">Miles</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={getHoursFieldValue(entryId, 'miles', entry.miles || 0)}
+                            onChange={(e) => handleHoursFieldChange(entryId, 'miles', e.target.value)}
+                            onBlur={(e) => handleUpdateDailyHours(entryId, 'miles', parseFloat(e.target.value) || 0)}
+                            disabled={savingHours}
+                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-400">Miles</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={getHoursFieldValue(entry.id, 'miles', entry.miles || 0)}
-                          onChange={(e) => handleHoursFieldChange(entry.id, 'miles', e.target.value)}
-                          onBlur={(e) => handleUpdateDailyHours(entry.id, 'miles', parseFloat(e.target.value) || 0)}
-                          disabled={savingHours}
-                          className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
-                        />
-                      </div>
-                    </div>
 
-                    {/* Labor Cost Display */}
-                    <div className="mt-2 flex justify-between text-xs">
-                      <span className="text-gray-400">
-                        Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
-                      </span>
-                      {entry.notes && !entry.notes.includes('[MIGRATED]') && !entry.notes.includes('[Added by Admin]') && (
-                        <span className="text-gray-400">📝 {entry.notes}</span>
-                      )}
+                      {/* Labor Cost Display */}
+                      <div className="mt-2 flex justify-between text-xs">
+                        <span className="text-gray-400">
+                          Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
+                        </span>
+                        {entry.notes && !entry.notes.includes('[MIGRATED]') && !entry.notes.includes('[Added by Admin]') && (
+                          <span className="text-gray-400">📝 {entry.notes}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -561,6 +561,45 @@ export default function WorkOrderDetailModal({
     }
   };
 
+  // Handle deleting customer signature
+  const handleDeleteSignature = async () => {
+    const password = prompt('Enter admin password to delete signature:');
+    if (password !== adminPassword) {
+      alert('❌ Incorrect password');
+      return;
+    }
+
+    if (!confirm('Delete the customer signature?\n\nThis will remove:\n- Signature image\n- Customer name\n- Signature date\n- GPS location\n\nThis cannot be undone. Continue?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          customer_signature: null,
+          customer_name: null,
+          signature_date: null,
+          signature_location: null
+        })
+        .eq('wo_id', selectedWO.wo_id);
+
+      if (error) throw error;
+
+      setSelectedWO({
+        ...selectedWO,
+        customer_signature: null,
+        customer_name: null,
+        signature_date: null,
+        signature_location: null
+      });
+      refreshWorkOrders();
+      alert('✅ Signature deleted successfully');
+    } catch (error) {
+      alert('Failed to delete signature: ' + error.message);
+    }
+  };
+
   const handleGenerateInvoice = async () => {
     if (!confirm('Generate invoice for this work order?\n\nThis will:\n- Create a draft invoice\n- Lock the work order\n- Send to invoicing for review\n\nContinue?')) {
       return;
@@ -1034,7 +1073,16 @@ export default function WorkOrderDetailModal({
           {/* Customer Signature Section */}
           {selectedWO.customer_signature && (
             <div className="bg-green-900 rounded-lg p-4">
-              <h3 className="font-bold mb-3 text-lg text-green-300">✍️ Customer Signature</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-lg text-green-300">✍️ Customer Signature</h3>
+                <button
+                  onClick={handleDeleteSignature}
+                  className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm font-semibold"
+                  title="Delete Signature (Admin Only)"
+                >
+                  🗑️ Delete Signature
+                </button>
+              </div>
               <div className="flex gap-4 items-start">
                 <div className="bg-white rounded-lg p-3 flex-shrink-0">
                   <img 
@@ -1052,6 +1100,21 @@ export default function WorkOrderDetailModal({
                     <span className="text-gray-400 text-sm">Signed On:</span>
                     <p className="font-semibold text-white">{formatDateTime(selectedWO.signature_date)}</p>
                   </div>
+                  {selectedWO.signature_location && (
+                    <div>
+                      <span className="text-gray-400 text-sm">Location (GPS):</span>
+                      <p className="font-semibold text-white">
+                        <a 
+                          href={`https://www.google.com/maps?q=${selectedWO.signature_location}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 underline"
+                        >
+                          📍 View on Map
+                        </a>
+                      </p>
+                    </div>
+                  )}
                   <div className="bg-green-800 rounded-lg p-2 mt-2">
                     <p className="text-green-200 text-sm">✓ Work verified and signed by customer</p>
                   </div>

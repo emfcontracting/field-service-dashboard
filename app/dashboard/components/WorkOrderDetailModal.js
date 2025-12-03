@@ -40,11 +40,14 @@ export default function WorkOrderDetailModal({
     miles: 0,
     notes: ''
   });
+  const [nteIncreases, setNteIncreases] = useState([]);
+  const [loadingNteIncreases, setLoadingNteIncreases] = useState(true);
   const adminPassword = 'admin123';
 
   useEffect(() => {
     checkCanGenerateInvoice();
     loadDailyHoursLog();
+    loadNteIncreases();
   }, [selectedWO]);
 
   const loadDailyHoursLog = async () => {
@@ -79,6 +82,27 @@ export default function WorkOrderDetailModal({
       totalMiles += parseFloat(entry.miles) || 0;
     });
     setDailyTotals({ totalRT, totalOT, totalMiles });
+  };
+
+  const loadNteIncreases = async () => {
+    try {
+      setLoadingNteIncreases(true);
+      const { data, error } = await supabase
+        .from('work_order_quotes')
+        .select(`
+          *,
+          creator:users!work_order_quotes_created_by_fkey(first_name, last_name)
+        `)
+        .eq('wo_id', selectedWO.wo_id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setNteIncreases(data || []);
+    } catch (err) {
+      console.error('Error loading NTE increases:', err);
+    } finally {
+      setLoadingNteIncreases(false);
+    }
   };
 
   const checkCanGenerateInvoice = async () => {
@@ -822,6 +846,136 @@ export default function WorkOrderDetailModal({
               </div>
             </div>
           )}
+
+          {/* NTE Increase Requests Section */}
+          <div className="bg-gray-700 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-lg">📈 NTE Increase Requests</h3>
+              <button
+                onClick={loadNteIncreases}
+                className="text-blue-400 hover:text-blue-300 text-sm"
+              >
+                🔄
+              </button>
+            </div>
+
+            {loadingNteIncreases ? (
+              <div className="text-center py-4 text-gray-400">Loading NTE increases...</div>
+            ) : nteIncreases.length === 0 ? (
+              <div className="text-center py-4 text-gray-400">
+                No NTE increase requests for this work order.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {nteIncreases.map((quote) => (
+                  <div key={quote.quote_id} className="bg-gray-600 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          {quote.is_verbal_nte ? (
+                            <span className="bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs font-semibold">
+                              📞 Verbal NTE
+                            </span>
+                          ) : (
+                            <span className="bg-blue-600 text-blue-100 px-2 py-1 rounded text-xs font-semibold">
+                              📄 Written Quote
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-gray-400 text-sm mt-1">
+                          Created by {quote.creator?.first_name} {quote.creator?.last_name} on{' '}
+                          {new Date(quote.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                        {quote.is_verbal_nte && quote.verbal_approved_by && (
+                          <div className="text-yellow-400 text-sm mt-1">
+                            Approved by: {quote.verbal_approved_by}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-400">
+                          ${(parseFloat(quote.grand_total) || 0).toFixed(2)}
+                        </div>
+                        <div className="text-gray-400 text-xs">Increase Amount</div>
+                      </div>
+                    </div>
+
+                    {quote.description && (
+                      <div className="mb-3">
+                        <div className="text-xs text-gray-400 mb-1">Description:</div>
+                        <div className="text-white text-sm">{quote.description}</div>
+                      </div>
+                    )}
+
+                    {/* Cost Breakdown */}
+                    <div className="bg-gray-700 rounded-lg p-3">
+                      <div className="text-xs text-gray-400 mb-2 font-semibold">Cost Breakdown:</div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Labor:</span>
+                          <span className="text-white">${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Materials (w/ markup):</span>
+                          <span className="text-white">${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Equipment (w/ markup):</span>
+                          <span className="text-white">${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Mileage:</span>
+                          <span className="text-white">${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Admin Fee:</span>
+                          <span className="text-white">${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Labor Details */}
+                      <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
+                        <span>{quote.estimated_techs || 1} tech(s) × </span>
+                        <span>{quote.estimated_rt_hours || 0} RT hrs + {quote.estimated_ot_hours || 0} OT hrs</span>
+                        {(parseFloat(quote.estimated_miles) || 0) > 0 && (
+                          <span> | {quote.estimated_miles} miles</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {quote.notes && (
+                      <div className="mt-3 text-sm">
+                        <span className="text-gray-400">Notes: </span>
+                        <span className="text-gray-300">{quote.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* NTE Increases Summary */}
+                {nteIncreases.length > 0 && (
+                  <div className="bg-yellow-900 rounded-lg p-3 mt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-yellow-200">Total NTE Increases:</span>
+                      <span className="text-2xl font-bold text-yellow-400">
+                        ${nteIncreases.reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-yellow-300 text-sm mt-1">
+                      Original NTE: ${(selectedWO.nte || 0).toFixed(2)} → New Total NTE: $
+                      {((selectedWO.nte || 0) + nteIncreases.reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0)).toFixed(2)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Daily Hours Log Section - EDITABLE */}
           <div className="bg-gray-700 rounded-lg p-4">

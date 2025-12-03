@@ -1,4 +1,4 @@
-// Work Order Detail View Component - WITH DAILY HOURS LOG AND FIELD DATA
+// Work Order Detail View Component - WITH DAILY HOURS LOG, FIELD DATA, AND NTE INCREASES
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -10,6 +10,7 @@ import PrimaryTechDailyHours from './PrimaryTechDailyHours';
 import TeamMembersDailyHours from './TeamMembersDailyHours';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
+import NTEIncreaseList from './quotes/NTEIncreaseList';
 
 export default function WorkOrderDetail({
   workOrder,
@@ -39,7 +40,13 @@ export default function WorkOrderDetail({
   // DAILY HOURS PROPS
   dailyLogs = [],
   onAddDailyHours,
-  onDownloadLogs
+  onDownloadLogs,
+  // NTE INCREASE PROPS
+  quotes = [],
+  quotesLoading = false,
+  onNewQuote,
+  onViewQuote,
+  onDeleteQuote
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
@@ -468,6 +475,15 @@ export default function WorkOrderDetail({
             getFieldValue={getFieldValue}
             handleFieldChange={handleFieldChange}
             handleUpdateField={onUpdateField}
+          />
+
+          {/* NTE INCREASES - Quotes for additional work */}
+          <NTEIncreaseList
+            quotes={quotes}
+            loading={quotesLoading}
+            onNewQuote={onNewQuote}
+            onViewQuote={onViewQuote}
+            onDeleteQuote={onDeleteQuote}
           />
 
           {/* PRIMARY TECH DAILY HOURS SECTION - with CSV download */}

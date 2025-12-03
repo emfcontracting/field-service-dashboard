@@ -1,4 +1,4 @@
-//Mobile App - Refactored & Modular with Bilingual Support (WITH DAILY HOURS)
+//Mobile App - Refactored & Modular with Bilingual Support (WITH DAILY HOURS & NTE INCREASES)
 'use client';
 import { useState } from 'react';
 
@@ -10,12 +10,14 @@ import { useAuth } from './hooks/useAuth';
 import { useWorkOrders } from './hooks/useWorkOrders';
 import { useTeam } from './hooks/useTeam';
 import { useAvailability } from './hooks/useAvailability';
+import { useQuotes } from './hooks/useQuotes';
 
 // Page Components
 import LoginScreen from './components/LoginScreen';
 import WorkOrdersList from './components/WorkOrdersList';
 import WorkOrderDetail from './components/WorkOrderDetail';
 import CompletedWorkOrders from './components/CompletedWorkOrders';
+import NTEIncreasePage from './components/quotes/NTEIncreasePage';
 
 // Modal Components
 import AvailabilityModal from './components/modals/AvailabilityModal';
@@ -78,6 +80,27 @@ export default function MobilePage() {
     submitAvailability,
     handleAvailabilityChange
   } = useAvailability(currentUser);
+
+  // NTE Increases / Quotes
+  const {
+    quotes,
+    selectedQuote,
+    materials,
+    loading: quotesLoading,
+    saving: quotesSaving,
+    showQuotePage,
+    editMode,
+    loadQuotesForWO,
+    loadQuoteDetails,
+    startNewQuote,
+    saveQuote,
+    deleteQuote,
+    closeQuotePage,
+    addMaterial,
+    updateMaterial,
+    deleteMaterial,
+    calculateTotals
+  } = useQuotes(selectedWO, currentUser);
 
   // UI State
   const [showCompletedPage, setShowCompletedPage] = useState(false);
@@ -160,6 +183,23 @@ export default function MobilePage() {
         dailyLogs={dailyLogs}
         addDailyHours={addDailyHours}
         downloadLogs={downloadLogs}
+        // NTE INCREASE PROPS
+        quotes={quotes}
+        selectedQuote={selectedQuote}
+        materials={materials}
+        quotesLoading={quotesLoading}
+        quotesSaving={quotesSaving}
+        showQuotePage={showQuotePage}
+        editMode={editMode}
+        loadQuoteDetails={loadQuoteDetails}
+        startNewQuote={startNewQuote}
+        saveQuote={saveQuote}
+        deleteQuote={deleteQuote}
+        closeQuotePage={closeQuotePage}
+        addMaterial={addMaterial}
+        updateMaterial={updateMaterial}
+        deleteMaterial={deleteMaterial}
+        calculateTotals={calculateTotals}
       />
     </LanguageProvider>
   );
@@ -216,7 +256,24 @@ function MobileAppContent({
   // DAILY HOURS PROPS
   dailyLogs,
   addDailyHours,
-  downloadLogs
+  downloadLogs,
+  // NTE INCREASE PROPS
+  quotes,
+  selectedQuote,
+  materials,
+  quotesLoading,
+  quotesSaving,
+  showQuotePage,
+  editMode,
+  loadQuoteDetails,
+  startNewQuote,
+  saveQuote,
+  deleteQuote,
+  closeQuotePage,
+  addMaterial,
+  updateMaterial,
+  deleteMaterial,
+  calculateTotals
 }) {
   // Login Screen
   if (!currentUser) {
@@ -241,6 +298,26 @@ function MobileAppContent({
         saving={availabilitySaving}
         handleAvailabilityChange={handleAvailabilityChange}
         submitAvailability={submitAvailability}
+      />
+    );
+  }
+
+  // NTE Increase Page (Full Screen)
+  if (showQuotePage && selectedWO) {
+    return (
+      <NTEIncreasePage
+        workOrder={selectedWO}
+        currentUser={currentUser}
+        selectedQuote={selectedQuote}
+        materials={materials}
+        saving={quotesSaving}
+        editMode={editMode}
+        onSave={saveQuote}
+        onClose={closeQuotePage}
+        onAddMaterial={addMaterial}
+        onUpdateMaterial={updateMaterial}
+        onDeleteMaterial={deleteMaterial}
+        calculateTotals={calculateTotals}
       />
     );
   }
@@ -281,6 +358,12 @@ function MobileAppContent({
           dailyLogs={dailyLogs}
           onAddDailyHours={addDailyHours}
           onDownloadLogs={downloadLogs}
+          // NTE INCREASE PROPS
+          quotes={quotes}
+          quotesLoading={quotesLoading}
+          onNewQuote={startNewQuote}
+          onViewQuote={loadQuoteDetails}
+          onDeleteQuote={deleteQuote}
         />
         
         {/* Modals */}

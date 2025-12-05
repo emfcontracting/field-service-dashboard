@@ -33,11 +33,14 @@ export function useOffline(currentUser) {
   const [isDBReady, setIsDBReady] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [lastSyncTime, setLastSyncTime] = useState(null);
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'success', 'error'
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'success', 'error', 'downloading'
   const [syncError, setSyncError] = useState(null);
+  const [cachedCount, setCachedCount] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const supabase = createClientComponentClient();
   const cleanupRef = useRef(null);
+  const hasInitialDownload = useRef(false);
 
   // Initialize offline DB
   useEffect(() => {
@@ -91,7 +94,6 @@ export function useOffline(currentUser) {
           if (!event.result.success) {
             setSyncError(`${event.result.failed} items failed to sync`);
           }
-          // Reset status after 3 seconds
           setTimeout(() => setSyncStatus('idle'), 3000);
           break;
         case 'sync_failed':
@@ -100,9 +102,6 @@ export function useOffline(currentUser) {
           break;
         case 'item_synced':
           updatePendingCount();
-          break;
-        case 'refresh_started':
-          // Optionally show refresh status
           break;
         case 'refresh_completed':
           setLastSyncTime(new Date());
@@ -113,15 +112,34 @@ export function useOffline(currentUser) {
     return removeSyncListener;
   }, []);
 
+  // ==================== AUTO-DOWNLOAD ON LOGIN ====================
+  // Automatically download work orders when user logs in and is online
+  useEffect(() => {
+    if (!currentUser || !isDBReady || !isOnline || hasInitialDownload.current) return;
+
+    async function autoDownload() {
+      console.log('📥 Auto-downloading work orders for offline use...');
+      hasInitialDownload.current = true;
+      
+      try {
+        await downloadForOffline();
+      } catch (error) {
+        console.error('Auto-download failed:', error);
+      }
+    }
+
+    // Small delay to let the app settle
+    const timer = setTimeout(autoDownload, 2000);
+    return () => clearTimeout(timer);
+  }, [currentUser, isDBReady, isOnline]);
+
   // Start background sync when user is logged in
   useEffect(() => {
     if (!currentUser || !isDBReady) return;
 
-    // Start background sync
     const cleanup = startBackgroundSync(supabase, currentUser, 30000);
     cleanupRef.current = cleanup;
 
-    // Initial sync if online
     if (navigator.onLine) {
       syncPendingChanges(supabase, currentUser);
     }
@@ -140,82 +158,203 @@ export function useOffline(currentUser) {
     setPendingSyncCount(count);
   }, [isDBReady]);
 
+  // Update cached count
+  const updateCachedCount = useCallback(async () => {
+    if (!isDBReady) return;
+    try {
+      const cached = await getCachedWorkOrders();
+      setCachedCount(cached.length);
+    } catch (e) {
+      setCachedCount(0);
+    }
+  }, [isDBReady]);
+
   useEffect(() => {
     if (isDBReady) {
       updatePendingCount();
-      const interval = setInterval(updatePendingCount, 5000);
+      updateCachedCount();
+      const interval = setInterval(() => {
+        updatePendingCount();
+        updateCachedCount();
+      }, 5000);
       return () => clearInterval(interval);
     }
-  }, [isDBReady, updatePendingCount]);
+  }, [isDBReady, updatePendingCount, updateCachedCount]);
 
-  // ==================== WORK ORDER OPERATIONS ====================
+  // ==================== MANUAL DOWNLOAD FOR OFFLINE ====================
+  const downloadForOffline = useCallback(async () => {
+    if (!isOnline) {
+      return { success: false, reason: 'offline', message: 'Cannot download while offline' };
+    }
 
-  // Get work orders (from cache if offline)
+    if (!currentUser) {
+      return { success: false, reason: 'no_user', message: 'Not logged in' };
+    }
+
+    setIsDownloading(true);
+    setSyncStatus('downloading');
+
+    try {
+      console.log('📥 Downloading work orders for offline use...');
+
+      // 1. Fetch active work orders
+      const { data: leadWOs, error: leadError } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+        `)
+        .eq('lead_tech_id', currentUser.user_id)
+        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+        .order('priority', { ascending: true });
+
+      if (leadError) throw leadError;
+
+      // 2. Fetch assignments where user is helper
+      const { data: assignments } = await supabase
+        .from('work_order_assignments')
+        .select('wo_id')
+        .eq('user_id', currentUser.user_id);
+
+      let helperWOs = [];
+      if (assignments && assignments.length > 0) {
+        const woIds = assignments.map(a => a.wo_id);
+        const { data: helperWOData } = await supabase
+          .from('work_orders')
+          .select(`
+            *,
+            lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+          `)
+          .in('wo_id', woIds)
+          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
+        helperWOs = helperWOData || [];
+      }
+
+      // Combine and dedupe
+      const allWOs = [...(leadWOs || []), ...helperWOs];
+      const uniqueWOs = Array.from(new Map(allWOs.map(wo => [wo.wo_id, wo])).values());
+
+      // 3. Cache active work orders
+      await cacheWorkOrders(uniqueWOs);
+      console.log(`✅ Cached ${uniqueWOs.length} active work orders`);
+
+      // 4. Fetch and cache completed work orders
+      const { data: completedLeadWOs } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+        `)
+        .eq('lead_tech_id', currentUser.user_id)
+        .eq('status', 'completed')
+        .order('date_completed', { ascending: false })
+        .limit(50);
+
+      let completedHelperWOs = [];
+      if (assignments && assignments.length > 0) {
+        const woIds = assignments.map(a => a.wo_id);
+        const { data } = await supabase
+          .from('work_orders')
+          .select(`
+            *,
+            lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+          `)
+          .in('wo_id', woIds)
+          .eq('status', 'completed')
+          .limit(50);
+        completedHelperWOs = data || [];
+      }
+
+      const allCompletedWOs = [...(completedLeadWOs || []), ...completedHelperWOs];
+      const uniqueCompletedWOs = Array.from(new Map(allCompletedWOs.map(wo => [wo.wo_id, wo])).values());
+      await cacheCompletedWorkOrders(uniqueCompletedWOs);
+      console.log(`✅ Cached ${uniqueCompletedWOs.length} completed work orders`);
+
+      // 5. Cache daily logs for each active work order
+      for (const wo of uniqueWOs) {
+        const { data: logs } = await supabase
+          .from('daily_hours_log')
+          .select(`
+            *,
+            user:users(first_name, last_name)
+          `)
+          .eq('wo_id', wo.wo_id)
+          .order('work_date', { ascending: false });
+
+        if (logs && logs.length > 0) {
+          await cacheDailyLogs(logs, wo.wo_id);
+        }
+      }
+
+      // 6. Cache team members for each active work order
+      for (const wo of uniqueWOs) {
+        const { data: team } = await supabase
+          .from('work_order_assignments')
+          .select(`
+            *,
+            user:users(first_name, last_name, role)
+          `)
+          .eq('wo_id', wo.wo_id);
+
+        if (team && team.length > 0) {
+          await cacheTeamMembers(team, wo.wo_id);
+        }
+      }
+
+      setLastSyncTime(new Date());
+      setCachedCount(uniqueWOs.length);
+      setSyncStatus('success');
+      
+      console.log('✅ Download complete!');
+      
+      setTimeout(() => setSyncStatus('idle'), 3000);
+
+      return { 
+        success: true, 
+        activeCount: uniqueWOs.length,
+        completedCount: uniqueCompletedWOs.length,
+        message: `Downloaded ${uniqueWOs.length} work orders for offline use`
+      };
+
+    } catch (error) {
+      console.error('❌ Download failed:', error);
+      setSyncStatus('error');
+      setSyncError(error.message);
+      return { success: false, reason: 'error', message: error.message };
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [isOnline, currentUser, supabase]);
+
+  // ==================== GET WORK ORDERS (OFFLINE-FIRST) ====================
   const getWorkOrders = useCallback(async (forceRefresh = false) => {
     if (!isDBReady) return [];
 
-    // If online and force refresh, get from server first
+    // If online and force refresh, download fresh data
     if (isOnline && forceRefresh) {
-      try {
-        const { data: leadWOs } = await supabase
-          .from('work_orders')
-          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
-          .eq('lead_tech_id', currentUser?.user_id)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
-          .order('priority', { ascending: true });
-
-        const { data: assignments } = await supabase
-          .from('work_order_assignments')
-          .select('wo_id')
-          .eq('user_id', currentUser?.user_id);
-
-        let helperWOs = [];
-        if (assignments?.length > 0) {
-          const { data } = await supabase
-            .from('work_orders')
-            .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
-            .in('wo_id', assignments.map(a => a.wo_id))
-            .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
-          helperWOs = data || [];
-        }
-
-        const allWOs = [...(leadWOs || []), ...helperWOs];
-        const uniqueWOs = Array.from(new Map(allWOs.map(wo => [wo.wo_id, wo])).values());
-        
-        await cacheWorkOrders(uniqueWOs);
-        return uniqueWOs;
-      } catch (error) {
-        console.error('Failed to fetch from server, using cache:', error);
-      }
+      await downloadForOffline();
     }
 
     // Return from cache
-    return await getCachedWorkOrders();
-  }, [isDBReady, isOnline, currentUser, supabase]);
+    try {
+      return await getCachedWorkOrders();
+    } catch (error) {
+      console.error('Failed to get cached work orders:', error);
+      return [];
+    }
+  }, [isDBReady, isOnline, downloadForOffline]);
 
-  // Get completed work orders (from cache if offline)
-  const getCompletedWorkOrders = useCallback(async (forceRefresh = false) => {
+  // Get completed work orders (from cache)
+  const getCompletedWorkOrders = useCallback(async () => {
     if (!isDBReady) return [];
 
-    if (isOnline && forceRefresh) {
-      try {
-        const { data: leadWOs } = await supabase
-          .from('work_orders')
-          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
-          .eq('lead_tech_id', currentUser?.user_id)
-          .eq('status', 'completed')
-          .order('date_completed', { ascending: false })
-          .limit(50);
-
-        await cacheCompletedWorkOrders(leadWOs || []);
-        return leadWOs || [];
-      } catch (error) {
-        console.error('Failed to fetch completed WOs, using cache:', error);
-      }
+    try {
+      return await getCachedCompletedWorkOrders();
+    } catch (error) {
+      console.error('Failed to get cached completed work orders:', error);
+      return [];
     }
-
-    return await getCachedCompletedWorkOrders();
-  }, [isDBReady, isOnline, currentUser, supabase]);
+  }, [isDBReady]);
 
   // ==================== OFFLINE ACTIONS ====================
 
@@ -225,10 +364,11 @@ export function useOffline(currentUser) {
     const timestamp = now.toLocaleString();
     const isoTime = now.toISOString();
 
-    // Update local cache immediately
     const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN${!isOnline ? ' [PENDING SYNC]' : ''}`;
     
-    const cachedWO = await getCachedWorkOrders().then(wos => wos.find(w => w.wo_id === woId));
+    const cachedWOs = await getCachedWorkOrders();
+    const cachedWO = cachedWOs.find(w => w.wo_id === woId);
+    
     if (cachedWO) {
       const existingComments = cachedWO.comments || '';
       await updateCachedWorkOrder(woId, {
@@ -239,14 +379,19 @@ export function useOffline(currentUser) {
     }
 
     if (isOnline) {
-      // Try to sync immediately
       try {
+        const { data: wo } = await supabase
+          .from('work_orders')
+          .select('comments, time_in')
+          .eq('wo_id', woId)
+          .single();
+
         await supabase
           .from('work_orders')
           .update({
             status: 'in_progress',
-            time_in: isoTime,
-            comments: cachedWO ? `${cachedWO.comments || ''}\n\n${checkInNote}` : checkInNote
+            time_in: wo?.time_in || isoTime,
+            comments: wo?.comments ? `${wo.comments}\n\n${checkInNote}` : checkInNote
           })
           .eq('wo_id', woId);
         return { success: true, synced: true };
@@ -255,14 +400,7 @@ export function useOffline(currentUser) {
       }
     }
 
-    // Queue for later sync
-    await addToSyncQueue('check_in', {
-      woId,
-      timestamp,
-      isoTime,
-      gpsLocation
-    });
-    
+    await addToSyncQueue('check_in', { woId, timestamp, isoTime, gpsLocation });
     updatePendingCount();
     return { success: true, synced: false };
   }, [currentUser, isOnline, supabase, updatePendingCount]);
@@ -275,7 +413,9 @@ export function useOffline(currentUser) {
 
     const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT${!isOnline ? ' [PENDING SYNC]' : ''}`;
     
-    const cachedWO = await getCachedWorkOrders().then(wos => wos.find(w => w.wo_id === woId));
+    const cachedWOs = await getCachedWorkOrders();
+    const cachedWO = cachedWOs.find(w => w.wo_id === woId);
+    
     if (cachedWO) {
       const existingComments = cachedWO.comments || '';
       await updateCachedWorkOrder(woId, {
@@ -286,11 +426,17 @@ export function useOffline(currentUser) {
 
     if (isOnline) {
       try {
+        const { data: wo } = await supabase
+          .from('work_orders')
+          .select('comments, time_out')
+          .eq('wo_id', woId)
+          .single();
+
         await supabase
           .from('work_orders')
           .update({
-            time_out: isoTime,
-            comments: cachedWO ? `${cachedWO.comments || ''}\n\n${checkOutNote}` : checkOutNote
+            time_out: wo?.time_out || isoTime,
+            comments: wo?.comments ? `${wo.comments}\n\n${checkOutNote}` : checkOutNote
           })
           .eq('wo_id', woId);
         return { success: true, synced: true };
@@ -299,13 +445,7 @@ export function useOffline(currentUser) {
       }
     }
 
-    await addToSyncQueue('check_out', {
-      woId,
-      timestamp,
-      isoTime,
-      gpsLocation
-    });
-    
+    await addToSyncQueue('check_out', { woId, timestamp, isoTime, gpsLocation });
     updatePendingCount();
     return { success: true, synced: false };
   }, [currentUser, isOnline, supabase, updatePendingCount]);
@@ -315,7 +455,9 @@ export function useOffline(currentUser) {
     const timestamp = new Date().toLocaleString();
     const formattedComment = `[${timestamp}] ${currentUser.first_name}: ${commentText}${!isOnline ? ' [PENDING SYNC]' : ''}`;
 
-    const cachedWO = await getCachedWorkOrders().then(wos => wos.find(w => w.wo_id === woId));
+    const cachedWOs = await getCachedWorkOrders();
+    const cachedWO = cachedWOs.find(w => w.wo_id === woId);
+    
     if (cachedWO) {
       const existingComments = cachedWO.comments || '';
       await updateCachedWorkOrder(woId, {
@@ -343,12 +485,7 @@ export function useOffline(currentUser) {
       }
     }
 
-    await addToSyncQueue('add_comment', {
-      woId,
-      commentText,
-      timestamp
-    });
-    
+    await addToSyncQueue('add_comment', { woId, commentText, timestamp });
     updatePendingCount();
     return { success: true, synced: false };
   }, [currentUser, isOnline, supabase, updatePendingCount]);
@@ -417,7 +554,9 @@ export function useOffline(currentUser) {
 
     const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED${!isOnline ? ' [PENDING SYNC]' : ''}`;
 
-    const cachedWO = await getCachedWorkOrders().then(wos => wos.find(w => w.wo_id === woId));
+    const cachedWOs = await getCachedWorkOrders();
+    const cachedWO = cachedWOs.find(w => w.wo_id === woId);
+    
     if (cachedWO) {
       const existingComments = cachedWO.comments || '';
       await updateCachedWorkOrder(woId, {
@@ -429,12 +568,18 @@ export function useOffline(currentUser) {
 
     if (isOnline) {
       try {
+        const { data: wo } = await supabase
+          .from('work_orders')
+          .select('comments')
+          .eq('wo_id', woId)
+          .single();
+
         await supabase
           .from('work_orders')
           .update({
             status: 'completed',
             date_completed: isoTime,
-            comments: cachedWO ? `${cachedWO.comments || ''}\n\n${completionNote}` : completionNote
+            comments: wo?.comments ? `${wo.comments}\n\n${completionNote}` : completionNote
           })
           .eq('wo_id', woId);
         return { success: true, synced: true };
@@ -443,19 +588,13 @@ export function useOffline(currentUser) {
       }
     }
 
-    await addToSyncQueue('complete_work_order', {
-      woId,
-      timestamp,
-      isoTime
-    });
-    
+    await addToSyncQueue('complete_work_order', { woId, timestamp, isoTime });
     updatePendingCount();
     return { success: true, synced: false };
   }, [currentUser, isOnline, supabase, updatePendingCount]);
 
   // ==================== SYNC CONTROLS ====================
 
-  // Force sync now
   const forceSync = useCallback(async () => {
     if (!isOnline) {
       return { success: false, reason: 'offline' };
@@ -465,19 +604,11 @@ export function useOffline(currentUser) {
     const result = await syncPendingChanges(supabase, currentUser);
     
     if (result.success) {
-      await refreshFromServer(supabase, currentUser);
+      await downloadForOffline(); // Re-download fresh data
     }
     
     return result;
-  }, [isOnline, supabase, currentUser]);
-
-  // Refresh data from server
-  const refresh = useCallback(async () => {
-    if (!isOnline) {
-      return false;
-    }
-    return await refreshFromServer(supabase, currentUser);
-  }, [isOnline, supabase, currentUser]);
+  }, [isOnline, supabase, currentUser, downloadForOffline]);
 
   // Get offline stats
   const getStats = useCallback(async () => {
@@ -485,10 +616,12 @@ export function useOffline(currentUser) {
     return await getOfflineStats();
   }, [isDBReady]);
 
-  // Clear all offline data (use with caution!)
+  // Clear all offline data
   const clearOfflineData = useCallback(async () => {
     if (!isDBReady) return false;
-    return await clearAllOfflineData();
+    const result = await clearAllOfflineData();
+    setCachedCount(0);
+    return result;
   }, [isDBReady]);
 
   return {
@@ -501,6 +634,8 @@ export function useOffline(currentUser) {
     lastSyncTime,
     syncStatus,
     syncError,
+    cachedCount,
+    isDownloading,
     
     // Work order operations (offline-capable)
     getWorkOrders,
@@ -514,7 +649,7 @@ export function useOffline(currentUser) {
     
     // Sync controls
     forceSync,
-    refresh,
+    downloadForOffline,  // <-- MANUAL DOWNLOAD BUTTON
     
     // Utilities
     getStats,

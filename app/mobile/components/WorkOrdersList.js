@@ -17,10 +17,24 @@ export default function WorkOrdersList({
   pendingSyncCount = 0,
   syncStatus = 'idle',
   onForceSync = null,
+  onDownloadOffline = null,
+  cachedCount = 0,
+  isDownloading = false,
   lastSyncTime = null
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
+
+  // Format last sync time
+  const formatLastSync = () => {
+    if (!lastSyncTime) return null;
+    const diff = Date.now() - new Date(lastSyncTime).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -59,31 +73,71 @@ export default function WorkOrdersList({
           </button>
         </div>
 
-        {/* Offline/Sync Banner */}
-        {(!isOnline || pendingSyncCount > 0) && (
-          <div className={`mb-2 px-3 py-2 rounded-lg text-xs flex items-center justify-between ${
-            !isOnline 
-              ? 'bg-red-900/50 border border-red-700' 
-              : 'bg-yellow-900/50 border border-yellow-700'
-          }`}>
+        {/* Offline Status / Download Banner */}
+        {!isOnline ? (
+          // OFFLINE MODE - Show cached count
+          <div className="mb-2 px-3 py-2 rounded-lg text-xs bg-red-900/50 border border-red-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>📴</span>
+                <span className="text-red-400">Working Offline</span>
+              </div>
+              <span className="text-gray-400">
+                {cachedCount > 0 ? `${cachedCount} WOs cached` : 'No cached data'}
+              </span>
+            </div>
+            {pendingSyncCount > 0 && (
+              <div className="mt-1 text-yellow-400">
+                ⏳ {pendingSyncCount} change{pendingSyncCount > 1 ? 's' : ''} will sync when online
+              </div>
+            )}
+          </div>
+        ) : pendingSyncCount > 0 ? (
+          // ONLINE WITH PENDING - Show sync option
+          <div className="mb-2 px-3 py-2 rounded-lg text-xs bg-yellow-900/50 border border-yellow-700 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span>{!isOnline ? '📴' : '⏳'}</span>
-              <span className={!isOnline ? 'text-red-400' : 'text-yellow-400'}>
-                {!isOnline 
-                  ? 'Working Offline - Changes saved locally' 
-                  : `${pendingSyncCount} change${pendingSyncCount > 1 ? 's' : ''} pending sync`
+              <span>⏳</span>
+              <span className="text-yellow-400">
+                {pendingSyncCount} change{pendingSyncCount > 1 ? 's' : ''} pending sync
+              </span>
+            </div>
+            <button
+              onClick={onForceSync}
+              disabled={syncStatus === 'syncing'}
+              className="text-yellow-400 hover:text-yellow-300 font-medium"
+            >
+              {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+        ) : (
+          // ONLINE - Show download button
+          <div className="mb-2 px-3 py-2 rounded-lg text-xs bg-gray-700/50 border border-gray-600 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span>📥</span>
+              <span className="text-gray-300">
+                {cachedCount > 0 
+                  ? `${cachedCount} WOs ready for offline${lastSyncTime ? ` • ${formatLastSync()}` : ''}`
+                  : 'Download work orders for offline use'
                 }
               </span>
             </div>
-            {isOnline && onForceSync && (
-              <button
-                onClick={onForceSync}
-                disabled={syncStatus === 'syncing'}
-                className="text-yellow-400 hover:text-yellow-300 font-medium"
-              >
-                {syncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
-              </button>
-            )}
+            <button
+              onClick={onDownloadOffline}
+              disabled={isDownloading || syncStatus === 'downloading'}
+              className={`px-3 py-1 rounded font-medium text-xs ${
+                isDownloading || syncStatus === 'downloading'
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isDownloading || syncStatus === 'downloading' ? (
+                <span className="flex items-center gap-1">
+                  <span className="animate-spin">⟳</span> Downloading...
+                </span>
+              ) : (
+                '📥 Download'
+              )}
+            </button>
           </div>
         )}
 
@@ -130,6 +184,15 @@ export default function WorkOrdersList({
               <div className="text-4xl mb-3">📋</div>
               <p className="text-gray-400 text-lg">{t('noActiveWorkOrders')}</p>
               <p className="text-gray-500 text-sm mt-2">{t('checkBackLater')}</p>
+              {isOnline && onDownloadOffline && (
+                <button
+                  onClick={onDownloadOffline}
+                  disabled={isDownloading}
+                  className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  {isDownloading ? '⟳ Downloading...' : '🔄 Refresh Work Orders'}
+                </button>
+              )}
             </div>
           ) : (
             workOrders.map(wo => (
@@ -144,6 +207,10 @@ export default function WorkOrdersList({
                     <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
                       {getPriorityBadge(wo.priority)}
                     </span>
+                    {/* Show if locally modified */}
+                    {wo.locally_modified && (
+                      <span className="ml-2 text-xs text-yellow-500">⏳</span>
+                    )}
                   </div>
                   <span className="text-xs bg-gray-700 px-2 py-1 rounded-full ml-2 flex-shrink-0">
                     {getStatusBadge(wo.status)}

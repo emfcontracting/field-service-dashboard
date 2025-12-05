@@ -1,6 +1,6 @@
-//Mobile App - Refactored & Modular with Bilingual Support (WITH DAILY HOURS & NTE INCREASES)
+//Mobile App - Refactored & Modular with Bilingual Support (WITH DAILY HOURS, NTE INCREASES & OFFLINE MODE)
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // Language Provider
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -11,6 +11,7 @@ import { useWorkOrders } from './hooks/useWorkOrders';
 import { useTeam } from './hooks/useTeam';
 import { useAvailability } from './hooks/useAvailability';
 import { useQuotes } from './hooks/useQuotes';
+import { useOffline } from './hooks/useOffline';
 
 // Page Components
 import LoginScreen from './components/LoginScreen';
@@ -24,9 +25,34 @@ import AvailabilityModal from './components/modals/AvailabilityModal';
 import ChangePinModal from './components/modals/ChangePinModal';
 import TeamModal from './components/modals/TeamModal';
 
+// Offline Components
+import { SyncNotification } from './components/ConnectionStatus';
+
 export default function MobilePage() {
   // Authentication
   const { currentUser, loading, error, setError, login, logout, changePin } = useAuth();
+  
+  // Offline Mode
+  const {
+    isOnline,
+    isOfflineReady,
+    pendingSyncCount,
+    lastSyncTime,
+    syncStatus,
+    syncError,
+    cachedCount,
+    isDownloading,
+    forceSync,
+    downloadForOffline,
+    offlineCheckIn,
+    offlineCheckOut,
+    offlineAddComment,
+    offlineUpdateStatus,
+    offlineAddDailyHours,
+    offlineCompleteWorkOrder,
+    getWorkOrders: getOfflineWorkOrders,
+    getCompletedWorkOrders: getOfflineCompletedWorkOrders
+  } = useOffline(currentUser);
   
   // Work Orders - INCLUDING DAILY HOURS
   const {
@@ -45,6 +71,7 @@ export default function MobilePage() {
     handleFieldChange,
     getFieldValue,
     loadWorkOrders,
+    loadCompletedWorkOrders,
     saveSignature,
     // DAILY HOURS EXPORTS
     dailyLogs,
@@ -105,6 +132,25 @@ export default function MobilePage() {
   // UI State
   const [showCompletedPage, setShowCompletedPage] = useState(false);
   const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [showSyncNotification, setShowSyncNotification] = useState(false);
+  const [syncNotificationMessage, setSyncNotificationMessage] = useState('');
+  const [syncNotificationType, setSyncNotificationType] = useState('success');
+
+  // Show sync notification when sync/download completes
+  useEffect(() => {
+    if (syncStatus === 'success') {
+      setSyncNotificationMessage(cachedCount > 0 
+        ? `✅ ${cachedCount} work orders ready for offline!` 
+        : 'All changes synced successfully!');
+      setSyncNotificationType('success');
+      setShowSyncNotification(true);
+      setTimeout(() => setShowSyncNotification(false), 3000);
+    } else if (syncStatus === 'error') {
+      setSyncNotificationMessage(syncError || 'Sync failed. Will retry automatically.');
+      setSyncNotificationType('error');
+      setShowSyncNotification(true);
+    }
+  }, [syncStatus, cachedCount, syncError]);
 
   // Handlers
   async function handleLogin(email, pin) {
@@ -120,11 +166,38 @@ export default function MobilePage() {
     await addTeamMember(memberId, selectedWO.wo_id, loadWorkOrders);
   }
 
+  // Download for offline handler
+  async function handleDownloadOffline() {
+    const result = await downloadForOffline();
+    if (result.success) {
+      // Also refresh the regular work orders list
+      await loadWorkOrders();
+    }
+    return result;
+  }
+
+  // Force sync handler
+  async function handleForceSync() {
+    const result = await forceSync();
+    if (result.success) {
+      await loadWorkOrders();
+      await loadCompletedWorkOrders();
+    }
+    return result;
+  }
+
   // Loading Screen
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+        <div className="text-center">
+          <div className="text-white text-xl mb-2">Loading...</div>
+          {isOfflineReady && (
+            <div className="text-gray-400 text-sm">
+              {isOnline ? '🌐 Online' : '📴 Offline mode ready'}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -132,6 +205,14 @@ export default function MobilePage() {
   // Wrap entire app with LanguageProvider
   return (
     <LanguageProvider>
+      {/* Sync Notification Toast */}
+      <SyncNotification
+        show={showSyncNotification}
+        message={syncNotificationMessage}
+        type={syncNotificationType}
+        onDismiss={() => setShowSyncNotification(false)}
+      />
+      
       <MobileAppContent
         currentUser={currentUser}
         error={error}
@@ -200,6 +281,16 @@ export default function MobilePage() {
         updateMaterial={updateMaterial}
         deleteMaterial={deleteMaterial}
         calculateTotals={calculateTotals}
+        // OFFLINE MODE PROPS
+        isOnline={isOnline}
+        isOfflineReady={isOfflineReady}
+        pendingSyncCount={pendingSyncCount}
+        syncStatus={syncStatus}
+        lastSyncTime={lastSyncTime}
+        cachedCount={cachedCount}
+        isDownloading={isDownloading}
+        onForceSync={handleForceSync}
+        onDownloadOffline={handleDownloadOffline}
       />
     </LanguageProvider>
   );
@@ -273,7 +364,17 @@ function MobileAppContent({
   addMaterial,
   updateMaterial,
   deleteMaterial,
-  calculateTotals
+  calculateTotals,
+  // OFFLINE MODE PROPS
+  isOnline,
+  isOfflineReady,
+  pendingSyncCount,
+  syncStatus,
+  lastSyncTime,
+  cachedCount,
+  isDownloading,
+  onForceSync,
+  onDownloadOffline
 }) {
   // Login Screen
   if (!currentUser) {
@@ -364,6 +465,12 @@ function MobileAppContent({
           onNewQuote={startNewQuote}
           onViewQuote={loadQuoteDetails}
           onDeleteQuote={deleteQuote}
+          // OFFLINE MODE PROPS
+          isOnline={isOnline}
+          pendingSyncCount={pendingSyncCount}
+          syncStatus={syncStatus}
+          onForceSync={onForceSync}
+          lastSyncTime={lastSyncTime}
         />
         
         {/* Modals */}
@@ -396,6 +503,12 @@ function MobileAppContent({
           onSelectWO={setSelectedWO}
           onShowChangePin={() => setShowChangePinModal(true)}
           onLogout={handleLogout}
+          // OFFLINE MODE PROPS
+          isOnline={isOnline}
+          pendingSyncCount={pendingSyncCount}
+          syncStatus={syncStatus}
+          onForceSync={onForceSync}
+          lastSyncTime={lastSyncTime}
         />
         
         <ChangePinModal
@@ -418,6 +531,15 @@ function MobileAppContent({
         onShowCompleted={() => setShowCompletedPage(true)}
         onShowChangePin={() => setShowChangePinModal(true)}
         onLogout={handleLogout}
+        // OFFLINE MODE PROPS
+        isOnline={isOnline}
+        pendingSyncCount={pendingSyncCount}
+        syncStatus={syncStatus}
+        onForceSync={onForceSync}
+        onDownloadOffline={onDownloadOffline}
+        cachedCount={cachedCount}
+        isDownloading={isDownloading}
+        lastSyncTime={lastSyncTime}
       />
       
       <ChangePinModal

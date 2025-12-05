@@ -10,6 +10,7 @@ import WorkOrderDetailModal from './components/WorkOrderDetailModal';
 import NewWorkOrderModal from './components/NewWorkOrderModal';
 import ImportModal from '../components/ImportModal';
 import { CalendarView } from './components/calendar';
+import { AgingView } from './components/aging';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -26,7 +27,7 @@ export default function Dashboard() {
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'availability'
+  const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'aging' | 'availability'
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -72,6 +73,17 @@ export default function Dashboard() {
       case 'calendar':
         return (
           <CalendarView
+            workOrders={workOrders}
+            users={users}
+            supabase={supabase}
+            refreshWorkOrders={refreshWorkOrders}
+            onSelectWorkOrder={setSelectedWO}
+          />
+        );
+      
+      case 'aging':
+        return (
+          <AgingView
             workOrders={workOrders}
             users={users}
             supabase={supabase}

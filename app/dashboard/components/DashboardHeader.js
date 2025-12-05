@@ -6,6 +6,7 @@ export default function DashboardHeader({ activeView, setActiveView }) {
   const viewTabs = [
     { id: 'workorders', label: 'Work Orders', icon: '📋' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
+    { id: 'aging', label: 'Aging', icon: '⚠️' },
     { id: 'availability', label: 'Availability', icon: '👥' },
   ];
 
@@ -72,7 +73,9 @@ export default function DashboardHeader({ activeView, setActiveView }) {
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition
                 ${isActive 
-                  ? 'bg-blue-600 text-white' 
+                  ? tab.id === 'aging' 
+                    ? 'bg-red-600 text-white' 
+                    : 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
                 }
               `}

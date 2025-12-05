@@ -51,8 +51,12 @@ export default function CalendarView({
     return grouped;
   }, [filteredWorkOrders]);
 
-  // Get unscheduled work orders
-  const unscheduledWorkOrders = filteredWorkOrders.filter(wo => !wo.scheduled_date);
+  // Get unscheduled work orders (exclude completed and needs_return statuses)
+  const unscheduledWorkOrders = filteredWorkOrders.filter(wo => 
+    !wo.scheduled_date && 
+    wo.status !== 'completed' && 
+    wo.status !== 'needs_return'
+  );
 
   // Handle drag start
   const handleDragStart = (e, workOrder) => {

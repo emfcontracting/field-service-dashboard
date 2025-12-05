@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 
 export async function POST(request) {
   try {
-    const { workOrders } = await request.json();
+    const { workOrders, targetTechIds } = await request.json();
 
     if (!workOrders || workOrders.length === 0) {
       return Response.json({ success: true, emailsSent: 0, message: 'No aging work orders' });
@@ -30,6 +30,11 @@ export async function POST(request) {
     for (const wo of workOrders) {
       // Get lead tech info
       if (wo.lead_tech_id) {
+        // If targetTechIds is specified, only include those techs
+        if (targetTechIds && !targetTechIds.includes(wo.lead_tech_id)) {
+          continue;
+        }
+
         const techId = wo.lead_tech_id;
         if (!woByTech[techId]) {
           woByTech[techId] = {
@@ -52,6 +57,11 @@ export async function POST(request) {
       if (assignments) {
         for (const assignment of assignments) {
           if (assignment.user?.user_id && assignment.user?.email) {
+            // If targetTechIds is specified, only include those techs
+            if (targetTechIds && !targetTechIds.includes(assignment.user.user_id)) {
+              continue;
+            }
+
             const memberId = assignment.user.user_id;
             if (!woByTech[memberId]) {
               woByTech[memberId] = {
@@ -85,6 +95,7 @@ export async function POST(request) {
 
         if (!techData?.email) {
           console.log(`No email found for tech ${techId}`);
+          emailResults.push({ tech: techId, email: 'N/A', status: 'skipped', error: 'No email found' });
           continue;
         }
         
@@ -103,32 +114,34 @@ export async function POST(request) {
         ? `🚨 CRITICAL: ${techWOs.length} Aging Work Orders Require Attention`
         : `⚠️ Aging Alert: ${techWOs.length} Work Orders Open 2+ Days`;
 
-      const workOrdersHtml = techWOs.map(wo => {
-        const severityColor = wo.aging?.severity === 'critical' ? '#ef4444' 
-          : wo.aging?.severity === 'warning' ? '#f97316' 
-          : '#eab308';
-        const severityLabel = wo.aging?.severity?.toUpperCase() || 'STALE';
-        
-        return `
-          <tr style="border-bottom: 1px solid #374151;">
-            <td style="padding: 12px; background-color: ${severityColor}20;">
-              <span style="color: ${severityColor}; font-weight: bold;">${severityLabel}</span>
-            </td>
-            <td style="padding: 12px;">
-              <strong>${wo.wo_number}</strong><br/>
-              <span style="color: #9ca3af; font-size: 12px;">${wo.building}</span>
-            </td>
-            <td style="padding: 12px; color: #9ca3af; font-size: 13px;">
-              ${wo.work_order_description?.substring(0, 80)}${wo.work_order_description?.length > 80 ? '...' : ''}
-            </td>
-            <td style="padding: 12px; text-align: center;">
-              <span style="color: ${severityColor}; font-size: 18px; font-weight: bold;">
-                ${wo.aging?.days || '?'} days
-              </span>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      const workOrdersHtml = techWOs
+        .sort((a, b) => (b.aging?.days || 0) - (a.aging?.days || 0))
+        .map(wo => {
+          const severityColor = wo.aging?.severity === 'critical' ? '#ef4444' 
+            : wo.aging?.severity === 'warning' ? '#f97316' 
+            : '#eab308';
+          const severityLabel = wo.aging?.severity?.toUpperCase() || 'STALE';
+          
+          return `
+            <tr style="border-bottom: 1px solid #374151;">
+              <td style="padding: 12px; background-color: ${severityColor}20;">
+                <span style="color: ${severityColor}; font-weight: bold;">${severityLabel}</span>
+              </td>
+              <td style="padding: 12px;">
+                <strong>${wo.wo_number}</strong><br/>
+                <span style="color: #9ca3af; font-size: 12px;">${wo.building}</span>
+              </td>
+              <td style="padding: 12px; color: #9ca3af; font-size: 13px;">
+                ${wo.work_order_description?.substring(0, 80)}${wo.work_order_description?.length > 80 ? '...' : ''}
+              </td>
+              <td style="padding: 12px; text-align: center;">
+                <span style="color: ${severityColor}; font-size: 18px; font-weight: bold;">
+                  ${wo.aging?.days || '?'} days
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('');
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -200,13 +213,13 @@ export async function POST(request) {
               
               <p style="margin-top: 30px; color: #9ca3af; font-size: 13px;">
                 Please update the status or complete these work orders as soon as possible.
-                This email will be sent daily until all work orders are resolved.
               </p>
             </div>
             
             <div class="footer">
               <p>EMF Contracting LLC - Field Service Management</p>
               <p>This is an automated message. Please do not reply.</p>
+              <p style="margin-top: 10px; font-size: 11px;">Sent: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST</p>
             </div>
           </div>
         </body>
@@ -222,8 +235,8 @@ export async function POST(request) {
         });
 
         emailsSent++;
-        emailResults.push({ tech: techName, email: techEmail, status: 'sent' });
-        console.log(`Sent aging alert to ${techName} (${techEmail})`);
+        emailResults.push({ tech: techName, email: techEmail, status: 'sent', woCount: techWOs.length });
+        console.log(`Sent aging alert to ${techName} (${techEmail}) - ${techWOs.length} WOs`);
       } catch (emailError) {
         console.error(`Failed to send email to ${techEmail}:`, emailError);
         emailResults.push({ tech: techName, email: techEmail, status: 'failed', error: emailError.message });
@@ -234,7 +247,7 @@ export async function POST(request) {
       success: true, 
       emailsSent, 
       results: emailResults,
-      message: `Sent ${emailsSent} aging alert emails`
+      message: `Sent ${emailsSent} aging alert email(s)`
     });
 
   } catch (error) {
@@ -246,7 +259,7 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint to check aging status (can be called by cron)
+// GET endpoint to check aging status
 export async function GET(request) {
   try {
     // Get all work orders with lead tech assigned that are not completed

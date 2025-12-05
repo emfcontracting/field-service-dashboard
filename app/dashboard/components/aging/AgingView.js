@@ -1,10 +1,11 @@
 // app/dashboard/components/aging/AgingView.js
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import AgingStatsCards from './AgingStatsCards';
 import AgingWorkOrdersList from './AgingWorkOrdersList';
 import AgingByTechChart from './AgingByTechChart';
+import SendAlertModal from './SendAlertModal';
 
 export default function AgingView({ 
   workOrders, 
@@ -18,6 +19,7 @@ export default function AgingView({
   const [sortBy, setSortBy] = useState('age'); // 'age' | 'priority' | 'tech'
   const [lastAlertSent, setLastAlertSent] = useState(null);
   const [sendingAlerts, setSendingAlerts] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   // Get lead techs for filter
   const leadTechs = users.filter(u => u.role === 'lead_tech' || u.role === 'admin');
@@ -117,10 +119,20 @@ export default function AgingView({
         : 'Unassigned';
       
       if (!byTech[techId]) {
-        byTech[techId] = { name: techName, critical: 0, warning: 0, stale: 0, total: 0 };
+        byTech[techId] = { 
+          name: techName, 
+          visibleName: techName,
+          visibleNameWithId: techId,
+          critical: 0, 
+          warning: 0, 
+          stale: 0, 
+          total: 0,
+          workOrders: []
+        };
       }
       byTech[techId][wo.aging.severity]++;
       byTech[techId].total++;
+      byTech[techId].workOrders.push(wo);
     });
 
     // Find oldest
@@ -129,34 +141,9 @@ export default function AgingView({
     return { critical, warning, stale, total, byTech, oldest };
   }, [agingWorkOrders]);
 
-  // Send manual alert
-  const handleSendAlerts = async () => {
-    if (!confirm('Send aging alert emails to all techs with stale work orders?')) {
-      return;
-    }
-
-    setSendingAlerts(true);
-    try {
-      const response = await fetch('/api/aging/send-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workOrders: agingWorkOrders })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert(`✅ Sent ${result.emailsSent} alert emails!`);
-        setLastAlertSent(new Date());
-      } else {
-        alert('❌ Failed to send alerts: ' + result.error);
-      }
-    } catch (err) {
-      console.error('Error sending alerts:', err);
-      alert('❌ Failed to send alerts: ' + err.message);
-    } finally {
-      setSendingAlerts(false);
-    }
+  // Handle alert sent callback
+  const handleAlertSent = () => {
+    setLastAlertSent(new Date());
   };
 
   return (
@@ -211,17 +198,13 @@ export default function AgingView({
               <option value="tech">Sort by Tech</option>
             </select>
 
-            {/* Send Alerts Button */}
+            {/* Send Alerts Button - Opens Modal */}
             <button
-              onClick={handleSendAlerts}
-              disabled={sendingAlerts || stats.total === 0}
+              onClick={() => setShowSendModal(true)}
+              disabled={stats.total === 0}
               className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
             >
-              {sendingAlerts ? (
-                <>⏳ Sending...</>
-              ) : (
-                <>📧 Send Alert Emails</>
-              )}
+              📧 Send Alert Emails
             </button>
           </div>
         </div>
@@ -256,9 +239,23 @@ export default function AgingView({
             stats={stats}
             onTechClick={setFilterTech}
             selectedTech={filterTech}
+            onSendToTech={(techId) => setShowSendModal({ techId })}
           />
         </div>
       </div>
+
+      {/* Send Alert Modal */}
+      {showSendModal && (
+        <SendAlertModal
+          stats={stats}
+          agingWorkOrders={agingWorkOrders}
+          leadTechs={leadTechs}
+          users={users}
+          preselectedTechId={showSendModal.techId || null}
+          onClose={() => setShowSendModal(false)}
+          onAlertSent={handleAlertSent}
+        />
+      )}
     </div>
   );
 }

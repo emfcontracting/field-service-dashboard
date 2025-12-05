@@ -1,7 +1,7 @@
 // app/dashboard/components/aging/AgingByTechChart.js
 'use client';
 
-export default function AgingByTechChart({ stats, onTechClick, selectedTech }) {
+export default function AgingByTechChart({ stats, onTechClick, selectedTech, onSendToTech }) {
   // Sort techs by total aging work orders (descending)
   const sortedTechs = Object.entries(stats.byTech)
     .sort((a, b) => b[1].total - a[1].total);
@@ -16,7 +16,7 @@ export default function AgingByTechChart({ stats, onTechClick, selectedTech }) {
           👥 Aging by Technician
         </h3>
         <p className="text-xs text-gray-500 mt-1">
-          Click to filter by tech
+          Click to filter • 📧 to send alert
         </p>
       </div>
 
@@ -29,67 +29,90 @@ export default function AgingByTechChart({ stats, onTechClick, selectedTech }) {
           sortedTechs.map(([techId, data]) => {
             const isSelected = selectedTech === techId;
             const barWidth = (data.total / maxTotal) * 100;
+            const isUnassigned = techId === 'unassigned';
 
             return (
-              <button
+              <div
                 key={techId}
-                onClick={() => onTechClick(isSelected ? 'all' : techId)}
                 className={`
-                  w-full text-left p-3 rounded-lg transition
+                  p-3 rounded-lg transition
                   ${isSelected ? 'bg-blue-900/50 ring-2 ring-blue-400' : 'bg-gray-700/50 hover:bg-gray-700'}
                 `}
               >
                 {/* Tech Name & Total */}
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`font-semibold ${techId === 'unassigned' ? 'text-gray-400 italic' : 'text-white'}`}>
+                  <button
+                    onClick={() => onTechClick(isSelected ? 'all' : techId)}
+                    className={`font-semibold text-left flex-1 ${isUnassigned ? 'text-gray-400 italic' : 'text-white'} hover:text-blue-400 transition`}
+                  >
                     {data.name}
-                  </span>
-                  <span className="text-lg font-bold text-white">
-                    {data.total}
-                  </span>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-white">
+                      {data.total}
+                    </span>
+                    {/* Send to this tech button */}
+                    {!isUnassigned && onSendToTech && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSendToTech(techId);
+                        }}
+                        className="p-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition"
+                        title={`Send alert to ${data.name}`}
+                      >
+                        📧
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Stacked Bar */}
-                <div className="h-4 bg-gray-600 rounded-full overflow-hidden flex">
-                  {/* Critical */}
-                  {data.critical > 0 && (
-                    <div 
-                      className="bg-red-500 h-full"
-                      style={{ width: `${(data.critical / data.total) * barWidth}%` }}
-                      title={`Critical: ${data.critical}`}
-                    />
-                  )}
-                  {/* Warning */}
-                  {data.warning > 0 && (
-                    <div 
-                      className="bg-orange-500 h-full"
-                      style={{ width: `${(data.warning / data.total) * barWidth}%` }}
-                      title={`Warning: ${data.warning}`}
-                    />
-                  )}
-                  {/* Stale */}
-                  {data.stale > 0 && (
-                    <div 
-                      className="bg-yellow-500 h-full"
-                      style={{ width: `${(data.stale / data.total) * barWidth}%` }}
-                      title={`Stale: ${data.stale}`}
-                    />
-                  )}
-                </div>
+                <button
+                  onClick={() => onTechClick(isSelected ? 'all' : techId)}
+                  className="w-full"
+                >
+                  <div className="h-4 bg-gray-600 rounded-full overflow-hidden flex">
+                    {/* Critical */}
+                    {data.critical > 0 && (
+                      <div 
+                        className="bg-red-500 h-full"
+                        style={{ width: `${(data.critical / data.total) * barWidth}%` }}
+                        title={`Critical: ${data.critical}`}
+                      />
+                    )}
+                    {/* Warning */}
+                    {data.warning > 0 && (
+                      <div 
+                        className="bg-orange-500 h-full"
+                        style={{ width: `${(data.warning / data.total) * barWidth}%` }}
+                        title={`Warning: ${data.warning}`}
+                      />
+                    )}
+                    {/* Stale */}
+                    {data.stale > 0 && (
+                      <div 
+                        className="bg-yellow-500 h-full"
+                        style={{ width: `${(data.stale / data.total) * barWidth}%` }}
+                        title={`Stale: ${data.stale}`}
+                      />
+                    )}
+                  </div>
 
-                {/* Breakdown */}
-                <div className="flex gap-3 mt-2 text-xs">
-                  {data.critical > 0 && (
-                    <span className="text-red-400">🔴 {data.critical}</span>
-                  )}
-                  {data.warning > 0 && (
-                    <span className="text-orange-400">🟠 {data.warning}</span>
-                  )}
-                  {data.stale > 0 && (
-                    <span className="text-yellow-400">🟡 {data.stale}</span>
-                  )}
-                </div>
-              </button>
+                  {/* Breakdown */}
+                  <div className="flex gap-3 mt-2 text-xs">
+                    {data.critical > 0 && (
+                      <span className="text-red-400">🔴 {data.critical}</span>
+                    )}
+                    {data.warning > 0 && (
+                      <span className="text-orange-400">🟠 {data.warning}</span>
+                    )}
+                    {data.stale > 0 && (
+                      <span className="text-yellow-400">🟡 {data.stale}</span>
+                    )}
+                  </div>
+                </button>
+              </div>
             );
           })
         )}
@@ -98,7 +121,7 @@ export default function AgingByTechChart({ stats, onTechClick, selectedTech }) {
       {/* Legend */}
       <div className="p-4 border-t border-gray-700 bg-gray-900/50">
         <div className="text-xs text-gray-500 mb-2">Legend:</div>
-        <div className="flex gap-4 text-xs">
+        <div className="flex gap-4 text-xs flex-wrap">
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 bg-red-500 rounded"></span>
             Critical (5+ days)

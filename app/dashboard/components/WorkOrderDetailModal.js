@@ -32,9 +32,32 @@ export default function WorkOrderDetailModal({
   const [editingHours, setEditingHours] = useState({}); // Track editing state for each entry
   const [savingHours, setSavingHours] = useState(false);
   const [showAddHoursForm, setShowAddHoursForm] = useState(false);
+  
+  // Helper function to get local date string in YYYY-MM-DD format
+  // This prevents timezone issues where UTC conversion shifts the date
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper function to parse date string without timezone issues
+  // work_date is stored as YYYY-MM-DD, parse it as local date
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return new Date(dateStr);
+    return new Date(
+      parseInt(parts[0]), 
+      parseInt(parts[1]) - 1, 
+      parseInt(parts[2])
+    );
+  };
+  
   const [newHoursEntry, setNewHoursEntry] = useState({
     user_id: '',
-    work_date: new Date().toISOString().split('T')[0],
+    work_date: getLocalDateString(),
     hours_regular: 0,
     hours_overtime: 0,
     miles: 0,
@@ -432,10 +455,10 @@ export default function WorkOrderDetailModal({
       setDailyHoursLog(updatedLog);
       calculateTotals(updatedLog);
 
-      // Reset form
+      // Reset form - FIXED: Use getLocalDateString() instead of toISOString()
       setNewHoursEntry({
         user_id: '',
-        work_date: new Date().toISOString().split('T')[0],
+        work_date: getLocalDateString(),
         hours_regular: 0,
         hours_overtime: 0,
         miles: 0,
@@ -1264,7 +1287,8 @@ export default function WorkOrderDetailModal({
                             {entry.user?.first_name} {entry.user?.last_name}
                           </span>
                           <span className="text-gray-400 text-sm ml-2">
-                            {new Date(entry.work_date).toLocaleDateString('en-US', { 
+                            {/* FIXED: Use parseLocalDate to prevent timezone shift */}
+                            {parseLocalDate(entry.work_date).toLocaleDateString('en-US', { 
                               weekday: 'short', 
                               month: 'short', 
                               day: 'numeric' 

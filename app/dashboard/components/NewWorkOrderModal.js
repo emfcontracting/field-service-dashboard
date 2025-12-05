@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Calendar, X } from 'lucide-react';
 
 export default function NewWorkOrderModal({ users, supabase, onClose, refreshWorkOrders }) {
   const [newWO, setNewWO] = useState({
@@ -13,7 +14,8 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     status: 'pending',
     lead_tech_id: '',
     nte: 0,
-    comments: ''
+    comments: '',
+    scheduled_date: ''
   });
 
   const [saving, setSaving] = useState(false);
@@ -27,12 +29,15 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     setSaving(true);
 
     try {
+      const insertData = {
+        ...newWO,
+        date_entered: new Date().toISOString(),
+        scheduled_date: newWO.scheduled_date || null
+      };
+
       const { data, error } = await supabase
         .from('work_orders')
-        .insert([{
-          ...newWO,
-          date_entered: new Date().toISOString()
-        }])
+        .insert([insertData])
         .select();
 
       if (error) {
@@ -51,6 +56,9 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     }
   };
 
+  // Get today's date for min value
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -58,9 +66,9 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
           <h2 className="text-2xl font-bold">+ New Work Order</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-3xl leading-none"
+            className="text-gray-400 hover:text-white p-1"
           >
-            ×
+            <X size={24} />
           </button>
         </div>
 
@@ -114,7 +122,7 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
             />
           </div>
 
-          {/* Priority, Status, NTE */}
+          {/* Priority, Status, Scheduled Date */}
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Priority</label>
@@ -144,6 +152,23 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
             </div>
 
             <div>
+              <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1">
+                <Calendar size={14} />
+                Scheduled Date
+              </label>
+              <input
+                type="date"
+                value={newWO.scheduled_date}
+                min={today}
+                onChange={(e) => setNewWO({ ...newWO, scheduled_date: e.target.value })}
+                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              />
+            </div>
+          </div>
+
+          {/* NTE and Lead Tech */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <label className="block text-sm text-gray-400 mb-1">NTE Budget ($)</label>
               <input
                 type="number"
@@ -154,23 +179,22 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
                 placeholder="5000.00"
               />
             </div>
-          </div>
 
-          {/* Lead Tech Assignment */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Assign to Lead Tech</label>
-            <select
-              value={newWO.lead_tech_id}
-              onChange={(e) => setNewWO({ ...newWO, lead_tech_id: e.target.value })}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-            >
-              <option value="">Unassigned</option>
-              {users.filter(u => u.role === 'lead_tech' || u.role === 'admin').map(user => (
-                <option key={user.user_id} value={user.user_id}>
-                  {user.first_name} {user.last_name}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Assign to Lead Tech</label>
+              <select
+                value={newWO.lead_tech_id}
+                onChange={(e) => setNewWO({ ...newWO, lead_tech_id: e.target.value })}
+                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              >
+                <option value="">Unassigned</option>
+                {users.filter(u => u.role === 'lead_tech' || u.role === 'admin').map(user => (
+                  <option key={user.user_id} value={user.user_id}>
+                    {user.first_name} {user.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Comments */}
@@ -186,12 +210,12 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
           </div>
 
           {/* Info Box */}
-          <div className="bg-blue-900 rounded-lg p-4 text-blue-200">
+          <div className="bg-blue-900/50 rounded-lg p-4 text-blue-200">
             <div className="font-semibold mb-1">ℹ️ Quick Tips:</div>
             <ul className="text-sm space-y-1">
               <li>• WO# format suggestion: WO-YYYY-###</li>
               <li>• Set priority to Emergency for urgent requests</li>
-              <li>• NTE helps track budget vs actual costs</li>
+              <li>• Use the <strong>Calendar view</strong> to schedule work orders by dragging</li>
               <li>• Assign a lead tech to make it visible in mobile app</li>
             </ul>
           </div>

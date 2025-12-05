@@ -8,7 +8,8 @@ import WorkOrdersView from './components/WorkOrdersView';
 import AvailabilityView from './components/AvailabilityView';
 import WorkOrderDetailModal from './components/WorkOrderDetailModal';
 import NewWorkOrderModal from './components/NewWorkOrderModal';
-import ImportModal from '../components/ImportModal'; // ✅ UNCOMMENTED - now using separate file
+import ImportModal from '../components/ImportModal';
+import { CalendarView } from './components/calendar';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -25,7 +26,7 @@ export default function Dashboard() {
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState('workorders');
+  const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'availability'
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -65,20 +66,31 @@ export default function Dashboard() {
     setShowImportModal(true);
   };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <DashboardHeader 
-          activeView={activeView}
-          setActiveView={setActiveView}
-        />
-
-        {activeView === 'availability' ? (
+  // Render the active view
+  const renderActiveView = () => {
+    switch (activeView) {
+      case 'calendar':
+        return (
+          <CalendarView
+            workOrders={workOrders}
+            users={users}
+            supabase={supabase}
+            refreshWorkOrders={refreshWorkOrders}
+            onSelectWorkOrder={setSelectedWO}
+          />
+        );
+      
+      case 'availability':
+        return (
           <AvailabilityView 
             supabase={supabase}
             users={users}
           />
-        ) : (
+        );
+      
+      case 'workorders':
+      default:
+        return (
           <WorkOrdersView
             workOrders={workOrders}
             stats={stats}
@@ -90,9 +102,21 @@ export default function Dashboard() {
             onImport={handleImportClick}
             refreshWorkOrders={refreshWorkOrders}
           />
-        )}
+        );
+    }
+  };
 
-        {/* Modals */}
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        <DashboardHeader 
+          activeView={activeView}
+          setActiveView={setActiveView}
+        />
+
+        {renderActiveView()}
+
+        {/* Modals - Available in all views */}
         {selectedWO && (
           <WorkOrderDetailModal
             workOrder={selectedWO}
@@ -112,7 +136,6 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Import Modal - Using separate component file */}
         {showImportModal && (
           <ImportModal
             isOpen={showImportModal}

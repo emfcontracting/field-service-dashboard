@@ -26,6 +26,7 @@ export default function UserManagement() {
     last_name: '',
     email: '',
     phone: '',
+    sms_carrier: '',
     role: 'lead_tech',
     regular_rate: 64,
     overtime_rate: 96,
@@ -78,6 +79,7 @@ export default function UserManagement() {
       last_name: '',
       email: '',
       phone: '',
+      sms_carrier: '',
       role: 'lead_tech',
       regular_rate: 64,
       overtime_rate: 96,
@@ -95,6 +97,7 @@ export default function UserManagement() {
       last_name: user.last_name,
       email: user.email,
       phone: user.phone || '',
+      sms_carrier: user.sms_carrier || '',
       role: user.role,
       regular_rate: user.regular_rate || 64,
       overtime_rate: user.overtime_rate || 96,
@@ -500,7 +503,32 @@ export default function UserManagement() {
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="(555) 123-4567"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Carrier (for SMS alerts)
+                  </label>
+                  <select
+                    value={formData.sms_carrier}
+                    onChange={(e) => setFormData({...formData, sms_carrier: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select Carrier --</option>
+                    <option value="verizon">Verizon</option>
+                    <option value="att">AT&T</option>
+                    <option value="tmobile">T-Mobile</option>
+                    <option value="sprint">Sprint</option>
+                    <option value="boost">Boost Mobile</option>
+                    <option value="cricket">Cricket</option>
+                    <option value="metro">Metro PCS</option>
+                    <option value="uscellular">US Cellular</option>
+                    <option value="googlefi">Google Fi</option>
+                    <option value="straight_talk">Straight Talk</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Required to receive text notifications</p>
                 </div>
 
                 <div>

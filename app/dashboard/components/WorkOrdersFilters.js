@@ -8,6 +8,8 @@ export default function WorkOrdersFilters({
   setStatusFilter,
   priorityFilter,
   setPriorityFilter,
+  billingStatusFilter,
+  setBillingStatusFilter,
   onNewWorkOrder,
   onImport,     
   exportDropdown
@@ -28,12 +30,28 @@ export default function WorkOrdersFilters({
           onChange={(e) => setStatusFilter(e.target.value)}
           className="bg-gray-700 text-white px-4 py-2 rounded-lg"
         >
-          <option value="all">All Status</option>
+          <option value="all">All Work Status</option>
           <option value="pending">Pending</option>
           <option value="assigned">Assigned</option>
           <option value="in_progress">In Progress</option>
           <option value="needs_return">Needs Return</option>
           <option value="completed">Completed</option>
+        </select>
+
+        <select
+          value={billingStatusFilter || 'all'}
+          onChange={(e) => setBillingStatusFilter && setBillingStatusFilter(e.target.value)}
+          className={`px-4 py-2 rounded-lg ${
+            billingStatusFilter && billingStatusFilter !== 'all' 
+              ? 'bg-orange-700 text-white' 
+              : 'bg-gray-700 text-white'
+          }`}
+        >
+          <option value="all">All Billing Status</option>
+          <option value="none">No Billing Flag</option>
+          <option value="pending_cbre_quote">📋 Needs CBRE Quote</option>
+          <option value="quoted">📤 Quote Submitted</option>
+          <option value="quote_approved">✅ Quote Approved</option>
         </select>
 
         <select
@@ -62,7 +80,7 @@ export default function WorkOrdersFilters({
           📥 Import
         </button>
 		
-		{exportDropdown}
+        {exportDropdown}
       </div>
     </div>
   );

@@ -542,17 +542,90 @@ export default function WorkOrderDetailModal({
   };
 
   const handleAssignToField = async () => {
-    if (!confirm('Assign this work order to field workers?\n\nThis will make it visible in the mobile app.')) {
+    if (!confirm('Assign this work order to field workers?\n\nThis will make it visible in the mobile app and send SMS notifications to the lead tech and team members.')) {
       return;
     }
 
     try {
       await assignToField(supabase, selectedWO.wo_id);
-      alert('✅ Work order assigned to field workers!');
+      
+      // Send SMS notifications to lead tech and team members
+      await sendAssignmentNotifications();
+      
+      alert('✅ Work order assigned to field workers!\nSMS notifications sent.');
       onClose();
       refreshWorkOrders();
     } catch (error) {
       alert('❌ Error assigning to field: ' + error.message);
+    }
+  };
+
+  // Send SMS notifications when work order is assigned to field
+  const sendAssignmentNotifications = async () => {
+    try {
+      // Gather recipients: lead tech + team members
+      const recipients = [];
+      
+      // Add lead tech if exists
+      if (selectedWO.lead_tech_id) {
+        const { data: leadTech } = await supabase
+          .from('users')
+          .select('user_id, first_name, last_name, phone, sms_carrier')
+          .eq('user_id', selectedWO.lead_tech_id)
+          .single();
+        
+        if (leadTech && leadTech.phone && leadTech.sms_carrier) {
+          recipients.push(leadTech);
+        }
+      }
+      
+      // Add team members
+      if (selectedWO.teamMembers && selectedWO.teamMembers.length > 0) {
+        for (const member of selectedWO.teamMembers) {
+          const { data: teamMember } = await supabase
+            .from('users')
+            .select('user_id, first_name, last_name, phone, sms_carrier')
+            .eq('user_id', member.user_id)
+            .single();
+          
+          if (teamMember && teamMember.phone && teamMember.sms_carrier) {
+            // Avoid duplicates
+            if (!recipients.find(r => r.user_id === teamMember.user_id)) {
+              recipients.push(teamMember);
+            }
+          }
+        }
+      }
+      
+      if (recipients.length === 0) {
+        console.log('No recipients with phone/carrier configured for SMS');
+        return;
+      }
+      
+      // Send notifications
+      const notificationType = selectedWO.priority === 'emergency' ? 'emergency_work_order' : 'work_order_assigned';
+      
+      const response = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: notificationType,
+          recipients,
+          workOrder: {
+            wo_number: selectedWO.wo_number,
+            building: selectedWO.building,
+            priority: selectedWO.priority,
+            work_order_description: selectedWO.work_order_description
+          }
+        })
+      });
+      
+      const result = await response.json();
+      console.log('Notification result:', result);
+      
+    } catch (error) {
+      console.error('Error sending notifications:', error);
+      // Don't throw - notification failure shouldn't block assignment
     }
   };
 
@@ -1045,7 +1118,7 @@ export default function WorkOrderDetailModal({
           {/* Status, Priority, Lead Tech */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Status</label>
+              <label className="block text-sm text-gray-400 mb-1">Work Status</label>
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
@@ -1091,6 +1164,39 @@ export default function WorkOrderDetailModal({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Billing Status - Separate from Work Status */}
+          <div className="bg-orange-900/30 border border-orange-600 rounded-lg p-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <label className="block text-sm text-orange-300 font-semibold mb-1">💰 Billing Status</label>
+                <p className="text-xs text-gray-400">Track quote/billing status separately from work completion</p>
+              </div>
+              <select
+                value={selectedWO.billing_status || ''}
+                onChange={(e) => handleUpdateField('billing_status', e.target.value || null)}
+                className={`px-4 py-2 rounded-lg font-semibold ${
+                  selectedWO.billing_status === 'pending_cbre_quote' 
+                    ? 'bg-orange-600 text-white' 
+                    : selectedWO.billing_status === 'quoted'
+                    ? 'bg-blue-600 text-white'
+                    : selectedWO.billing_status === 'quote_approved'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 text-white'
+                }`}
+              >
+                <option value="">— No Billing Flag —</option>
+                <option value="pending_cbre_quote">📋 Needs CBRE Quote</option>
+                <option value="quoted">📤 Quote Submitted</option>
+                <option value="quote_approved">✅ Quote Approved</option>
+              </select>
+            </div>
+            {selectedWO.billing_status === 'pending_cbre_quote' && (
+              <div className="mt-3 bg-orange-800/50 rounded p-2 text-sm text-orange-200">
+                ⚠️ This ticket requires a CBRE quote. NTE was too low for actual cost.
+              </div>
+            )}
           </div>
 
           {/* Customer Signature Section */}

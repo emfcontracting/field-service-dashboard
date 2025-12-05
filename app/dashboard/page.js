@@ -32,7 +32,10 @@ export default function Dashboard() {
     assigned: 0,
     in_progress: 0,
     completed: 0,
-    needs_return: 0
+    needs_return: 0,
+    pending_cbre_quote: 0,
+    quoted: 0,
+    quote_approved: 0
   });
 
   // Load initial data

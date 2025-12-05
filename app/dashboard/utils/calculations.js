@@ -7,7 +7,11 @@ export function calculateStats(orders) {
     assigned: orders.filter(wo => wo.status === 'assigned').length,
     in_progress: orders.filter(wo => wo.status === 'in_progress').length,
     completed: orders.filter(wo => wo.status === 'completed').length,
-    needs_return: orders.filter(wo => wo.status === 'needs_return').length
+    needs_return: orders.filter(wo => wo.status === 'needs_return').length,
+    // Billing status counts (separate from work status)
+    pending_cbre_quote: orders.filter(wo => wo.billing_status === 'pending_cbre_quote').length,
+    quoted: orders.filter(wo => wo.billing_status === 'quoted').length,
+    quote_approved: orders.filter(wo => wo.billing_status === 'quote_approved').length
   };
 }
 

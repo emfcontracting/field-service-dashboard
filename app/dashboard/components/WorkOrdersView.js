@@ -21,24 +21,38 @@ export default function WorkOrdersView({
   const [filteredWorkOrders, setFilteredWorkOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [billingStatusFilter, setBillingStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Apply filters whenever workOrders or filters change
   useEffect(() => {
     applyFilters();
-  }, [workOrders, statusFilter, priorityFilter, searchTerm]);
+  }, [workOrders, statusFilter, priorityFilter, billingStatusFilter, searchTerm]);
 
   const applyFilters = () => {
     let filtered = [...workOrders];
 
+    // Work status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(wo => wo.status === statusFilter);
     }
 
+    // Billing status filter
+    if (billingStatusFilter !== 'all') {
+      if (billingStatusFilter === 'none') {
+        // Show only work orders without any billing flag
+        filtered = filtered.filter(wo => !wo.billing_status);
+      } else {
+        filtered = filtered.filter(wo => wo.billing_status === billingStatusFilter);
+      }
+    }
+
+    // Priority filter
     if (priorityFilter !== 'all') {
       filtered = filtered.filter(wo => wo.priority === priorityFilter);
     }
 
+    // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter(wo =>
@@ -50,6 +64,11 @@ export default function WorkOrdersView({
     }
 
     setFilteredWorkOrders(filtered);
+  };
+
+  // Handle clicking on billing status cards
+  const handleFilterByBillingStatus = (status) => {
+    setBillingStatusFilter(status);
   };
 
   const selectWorkOrderEnhanced = async (wo) => {
@@ -67,7 +86,10 @@ export default function WorkOrdersView({
 
   return (
     <>
-      <StatsCards stats={stats} />
+      <StatsCards 
+        stats={stats} 
+        onFilterByBillingStatus={handleFilterByBillingStatus}
+      />
       
       <WorkOrdersFilters
         searchTerm={searchTerm}
@@ -76,10 +98,32 @@ export default function WorkOrdersView({
         setStatusFilter={setStatusFilter}
         priorityFilter={priorityFilter}
         setPriorityFilter={setPriorityFilter}
+        billingStatusFilter={billingStatusFilter}
+        setBillingStatusFilter={setBillingStatusFilter}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
         exportDropdown={<ExportDropdown workOrders={workOrders} />}
       />
+
+      {/* Active Billing Filter Indicator */}
+      {billingStatusFilter !== 'all' && (
+        <div className="bg-orange-900/50 border border-orange-600 rounded-lg p-3 mb-4 flex justify-between items-center">
+          <span className="text-orange-200">
+            <strong>Billing Filter Active:</strong>{' '}
+            {billingStatusFilter === 'none' && 'No Billing Flag'}
+            {billingStatusFilter === 'pending_cbre_quote' && '📋 Needs CBRE Quote'}
+            {billingStatusFilter === 'quoted' && '📤 Quote Submitted'}
+            {billingStatusFilter === 'quote_approved' && '✅ Quote Approved'}
+            {' '}({filteredWorkOrders.length} results)
+          </span>
+          <button
+            onClick={() => setBillingStatusFilter('all')}
+            className="bg-orange-700 hover:bg-orange-600 px-3 py-1 rounded text-sm font-semibold"
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       <WorkOrdersTable
         workOrders={filteredWorkOrders}

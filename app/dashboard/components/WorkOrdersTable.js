@@ -5,6 +5,32 @@ import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 
+// Billing status badge helper
+const getBillingStatusBadge = (billingStatus) => {
+  switch (billingStatus) {
+    case 'pending_cbre_quote':
+      return {
+        text: '📋 NEEDS QUOTE',
+        color: 'bg-orange-600 text-orange-100',
+        shortText: '📋 Quote'
+      };
+    case 'quoted':
+      return {
+        text: '📤 QUOTED',
+        color: 'bg-blue-600 text-blue-100',
+        shortText: '📤 Quoted'
+      };
+    case 'quote_approved':
+      return {
+        text: '✅ APPROVED',
+        color: 'bg-green-600 text-green-100',
+        shortText: '✅ Approved'
+      };
+    default:
+      return null;
+  }
+};
+
 export default function WorkOrdersTable({ 
   workOrders, 
   loading, 
@@ -48,16 +74,17 @@ export default function WorkOrdersTable({
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
+        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1500px' }}>
           <thead className="bg-gray-700">
             <tr>
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Building</th>
-              <th className="px-2 py-2 text-left" style={{ width: '300px' }}>Description</th>
-              <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Status</th>
+              <th className="px-2 py-2 text-left" style={{ width: '280px' }}>Description</th>
+              <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Work Status</th>
+              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Billing</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Priority</th>
-              <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Lead Tech</th>
+              <th className="px-2 py-2 text-left" style={{ width: '110px' }}>Lead Tech</th>
               <th className="px-2 py-2 text-right" style={{ width: '80px' }}>NTE</th>
               <th className="px-2 py-2 text-right" style={{ width: '80px' }}>Est Cost</th>
               <th className="px-2 py-2 text-center" style={{ width: '40px' }}>🔒</th>
@@ -69,12 +96,15 @@ export default function WorkOrdersTable({
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
               const isNew = isNewWorkOrder(wo);
+              const billingBadge = getBillingStatusBadge(wo.billing_status);
 
               return (
                 <tr
                   key={wo.wo_id}
                   onClick={() => onSelectWorkOrder(wo)}
-                  className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
+                  className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
+                    wo.billing_status === 'pending_cbre_quote' ? 'bg-orange-900/20' : ''
+                  }`}
                 >
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-2">
@@ -121,23 +151,35 @@ export default function WorkOrdersTable({
                       )}
                     </div>
                   </td>
+                  <td className="px-2 py-2">
+                    {billingBadge ? (
+                      <span 
+                        className={`px-2 py-1 rounded text-[10px] font-bold ${billingBadge.color}`}
+                        title={billingBadge.text}
+                      >
+                        {billingBadge.shortText}
+                      </span>
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">—</span>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-center">
-  {(() => {
-    const badge = getPriorityBadge(wo.priority);
-    
-    // Compact version - just show emoji and code (e.g. "🔴 P1")
-    const compactText = badge.text.split(' ')[0] + ' ' + badge.text.split(' ')[1];
-    
-    return (
-      <span 
-        className={`px-2 py-1 rounded text-xs font-semibold text-white ${badge.color} whitespace-nowrap`}
-        title={badge.text} // Full text on hover
-      >
-        {compactText}
-      </span>
-    );
-  })()}
-</td>
+                    {(() => {
+                      const badge = getPriorityBadge(wo.priority);
+                      
+                      // Compact version - just show emoji and code (e.g. "🔴 P1")
+                      const compactText = badge.text.split(' ')[0] + ' ' + badge.text.split(' ')[1];
+                      
+                      return (
+                        <span 
+                          className={`px-2 py-1 rounded text-xs font-semibold text-white ${badge.color} whitespace-nowrap`}
+                          title={badge.text} // Full text on hover
+                        >
+                          {compactText}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-2 py-2">
                     {wo.lead_tech ? (
                       <div className="truncate" title={`${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`}>

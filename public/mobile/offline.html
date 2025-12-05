@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EMF Mobile - Offline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111827;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+    .icon { font-size: 64px; margin-bottom: 20px; }
+    h1 { font-size: 24px; margin-bottom: 12px; color: #f87171; }
+    p { color: #9ca3af; margin-bottom: 20px; max-width: 300px; line-height: 1.5; }
+    .btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 8px;
+    }
+    .btn:active { background: #2563eb; }
+    .tip {
+      background: #1f2937;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 30px;
+      max-width: 320px;
+    }
+    .tip h3 { color: #fbbf24; font-size: 14px; margin-bottom: 8px; }
+    .tip p { font-size: 13px; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="icon">📴</div>
+  <h1>You're Offline</h1>
+  <p>The app couldn't load because you don't have an internet connection.</p>
+  
+  <button class="btn" onclick="location.reload()">🔄 Try Again</button>
+  
+  <div class="tip">
+    <h3>💡 Tip for Next Time</h3>
+    <p>Open the app while online and tap "Download" to save your work orders. Then you can use the app offline!</p>
+  </div>
+  
+  <script>
+    // Auto-reload when back online
+    window.addEventListener('online', () => {
+      location.reload();
+    });
+  </script>
+</body>
+</html>

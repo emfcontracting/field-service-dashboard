@@ -14,7 +14,7 @@ export default function InvoicingPage() {
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
   const [previewWO, setPreviewWO] = useState(null);
   const [previewLineItems, setPreviewLineItems] = useState([]);
-  const [workPerformedText, setWorkPerformedText] = useState(''); // NEW: Separate state for editable work performed
+  const [workPerformedText, setWorkPerformedText] = useState(''); // Separate state for editable work performed
   const [customLineItem, setCustomLineItem] = useState({
     description: '',
     quantity: 1,
@@ -196,7 +196,7 @@ export default function InvoicingPage() {
         });
       }
 
-      // *** ADD ADMIN HOURS HERE ***
+      // Admin Hours
       items.push({
         description: 'Administrative Hours (2 hrs @ $64/hr)',
         quantity: 2,
@@ -272,15 +272,17 @@ export default function InvoicingPage() {
         });
       }
 
-      // *** CHANGED: Use comments_english field as Work Performed instead of work_order_description ***
-      // The comments_english field contains the actual work notes from field techs
+      // *** FIXED: Use tech's comments field as Work Performed instead of work_order_description ***
+      // The 'comments' field is where field techs document work they performed
       let workPerformed = '';
       
-      // Use comments_english as primary work performed (this is where techs document work)
-      if (wo.comments_english && wo.comments_english.trim()) {
+      // Priority: 1) comments (tech work notes), 2) comments_english (if bilingual), 3) fallback to description
+      if (wo.comments && wo.comments.trim()) {
+        workPerformed = wo.comments;
+      } else if (wo.comments_english && wo.comments_english.trim()) {
         workPerformed = wo.comments_english;
       } else {
-        // Fallback to description if no comments exist
+        // Only use description as last resort if no comments exist
         workPerformed = wo.work_order_description || 'Work completed as requested.';
       }
 
@@ -769,12 +771,12 @@ export default function InvoicingPage() {
                     <span className="text-gray-400">Acknowledged:</span>
                     <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
                   </div>
-                  {/* Show comments preview */}
-                  {selectedItem.data.comments_english && (
+                  {/* Show tech comments preview - this is the work performed */}
+                  {selectedItem.data.comments && (
                     <div className="mt-4 pt-4 border-t border-gray-600">
-                      <span className="text-gray-400">Work Notes/Comments:</span>
+                      <span className="text-gray-400">Tech's Work Notes (Work Performed):</span>
                       <div className="mt-2 bg-gray-800 rounded p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-                        {selectedItem.data.comments_english}
+                        {selectedItem.data.comments}
                       </div>
                     </div>
                   )}
@@ -787,7 +789,7 @@ export default function InvoicingPage() {
                   This work order has been completed and acknowledged. Click below to generate an invoice:
                   <ul className="list-disc list-inside mt-2 text-xs">
                     <li>All labor, materials, and costs will be included</li>
-                    <li><strong>Comments/work notes will be used as "Work Performed"</strong></li>
+                    <li><strong>Tech's comments/work notes will be used as "Work Performed"</strong></li>
                     <li>You can edit the work performed text before finalizing</li>
                   </ul>
                 </div>
@@ -973,11 +975,11 @@ export default function InvoicingPage() {
                 </div>
               </div>
 
-              {/* *** NEW: Editable Work Performed Section *** */}
+              {/* Editable Work Performed Section */}
               <div className="bg-gray-700 rounded-lg p-4">
                 <h3 className="font-bold text-lg mb-2">📝 Work Performed</h3>
                 <p className="text-gray-400 text-sm mb-3">
-                  This text will appear on the invoice as "Work Performed". Edit as needed.
+                  This text (from tech's comments) will appear on the invoice as "Work Performed". Edit as needed.
                 </p>
                 <textarea
                   value={workPerformedText}

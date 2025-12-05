@@ -2,7 +2,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, X } from 'lucide-react';
 
 export default function NewWorkOrderModal({ users, supabase, onClose, refreshWorkOrders }) {
   const [newWO, setNewWO] = useState({
@@ -66,9 +65,9 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
           <h2 className="text-2xl font-bold">+ New Work Order</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-1"
+            className="text-gray-400 hover:text-white text-3xl leading-none"
           >
-            <X size={24} />
+            ×
           </button>
         </div>
 
@@ -152,9 +151,8 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1 flex items-center gap-1">
-                <Calendar size={14} />
-                Scheduled Date
+              <label className="block text-sm text-gray-400 mb-1">
+                📅 Scheduled Date
               </label>
               <input
                 type="date"

@@ -28,6 +28,19 @@ export default function DailyHoursLog({
   const leadTech = wo.lead_tech || {};
   const isCompleted = status === 'completed';
 
+  // Helper function to parse date string without timezone issues
+  // work_date is stored as YYYY-MM-DD, parse it as local date
+  function parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return new Date(dateStr);
+    return new Date(
+      parseInt(parts[0]), 
+      parseInt(parts[1]) - 1, 
+      parseInt(parts[2])
+    );
+  }
+
   // Build list of all techs (primary + team)
   const allTechs = [];
   
@@ -185,18 +198,23 @@ export default function DailyHoursLog({
                 {/* Expanded Details */}
                 {isExpanded && totals.logs.length > 0 && (
                   <div className="ml-6 mt-1 mb-2 bg-gray-900 rounded p-2 text-xs">
-                    {totals.logs.map(log => (
-                      <div key={log.id || log.log_id} className="flex justify-between py-1 border-b border-gray-800 last:border-0">
-                        <span className="text-gray-400">
-                          {new Date(log.work_date).toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', { month: 'short', day: 'numeric' })}
-                        </span>
-                        <span>
-                          {log.hours_regular > 0 && <span className="text-green-400 mr-2">RT:{log.hours_regular}</span>}
-                          {log.hours_overtime > 0 && <span className="text-yellow-400 mr-2">OT:{log.hours_overtime}</span>}
-                          {log.miles > 0 && <span className="text-blue-400">{log.miles}mi</span>}
-                        </span>
-                      </div>
-                    ))}
+                    {totals.logs.map(log => {
+                      // Parse the date string directly to avoid timezone conversion issues
+                      const displayDate = parseLocalDate(log.work_date);
+                      
+                      return (
+                        <div key={log.id || log.log_id} className="flex justify-between py-1 border-b border-gray-800 last:border-0">
+                          <span className="text-gray-400">
+                            {displayDate.toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', { month: 'short', day: 'numeric' })}
+                          </span>
+                          <span>
+                            {log.hours_regular > 0 && <span className="text-green-400 mr-2">RT:{log.hours_regular}</span>}
+                            {log.hours_overtime > 0 && <span className="text-yellow-400 mr-2">OT:{log.hours_overtime}</span>}
+                            {log.miles > 0 && <span className="text-blue-400">{log.miles}mi</span>}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

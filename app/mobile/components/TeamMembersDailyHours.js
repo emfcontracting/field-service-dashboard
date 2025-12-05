@@ -1,5 +1,5 @@
 // components/TeamMembersDailyHours.js - Team Members Daily Hours (VIEW ALL, LOG OWN ONLY)
-// FIXED: Improved user matching and added self-add capability
+// FIXED: Improved user matching, added self-add capability, and timezone-safe date display
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -20,6 +20,19 @@ export default function TeamMembersDailyHours({
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+
+  // Helper function to parse date string without timezone issues
+  // work_date is stored as YYYY-MM-DD, parse it as local date
+  function parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return new Date(dateStr);
+    return new Date(
+      parseInt(parts[0]), 
+      parseInt(parts[1]) - 1, 
+      parseInt(parts[2])
+    );
+  }
 
   // Check if current user is in the team list
   // Use string comparison to handle potential type mismatches
@@ -196,35 +209,40 @@ export default function TeamMembersDailyHours({
                       <p className="text-xs text-gray-400 font-semibold">
                         📅 {memberLogs.length} {t('entries') || 'entries'}
                       </p>
-                      {memberLogs.slice(0, 3).map((log) => (
-                        <div
-                          key={log.log_id || log.id}
-                          className="bg-gray-800 rounded p-2 text-xs"
-                        >
-                          <div className="flex justify-between items-start">
-                            <span className="text-gray-400">
-                              {new Date(log.work_date).toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', {
-                                month: 'short',
-                                day: 'numeric'
-                              })}
-                            </span>
-                            <div className="flex gap-2">
-                              {log.hours_regular > 0 && (
-                                <span className="text-green-400">RT:{log.hours_regular}</span>
-                              )}
-                              {log.hours_overtime > 0 && (
-                                <span className="text-yellow-400">OT:{log.hours_overtime}</span>
-                              )}
-                              {log.miles > 0 && (
-                                <span className="text-blue-400">{log.miles}mi</span>
-                              )}
+                      {memberLogs.slice(0, 3).map((log) => {
+                        // Parse the date string directly to avoid timezone conversion issues
+                        const displayDate = parseLocalDate(log.work_date);
+                        
+                        return (
+                          <div
+                            key={log.log_id || log.id}
+                            className="bg-gray-800 rounded p-2 text-xs"
+                          >
+                            <div className="flex justify-between items-start">
+                              <span className="text-gray-400">
+                                {displayDate.toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', {
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                              <div className="flex gap-2">
+                                {log.hours_regular > 0 && (
+                                  <span className="text-green-400">RT:{log.hours_regular}</span>
+                                )}
+                                {log.hours_overtime > 0 && (
+                                  <span className="text-yellow-400">OT:{log.hours_overtime}</span>
+                                )}
+                                {log.miles > 0 && (
+                                  <span className="text-blue-400">{log.miles}mi</span>
+                                )}
+                              </div>
                             </div>
+                            {log.notes && (
+                              <p className="text-gray-500 mt-1 italic truncate">{log.notes}</p>
+                            )}
                           </div>
-                          {log.notes && (
-                            <p className="text-gray-500 mt-1 italic truncate">{log.notes}</p>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                       {memberLogs.length > 3 && (
                         <p className="text-xs text-gray-500 text-center">
                           ... +{memberLogs.length - 3} {t('moreEntries') || 'more entries'}

@@ -1,5 +1,5 @@
 // components/PrimaryTechDailyHours.js - Bilingual Primary Tech Daily Hours with Logging
-// FIXED: Type-safe user ID comparison
+// FIXED: Type-safe user ID comparison and timezone-safe date display
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -19,6 +19,19 @@ export default function PrimaryTechDailyHours({
   
   const [showAddModal, setShowAddModal] = useState(false);
   const wo = workOrder || {};
+  
+  // Helper function to parse date string without timezone issues
+  // work_date is stored as YYYY-MM-DD, parse it as local date
+  function parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return new Date(dateStr);
+    return new Date(
+      parseInt(parts[0]), 
+      parseInt(parts[1]) - 1, 
+      parseInt(parts[2])
+    );
+  }
   
   // Get the PRIMARY TECH (lead tech) from the work order - NOT the current user
   const leadTechId = wo.lead_tech_id;
@@ -139,48 +152,53 @@ export default function PrimaryTechDailyHours({
               )}
             </div>
           ) : (
-            primaryTechLogs.map((log) => (
-              <div
-                key={log.log_id || log.id}
-                className="bg-blue-900 border-l-4 border-blue-500 rounded-lg p-3"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="font-semibold text-sm">
-                      {new Date(log.work_date).toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <div className="flex gap-3">
-                      {log.hours_regular > 0 && (
-                        <span className="text-green-400">RT: {log.hours_regular}</span>
-                      )}
-                      {log.hours_overtime > 0 && (
-                        <span className="text-yellow-400">OT: {log.hours_overtime}</span>
-                      )}
-                      {log.miles > 0 && (
-                        <span className="text-blue-400">{log.miles} mi</span>
-                      )}
+            primaryTechLogs.map((log) => {
+              // Parse the date string directly to avoid timezone conversion issues
+              const displayDate = parseLocalDate(log.work_date);
+              
+              return (
+                <div
+                  key={log.log_id || log.id}
+                  className="bg-blue-900 border-l-4 border-blue-500 rounded-lg p-3"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-semibold text-sm">
+                        {displayDate.toLocaleDateString(language === 'en' ? 'en-US' : 'es-ES', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm">
+                      <div className="flex gap-3">
+                        {log.hours_regular > 0 && (
+                          <span className="text-green-400">RT: {log.hours_regular}</span>
+                        )}
+                        {log.hours_overtime > 0 && (
+                          <span className="text-yellow-400">OT: {log.hours_overtime}</span>
+                        )}
+                        {log.miles > 0 && (
+                          <span className="text-blue-400">{log.miles} mi</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {log.notes && (
-                  <p className="text-xs text-gray-300 mt-2 italic border-t border-blue-800 pt-2">
-                    {log.notes}
+                  {log.notes && (
+                    <p className="text-xs text-gray-300 mt-2 italic border-t border-blue-800 pt-2">
+                      {log.notes}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    {t('loggedAt') || 'Logged at'}: {new Date(log.created_at).toLocaleString()}
                   </p>
-                )}
-
-                <p className="text-xs text-gray-500 mt-2">
-                  {t('loggedAt') || 'Logged at'}: {new Date(log.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))
+                </div>
+              );
+            })
           )}
         </div>
       </div>

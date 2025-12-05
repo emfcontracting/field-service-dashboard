@@ -23,10 +23,20 @@ export default function AddDailyHoursModal({
   const [notes, setNotes] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Helper function to get local date string in YYYY-MM-DD format
+  // This prevents timezone issues where UTC conversion shifts the date
+  function getLocalDateString(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   // Set default date to today when modal opens
+  // FIXED: Use local timezone instead of UTC to prevent date shift
   useEffect(() => {
     if (show && !isInitialized) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       setWorkDate(today);
       setIsInitialized(true);
       console.log('Modal opened, set default date to:', today);
@@ -79,7 +89,7 @@ export default function AddDailyHoursModal({
       return;
     }
 
-    // Prepare data
+    // Prepare data - workDate is already in YYYY-MM-DD format
     const hoursData = {
       userId,
       workDate: workDate.trim(),
@@ -104,6 +114,9 @@ export default function AddDailyHoursModal({
     setIsInitialized(false);
     onClose();
   }
+
+  // Get max date for date picker (today in local time)
+  const maxDate = getLocalDateString();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
@@ -140,7 +153,7 @@ export default function AddDailyHoursModal({
                 console.log('Date changed to:', e.target.value);
                 setWorkDate(e.target.value);
               }}
-              max={new Date().toISOString().split('T')[0]}
+              max={maxDate}
               className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />

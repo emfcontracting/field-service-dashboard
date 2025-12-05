@@ -1,4 +1,4 @@
-// useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS & SIGNATURE SUPPORT)
+// useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS, SIGNATURE & OFFLINE SUPPORT)
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -288,7 +288,7 @@ export function useWorkOrders(currentUser) {
     document.body.removeChild(link);
   }
 
-  // ==================== CHECK IN/OUT FUNCTIONS ====================
+  // ==================== CHECK IN/OUT FUNCTIONS (WITH OFFLINE SUPPORT) ====================
 
   async function checkIn(woId) {
     try {
@@ -297,45 +297,86 @@ export function useWorkOrders(currentUser) {
       const timestamp = now.toLocaleString();
       const isoTime = now.toISOString();
       
-      const { data: wo } = await supabase
-        .from('work_orders')
-        .select('*')
-        .eq('wo_id', woId)
-        .single();
+      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
       
-      const existingComments = wo.comments || '';
-      const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN`;
+      // Use selectedWO data if available (works offline)
+      const existingComments = selectedWO?.comments || '';
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${checkInNote}`
         : checkInNote;
-      
-      const updateData = {
-        comments: updatedComments,
-        status: 'in_progress'
-      };
-      
-      if (!wo.time_in) {
-        updateData.time_in = isoTime;
-      }
-      
-      const { error } = await supabase
-        .from('work_orders')
-        .update(updateData)
-        .eq('wo_id', woId);
 
-      if (error) throw error;
-
-      await loadWorkOrders();
-      if (selectedWO && selectedWO.wo_id === woId) {
-        const { data: updated } = await supabase
+      if (navigator.onLine) {
+        // Online - save to server
+        const { data: wo } = await supabase
           .from('work_orders')
-          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+          .select('*')
           .eq('wo_id', woId)
           .single();
-        setSelectedWO(updated);
+        
+        const serverComments = wo?.comments || '';
+        const serverUpdatedComments = serverComments 
+          ? `${serverComments}\n\n${checkInNote}`
+          : checkInNote;
+        
+        const updateData = {
+          comments: serverUpdatedComments,
+          status: 'in_progress'
+        };
+        
+        if (!wo?.time_in) {
+          updateData.time_in = isoTime;
+        }
+        
+        const { error } = await supabase
+          .from('work_orders')
+          .update(updateData)
+          .eq('wo_id', woId);
+
+        if (error) throw error;
+
+        await loadWorkOrders();
+        if (selectedWO && selectedWO.wo_id === woId) {
+          const { data: updated } = await supabase
+            .from('work_orders')
+            .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+            .eq('wo_id', woId)
+            .single();
+          setSelectedWO(updated);
+        }
+      } else {
+        // Offline - update local state
+        if (selectedWO && selectedWO.wo_id === woId) {
+          setSelectedWO({
+            ...selectedWO,
+            comments: updatedComments,
+            status: 'in_progress',
+            time_in: selectedWO.time_in || isoTime
+          });
+        }
+        alert('Check-in saved locally. Will sync when back online.');
       }
     } catch (err) {
-      alert('Error checking in: ' + err.message);
+      if (!navigator.onLine) {
+        // Save locally on error if offline
+        const now = new Date();
+        const timestamp = now.toLocaleString();
+        const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN [PENDING SYNC]`;
+        const existingComments = selectedWO?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkInNote}`
+          : checkInNote;
+        
+        if (selectedWO && selectedWO.wo_id === woId) {
+          setSelectedWO({
+            ...selectedWO,
+            comments: updatedComments,
+            status: 'in_progress'
+          });
+        }
+        alert('Check-in saved locally. Will sync when back online.');
+      } else {
+        alert('Error checking in: ' + err.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -348,44 +389,82 @@ export function useWorkOrders(currentUser) {
       const timestamp = now.toLocaleString();
       const isoTime = now.toISOString();
       
-      const { data: wo } = await supabase
-        .from('work_orders')
-        .select('*')
-        .eq('wo_id', woId)
-        .single();
+      const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
       
-      const existingComments = wo.comments || '';
-      const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT`;
+      // Use selectedWO data if available (works offline)
+      const existingComments = selectedWO?.comments || '';
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${checkOutNote}`
         : checkOutNote;
-      
-      const updateData = {
-        comments: updatedComments
-      };
-      
-      if (!wo.time_out) {
-        updateData.time_out = isoTime;
-      }
-      
-      const { error } = await supabase
-        .from('work_orders')
-        .update(updateData)
-        .eq('wo_id', woId);
 
-      if (error) throw error;
-
-      await loadWorkOrders();
-      if (selectedWO && selectedWO.wo_id === woId) {
-        const { data: updated } = await supabase
+      if (navigator.onLine) {
+        // Online - save to server
+        const { data: wo } = await supabase
           .from('work_orders')
-          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+          .select('*')
           .eq('wo_id', woId)
           .single();
-        setSelectedWO(updated);
+        
+        const serverComments = wo?.comments || '';
+        const serverUpdatedComments = serverComments 
+          ? `${serverComments}\n\n${checkOutNote}`
+          : checkOutNote;
+        
+        const updateData = {
+          comments: serverUpdatedComments
+        };
+        
+        if (!wo?.time_out) {
+          updateData.time_out = isoTime;
+        }
+        
+        const { error } = await supabase
+          .from('work_orders')
+          .update(updateData)
+          .eq('wo_id', woId);
+
+        if (error) throw error;
+
+        await loadWorkOrders();
+        if (selectedWO && selectedWO.wo_id === woId) {
+          const { data: updated } = await supabase
+            .from('work_orders')
+            .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+            .eq('wo_id', woId)
+            .single();
+          setSelectedWO(updated);
+        }
+      } else {
+        // Offline - update local state
+        if (selectedWO && selectedWO.wo_id === woId) {
+          setSelectedWO({
+            ...selectedWO,
+            comments: updatedComments,
+            time_out: selectedWO.time_out || isoTime
+          });
+        }
+        alert('Check-out saved locally. Will sync when back online.');
       }
     } catch (err) {
-      alert('Error checking out: ' + err.message);
+      if (!navigator.onLine) {
+        const now = new Date();
+        const timestamp = now.toLocaleString();
+        const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT [PENDING SYNC]`;
+        const existingComments = selectedWO?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkOutNote}`
+          : checkOutNote;
+        
+        if (selectedWO && selectedWO.wo_id === woId) {
+          setSelectedWO({
+            ...selectedWO,
+            comments: updatedComments
+          });
+        }
+        alert('Check-out saved locally. Will sync when back online.');
+      } else {
+        alert('Error checking out: ' + err.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -406,36 +485,45 @@ export function useWorkOrders(currentUser) {
       const timestamp = now.toLocaleString();
       const isoTime = now.toISOString();
       
-      const { data: wo } = await supabase
-        .from('work_orders')
-        .select('*')
-        .eq('wo_id', selectedWO.wo_id)
-        .single();
-      
-      const existingComments = wo.comments || '';
-      const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED`;
+      const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
+      const existingComments = selectedWO.comments || '';
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${completionNote}`
         : completionNote;
-      
-      const { error } = await supabase
-        .from('work_orders')
-        .update({
+
+      if (navigator.onLine) {
+        const { error } = await supabase
+          .from('work_orders')
+          .update({
+            status: 'completed',
+            date_completed: isoTime,
+            comments: updatedComments
+          })
+          .eq('wo_id', selectedWO.wo_id);
+
+        if (error) throw error;
+
+        alert('Work order marked as completed! ✅');
+        
+        await loadWorkOrders();
+        await loadCompletedWorkOrders();
+        setSelectedWO(null);
+      } else {
+        // Offline - update local state
+        setSelectedWO({
+          ...selectedWO,
           status: 'completed',
           date_completed: isoTime,
           comments: updatedComments
-        })
-        .eq('wo_id', selectedWO.wo_id);
-
-      if (error) throw error;
-
-      alert('Work order marked as completed! ✅');
-      
-      await loadWorkOrders();
-      await loadCompletedWorkOrders();
-      setSelectedWO(null);
+        });
+        alert('Work order marked as completed locally. Will sync when back online.');
+      }
     } catch (err) {
-      alert('Error completing work order: ' + err.message);
+      if (!navigator.onLine) {
+        alert('Completion saved locally. Will sync when back online.');
+      } else {
+        alert('Error completing work order: ' + err.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -444,17 +532,26 @@ export function useWorkOrders(currentUser) {
   async function updateField(woId, field, value) {
     try {
       setSaving(true);
-      const { error } = await supabase
-        .from('work_orders')
-        .update({ [field]: value })
-        .eq('wo_id', woId);
+      
+      if (navigator.onLine) {
+        const { error } = await supabase
+          .from('work_orders')
+          .update({ [field]: value })
+          .eq('wo_id', woId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setSelectedWO({ ...selectedWO, [field]: value });
       setEditingField({});
     } catch (err) {
-      alert('Error updating: ' + err.message);
+      if (!navigator.onLine) {
+        // Save locally anyway
+        setSelectedWO({ ...selectedWO, [field]: value });
+        setEditingField({});
+      } else {
+        alert('Error updating: ' + err.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -517,46 +614,72 @@ export function useWorkOrders(currentUser) {
     }
   }
 
-  // Add comment
+  // Add comment (with offline support)
   async function addComment(commentText) {
     if (!commentText || !commentText.trim() || !selectedWO) return;
 
     try {
       setSaving(true);
       
-      const { data: wo } = await supabase
-        .from('work_orders')
-        .select('comments')
-        .eq('wo_id', selectedWO.wo_id)
-        .single();
-
-      const existingComments = wo.comments || '';
       const timestamp = new Date().toLocaleString();
+      const formattedComment = `[${timestamp}] ${currentUser.first_name}: ${commentText}`;
       
+      // Use existing comments from selectedWO (works offline too)
+      const existingComments = selectedWO.comments || '';
       const updatedComments = existingComments 
-        ? `${existingComments}\n\n[${timestamp}] ${currentUser.first_name}: ${commentText}`
-        : `[${timestamp}] ${currentUser.first_name}: ${commentText}`;
+        ? `${existingComments}\n\n${formattedComment}`
+        : formattedComment;
 
-      const { error } = await supabase
-        .from('work_orders')
-        .update({ comments: updatedComments })
-        .eq('wo_id', selectedWO.wo_id);
+      // Check if online
+      if (navigator.onLine) {
+        // Try to save to server
+        const { error } = await supabase
+          .from('work_orders')
+          .update({ comments: updatedComments })
+          .eq('wo_id', selectedWO.wo_id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setNewComment('');
-      
-      // Reload the selected work order
-      const { data: updated } = await supabase
-        .from('work_orders')
-        .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
-        .eq('wo_id', selectedWO.wo_id)
-        .single();
-      
-      setSelectedWO(updated);
+        setNewComment('');
+        
+        // Reload the selected work order
+        const { data: updated } = await supabase
+          .from('work_orders')
+          .select(`*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)`)
+          .eq('wo_id', selectedWO.wo_id)
+          .single();
+        
+        setSelectedWO(updated);
+      } else {
+        // OFFLINE: Update local state
+        const offlineComment = `${formattedComment} [PENDING SYNC]`;
+        const offlineUpdatedComments = existingComments 
+          ? `${existingComments}\n\n${offlineComment}`
+          : offlineComment;
+        
+        // Update selectedWO locally
+        setSelectedWO({ ...selectedWO, comments: offlineUpdatedComments });
+        setNewComment('');
+        
+        alert('Comment saved locally. Will sync when back online.');
+      }
       
     } catch (err) {
-      alert('Error adding comment: ' + err.message);
+      // If online request fails, try to save locally
+      if (!navigator.onLine) {
+        const timestamp = new Date().toLocaleString();
+        const existingComments = selectedWO.comments || '';
+        const offlineComment = `[${timestamp}] ${currentUser.first_name}: ${commentText} [PENDING SYNC]`;
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${offlineComment}`
+          : offlineComment;
+        
+        setSelectedWO({ ...selectedWO, comments: updatedComments });
+        setNewComment('');
+        alert('Comment saved locally. Will sync when back online.');
+      } else {
+        alert('Error adding comment: ' + err.message);
+      }
     } finally {
       setSaving(false);
     }

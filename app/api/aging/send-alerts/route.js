@@ -20,6 +20,11 @@ export async function POST(request) {
   try {
     const { workOrders, targetTechIds } = await request.json();
 
+    console.log('Received request:', { 
+      workOrderCount: workOrders?.length, 
+      targetTechIds 
+    });
+
     if (!workOrders || workOrders.length === 0) {
       return Response.json({ success: true, emailsSent: 0, message: 'No aging work orders' });
     }
@@ -31,7 +36,7 @@ export async function POST(request) {
       // Get lead tech info
       if (wo.lead_tech_id) {
         // If targetTechIds is specified, only include those techs
-        if (targetTechIds && !targetTechIds.includes(wo.lead_tech_id)) {
+        if (targetTechIds && targetTechIds.length > 0 && !targetTechIds.includes(wo.lead_tech_id)) {
           continue;
         }
 
@@ -44,39 +49,9 @@ export async function POST(request) {
         }
         woByTech[techId].workOrders.push(wo);
       }
-
-      // Also get team members for each work order and add to their digest
-      const { data: assignments } = await supabase
-        .from('work_order_assignments')
-        .select(`
-          user_id,
-          user:users(user_id, first_name, last_name, email)
-        `)
-        .eq('wo_id', wo.wo_id);
-
-      if (assignments) {
-        for (const assignment of assignments) {
-          if (assignment.user?.user_id && assignment.user?.email) {
-            // If targetTechIds is specified, only include those techs
-            if (targetTechIds && !targetTechIds.includes(assignment.user.user_id)) {
-              continue;
-            }
-
-            const memberId = assignment.user.user_id;
-            if (!woByTech[memberId]) {
-              woByTech[memberId] = {
-                tech: assignment.user,
-                workOrders: []
-              };
-            }
-            // Avoid duplicates
-            if (!woByTech[memberId].workOrders.find(w => w.wo_id === wo.wo_id)) {
-              woByTech[memberId].workOrders.push(wo);
-            }
-          }
-        }
-      }
     }
+
+    console.log('Grouped by tech:', Object.keys(woByTech));
 
     let emailsSent = 0;
     const emailResults = [];
@@ -85,25 +60,45 @@ export async function POST(request) {
     for (const [techId, data] of Object.entries(woByTech)) {
       let { tech, workOrders: techWOs } = data;
       
-      if (!tech?.email) {
-        // Try to get tech email from database
-        const { data: techData } = await supabase
-          .from('users')
-          .select('email, first_name, last_name')
-          .eq('user_id', techId)
-          .single();
+      console.log(`Processing tech ${techId}:`, { 
+        techFromWO: tech, 
+        woCount: techWOs.length 
+      });
 
-        if (!techData?.email) {
-          console.log(`No email found for tech ${techId}`);
-          emailResults.push({ tech: techId, email: 'N/A', status: 'skipped', error: 'No email found' });
-          continue;
-        }
-        
-        tech = techData;
+      // Always fetch fresh tech data from database to ensure we have email
+      const { data: techData, error: techError } = await supabase
+        .from('users')
+        .select('email, first_name, last_name')
+        .eq('user_id', techId)
+        .single();
+
+      if (techError) {
+        console.error(`Error fetching tech ${techId}:`, techError);
+        emailResults.push({ 
+          tech: tech?.first_name ? `${tech.first_name} ${tech.last_name}` : techId, 
+          email: 'N/A', 
+          status: 'failed', 
+          error: `Database error: ${techError.message}` 
+        });
+        continue;
       }
 
+      if (!techData?.email) {
+        console.log(`No email found for tech ${techId}`);
+        emailResults.push({ 
+          tech: techData?.first_name ? `${techData.first_name} ${techData.last_name}` : techId, 
+          email: 'N/A', 
+          status: 'failed', 
+          error: 'No email in database' 
+        });
+        continue;
+      }
+      
+      tech = techData;
       const techEmail = tech.email;
       const techName = `${tech.first_name} ${tech.last_name}`;
+
+      console.log(`Sending email to ${techName} (${techEmail})`);
 
       // Build email content
       const criticalCount = techWOs.filter(wo => wo.aging?.severity === 'critical').length;
@@ -227,21 +222,28 @@ export async function POST(request) {
       `;
 
       try {
-        await transporter.sendMail({
+        const mailResult = await transporter.sendMail({
           from: `"EMF Contracting Alerts" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
           to: techEmail,
           subject: subject,
           html: htmlContent
         });
 
+        console.log(`Email sent successfully to ${techEmail}:`, mailResult.messageId);
         emailsSent++;
         emailResults.push({ tech: techName, email: techEmail, status: 'sent', woCount: techWOs.length });
-        console.log(`Sent aging alert to ${techName} (${techEmail}) - ${techWOs.length} WOs`);
       } catch (emailError) {
         console.error(`Failed to send email to ${techEmail}:`, emailError);
-        emailResults.push({ tech: techName, email: techEmail, status: 'failed', error: emailError.message });
+        emailResults.push({ 
+          tech: techName, 
+          email: techEmail, 
+          status: 'failed', 
+          error: emailError.message || 'Email send failed'
+        });
       }
     }
+
+    console.log('Email sending complete:', { emailsSent, results: emailResults });
 
     return Response.json({ 
       success: true, 
@@ -251,7 +253,7 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    console.error('Error sending aging alerts:', error);
+    console.error('Error in send-alerts API:', error);
     return Response.json({ 
       success: false, 
       error: error.message 

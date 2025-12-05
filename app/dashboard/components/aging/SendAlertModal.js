@@ -159,6 +159,7 @@ export default function SendAlertModal({
                       {results.results.map((r, i) => (
                         <div key={i} className={r.status === 'sent' ? 'text-green-300' : 'text-red-300'}>
                           {r.status === 'sent' ? '✓' : '✗'} {r.tech} ({r.email})
+                          {r.error && <span className="text-red-400 ml-2">- {r.error}</span>}
                         </div>
                       ))}
                     </div>

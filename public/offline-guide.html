@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EMF Mobile App - Offline Mode Guide</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      line-height: 1.6;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    h1 { color: #4ade80; margin-bottom: 10px; font-size: 24px; }
+    h2 { color: #60a5fa; margin: 25px 0 15px; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+    h3 { color: #fbbf24; margin: 20px 0 10px; font-size: 16px; }
+    p { margin-bottom: 12px; color: #ccc; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .logo { font-size: 48px; margin-bottom: 10px; }
+    .card {
+      background: #252540;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #333;
+    }
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      margin: 5px 0;
+    }
+    .status-green { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .status-yellow { background: rgba(234, 179, 8, 0.2); color: #fbbf24; }
+    .status-red { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-green { background: #22c55e; }
+    .dot-yellow { background: #eab308; }
+    .dot-red { background: #ef4444; }
+    ul { margin: 10px 0 10px 20px; }
+    li { margin-bottom: 8px; color: #ccc; }
+    .emoji { font-size: 20px; margin-right: 8px; }
+    .tip {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 4px solid #3b82f6;
+      padding: 12px 16px;
+      margin: 15px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .warning {
+      background: rgba(234, 179, 8, 0.1);
+      border-left: 4px solid #eab308;
+      padding: 12px 16px;
+      margin: 15px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .step-number {
+      background: #3b82f6;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th { color: #60a5fa; font-weight: 600; }
+    .yes { color: #4ade80; }
+    .no { color: #f87171; }
+    .back-btn {
+      display: inline-block;
+      background: #3b82f6;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 20px;
+    }
+    .lang-toggle {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .lang-btn {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 2px solid #3b82f6;
+      background: transparent;
+      color: #3b82f6;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .lang-btn.active {
+      background: #3b82f6;
+      color: white;
+    }
+    .hidden { display: none; }
+    .mock-header {
+      background: #1f2937;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 15px 0;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .mock-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .mock-download-bar {
+      background: #374151;
+      border-radius: 6px;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .download-btn {
+      background: #3b82f6;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .highlight-box {
+      border: 2px dashed #fbbf24;
+      padding: 4px;
+      border-radius: 8px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { border-color: #fbbf24; }
+      50% { border-color: #f59e0b; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Language Toggle -->
+  <div class="lang-toggle">
+    <button class="lang-btn active" onclick="showEnglish()">🇺🇸 English</button>
+    <button class="lang-btn" onclick="showSpanish()">🇲🇽 Español</button>
+  </div>
+
+  <!-- ENGLISH VERSION -->
+  <div id="english">
+    <div class="header">
+      <div class="logo">📱</div>
+      <h1>Offline Mode Guide</h1>
+      <p>How to use the EMF Mobile App without internet</p>
+    </div>
+
+    <div class="card">
+      <h2>📥 Where is the Download Button?</h2>
+      <p>The Download button is in the <strong>header area</strong> below your name:</p>
+      
+      <div class="mock-header">
+        <div class="mock-row">
+          <span>👋 Daniel <span style="color:#22c55e">🟢</span></span>
+          <span style="color:#ef4444">[Logout]</span>
+        </div>
+        <div class="highlight-box">
+          <div class="mock-download-bar">
+            <span style="color:#9ca3af">📥 5 WOs ready for offline • 2m ago</span>
+            <span class="download-btn">📥 Download</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tip">
+        <strong>⬆️ Tap "Download" before going to basements or remote areas!</strong><br>
+        This saves your work orders to your phone so you can work without signal.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔵 Understanding the Status Indicator</h2>
+      <p>Look for the small colored dot next to your name in the header:</p>
+      
+      <div class="status-indicator status-green">
+        <span class="dot dot-green"></span>
+        <span>✓ Online & Synced</span>
+      </div>
+      <p>You're connected. All changes save immediately.</p>
+      
+      <div class="status-indicator status-yellow">
+        <span class="dot dot-yellow"></span>
+        <span>3 Pending</span>
+      </div>
+      <p>You're online but have changes waiting to sync. Tap "Sync Now" to upload.</p>
+      
+      <div class="status-indicator status-red">
+        <span class="dot dot-red"></span>
+        <span>! Offline</span>
+      </div>
+      <p>No internet connection. Your work is saved locally.</p>
+    </div>
+
+    <div class="card">
+      <h2>✅ What Works Offline</h2>
+      <table>
+        <tr>
+          <th>Feature</th>
+          <th>Offline?</th>
+        </tr>
+        <tr>
+          <td><span class="emoji">👀</span> View Work Orders</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✓</span> Check In</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">⏸</span> Check Out</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">💬</span> Add Comments</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">⏱</span> Log Daily Hours</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✅</span> Complete Work Order</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">📋</span> View Completed WOs</td>
+          <td class="yes">✅ Yes</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">👥</span> Add/Remove Team</td>
+          <td class="no">❌ Online Only</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">📝</span> NTE Increase Request</td>
+          <td class="no">❌ Online Only</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✍️</span> Customer Signature</td>
+          <td class="no">❌ Online Only</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>📴 How To Use Offline Mode</h2>
+      
+      <div class="step">
+        <div class="step-number">1</div>
+        <div>
+          <strong>Login while you have good signal</strong>
+          <p>The app will automatically start downloading your work orders.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">2</div>
+        <div>
+          <strong>Tap the blue "📥 Download" button</strong>
+          <p>This is in the header bar. It ensures all your work orders are saved locally.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">3</div>
+        <div>
+          <strong>Wait for the green confirmation</strong>
+          <p>You'll see "✅ X work orders ready for offline!" when complete.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">4</div>
+        <div>
+          <strong>Now you can work without internet!</strong>
+          <p>Check in, add comments, log hours - everything saves locally.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">5</div>
+        <div>
+          <strong>When back online, tap "Sync Now"</strong>
+          <p>Your changes will upload to the server automatically.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💡 Tips for Best Results</h2>
+      
+      <div class="tip">
+        <strong>📶 Download before going underground</strong><br>
+        Before going to a basement or remote area, tap "Download" while you have good signal.
+      </div>
+      
+      <div class="tip">
+        <strong>🔢 Check the cached count</strong><br>
+        The header shows "5 WOs ready for offline" - this tells you how many work orders are saved on your phone.
+      </div>
+      
+      <div class="tip">
+        <strong>🔄 Tap "Sync Now" when you see yellow</strong><br>
+        If you see a yellow indicator with a number, you have changes waiting to upload.
+      </div>
+      
+      <div class="warning">
+        <strong>⚠️ Important:</strong> For signatures and NTE requests, you need internet. Plan to do these when you have connection.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>❓ Common Questions</h2>
+      
+      <h3>Q: Will I lose my work if I go offline?</h3>
+      <p>No! All your check-ins, comments, and hours are saved on your phone. They upload automatically when you reconnect.</p>
+      
+      <h3>Q: How do I know my changes synced?</h3>
+      <p>Look for the green dot (✓) next to your name. You'll also see a green "All changes synced" message.</p>
+      
+      <h3>Q: What does the cached count mean?</h3>
+      <p>"5 WOs ready for offline" means 5 work orders are saved on your phone and can be viewed without internet.</p>
+      
+      <h3>Q: Do I need to tap Download every time?</h3>
+      <p>No! The app automatically downloads when you login. But tap Download before going to areas with poor signal to make sure you have the latest data.</p>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <a href="/mobile" class="back-btn">← Back to Mobile App</a>
+    </div>
+  </div>
+
+  <!-- SPANISH VERSION -->
+  <div id="spanish" class="hidden">
+    <div class="header">
+      <div class="logo">📱</div>
+      <h1>Guía del Modo Sin Conexión</h1>
+      <p>Cómo usar la aplicación EMF sin internet</p>
+    </div>
+
+    <div class="card">
+      <h2>📥 ¿Dónde está el Botón de Descarga?</h2>
+      <p>El botón de Descarga está en el <strong>área del encabezado</strong> debajo de tu nombre:</p>
+      
+      <div class="mock-header">
+        <div class="mock-row">
+          <span>👋 Daniel <span style="color:#22c55e">🟢</span></span>
+          <span style="color:#ef4444">[Salir]</span>
+        </div>
+        <div class="highlight-box">
+          <div class="mock-download-bar">
+            <span style="color:#9ca3af">📥 5 OTs listas para offline • hace 2m</span>
+            <span class="download-btn">📥 Descargar</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tip">
+        <strong>⬆️ ¡Toca "Descargar" antes de ir a sótanos o áreas remotas!</strong><br>
+        Esto guarda tus órdenes de trabajo en tu teléfono para que puedas trabajar sin señal.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔵 Entendiendo el Indicador de Estado</h2>
+      <p>Busca el pequeño punto de color junto a tu nombre en el encabezado:</p>
+      
+      <div class="status-indicator status-green">
+        <span class="dot dot-green"></span>
+        <span>✓ En Línea y Sincronizado</span>
+      </div>
+      <p>Estás conectado. Todos los cambios se guardan inmediatamente.</p>
+      
+      <div class="status-indicator status-yellow">
+        <span class="dot dot-yellow"></span>
+        <span>3 Pendientes</span>
+      </div>
+      <p>Estás en línea pero tienes cambios esperando sincronizar. Toca "Sincronizar" para subir.</p>
+      
+      <div class="status-indicator status-red">
+        <span class="dot dot-red"></span>
+        <span>! Sin Conexión</span>
+      </div>
+      <p>Sin conexión a internet. Tu trabajo se guarda localmente.</p>
+    </div>
+
+    <div class="card">
+      <h2>✅ Qué Funciona Sin Conexión</h2>
+      <table>
+        <tr>
+          <th>Función</th>
+          <th>¿Sin Conexión?</th>
+        </tr>
+        <tr>
+          <td><span class="emoji">👀</span> Ver Órdenes de Trabajo</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✓</span> Registrar Entrada</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">⏸</span> Registrar Salida</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">💬</span> Agregar Comentarios</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">⏱</span> Registrar Horas Diarias</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✅</span> Completar Orden de Trabajo</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">📋</span> Ver OT Completadas</td>
+          <td class="yes">✅ Sí</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">👥</span> Agregar/Quitar Equipo</td>
+          <td class="no">❌ Solo En Línea</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">📝</span> Solicitud de Aumento NTE</td>
+          <td class="no">❌ Solo En Línea</td>
+        </tr>
+        <tr>
+          <td><span class="emoji">✍️</span> Firma del Cliente</td>
+          <td class="no">❌ Solo En Línea</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>📴 Cómo Usar el Modo Sin Conexión</h2>
+      
+      <div class="step">
+        <div class="step-number">1</div>
+        <div>
+          <strong>Inicia sesión cuando tengas buena señal</strong>
+          <p>La app comenzará automáticamente a descargar tus órdenes de trabajo.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">2</div>
+        <div>
+          <strong>Toca el botón azul "📥 Descargar"</strong>
+          <p>Está en la barra del encabezado. Asegura que todas tus órdenes estén guardadas localmente.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">3</div>
+        <div>
+          <strong>Espera la confirmación verde</strong>
+          <p>Verás "✅ X órdenes de trabajo listas para offline!" cuando termine.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">4</div>
+        <div>
+          <strong>¡Ahora puedes trabajar sin internet!</strong>
+          <p>Registra entrada, agrega comentarios, registra horas - todo se guarda localmente.</p>
+        </div>
+      </div>
+      
+      <div class="step">
+        <div class="step-number">5</div>
+        <div>
+          <strong>Cuando vuelvas a tener conexión, toca "Sincronizar"</strong>
+          <p>Tus cambios se subirán al servidor automáticamente.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💡 Consejos para Mejores Resultados</h2>
+      
+      <div class="tip">
+        <strong>📶 Descarga antes de ir bajo tierra</strong><br>
+        Antes de ir a un sótano o área remota, toca "Descargar" mientras tengas buena señal.
+      </div>
+      
+      <div class="tip">
+        <strong>🔢 Revisa el conteo guardado</strong><br>
+        El encabezado muestra "5 OTs listas para offline" - esto te dice cuántas órdenes están guardadas en tu teléfono.
+      </div>
+      
+      <div class="tip">
+        <strong>🔄 Toca "Sincronizar" cuando veas amarillo</strong><br>
+        Si ves un indicador amarillo con un número, tienes cambios esperando subirse.
+      </div>
+      
+      <div class="warning">
+        <strong>⚠️ Importante:</strong> Para firmas y solicitudes NTE, necesitas internet. Planea hacer estas cuando tengas conexión.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>❓ Preguntas Frecuentes</h2>
+      
+      <h3>P: ¿Perderé mi trabajo si me quedo sin conexión?</h3>
+      <p>¡No! Todas tus entradas, comentarios y horas se guardan en tu teléfono. Se suben automáticamente cuando te reconectas.</p>
+      
+      <h3>P: ¿Cómo sé que mis cambios se sincronizaron?</h3>
+      <p>Busca el punto verde (✓) junto a tu nombre. También verás un mensaje verde "Todos los cambios sincronizados".</p>
+      
+      <h3>P: ¿Qué significa el conteo guardado?</h3>
+      <p>"5 OTs listas para offline" significa que 5 órdenes de trabajo están guardadas en tu teléfono y pueden verse sin internet.</p>
+      
+      <h3>P: ¿Necesito tocar Descargar cada vez?</h3>
+      <p>¡No! La app descarga automáticamente cuando inicias sesión. Pero toca Descargar antes de ir a áreas con mala señal para asegurarte de tener los datos más recientes.</p>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <a href="/mobile" class="back-btn">← Volver a la Aplicación Móvil</a>
+    </div>
+  </div>
+
+  <script>
+    function showEnglish() {
+      document.getElementById('english').classList.remove('hidden');
+      document.getElementById('spanish').classList.add('hidden');
+      document.querySelectorAll('.lang-btn')[0].classList.add('active');
+      document.querySelectorAll('.lang-btn')[1].classList.remove('active');
+    }
+    
+    function showSpanish() {
+      document.getElementById('english').classList.add('hidden');
+      document.getElementById('spanish').classList.remove('hidden');
+      document.querySelectorAll('.lang-btn')[0].classList.remove('active');
+      document.querySelectorAll('.lang-btn')[1].classList.add('active');
+    }
+  </script>
+</body>
+</html>

@@ -1,7 +1,8 @@
-// components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive)
+// components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive) - WITH OFFLINE SUPPORT
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
+import ConnectionStatus from './ConnectionStatus';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 
 export default function WorkOrdersList({
@@ -10,7 +11,13 @@ export default function WorkOrdersList({
   onSelectWO,
   onShowCompleted,
   onShowChangePin,
-  onLogout
+  onLogout,
+  // OFFLINE MODE PROPS
+  isOnline = true,
+  pendingSyncCount = 0,
+  syncStatus = 'idle',
+  onForceSync = null,
+  lastSyncTime = null
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
@@ -19,7 +26,7 @@ export default function WorkOrdersList({
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header - Fixed at top */}
       <div className="bg-gray-800 p-3 sticky top-0 z-10">
-        {/* Top Row: Logo/Name and Logout */}
+        {/* Top Row: Logo/Name, Connection Status and Logout */}
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center gap-2">
             <img 
@@ -31,7 +38,16 @@ export default function WorkOrdersList({
               }}
             />
             <div>
-              <p className="font-bold text-sm leading-tight">👋 {currentUser.first_name}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-sm leading-tight">👋 {currentUser.first_name}</p>
+                {/* Compact Connection Status Indicator */}
+                <ConnectionStatus
+                  isOnline={isOnline}
+                  pendingSyncCount={pendingSyncCount}
+                  syncStatus={syncStatus}
+                  compact={true}
+                />
+              </div>
               <p className="text-[10px] text-gray-400 leading-tight">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
             </div>
           </div>
@@ -42,6 +58,34 @@ export default function WorkOrdersList({
             {t('logout')}
           </button>
         </div>
+
+        {/* Offline/Sync Banner */}
+        {(!isOnline || pendingSyncCount > 0) && (
+          <div className={`mb-2 px-3 py-2 rounded-lg text-xs flex items-center justify-between ${
+            !isOnline 
+              ? 'bg-red-900/50 border border-red-700' 
+              : 'bg-yellow-900/50 border border-yellow-700'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span>{!isOnline ? '📴' : '⏳'}</span>
+              <span className={!isOnline ? 'text-red-400' : 'text-yellow-400'}>
+                {!isOnline 
+                  ? 'Working Offline - Changes saved locally' 
+                  : `${pendingSyncCount} change${pendingSyncCount > 1 ? 's' : ''} pending sync`
+                }
+              </span>
+            </div>
+            {isOnline && onForceSync && (
+              <button
+                onClick={onForceSync}
+                disabled={syncStatus === 'syncing'}
+                className="text-yellow-400 hover:text-yellow-300 font-medium"
+              >
+                {syncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Bottom Row: Action Buttons - Scrollable on very small screens */}
         <div className="flex gap-2 overflow-x-auto pb-1">

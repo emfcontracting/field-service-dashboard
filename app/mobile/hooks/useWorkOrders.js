@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import {
+  getCachedWorkOrders,
+  getCachedCompletedWorkOrders,
+  getCachedDailyLogs,
+  updateCachedWorkOrder,
+  addToSyncQueue,
+  initOfflineDB,
+  isOfflineDBReady
+} from '../services/offline/offlineService';
 
 export function useWorkOrders(currentUser) {
   const [workOrders, setWorkOrders] = useState([]);
@@ -10,6 +19,7 @@ export function useWorkOrders(currentUser) {
   const [saving, setSaving] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [editingField, setEditingField] = useState({});
+  const [isOfflineDBInitialized, setIsOfflineDBInitialized] = useState(false);
   
   // DAILY HOURS LOG STATE
   const [dailyLogs, setDailyLogs] = useState([]);
@@ -17,32 +27,51 @@ export function useWorkOrders(currentUser) {
   
   const supabase = createClientComponentClient();
 
+  // Initialize offline DB on mount
+  useEffect(() => {
+    async function initDB() {
+      try {
+        await initOfflineDB();
+        setIsOfflineDBInitialized(true);
+        console.log('✅ Offline DB ready in useWorkOrders');
+      } catch (error) {
+        console.error('Failed to init offline DB:', error);
+      }
+    }
+    initDB();
+  }, []);
+
   useEffect(() => {
     if (!currentUser) return;
     
     loadWorkOrders();
     loadCompletedWorkOrders();
 
-    const channel = supabase
-      .channel('work-orders-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'work_orders'
-        },
-        () => {
-          loadWorkOrders();
-          loadCompletedWorkOrders();
-        }
-      )
-      .subscribe();
+    // Only subscribe to realtime if online
+    if (navigator.onLine) {
+      const channel = supabase
+        .channel('work-orders-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'work_orders'
+          },
+          () => {
+            if (navigator.onLine) {
+              loadWorkOrders();
+              loadCompletedWorkOrders();
+            }
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser]);
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [currentUser, isOfflineDBInitialized]);
 
   // Load daily logs when selected work order changes
   useEffect(() => {
@@ -53,9 +82,28 @@ export function useWorkOrders(currentUser) {
     }
   }, [selectedWO?.wo_id]);
 
+  // ==================== LOAD WORK ORDERS (OFFLINE-FIRST) ====================
   async function loadWorkOrders() {
     if (!currentUser) return;
 
+    // If offline, load from IndexedDB cache
+    if (!navigator.onLine) {
+      console.log('📴 Offline - loading work orders from cache');
+      try {
+        const cached = await getCachedWorkOrders();
+        if (cached && cached.length > 0) {
+          console.log(`✅ Loaded ${cached.length} work orders from cache`);
+          setWorkOrders(cached);
+        } else {
+          console.log('⚠️ No cached work orders found');
+        }
+      } catch (err) {
+        console.error('Error loading cached work orders:', err);
+      }
+      return;
+    }
+
+    // Online - fetch from Supabase
     try {
       const { data: leadWOs, error: leadError } = await supabase
         .from('work_orders')
@@ -100,13 +148,41 @@ export function useWorkOrders(currentUser) {
 
       setWorkOrders(uniqueWOs);
     } catch (err) {
-      console.error('Error loading work orders:', err);
+      console.error('Error loading work orders from server:', err);
+      
+      // Fallback to cache on error
+      console.log('⚠️ Falling back to cached data');
+      try {
+        const cached = await getCachedWorkOrders();
+        if (cached && cached.length > 0) {
+          setWorkOrders(cached);
+        }
+      } catch (cacheErr) {
+        console.error('Cache fallback also failed:', cacheErr);
+      }
     }
   }
 
+  // ==================== LOAD COMPLETED WORK ORDERS (OFFLINE-FIRST) ====================
   async function loadCompletedWorkOrders() {
     if (!currentUser) return;
 
+    // If offline, load from IndexedDB cache
+    if (!navigator.onLine) {
+      console.log('📴 Offline - loading completed work orders from cache');
+      try {
+        const cached = await getCachedCompletedWorkOrders();
+        if (cached && cached.length > 0) {
+          console.log(`✅ Loaded ${cached.length} completed work orders from cache`);
+          setCompletedWorkOrders(cached);
+        }
+      } catch (err) {
+        console.error('Error loading cached completed work orders:', err);
+      }
+      return;
+    }
+
+    // Online - fetch from Supabase
     try {
       const { data: leadWOs, error: leadError } = await supabase
         .from('work_orders')
@@ -149,10 +225,20 @@ export function useWorkOrders(currentUser) {
       setCompletedWorkOrders(uniqueWOs);
     } catch (err) {
       console.error('Error loading completed work orders:', err);
+      
+      // Fallback to cache
+      try {
+        const cached = await getCachedCompletedWorkOrders();
+        if (cached && cached.length > 0) {
+          setCompletedWorkOrders(cached);
+        }
+      } catch (cacheErr) {
+        console.error('Cache fallback failed:', cacheErr);
+      }
     }
   }
 
-  // ==================== DAILY HOURS LOG FUNCTIONS ====================
+  // ==================== DAILY HOURS LOG FUNCTIONS (OFFLINE-FIRST) ====================
   
   async function loadDailyLogs(woId) {
     if (!woId) return;
@@ -160,6 +246,27 @@ export function useWorkOrders(currentUser) {
     try {
       setLoadingLogs(true);
       
+      // If offline, try cache first
+      if (!navigator.onLine) {
+        console.log('📴 Offline - loading daily logs from cache');
+        try {
+          const cached = await getCachedDailyLogs(woId);
+          if (cached && cached.length > 0) {
+            const transformedData = cached.map(log => ({
+              ...log,
+              log_id: log.id || log.log_id
+            }));
+            setDailyLogs(transformedData);
+            return;
+          }
+        } catch (err) {
+          console.error('Error loading cached logs:', err);
+        }
+        setDailyLogs([]);
+        return;
+      }
+      
+      // Online - fetch from server
       const { data, error } = await supabase
         .from('daily_hours_log')
         .select(`
@@ -198,22 +305,58 @@ export function useWorkOrders(currentUser) {
     try {
       setSaving(true);
       
-      // Check for duplicate entry on same date for same user
-      const { data: existing } = await supabase
-        .from('daily_hours_log')
-        .select('id')
-        .eq('wo_id', selectedWO.wo_id)
-        .eq('user_id', hoursData.userId)
-        .eq('work_date', hoursData.workDate)
-        .single();
+      if (navigator.onLine) {
+        // Check for duplicate entry on same date for same user
+        const { data: existing } = await supabase
+          .from('daily_hours_log')
+          .select('id')
+          .eq('wo_id', selectedWO.wo_id)
+          .eq('user_id', hoursData.userId)
+          .eq('work_date', hoursData.workDate)
+          .single();
 
-      if (existing) {
-        throw new Error('Hours already logged for this date. Edit the existing entry instead.');
-      }
+        if (existing) {
+          throw new Error('Hours already logged for this date. Edit the existing entry instead.');
+        }
 
-      const { error } = await supabase
-        .from('daily_hours_log')
-        .insert({
+        const { error } = await supabase
+          .from('daily_hours_log')
+          .insert({
+            wo_id: selectedWO.wo_id,
+            user_id: hoursData.userId,
+            assignment_id: hoursData.assignmentId || null,
+            work_date: hoursData.workDate,
+            hours_regular: hoursData.hoursRegular || 0,
+            hours_overtime: hoursData.hoursOvertime || 0,
+            miles: hoursData.miles || 0,
+            notes: hoursData.notes || null,
+            created_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+
+        // Reload daily logs
+        await loadDailyLogs(selectedWO.wo_id);
+      } else {
+        // Offline - add to local state and queue for sync
+        const localLog = {
+          id: `local_${Date.now()}`,
+          log_id: `local_${Date.now()}`,
+          wo_id: selectedWO.wo_id,
+          user_id: hoursData.userId,
+          work_date: hoursData.workDate,
+          hours_regular: hoursData.hoursRegular || 0,
+          hours_overtime: hoursData.hoursOvertime || 0,
+          miles: hoursData.miles || 0,
+          notes: hoursData.notes ? `${hoursData.notes} [PENDING SYNC]` : '[PENDING SYNC]',
+          created_at: new Date().toISOString(),
+          user: { first_name: currentUser.first_name, last_name: currentUser.last_name }
+        };
+        
+        setDailyLogs(prev => [localLog, ...prev]);
+        
+        // Queue for sync
+        await addToSyncQueue('add_daily_hours', {
           wo_id: selectedWO.wo_id,
           user_id: hoursData.userId,
           assignment_id: hoursData.assignmentId || null,
@@ -221,14 +364,11 @@ export function useWorkOrders(currentUser) {
           hours_regular: hoursData.hoursRegular || 0,
           hours_overtime: hoursData.hoursOvertime || 0,
           miles: hoursData.miles || 0,
-          notes: hoursData.notes || null,
-          created_at: new Date().toISOString()
+          notes: hoursData.notes || null
         });
-
-      if (error) throw error;
-
-      // Reload daily logs
-      await loadDailyLogs(selectedWO.wo_id);
+        
+        alert('Hours saved locally. Will sync when back online.');
+      }
       
       return true;
     } catch (err) {
@@ -344,15 +484,33 @@ export function useWorkOrders(currentUser) {
           setSelectedWO(updated);
         }
       } else {
-        // Offline - update local state
+        // Offline - update local state and cache
+        const updatedWO = {
+          ...selectedWO,
+          comments: updatedComments,
+          status: 'in_progress',
+          time_in: selectedWO?.time_in || isoTime
+        };
+        
         if (selectedWO && selectedWO.wo_id === woId) {
-          setSelectedWO({
-            ...selectedWO,
-            comments: updatedComments,
-            status: 'in_progress',
-            time_in: selectedWO.time_in || isoTime
-          });
+          setSelectedWO(updatedWO);
         }
+        
+        // Update in workOrders list too
+        setWorkOrders(prev => prev.map(wo => 
+          wo.wo_id === woId ? updatedWO : wo
+        ));
+        
+        // Update cache
+        await updateCachedWorkOrder(woId, {
+          comments: updatedComments,
+          status: 'in_progress',
+          time_in: selectedWO?.time_in || isoTime
+        });
+        
+        // Queue for sync
+        await addToSyncQueue('check_in', { woId, timestamp, isoTime });
+        
         alert('Check-in saved locally. Will sync when back online.');
       }
     } catch (err) {
@@ -435,14 +593,31 @@ export function useWorkOrders(currentUser) {
           setSelectedWO(updated);
         }
       } else {
-        // Offline - update local state
+        // Offline - update local state and cache
+        const updatedWO = {
+          ...selectedWO,
+          comments: updatedComments,
+          time_out: selectedWO?.time_out || isoTime
+        };
+        
         if (selectedWO && selectedWO.wo_id === woId) {
-          setSelectedWO({
-            ...selectedWO,
-            comments: updatedComments,
-            time_out: selectedWO.time_out || isoTime
-          });
+          setSelectedWO(updatedWO);
         }
+        
+        // Update in workOrders list too
+        setWorkOrders(prev => prev.map(wo => 
+          wo.wo_id === woId ? updatedWO : wo
+        ));
+        
+        // Update cache
+        await updateCachedWorkOrder(woId, {
+          comments: updatedComments,
+          time_out: selectedWO?.time_out || isoTime
+        });
+        
+        // Queue for sync
+        await addToSyncQueue('check_out', { woId, timestamp, isoTime });
+        
         alert('Check-out saved locally. Will sync when back online.');
       }
     } catch (err) {
@@ -509,13 +684,33 @@ export function useWorkOrders(currentUser) {
         await loadCompletedWorkOrders();
         setSelectedWO(null);
       } else {
-        // Offline - update local state
-        setSelectedWO({
+        // Offline - update local state and cache
+        const updatedWO = {
           ...selectedWO,
           status: 'completed',
           date_completed: isoTime,
           comments: updatedComments
+        };
+        
+        // Update cache
+        await updateCachedWorkOrder(selectedWO.wo_id, {
+          status: 'completed',
+          date_completed: isoTime,
+          comments: updatedComments
         });
+        
+        // Queue for sync
+        await addToSyncQueue('complete_work_order', { 
+          woId: selectedWO.wo_id, 
+          timestamp, 
+          isoTime 
+        });
+        
+        // Remove from active list, add to completed
+        setWorkOrders(prev => prev.filter(wo => wo.wo_id !== selectedWO.wo_id));
+        setCompletedWorkOrders(prev => [updatedWO, ...prev]);
+        
+        setSelectedWO(null);
         alert('Work order marked as completed locally. Will sync when back online.');
       }
     } catch (err) {
@@ -540,6 +735,10 @@ export function useWorkOrders(currentUser) {
           .eq('wo_id', woId);
 
         if (error) throw error;
+      } else {
+        // Update cache when offline
+        await updateCachedWorkOrder(woId, { [field]: value });
+        await addToSyncQueue('update_field', { woId, field, value });
       }
 
       setSelectedWO({ ...selectedWO, [field]: value });
@@ -566,10 +765,14 @@ export function useWorkOrders(currentUser) {
     return editingField.hasOwnProperty(field) ? editingField[field] : (selectedWO[field] || '');
   }
 
-  // SIGNATURE SAVE FUNCTION - with location support
+  // SIGNATURE SAVE FUNCTION - with location support (online only)
   async function saveSignature(signatureData) {
     if (!selectedWO) {
       throw new Error('No work order selected');
+    }
+    
+    if (!navigator.onLine) {
+      throw new Error('Signature capture requires internet connection');
     }
 
     try {
@@ -587,7 +790,7 @@ export function useWorkOrders(currentUser) {
           customer_signature: signatureData.signature,
           customer_name: signatureData.customerName,
           signature_date: signatureData.signedAt,
-          signature_location: locationStr // Store as "lat,lng" string
+          signature_location: locationStr
         })
         .eq('wo_id', selectedWO.wo_id);
 
@@ -622,7 +825,7 @@ export function useWorkOrders(currentUser) {
       setSaving(true);
       
       const timestamp = new Date().toLocaleString();
-      const formattedComment = `[${timestamp}] ${currentUser.first_name}: ${commentText}`;
+      const formattedComment = `[${timestamp}] ${currentUser.first_name}: ${commentText}${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
       
       // Use existing comments from selectedWO (works offline too)
       const existingComments = selectedWO.comments || '';
@@ -651,15 +854,25 @@ export function useWorkOrders(currentUser) {
         
         setSelectedWO(updated);
       } else {
-        // OFFLINE: Update local state
-        const offlineComment = `${formattedComment} [PENDING SYNC]`;
-        const offlineUpdatedComments = existingComments 
-          ? `${existingComments}\n\n${offlineComment}`
-          : offlineComment;
-        
-        // Update selectedWO locally
-        setSelectedWO({ ...selectedWO, comments: offlineUpdatedComments });
+        // OFFLINE: Update local state and cache
+        const updatedWO = { ...selectedWO, comments: updatedComments };
+        setSelectedWO(updatedWO);
         setNewComment('');
+        
+        // Update in workOrders list
+        setWorkOrders(prev => prev.map(wo => 
+          wo.wo_id === selectedWO.wo_id ? updatedWO : wo
+        ));
+        
+        // Update cache
+        await updateCachedWorkOrder(selectedWO.wo_id, { comments: updatedComments });
+        
+        // Queue for sync
+        await addToSyncQueue('add_comment', { 
+          woId: selectedWO.wo_id, 
+          commentText, 
+          timestamp 
+        });
         
         alert('Comment saved locally. Will sync when back online.');
       }

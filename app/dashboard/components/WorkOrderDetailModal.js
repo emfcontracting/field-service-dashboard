@@ -191,41 +191,125 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Print NTE Increase
-  const printNTEIncrease = (quote) => {
-    const newNTE = (selectedWO.nte || 0) + (quote.grand_total || 0);
+  // Print NTE Increase - CORRECTED VERSION
+  // Shows: Current Accrued + Additional Estimate = Projected Total (New NTE Needed)
+  // Printable version shows final costs only - NO markup percentages displayed
+  const printNTEIncrease = async (quote) => {
+    // Calculate existing/accrued costs from the work order
+    let existingCostsTotal = 0;
+    let existingBreakdown = {
+      labor: 0,
+      materials: 0,
+      equipment: 0,
+      rental: 0,
+      trailer: 0,
+      mileage: 0,
+      admin: 128
+    };
+    
+    try {
+      // Get daily hours logs for this work order
+      const { data: dailyLogs } = await supabase
+        .from('daily_hours_log')
+        .select('*')
+        .eq('wo_id', selectedWO.wo_id);
+      
+      // Get team member assignments  
+      const { data: teamMembers } = await supabase
+        .from('work_order_assignments')
+        .select('*')
+        .eq('wo_id', selectedWO.wo_id);
+      
+      // Calculate labor from daily logs or legacy fields
+      let totalRT = 0;
+      let totalOT = 0;
+      
+      if (dailyLogs && dailyLogs.length > 0) {
+        dailyLogs.forEach(log => {
+          totalRT += parseFloat(log.hours_regular) || 0;
+          totalOT += parseFloat(log.hours_overtime) || 0;
+        });
+      } else {
+        // Legacy fields
+        totalRT = parseFloat(selectedWO.hours_regular) || 0;
+        totalOT = parseFloat(selectedWO.hours_overtime) || 0;
+        
+        if (teamMembers) {
+          teamMembers.forEach(tm => {
+            totalRT += parseFloat(tm.hours_regular) || 0;
+            totalOT += parseFloat(tm.hours_overtime) || 0;
+          });
+        }
+      }
+      
+      existingBreakdown.labor = (totalRT * 64) + (totalOT * 96);
+      existingBreakdown.materials = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
+      existingBreakdown.equipment = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+      existingBreakdown.rental = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+      existingBreakdown.trailer = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+      
+      // Mileage including team members
+      let totalMileage = parseFloat(selectedWO.miles) || 0;
+      if (teamMembers) {
+        teamMembers.forEach(tm => {
+          totalMileage += parseFloat(tm.miles) || 0;
+        });
+      }
+      existingBreakdown.mileage = totalMileage * 1.00;
+      
+      existingCostsTotal = existingBreakdown.labor + existingBreakdown.materials + 
+                           existingBreakdown.equipment + existingBreakdown.rental + 
+                           existingBreakdown.trailer + existingBreakdown.mileage + 
+                           existingBreakdown.admin;
+    } catch (err) {
+      console.error('Error calculating existing costs:', err);
+    }
+    
+    // Additional work estimate from the quote
+    const additionalTotal = parseFloat(quote.grand_total) || 0;
+    
+    // Projected total = existing + additional
+    const projectedTotal = existingCostsTotal + additionalTotal;
+    
+    // Original NTE budget
+    const originalNTE = parseFloat(selectedWO.nte) || 0;
+    
+    // New NTE needed = projected total cost
+    const newNTENeeded = projectedTotal;
     
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>NTE Increase - ${selectedWO.wo_number}</title>
+        <title>NTE Increase Request - ${selectedWO.wo_number}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; padding: 30px; background: white; color: #333; }
+          body { font-family: Arial, sans-serif; padding: 30px; background: white; color: #333; font-size: 12px; }
           .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 15px; margin-bottom: 20px; }
           .header h1 { color: #1e40af; font-size: 22px; margin-bottom: 5px; }
           .header .company { font-size: 14px; color: #666; }
-          .badge { display: inline-block; padding: 5px 15px; border-radius: 15px; font-weight: bold; font-size: 12px; margin-top: 10px; }
+          .badge { display: inline-block; padding: 5px 15px; border-radius: 15px; font-weight: bold; font-size: 11px; margin-top: 10px; }
           .badge-written { background: #3b82f6; color: white; }
           .badge-verbal { background: #f59e0b; color: white; }
           .section { margin-bottom: 20px; }
-          .section-title { font-size: 14px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; text-transform: uppercase; }
+          .section-title { font-size: 13px; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; text-transform: uppercase; }
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
           .info-item { padding: 8px; background: #f9fafb; border-radius: 5px; }
-          .info-label { font-size: 10px; color: #666; text-transform: uppercase; }
-          .info-value { font-size: 14px; font-weight: 600; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-          th { background: #f3f4f6; font-weight: 600; font-size: 12px; }
-          .text-right { text-align: right; }
-          .total-row { background: #f0f9ff; font-weight: bold; }
-          .grand-total { font-size: 16px; background: #1e40af; color: white; }
-          .summary-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0; }
-          .new-nte-box { background: #d1fae5; border: 2px solid #10b981; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center; }
-          .new-nte-value { font-size: 28px; font-weight: bold; color: #059669; }
-          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 15px; }
-          @media print { body { padding: 15px; } .no-print { display: none; } }
+          .info-label { font-size: 9px; color: #666; text-transform: uppercase; }
+          .info-value { font-size: 12px; font-weight: 600; }
+          .cost-box { border: 2px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 15px 0; }
+          .cost-box-blue { border-color: #3b82f6; background: #eff6ff; }
+          .cost-box-yellow { border-color: #f59e0b; background: #fffbeb; }
+          .cost-box-green { border-color: #10b981; background: #d1fae5; }
+          .cost-box-title { font-weight: bold; font-size: 12px; margin-bottom: 10px; color: #1e40af; }
+          .summary-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e5e7eb; }
+          .summary-row:last-child { border-bottom: none; }
+          .summary-total { font-size: 14px; font-weight: bold; padding-top: 10px; border-top: 2px solid #333; margin-top: 10px; }
+          .new-nte-box { background: #065f46; color: white; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; }
+          .new-nte-value { font-size: 28px; font-weight: bold; }
+          .new-nte-label { font-size: 12px; margin-bottom: 5px; }
+          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 10px; border-top: 1px solid #e5e7eb; padding-top: 15px; }
+          @media print { body { padding: 20px; } .no-print { display: none; } }
         </style>
       </head>
       <body>
@@ -249,8 +333,8 @@ export default function WorkOrderDetailModal({
               <div class="info-value">${selectedWO.building || 'N/A'}</div>
             </div>
             <div class="info-item">
-              <div class="info-label">Original NTE</div>
-              <div class="info-value">$${(selectedWO.nte || 0).toFixed(2)}</div>
+              <div class="info-label">Original NTE Budget</div>
+              <div class="info-value">${originalNTE.toFixed(2)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Date Submitted</div>
@@ -271,53 +355,105 @@ export default function WorkOrderDetailModal({
 
         ${quote.description ? `
         <div class="section">
-          <div class="section-title">Additional Work Description</div>
+          <div class="section-title">Description of Additional Work</div>
           <p style="padding: 10px; background: #f9fafb; border-radius: 5px;">${quote.description}</p>
         </div>
         ` : ''}
 
-        <div class="section">
-          <div class="section-title">Cost Breakdown</div>
-          <table>
-            <tr>
-              <th>Category</th>
-              <th class="text-right">Amount</th>
-            </tr>
-            <tr>
-              <td>Labor Total</td>
-              <td class="text-right">$${(quote.labor_total || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Materials (with 25% markup)</td>
-              <td class="text-right">$${(quote.materials_with_markup || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Equipment (with markup)</td>
-              <td class="text-right">$${(quote.equipment_with_markup || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Mileage</td>
-              <td class="text-right">$${(quote.mileage_total || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>Admin Fee</td>
-              <td class="text-right">$${(quote.admin_fee || 0).toFixed(2)}</td>
-            </tr>
-            <tr class="grand-total">
-              <td><strong>NTE INCREASE AMOUNT</strong></td>
-              <td class="text-right"><strong>$${(quote.grand_total || 0).toFixed(2)}</strong></td>
-            </tr>
-          </table>
+        <!-- Current Costs Accrued -->
+        <div class="cost-box cost-box-blue">
+          <div class="cost-box-title">CURRENT COSTS ACCRUED (Work Completed So Far)</div>
+          <div class="summary-row">
+            <span>Labor</span>
+            <span>${existingBreakdown.labor.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Materials</span>
+            <span>${existingBreakdown.materials.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Equipment</span>
+            <span>${existingBreakdown.equipment.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Rental</span>
+            <span>${existingBreakdown.rental.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Trailer</span>
+            <span>${existingBreakdown.trailer.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Mileage</span>
+            <span>${existingBreakdown.mileage.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Admin Fee</span>
+            <span>${existingBreakdown.admin.toFixed(2)}</span>
+          </div>
+          <div class="summary-total">
+            <div class="summary-row" style="border: none;">
+              <span>CURRENT TOTAL</span>
+              <span>${existingCostsTotal.toFixed(2)}</span>
+            </div>
+          </div>
         </div>
 
-        <div class="new-nte-box">
-          <div style="margin-bottom: 10px;">
-            <span style="color: #666;">Original NTE: $${(selectedWO.nte || 0).toFixed(2)}</span>
-            <span style="margin: 0 10px;">+</span>
-            <span style="color: #666;">Increase: $${(quote.grand_total || 0).toFixed(2)}</span>
+        <!-- Additional Work Estimate -->
+        <div class="cost-box cost-box-yellow">
+          <div class="cost-box-title" style="color: #b45309;">ADDITIONAL WORK ESTIMATE</div>
+          <div class="summary-row">
+            <span>Labor</span>
+            <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
           </div>
-          <div style="font-size: 12px; color: #666; margin-bottom: 5px;">NEW NTE TOTAL REQUESTED</div>
-          <div class="new-nte-value">$${newNTE.toFixed(2)}</div>
+          <div class="summary-row">
+            <span>Materials</span>
+            <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Equipment</span>
+            <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Mileage</span>
+            <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Admin Fee</span>
+            <span>${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-total">
+            <div class="summary-row" style="border: none;">
+              <span>ADDITIONAL WORK TOTAL</span>
+              <span>${additionalTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- NTE Increase Summary -->
+        <div class="cost-box cost-box-green">
+          <div class="cost-box-title" style="color: #065f46;">NTE INCREASE SUMMARY</div>
+          <div class="summary-row">
+            <span>Current Costs Accrued</span>
+            <span>${existingCostsTotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Additional Work Estimate</span>
+            <span>${additionalTotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-total">
+            <div class="summary-row" style="border: none; font-size: 14px;">
+              <span>PROJECTED TOTAL COST</span>
+              <span>${projectedTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- New NTE Needed -->
+        <div class="new-nte-box">
+          <div class="new-nte-label">Original NTE Budget: ${originalNTE.toFixed(2)}</div>
+          <div class="new-nte-label" style="font-size: 14px; margin-top: 10px;">NEW NTE BUDGET NEEDED:</div>
+          <div class="new-nte-value">${newNTENeeded.toFixed(2)}</div>
         </div>
 
         ${quote.notes ? `

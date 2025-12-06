@@ -98,7 +98,7 @@ export async function loadQuoteWithMaterials(supabase, quoteId) {
 
 // Create a new quote
 export async function createQuote(supabase, quoteData, userId) {
-  // Calculate totals
+  // Calculate totals for the additional costs
   const totals = calculateQuoteTotals(quoteData);
 
   const { data, error } = await supabase
@@ -118,7 +118,13 @@ export async function createQuote(supabase, quoteData, userId) {
       estimated_miles: quoteData.estimated_miles || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
-      ...totals
+      // Additional costs totals
+      ...totals,
+      // Combined costs (existing + additional = new NTE needed)
+      existing_costs_total: quoteData.existing_costs_total || 0,
+      combined_total: quoteData.combined_total || totals.grand_total,
+      original_nte: quoteData.original_nte || 0,
+      increase_needed: quoteData.increase_needed || 0
     })
     .select()
     .single();
@@ -129,7 +135,7 @@ export async function createQuote(supabase, quoteData, userId) {
 
 // Update an existing quote
 export async function updateQuote(supabase, quoteId, quoteData) {
-  // Calculate totals
+  // Calculate totals for the additional costs
   const totals = calculateQuoteTotals(quoteData);
 
   const { data, error } = await supabase
@@ -148,7 +154,13 @@ export async function updateQuote(supabase, quoteId, quoteData) {
       description: quoteData.description || null,
       notes: quoteData.notes || null,
       updated_at: new Date().toISOString(),
-      ...totals
+      // Additional costs totals
+      ...totals,
+      // Combined costs (existing + additional = new NTE needed)
+      existing_costs_total: quoteData.existing_costs_total || 0,
+      combined_total: quoteData.combined_total || totals.grand_total,
+      original_nte: quoteData.original_nte || 0,
+      increase_needed: quoteData.increase_needed || 0
     })
     .eq('quote_id', quoteId)
     .select()

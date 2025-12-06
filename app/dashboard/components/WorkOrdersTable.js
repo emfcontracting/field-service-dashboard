@@ -5,7 +5,54 @@ import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 
-// Billing status badge helper
+// NTE Status badge helper - determines status from nte_quotes array
+const getNTEStatusBadge = (nteQuotes) => {
+  if (!nteQuotes || nteQuotes.length === 0) return null;
+  
+  // Check for any approved quotes (verbal or written)
+  const approvedQuote = nteQuotes.find(q => q.nte_status === 'approved');
+  if (approvedQuote) {
+    return {
+      text: '✅ NTE APPROVED',
+      color: 'bg-green-600 text-green-100',
+      shortText: '✅ Approved'
+    };
+  }
+  
+  // Check for verbal approved
+  const verbalApproved = nteQuotes.find(q => q.nte_status === 'verbal_approved' || (q.is_verbal_nte && q.nte_status === 'approved'));
+  if (verbalApproved) {
+    return {
+      text: '📞 VERBAL APPROVED',
+      color: 'bg-yellow-600 text-yellow-100',
+      shortText: '📞 Verbal'
+    };
+  }
+  
+  // Check for submitted/pending quotes
+  const submittedQuote = nteQuotes.find(q => q.nte_status === 'submitted');
+  if (submittedQuote) {
+    return {
+      text: '📤 NTE SUBMITTED',
+      color: 'bg-blue-600 text-blue-100',
+      shortText: '📤 Submitted'
+    };
+  }
+  
+  // Has quotes but pending (needs to be sent)
+  const pendingQuote = nteQuotes.find(q => q.nte_status === 'pending' || !q.nte_status);
+  if (pendingQuote) {
+    return {
+      text: '📋 NTE PENDING',
+      color: 'bg-orange-600 text-orange-100',
+      shortText: '📋 Pending'
+    };
+  }
+  
+  return null;
+};
+
+// Billing status badge helper (legacy - keeping for backward compatibility)
 const getBillingStatusBadge = (billingStatus) => {
   switch (billingStatus) {
     case 'pending_cbre_quote':
@@ -96,7 +143,9 @@ export default function WorkOrdersTable({
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
               const isNew = isNewWorkOrder(wo);
-              const billingBadge = getBillingStatusBadge(wo.billing_status);
+              // Prioritize NTE status badge over billing status
+              const nteBadge = getNTEStatusBadge(wo.nte_quotes);
+              const billingBadge = nteBadge || getBillingStatusBadge(wo.billing_status);
 
               return (
                 <tr

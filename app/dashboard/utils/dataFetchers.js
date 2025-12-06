@@ -6,7 +6,8 @@ export async function fetchWorkOrders(supabase) {
     .select(`
       *,
       lead_tech:users!lead_tech_id(first_name, last_name, email),
-      locked_by_user:users!locked_by(first_name, last_name)
+      locked_by_user:users!locked_by(first_name, last_name),
+      nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at)
     `)
     .order('date_entered', { ascending: true });
 

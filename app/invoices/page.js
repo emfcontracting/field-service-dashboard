@@ -103,8 +103,67 @@ export default function InvoicingPage() {
     setSelectedItem({ type: 'invoice', data: invoice });
   };
 
-  // Helper function to calculate work order total for display
+  // Helper function to calculate work order total for display - fetches from daily_hours_log
+  const calculateWOTotalAsync = async (wo) => {
+    try {
+      // 1. Legacy totals from work_orders table
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+
+      // 2. Team member legacy totals from work_order_assignments
+      const { data: teamAssignments } = await supabase
+        .from('work_order_assignments')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let teamRT = 0, teamOT = 0, teamMiles = 0;
+      if (teamAssignments) {
+        teamAssignments.forEach(member => {
+          teamRT += parseFloat(member.hours_regular) || 0;
+          teamOT += parseFloat(member.hours_overtime) || 0;
+          teamMiles += parseFloat(member.miles) || 0;
+        });
+      }
+
+      // 3. Daily hours log totals (this is where most hours are tracked now)
+      const { data: dailyData } = await supabase
+        .from('daily_hours_log')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
+      if (dailyData) {
+        dailyData.forEach(log => {
+          dailyRT += parseFloat(log.hours_regular) || 0;
+          dailyOT += parseFloat(log.hours_overtime) || 0;
+          dailyMiles += parseFloat(log.miles) || 0;
+        });
+      }
+
+      // Combined totals
+      const totalRT = primaryRT + teamRT + dailyRT;
+      const totalOT = primaryOT + teamOT + dailyOT;
+      const totalMiles = primaryMiles + teamMiles + dailyMiles;
+
+      // Calculate costs
+      const laborCost = (totalRT * 64) + (totalOT * 96) + 128; // +128 for admin hours
+      const mileageCost = totalMiles * 1.00;
+      const materialWithMarkup = (parseFloat(wo.material_cost) || 0) * 1.25;
+      const equipmentWithMarkup = (parseFloat(wo.emf_equipment_cost) || 0) * 1.25;
+      const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25;
+      const rentalWithMarkup = (parseFloat(wo.rental_cost) || 0) * 1.25;
+
+      return laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
+    } catch (error) {
+      console.error('Error calculating WO total:', error);
+      return 128; // Default to admin hours only
+    }
+  };
+
+  // Synchronous version for initial display (uses cached data)
   const calculateWOTotal = (wo) => {
+    // Just return admin hours for initial display - the real calculation happens in generateInvoicePreview
     const hoursRegular = parseFloat(wo.hours_regular) || 0;
     const hoursOvertime = parseFloat(wo.hours_overtime) || 0;
     const woMiles = parseFloat(wo.miles) || 0;
@@ -113,7 +172,7 @@ export default function InvoicingPage() {
     const trailerCost = parseFloat(wo.trailer_cost) || 0;
     const rentalCost = parseFloat(wo.rental_cost) || 0;
 
-    const laborCost = (hoursRegular * 64) + (hoursOvertime * 96) + 128; // +128 for admin hours
+    const laborCost = (hoursRegular * 64) + (hoursOvertime * 96) + 128;
     const mileageCost = woMiles * 1.00;
     const materialWithMarkup = materialCost * 1.25;
     const equipmentWithMarkup = equipmentCost * 1.25;
@@ -130,19 +189,16 @@ export default function InvoicingPage() {
     setGeneratingInvoice(true);
 
     try {
-      // DEBUG: Log the work order data
       console.log('=== INVOICE PREVIEW DEBUG ===');
       console.log('Work Order ID:', woId);
-      console.log('Full Work Order Data:', JSON.stringify(wo, null, 2));
-      console.log('hours_regular:', wo.hours_regular, 'type:', typeof wo.hours_regular);
-      console.log('hours_overtime:', wo.hours_overtime, 'type:', typeof wo.hours_overtime);
-      console.log('miles:', wo.miles, 'type:', typeof wo.miles);
-      console.log('material_cost:', wo.material_cost, 'type:', typeof wo.material_cost);
-      console.log('emf_equipment_cost:', wo.emf_equipment_cost, 'type:', typeof wo.emf_equipment_cost);
-      console.log('trailer_cost:', wo.trailer_cost, 'type:', typeof wo.trailer_cost);
-      console.log('rental_cost:', wo.rental_cost, 'type:', typeof wo.rental_cost);
 
-      // Fetch team members
+      // 1. Get legacy totals from work_orders table
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+      console.log('Legacy WO data - RT:', primaryRT, 'OT:', primaryOT, 'Miles:', primaryMiles);
+
+      // 2. Get team member data from work_order_assignments
       const { data: teamAssignments, error: teamError } = await supabase
         .from('work_order_assignments')
         .select(`
@@ -154,98 +210,68 @@ export default function InvoicingPage() {
       console.log('Team Assignments:', teamAssignments);
       if (teamError) console.error('Team fetch error:', teamError);
 
-      // Build line items preview with MARKUPS
+      let teamRT = 0, teamOT = 0, teamMiles = 0;
+      if (teamAssignments) {
+        teamAssignments.forEach(member => {
+          teamRT += parseFloat(member.hours_regular) || 0;
+          teamOT += parseFloat(member.hours_overtime) || 0;
+          teamMiles += parseFloat(member.miles) || 0;
+        });
+      }
+      console.log('Team legacy totals - RT:', teamRT, 'OT:', teamOT, 'Miles:', teamMiles);
+
+      // 3. Get daily hours log data (THIS IS WHERE THE HOURS ACTUALLY ARE!)
+      const { data: dailyHoursData, error: dailyError } = await supabase
+        .from('daily_hours_log')
+        .select('*')
+        .eq('wo_id', woId);
+
+      console.log('Daily Hours Log Data:', dailyHoursData);
+      if (dailyError) console.error('Daily hours fetch error:', dailyError);
+
+      let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
+      if (dailyHoursData) {
+        dailyHoursData.forEach(log => {
+          dailyRT += parseFloat(log.hours_regular) || 0;
+          dailyOT += parseFloat(log.hours_overtime) || 0;
+          dailyMiles += parseFloat(log.miles) || 0;
+        });
+      }
+      console.log('Daily log totals - RT:', dailyRT, 'OT:', dailyOT, 'Miles:', dailyMiles);
+
+      // 4. Combined totals (legacy + daily hours)
+      const totalRT = primaryRT + teamRT + dailyRT;
+      const totalOT = primaryOT + teamOT + dailyOT;
+      const totalMiles = primaryMiles + teamMiles + dailyMiles;
+      console.log('=== COMBINED TOTALS ===');
+      console.log('Total RT:', totalRT, '| Total OT:', totalOT, '| Total Miles:', totalMiles);
+
+      // Build line items
       const items = [];
 
-      // CRITICAL FIX: Parse all values as floats to handle string/null values properly
-      const hoursRegular = parseFloat(wo.hours_regular) || 0;
-      const hoursOvertime = parseFloat(wo.hours_overtime) || 0;
-      const woMiles = parseFloat(wo.miles) || 0;
-      const materialCost = parseFloat(wo.material_cost) || 0;
-      const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
-      const trailerCost = parseFloat(wo.trailer_cost) || 0;
-      const rentalCost = parseFloat(wo.rental_cost) || 0;
-
-      console.log('=== PARSED VALUES ===');
-      console.log('RT Hours:', hoursRegular, '| OT Hours:', hoursOvertime);
-      console.log('Miles:', woMiles);
-      console.log('Material:', materialCost, '| Equipment:', equipmentCost);
-      console.log('Trailer:', trailerCost, '| Rental:', rentalCost);
-
-      // Labor - Lead Tech
-      const leadRegular = hoursRegular * 64;
-      const leadOvertime = hoursOvertime * 96;
-
-      if (hoursRegular > 0) {
+      // Labor - Combined hours
+      if (totalRT > 0) {
         items.push({
-          description: `Lead Tech Labor - Regular Time (${hoursRegular} hrs @ $64/hr)`,
-          quantity: hoursRegular,
+          description: `Labor - Regular Time (${totalRT} hrs @ $64/hr)`,
+          quantity: totalRT,
           unit_price: 64,
-          amount: leadRegular,
+          amount: totalRT * 64,
           line_type: 'labor',
           editable: true
         });
-        console.log('Added Lead Tech RT:', leadRegular);
+        console.log('Added RT Labor:', totalRT * 64);
       }
 
-      if (hoursOvertime > 0) {
+      if (totalOT > 0) {
         items.push({
-          description: `Lead Tech Labor - Overtime (${hoursOvertime} hrs @ $96/hr)`,
-          quantity: hoursOvertime,
+          description: `Labor - Overtime (${totalOT} hrs @ $96/hr)`,
+          quantity: totalOT,
           unit_price: 96,
-          amount: leadOvertime,
+          amount: totalOT * 96,
           line_type: 'labor',
           editable: true
         });
-        console.log('Added Lead Tech OT:', leadOvertime);
-      }
-
-      // Team member labor
-      if (teamAssignments && teamAssignments.length > 0) {
-        const laborByRole = {};
-        
-        teamAssignments.forEach(member => {
-          const roleTitle = member.role === 'lead_tech' ? 'Tech' : 
-                            member.role === 'tech' ? 'Tech' : 
-                            'Helper';
-          
-          if (!laborByRole[roleTitle]) {
-            laborByRole[roleTitle] = {
-              regular_hours: 0,
-              overtime_hours: 0,
-              regular_rate: member.user?.hourly_rate_regular || 64,
-              overtime_rate: member.user?.hourly_rate_overtime || 96
-            };
-          }
-          
-          laborByRole[roleTitle].regular_hours += parseFloat(member.hours_regular) || 0;
-          laborByRole[roleTitle].overtime_hours += parseFloat(member.hours_overtime) || 0;
-        });
-        
-        Object.entries(laborByRole).forEach(([role, data]) => {
-          if (data.regular_hours > 0) {
-            items.push({
-              description: `${role} - Regular Time (${data.regular_hours} hrs @ $${data.regular_rate}/hr)`,
-              quantity: data.regular_hours,
-              unit_price: data.regular_rate,
-              amount: data.regular_hours * data.regular_rate,
-              line_type: 'labor',
-              editable: true
-            });
-            console.log(`Added ${role} RT:`, data.regular_hours * data.regular_rate);
-          }
-          if (data.overtime_hours > 0) {
-            items.push({
-              description: `${role} - Overtime (${data.overtime_hours} hrs @ $${data.overtime_rate}/hr)`,
-              quantity: data.overtime_hours,
-              unit_price: data.overtime_rate,
-              amount: data.overtime_hours * data.overtime_rate,
-              line_type: 'labor',
-              editable: true
-            });
-            console.log(`Added ${role} OT:`, data.overtime_hours * data.overtime_rate);
-          }
-        });
+        console.log('Added OT Labor:', totalOT * 96);
       }
 
       // Admin Hours - ALWAYS ADD
@@ -259,11 +285,7 @@ export default function InvoicingPage() {
       });
       console.log('Added Admin Hours: 128');
 
-      // Mileage - using parsed woMiles
-      const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (parseFloat(m.miles) || 0), 0);
-      const totalMiles = woMiles + teamMiles;
-      console.log('Lead Miles:', woMiles, '| Team Miles:', teamMiles, '| Total:', totalMiles);
-      
+      // Mileage
       if (totalMiles > 0) {
         items.push({
           description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
@@ -277,6 +299,7 @@ export default function InvoicingPage() {
       }
 
       // Materials WITH 25% MARKUP
+      const materialCost = parseFloat(wo.material_cost) || 0;
       if (materialCost > 0) {
         const markedUpMaterials = materialCost * 1.25;
         items.push({
@@ -291,6 +314,7 @@ export default function InvoicingPage() {
       }
 
       // Equipment WITH 25% MARKUP
+      const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
       if (equipmentCost > 0) {
         const markedUpEquipment = equipmentCost * 1.25;
         items.push({
@@ -305,6 +329,7 @@ export default function InvoicingPage() {
       }
 
       // Trailer WITH 25% MARKUP
+      const trailerCost = parseFloat(wo.trailer_cost) || 0;
       if (trailerCost > 0) {
         const markedUpTrailer = trailerCost * 1.25;
         items.push({
@@ -319,6 +344,7 @@ export default function InvoicingPage() {
       }
 
       // Rental WITH 25% MARKUP
+      const rentalCost = parseFloat(wo.rental_cost) || 0;
       if (rentalCost > 0) {
         const markedUpRental = rentalCost * 1.25;
         items.push({
@@ -339,7 +365,6 @@ export default function InvoicingPage() {
 
       // Work Performed - Use tech's comments field
       let workPerformed = '';
-      
       if (wo.comments && wo.comments.trim()) {
         workPerformed = wo.comments;
       } else if (wo.comments_english && wo.comments_english.trim()) {
@@ -695,7 +720,7 @@ export default function InvoicingPage() {
                       <th className="px-4 py-3 text-left">Building</th>
                       <th className="px-4 py-3 text-left">Lead Tech</th>
                       <th className="px-4 py-3 text-left">Acknowledged</th>
-                      <th className="px-4 py-3 text-right">Est. Total</th>
+                      <th className="px-4 py-3 text-right">NTE</th>
                       <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -714,7 +739,7 @@ export default function InvoicingPage() {
                           {wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : 'N/A'}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-green-400">
-                          ${calculateWOTotal(wo).toFixed(2)}
+                          ${(wo.nte || 0).toFixed(2)}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -827,24 +852,9 @@ export default function InvoicingPage() {
                     <span className="text-gray-400">Acknowledged:</span>
                     <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
                   </div>
-                  
-                  {/* Show cost breakdown */}
-                  <div className="mt-4 pt-4 border-t border-gray-600">
-                    <span className="text-gray-400 font-semibold">Cost Summary:</span>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                      <div>RT Hours: {parseFloat(selectedItem.data.hours_regular) || 0}</div>
-                      <div>OT Hours: {parseFloat(selectedItem.data.hours_overtime) || 0}</div>
-                      <div>Miles: {parseFloat(selectedItem.data.miles) || 0}</div>
-                      <div>Materials: ${parseFloat(selectedItem.data.material_cost) || 0}</div>
-                      <div>Equipment: ${parseFloat(selectedItem.data.emf_equipment_cost) || 0}</div>
-                      <div>Trailer: ${parseFloat(selectedItem.data.trailer_cost) || 0}</div>
-                      <div>Rental: ${parseFloat(selectedItem.data.rental_cost) || 0}</div>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-gray-600">
-                      <span className="font-bold text-green-400">
-                        Estimated Invoice Total: ${calculateWOTotal(selectedItem.data).toFixed(2)}
-                      </span>
-                    </div>
+                  <div>
+                    <span className="text-gray-400">NTE Budget:</span>
+                    <span className="ml-2 font-bold text-green-400">${(selectedItem.data.nte || 0).toFixed(2)}</span>
                   </div>
 
                   {selectedItem.data.comments && (
@@ -861,11 +871,11 @@ export default function InvoicingPage() {
               <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
                 <div className="font-bold mb-2">✓ Ready to Generate Invoice</div>
                 <div className="text-sm">
-                  This work order has been completed and acknowledged. Click below to generate an invoice:
+                  Click below to generate an invoice preview. The system will pull all hours from the daily hours log, team assignments, materials, and equipment costs.
                   <ul className="list-disc list-inside mt-2 text-xs">
-                    <li>All labor, materials, and costs will be included</li>
-                    <li><strong>Tech's comments/work notes will be used as "Work Performed"</strong></li>
-                    <li>You can edit the work performed text before finalizing</li>
+                    <li>Labor hours from daily_hours_log table will be included</li>
+                    <li>Materials, Equipment, Trailer, Rental with 25% markup</li>
+                    <li>You can edit line items before finalizing</li>
                   </ul>
                 </div>
               </div>

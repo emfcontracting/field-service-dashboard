@@ -25,28 +25,83 @@ export async function POST(request) {
       );
     }
 
-    // SOFT DELETE: Just mark the user as inactive
-    // This preserves all work order history and relationships
-    const { error: updateError } = await supabase
+    // First, get the user to check if they have an auth_id
+    const { data: user, error: fetchError } = await supabase
       .from('users')
-      .update({ 
-        is_active: false,
-        // Optional: You can add a deleted_at timestamp if the column exists
-        // deleted_at: new Date().toISOString()
-      })
+      .select('auth_id, email')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching user:', fetchError);
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Clear foreign key references first to avoid constraint errors
+    // Update work_orders to remove lead_tech_id references
+    await supabase
+      .from('work_orders')
+      .update({ lead_tech_id: null })
+      .eq('lead_tech_id', userId);
+
+    // Delete work_order_assignments for this user
+    await supabase
+      .from('work_order_assignments')
+      .delete()
       .eq('user_id', userId);
 
-    if (updateError) {
-      console.error('Error soft-deleting user:', updateError);
+    // Delete daily_hours_log entries for this user
+    await supabase
+      .from('daily_hours_log')
+      .delete()
+      .eq('user_id', userId);
+
+    // Delete availability records for this user
+    await supabase
+      .from('availability')
+      .delete()
+      .eq('user_id', userId);
+
+    // Delete work_order_quotes created by this user
+    await supabase
+      .from('work_order_quotes')
+      .update({ created_by: null })
+      .eq('created_by', userId);
+
+    // Now delete the user from the users table
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      console.error('Error deleting user:', deleteError);
       return NextResponse.json(
-        { error: updateError.message },
+        { error: deleteError.message },
         { status: 500 }
       );
     }
 
+    // If user had an auth account, try to delete it from Supabase Auth
+    // This requires the service role key
+    if (user.auth_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const { error: authDeleteError } = await supabase.auth.admin.deleteUser(user.auth_id);
+        if (authDeleteError) {
+          console.error('Error deleting auth user (non-fatal):', authDeleteError);
+          // Don't fail the request - the users table record is already deleted
+        }
+      } catch (authErr) {
+        console.error('Auth deletion error (non-fatal):', authErr);
+      }
+    }
+
     return NextResponse.json({ 
       success: true,
-      message: 'User deactivated successfully'
+      message: 'User permanently deleted'
     });
 
   } catch (error) {

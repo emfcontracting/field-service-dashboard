@@ -181,7 +181,20 @@ export default function UserManagement() {
       return;
     }
 
-    const confirmMessage = `⚠️ WARNING: This will PERMANENTLY DELETE ${user.first_name} ${user.last_name} (${user.email}).\n\nThis action cannot be undone!\n\nType "DELETE" to confirm:`;
+    const confirmMessage = `⚠️ WARNING: PERMANENT DELETION
+
+This will PERMANENTLY DELETE:
+• ${user.first_name} ${user.last_name}
+• ${user.email}
+• All their hours logs
+• All their team assignments
+• Their availability records
+
+This CANNOT be undone!
+
+If you just want to remove access, use "Deactivate" instead.
+
+Type "DELETE" to confirm permanent deletion:`;
     const confirmation = prompt(confirmMessage);
 
     if (confirmation !== 'DELETE') {
@@ -205,7 +218,7 @@ export default function UserManagement() {
         throw new Error(data.error || 'Failed to delete user');
       }
 
-      alert('User deleted successfully!');
+      alert('✅ User permanently deleted!');
       fetchUsers();
     } catch (error) {
       console.error('Delete user error:', error);
@@ -436,7 +449,7 @@ export default function UserManagement() {
                       </button>
                       <button
                         onClick={() => toggleUserStatus(user)}
-                        className={user.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}
+                        className={user.is_active ? 'text-orange-600 hover:text-orange-800' : 'text-green-600 hover:text-green-800'}
                       >
                         {user.is_active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -444,8 +457,9 @@ export default function UserManagement() {
                         <button
                           onClick={() => handleDeleteUser(user)}
                           className="text-red-600 hover:text-red-800 font-semibold"
+                          title="Permanently delete user"
                         >
-                          Delete
+                          🗑️ Delete
                         </button>
                       )}
                     </div>

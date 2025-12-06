@@ -14,14 +14,13 @@ export default function InvoicingPage() {
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
   const [previewWO, setPreviewWO] = useState(null);
   const [previewLineItems, setPreviewLineItems] = useState([]);
-  const [workPerformedText, setWorkPerformedText] = useState(''); // Separate state for editable work performed
+  const [workPerformedText, setWorkPerformedText] = useState('');
   const [customLineItem, setCustomLineItem] = useState({
     description: '',
     quantity: 1,
     unit_price: 0
   });
 
-  // Initialize Supabase client inside component
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -54,7 +53,6 @@ export default function InvoicingPage() {
       .order('acknowledged_at', { ascending: false });
 
     console.log('Acknowledged WOs query result:', { data, error });
-    console.log('Number of acknowledged WOs:', data?.length || 0);
 
     if (error) {
       console.error('Error fetching acknowledged work orders:', error);
@@ -105,6 +103,26 @@ export default function InvoicingPage() {
     setSelectedItem({ type: 'invoice', data: invoice });
   };
 
+  // Helper function to calculate work order total for display
+  const calculateWOTotal = (wo) => {
+    const hoursRegular = parseFloat(wo.hours_regular) || 0;
+    const hoursOvertime = parseFloat(wo.hours_overtime) || 0;
+    const woMiles = parseFloat(wo.miles) || 0;
+    const materialCost = parseFloat(wo.material_cost) || 0;
+    const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
+    const trailerCost = parseFloat(wo.trailer_cost) || 0;
+    const rentalCost = parseFloat(wo.rental_cost) || 0;
+
+    const laborCost = (hoursRegular * 64) + (hoursOvertime * 96) + 128; // +128 for admin hours
+    const mileageCost = woMiles * 1.00;
+    const materialWithMarkup = materialCost * 1.25;
+    const equipmentWithMarkup = equipmentCost * 1.25;
+    const trailerWithMarkup = trailerCost * 1.25;
+    const rentalWithMarkup = rentalCost * 1.25;
+
+    return laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
+  };
+
   const generateInvoicePreview = async (woId) => {
     const wo = acknowledgedWOs.find(w => w.wo_id === woId);
     if (!wo) return;
@@ -112,8 +130,20 @@ export default function InvoicingPage() {
     setGeneratingInvoice(true);
 
     try {
+      // DEBUG: Log the work order data
+      console.log('=== INVOICE PREVIEW DEBUG ===');
+      console.log('Work Order ID:', woId);
+      console.log('Full Work Order Data:', JSON.stringify(wo, null, 2));
+      console.log('hours_regular:', wo.hours_regular, 'type:', typeof wo.hours_regular);
+      console.log('hours_overtime:', wo.hours_overtime, 'type:', typeof wo.hours_overtime);
+      console.log('miles:', wo.miles, 'type:', typeof wo.miles);
+      console.log('material_cost:', wo.material_cost, 'type:', typeof wo.material_cost);
+      console.log('emf_equipment_cost:', wo.emf_equipment_cost, 'type:', typeof wo.emf_equipment_cost);
+      console.log('trailer_cost:', wo.trailer_cost, 'type:', typeof wo.trailer_cost);
+      console.log('rental_cost:', wo.rental_cost, 'type:', typeof wo.rental_cost);
+
       // Fetch team members
-      const { data: teamAssignments } = await supabase
+      const { data: teamAssignments, error: teamError } = await supabase
         .from('work_order_assignments')
         .select(`
           *,
@@ -121,33 +151,53 @@ export default function InvoicingPage() {
         `)
         .eq('wo_id', woId);
 
+      console.log('Team Assignments:', teamAssignments);
+      if (teamError) console.error('Team fetch error:', teamError);
+
       // Build line items preview with MARKUPS
       const items = [];
 
-      // Labor - Lead Tech
-      const leadRegular = (wo.hours_regular || 0) * 64;
-      const leadOvertime = (wo.hours_overtime || 0) * 96;
+      // CRITICAL FIX: Parse all values as floats to handle string/null values properly
+      const hoursRegular = parseFloat(wo.hours_regular) || 0;
+      const hoursOvertime = parseFloat(wo.hours_overtime) || 0;
+      const woMiles = parseFloat(wo.miles) || 0;
+      const materialCost = parseFloat(wo.material_cost) || 0;
+      const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
+      const trailerCost = parseFloat(wo.trailer_cost) || 0;
+      const rentalCost = parseFloat(wo.rental_cost) || 0;
 
-      if (wo.hours_regular > 0) {
+      console.log('=== PARSED VALUES ===');
+      console.log('RT Hours:', hoursRegular, '| OT Hours:', hoursOvertime);
+      console.log('Miles:', woMiles);
+      console.log('Material:', materialCost, '| Equipment:', equipmentCost);
+      console.log('Trailer:', trailerCost, '| Rental:', rentalCost);
+
+      // Labor - Lead Tech
+      const leadRegular = hoursRegular * 64;
+      const leadOvertime = hoursOvertime * 96;
+
+      if (hoursRegular > 0) {
         items.push({
-          description: `Lead Tech Labor - Regular Time (${wo.hours_regular} hrs @ $64/hr)`,
-          quantity: wo.hours_regular,
+          description: `Lead Tech Labor - Regular Time (${hoursRegular} hrs @ $64/hr)`,
+          quantity: hoursRegular,
           unit_price: 64,
           amount: leadRegular,
           line_type: 'labor',
           editable: true
         });
+        console.log('Added Lead Tech RT:', leadRegular);
       }
 
-      if (wo.hours_overtime > 0) {
+      if (hoursOvertime > 0) {
         items.push({
-          description: `Lead Tech Labor - Overtime (${wo.hours_overtime} hrs @ $96/hr)`,
-          quantity: wo.hours_overtime,
+          description: `Lead Tech Labor - Overtime (${hoursOvertime} hrs @ $96/hr)`,
+          quantity: hoursOvertime,
           unit_price: 96,
           amount: leadOvertime,
           line_type: 'labor',
           editable: true
         });
+        console.log('Added Lead Tech OT:', leadOvertime);
       }
 
       // Team member labor
@@ -168,8 +218,8 @@ export default function InvoicingPage() {
             };
           }
           
-          laborByRole[roleTitle].regular_hours += member.hours_regular || 0;
-          laborByRole[roleTitle].overtime_hours += member.hours_overtime || 0;
+          laborByRole[roleTitle].regular_hours += parseFloat(member.hours_regular) || 0;
+          laborByRole[roleTitle].overtime_hours += parseFloat(member.hours_overtime) || 0;
         });
         
         Object.entries(laborByRole).forEach(([role, data]) => {
@@ -182,6 +232,7 @@ export default function InvoicingPage() {
               line_type: 'labor',
               editable: true
             });
+            console.log(`Added ${role} RT:`, data.regular_hours * data.regular_rate);
           }
           if (data.overtime_hours > 0) {
             items.push({
@@ -192,11 +243,12 @@ export default function InvoicingPage() {
               line_type: 'labor',
               editable: true
             });
+            console.log(`Added ${role} OT:`, data.overtime_hours * data.overtime_rate);
           }
         });
       }
 
-      // Admin Hours
+      // Admin Hours - ALWAYS ADD
       items.push({
         description: 'Administrative Hours (2 hrs @ $64/hr)',
         quantity: 2,
@@ -205,10 +257,13 @@ export default function InvoicingPage() {
         line_type: 'labor',
         editable: true
       });
+      console.log('Added Admin Hours: 128');
 
-      // Mileage
-      const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (m.miles || 0), 0);
-      const totalMiles = (wo.miles || 0) + teamMiles;
+      // Mileage - using parsed woMiles
+      const teamMiles = (teamAssignments || []).reduce((sum, m) => sum + (parseFloat(m.miles) || 0), 0);
+      const totalMiles = woMiles + teamMiles;
+      console.log('Lead Miles:', woMiles, '| Team Miles:', teamMiles, '| Total:', totalMiles);
+      
       if (totalMiles > 0) {
         items.push({
           description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
@@ -218,11 +273,12 @@ export default function InvoicingPage() {
           line_type: 'mileage',
           editable: true
         });
+        console.log('Added Mileage:', totalMiles);
       }
 
-      // Materials WITH 25% MARKUP (but don't show it)
-      if (wo.material_cost > 0) {
-        const markedUpMaterials = wo.material_cost * 1.25;
+      // Materials WITH 25% MARKUP
+      if (materialCost > 0) {
+        const markedUpMaterials = materialCost * 1.25;
         items.push({
           description: 'Materials',
           quantity: 1,
@@ -231,11 +287,12 @@ export default function InvoicingPage() {
           line_type: 'material',
           editable: true
         });
+        console.log('Added Materials (with 25% markup):', markedUpMaterials);
       }
 
-      // Equipment WITH 25% MARKUP (but don't show it)
-      if (wo.emf_equipment_cost > 0) {
-        const markedUpEquipment = wo.emf_equipment_cost * 1.25;
+      // Equipment WITH 25% MARKUP
+      if (equipmentCost > 0) {
+        const markedUpEquipment = equipmentCost * 1.25;
         items.push({
           description: 'Equipment',
           quantity: 1,
@@ -244,11 +301,12 @@ export default function InvoicingPage() {
           line_type: 'equipment',
           editable: true
         });
+        console.log('Added Equipment (with 25% markup):', markedUpEquipment);
       }
 
-      // Trailer WITH 25% MARKUP (but don't show it)
-      if (wo.trailer_cost > 0) {
-        const markedUpTrailer = wo.trailer_cost * 1.25;
+      // Trailer WITH 25% MARKUP
+      if (trailerCost > 0) {
+        const markedUpTrailer = trailerCost * 1.25;
         items.push({
           description: 'Trailer',
           quantity: 1,
@@ -257,11 +315,12 @@ export default function InvoicingPage() {
           line_type: 'equipment',
           editable: true
         });
+        console.log('Added Trailer (with 25% markup):', markedUpTrailer);
       }
 
-      // Rental WITH 15% MARKUP (but don't show it)
-      if (wo.rental_cost > 0) {
-        const markedUpRental = wo.rental_cost * 1.15;
+      // Rental WITH 25% MARKUP
+      if (rentalCost > 0) {
+        const markedUpRental = rentalCost * 1.25;
         items.push({
           description: 'Rental',
           quantity: 1,
@@ -270,32 +329,35 @@ export default function InvoicingPage() {
           line_type: 'rental',
           editable: true
         });
+        console.log('Added Rental (with 25% markup):', markedUpRental);
       }
 
-      // *** FIXED: Use tech's comments field as Work Performed instead of work_order_description ***
-      // The 'comments' field is where field techs document work they performed
+      // Calculate and log total
+      const previewTotal = items.reduce((sum, item) => sum + item.amount, 0);
+      console.log('=== PREVIEW TOTAL ===', previewTotal);
+      console.log('Number of line items:', items.length);
+
+      // Work Performed - Use tech's comments field
       let workPerformed = '';
       
-      // Priority: 1) comments (tech work notes), 2) comments_english (if bilingual), 3) fallback to description
       if (wo.comments && wo.comments.trim()) {
         workPerformed = wo.comments;
       } else if (wo.comments_english && wo.comments_english.trim()) {
         workPerformed = wo.comments_english;
       } else {
-        // Only use description as last resort if no comments exist
         workPerformed = wo.work_order_description || 'Work completed as requested.';
       }
 
-      // Set the editable work performed text
       setWorkPerformedText(workPerformed);
-
       setPreviewWO(wo);
       setPreviewLineItems(items);
       setShowInvoicePreview(true);
       setSelectedItem(null);
+      
+      console.log('=== PREVIEW COMPLETE ===');
     } catch (error) {
       console.error('Error generating preview:', error);
-      alert('❌ Failed to generate preview');
+      alert('❌ Failed to generate preview: ' + error.message);
     } finally {
       setGeneratingInvoice(false);
     }
@@ -311,13 +373,11 @@ export default function InvoicingPage() {
     setGeneratingInvoice(true);
 
     try {
-      // Calculate totals from preview line items
       const costItems = previewLineItems.filter(item => item.line_type !== 'description');
       const subtotal = costItems.reduce((sum, item) => sum + item.amount, 0);
       const tax = 0;
       const total = subtotal + tax;
 
-      // Generate invoice number
       const year = new Date().getFullYear();
       const { data: lastInvoice } = await supabase
         .from('invoices')
@@ -335,7 +395,6 @@ export default function InvoicingPage() {
         invoiceNumber = `INV-${year}-00001`;
       }
 
-      // Create invoice
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
         .insert({
@@ -354,7 +413,6 @@ export default function InvoicingPage() {
 
       if (invoiceError) throw invoiceError;
 
-      // Insert line items (including the work performed description)
       const lineItemsToInsert = [
         ...previewLineItems.map(item => ({
           invoice_id: invoice.invoice_id,
@@ -364,7 +422,6 @@ export default function InvoicingPage() {
           amount: item.amount,
           line_type: item.line_type
         })),
-        // Add the work performed description as a line item
         {
           invoice_id: invoice.invoice_id,
           description: workPerformedText,
@@ -381,7 +438,6 @@ export default function InvoicingPage() {
 
       if (lineItemsError) throw lineItemsError;
 
-      // Lock the work order
       const { error: lockError } = await supabase
         .from('work_orders')
         .update({
@@ -639,7 +695,7 @@ export default function InvoicingPage() {
                       <th className="px-4 py-3 text-left">Building</th>
                       <th className="px-4 py-3 text-left">Lead Tech</th>
                       <th className="px-4 py-3 text-left">Acknowledged</th>
-                      <th className="px-4 py-3 text-right">NTE</th>
+                      <th className="px-4 py-3 text-right">Est. Total</th>
                       <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -658,7 +714,7 @@ export default function InvoicingPage() {
                           {wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : 'N/A'}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-green-400">
-                          ${(wo.nte || 0).toFixed(2)}
+                          ${calculateWOTotal(wo).toFixed(2)}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -771,7 +827,26 @@ export default function InvoicingPage() {
                     <span className="text-gray-400">Acknowledged:</span>
                     <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
                   </div>
-                  {/* Show tech comments preview - this is the work performed */}
+                  
+                  {/* Show cost breakdown */}
+                  <div className="mt-4 pt-4 border-t border-gray-600">
+                    <span className="text-gray-400 font-semibold">Cost Summary:</span>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div>RT Hours: {parseFloat(selectedItem.data.hours_regular) || 0}</div>
+                      <div>OT Hours: {parseFloat(selectedItem.data.hours_overtime) || 0}</div>
+                      <div>Miles: {parseFloat(selectedItem.data.miles) || 0}</div>
+                      <div>Materials: ${parseFloat(selectedItem.data.material_cost) || 0}</div>
+                      <div>Equipment: ${parseFloat(selectedItem.data.emf_equipment_cost) || 0}</div>
+                      <div>Trailer: ${parseFloat(selectedItem.data.trailer_cost) || 0}</div>
+                      <div>Rental: ${parseFloat(selectedItem.data.rental_cost) || 0}</div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-600">
+                      <span className="font-bold text-green-400">
+                        Estimated Invoice Total: ${calculateWOTotal(selectedItem.data).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
                   {selectedItem.data.comments && (
                     <div className="mt-4 pt-4 border-t border-gray-600">
                       <span className="text-gray-400">Tech's Work Notes (Work Performed):</span>
@@ -889,7 +964,6 @@ export default function InvoicingPage() {
                               setPreviewLineItems(updated);
                             }}
                             className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
-                            placeholder="Unit Price"
                           />
                         </div>
                         <div className="col-span-2 text-right font-bold">
@@ -944,7 +1018,6 @@ export default function InvoicingPage() {
                       value={customLineItem.unit_price}
                       onChange={(e) => setCustomLineItem({ ...customLineItem, unit_price: parseFloat(e.target.value) || 0 })}
                       className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
-                      placeholder="0.00"
                     />
                   </div>
                   <div className="col-span-2">
@@ -1164,39 +1237,7 @@ export default function InvoicingPage() {
                     📤 Share
                   </button>
                 </div>
-                {selectedItem.data.status === 'approved' && (
-                  <button
-                    onClick={async () => {
-                      if (!confirm('Sync this invoice to QuickBooks?')) return;
-                      
-                      setLoading(true);
-                      try {
-                        const response = await fetch('/api/quickbooks/sync', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ invoice_id: selectedItem.data.invoice_id })
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                          alert('✅ Invoice synced to QuickBooks!\n\nQuickBooks ID: ' + result.quickbooks_id);
-                          fetchData();
-                        } else {
-                          alert('❌ Sync failed: ' + result.error);
-                        }
-                      } catch (error) {
-                        alert('❌ Sync failed: ' + error.message);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    disabled={selectedItem.data.quickbooks_invoice_id}
-                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
-                  >
-                    {selectedItem.data.quickbooks_invoice_id ? '✅ Synced to QuickBooks' : '📤 Sync to QuickBooks'}
-                  </button>
-                )}
+                
                 {selectedItem.data.status === 'draft' && (
                   <>
                     <button

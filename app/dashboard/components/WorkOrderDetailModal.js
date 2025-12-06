@@ -132,11 +132,12 @@ export default function WorkOrderDetailModal({
   };
 
   // Handle updating an NTE increase
+  // NOTE: Admin fee is NOT included in additional work - it's already in current/accrued costs
   const handleUpdateNTEIncrease = async (quoteId, updates) => {
     try {
       setSavingNTE(true);
       
-      // Recalculate grand total if cost fields changed
+      // Recalculate grand total if cost fields changed (NO admin fee - that's in current costs)
       const quote = nteIncreases.find(q => q.quote_id === quoteId);
       const updatedQuote = { ...quote, ...updates };
       
@@ -144,8 +145,8 @@ export default function WorkOrderDetailModal({
       const materialsWithMarkup = parseFloat(updatedQuote.materials_with_markup) || 0;
       const equipmentWithMarkup = parseFloat(updatedQuote.equipment_with_markup) || 0;
       const mileageTotal = parseFloat(updatedQuote.mileage_total) || 0;
-      const adminFee = parseFloat(updatedQuote.admin_fee) || 0;
-      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal + adminFee;
+      // NO admin fee here - it's already included in current/accrued costs
+      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
       
       const finalUpdates = { ...updates, grand_total: grandTotal };
       
@@ -265,8 +266,13 @@ export default function WorkOrderDetailModal({
       console.error('Error calculating existing costs:', err);
     }
     
-    // Additional work estimate from the quote
-    const additionalTotal = parseFloat(quote.grand_total) || 0;
+    // Additional work estimate from the quote - calculate from individual fields (NO admin fee)
+    const laborTotal = parseFloat(quote.labor_total) || 0;
+    const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
+    const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
+    const mileageTotal = parseFloat(quote.mileage_total) || 0;
+    // NO admin fee in additional work - it's already in current/accrued costs
+    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
     
     // Projected total = existing + additional
     const projectedTotal = existingCostsTotal + additionalTotal;
@@ -417,10 +423,6 @@ export default function WorkOrderDetailModal({
           <div class="summary-row">
             <span>Mileage</span>
             <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Admin Fee</span>
-            <span>${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
           </div>
           <div class="summary-total">
             <div class="summary-row" style="border: none;">

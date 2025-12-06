@@ -221,24 +221,29 @@ export default function WorkOrderDetailModal({
         .select('*')
         .eq('wo_id', selectedWO.wo_id);
       
-      // Calculate labor from daily logs or legacy fields
+      // Calculate labor and mileage from daily logs or legacy fields
       let totalRT = 0;
       let totalOT = 0;
+      let totalMileage = 0;
       
       if (dailyLogs && dailyLogs.length > 0) {
+        // Use daily logs for hours AND mileage
         dailyLogs.forEach(log => {
           totalRT += parseFloat(log.hours_regular) || 0;
           totalOT += parseFloat(log.hours_overtime) || 0;
+          totalMileage += parseFloat(log.miles) || 0;
         });
       } else {
         // Legacy fields
         totalRT = parseFloat(selectedWO.hours_regular) || 0;
         totalOT = parseFloat(selectedWO.hours_overtime) || 0;
+        totalMileage = parseFloat(selectedWO.miles) || 0;
         
         if (teamMembers) {
           teamMembers.forEach(tm => {
             totalRT += parseFloat(tm.hours_regular) || 0;
             totalOT += parseFloat(tm.hours_overtime) || 0;
+            totalMileage += parseFloat(tm.miles) || 0;
           });
         }
       }
@@ -248,14 +253,6 @@ export default function WorkOrderDetailModal({
       existingBreakdown.equipment = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
       existingBreakdown.rental = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
       existingBreakdown.trailer = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-      
-      // Mileage including team members
-      let totalMileage = parseFloat(selectedWO.miles) || 0;
-      if (teamMembers) {
-        teamMembers.forEach(tm => {
-          totalMileage += parseFloat(tm.miles) || 0;
-        });
-      }
       existingBreakdown.mileage = totalMileage * 1.00;
       
       existingCostsTotal = existingBreakdown.labor + existingBreakdown.materials + 

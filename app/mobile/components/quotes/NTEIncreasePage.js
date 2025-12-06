@@ -1,22 +1,23 @@
 // components/quotes/NTEIncreasePage.js - Full Page NTE Increase/Quote Form
 // CORRECTED: Current Accrued Costs + Estimated Additional = Projected Total (New NTE Needed)
+// Uses same calculation logic as CostSummarySection
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-// Define rate constants locally to avoid import issues
+// Rate constants (matching CostSummarySection)
 const RATES = {
   RT_RATE: 64,
   OT_RATE: 96,
   MILEAGE_RATE: 1.00,
-  MATERIAL_MARKUP: 0.25,
-  EQUIPMENT_MARKUP: 0.25,
-  ADMIN_FEE: 128
+  MARKUP_PERCENT: 0.25,
+  ADMIN_HOURS: 2  // 2 hours @ $64 = $128
 };
 
 export default function NTEIncreasePage({
   workOrder,
   currentUser,
+  currentTeamList,  // Need this to match CostSummarySection
   selectedQuote,
   materials,
   saving,
@@ -32,22 +33,23 @@ export default function NTEIncreasePage({
   const supabase = createClientComponentClient();
   const wo = workOrder || {};
   
-  // Existing costs from ticket (accrued so far)
+  // Existing costs from ticket (accrued so far) - matching CostSummarySection structure
   const [existingCosts, setExistingCosts] = useState({
-    laborRT: 0,
-    laborOT: 0,
-    laborTotal: 0,
-    materialCost: 0,
+    // Hours
+    totalRT: 0,
+    totalOT: 0,
+    totalMiles: 0,
+    // Calculated costs
+    laborCost: 0,
+    materialBase: 0,
     materialWithMarkup: 0,
-    equipmentCost: 0,
+    equipmentBase: 0,
     equipmentWithMarkup: 0,
-    trailerCost: 0,
+    trailerBase: 0,
     trailerWithMarkup: 0,
-    rentalCost: 0,
+    rentalBase: 0,
     rentalWithMarkup: 0,
-    mileage: 0,
     mileageCost: 0,
-    adminFee: RATES.ADMIN_FEE,
     grandTotal: 0
   });
   const [loadingExisting, setLoadingExisting] = useState(true);
@@ -71,14 +73,14 @@ export default function NTEIncreasePage({
   const [useMaterialLineItems, setUseMaterialLineItems] = useState(false);
   const [materialLineItems, setMaterialLineItems] = useState([]);
 
-  // Load existing costs when component mounts
+  // Load existing costs when component mounts - SAME LOGIC AS CostSummarySection
   useEffect(() => {
     if (wo.wo_id) {
       calculateExistingCosts();
     }
-  }, [wo.wo_id]);
+  }, [wo.wo_id, currentTeamList]);
   
-  // Calculate existing costs from ticket (same logic as CostSummarySection)
+  // Calculate existing costs - MATCHING CostSummarySection EXACTLY
   const calculateExistingCosts = async () => {
     if (!wo.wo_id) {
       setLoadingExisting(false);
@@ -87,99 +89,103 @@ export default function NTEIncreasePage({
     
     setLoadingExisting(true);
     try {
-      // Get daily hours logs
-      const { data: dailyLogs, error: logsError } = await supabase
-        .from('daily_hours_logs')
-        .select('*')
-        .eq('wo_id', wo.wo_id);
-      
-      if (logsError) {
-        console.error('Error fetching daily logs:', logsError);
-      }
-      
-      // Get team member assignments  
-      const { data: teamMembers, error: teamError } = await supabase
-        .from('work_order_assignments')
-        .select('*, users(first_name, last_name)')
-        .eq('wo_id', wo.wo_id);
-      
-      if (teamError) {
-        console.error('Error fetching team members:', teamError);
-      }
-      
-      // Calculate labor from daily logs
-      let totalRT = 0;
-      let totalOT = 0;
-      
-      if (dailyLogs && dailyLogs.length > 0) {
-        dailyLogs.forEach(log => {
-          totalRT += parseFloat(log.regular_hours) || 0;
-          totalOT += parseFloat(log.overtime_hours) || 0;
+      // 1. Calculate legacy totals from work_orders and assignments
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+
+      let teamRT = 0;
+      let teamOT = 0;
+      let teamMiles = 0;
+
+      // Use passed currentTeamList if available
+      if (currentTeamList && Array.isArray(currentTeamList)) {
+        currentTeamList.forEach(member => {
+          if (member) {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
+          }
         });
       } else {
-        // Fallback to legacy fields if no daily logs
-        totalRT = parseFloat(wo.hours_regular) || 0;
-        totalOT = parseFloat(wo.hours_overtime) || 0;
+        // Fallback: fetch team members from database
+        const { data: teamMembers } = await supabase
+          .from('work_order_assignments')
+          .select('hours_regular, hours_overtime, miles')
+          .eq('wo_id', wo.wo_id);
         
-        // Add team member hours from legacy fields
         if (teamMembers) {
-          teamMembers.forEach(tm => {
-            totalRT += parseFloat(tm.hours_regular) || 0;
-            totalOT += parseFloat(tm.hours_overtime) || 0;
+          teamMembers.forEach(member => {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
           });
         }
       }
-      
-      const laborRT = totalRT * RATES.RT_RATE;
-      const laborOT = totalOT * RATES.OT_RATE;
-      const laborTotal = laborRT + laborOT;
-      
-      // Materials, Equipment, etc. with markups
-      const materialCost = parseFloat(wo.material_cost) || 0;
-      const materialWithMarkup = materialCost * (1 + RATES.MATERIAL_MARKUP);
-      
-      const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
-      const equipmentWithMarkup = equipmentCost * (1 + RATES.EQUIPMENT_MARKUP);
-      
-      const trailerCost = parseFloat(wo.trailer_cost) || 0;
-      const trailerWithMarkup = trailerCost * (1 + RATES.EQUIPMENT_MARKUP);
-      
-      const rentalCost = parseFloat(wo.rental_cost) || 0;
-      const rentalWithMarkup = rentalCost * (1 + RATES.EQUIPMENT_MARKUP);
-      
-      // Mileage from WO + team members
-      let totalMileage = parseFloat(wo.miles) || 0;
-      if (teamMembers) {
-        teamMembers.forEach(tm => {
-          totalMileage += parseFloat(tm.miles) || 0;
+
+      const legacyTotalRT = primaryRT + teamRT;
+      const legacyTotalOT = primaryOT + teamOT;
+      const legacyTotalMiles = primaryMiles + teamMiles;
+
+      // 2. Load daily hours totals from daily_hours_log table (NOTE: singular, not plural)
+      const { data: dailyData, error: dailyError } = await supabase
+        .from('daily_hours_log')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let dailyTotalRT = 0;
+      let dailyTotalOT = 0;
+      let dailyTotalMiles = 0;
+
+      if (!dailyError && dailyData) {
+        dailyData.forEach(log => {
+          dailyTotalRT += parseFloat(log.hours_regular) || 0;
+          dailyTotalOT += parseFloat(log.hours_overtime) || 0;
+          dailyTotalMiles += parseFloat(log.miles) || 0;
         });
       }
-      const mileageCost = totalMileage * RATES.MILEAGE_RATE;
+
+      // Combined totals = legacy + daily hours (same as CostSummarySection)
+      const totalRT = legacyTotalRT + dailyTotalRT;
+      const totalOT = legacyTotalOT + dailyTotalOT;
+      const totalMiles = legacyTotalMiles + dailyTotalMiles;
       
-      // Admin fee
-      const adminFee = RATES.ADMIN_FEE;
+      // Labor includes admin hours (2 hrs × $64 = $128)
+      const laborCost = (totalRT * RATES.RT_RATE) + (totalOT * RATES.OT_RATE) + (RATES.ADMIN_HOURS * RATES.RT_RATE);
       
-      // Grand total of existing/accrued costs
-      const grandTotal = laborTotal + materialWithMarkup + equipmentWithMarkup + 
-                        trailerWithMarkup + rentalWithMarkup + mileageCost + adminFee;
+      // Materials, Equipment, Trailer, Rental with 25% markup
+      const materialBase = parseFloat(wo.material_cost) || 0;
+      const materialWithMarkup = materialBase * (1 + RATES.MARKUP_PERCENT);
+      
+      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+      const equipmentWithMarkup = equipmentBase * (1 + RATES.MARKUP_PERCENT);
+      
+      const trailerBase = parseFloat(wo.trailer_cost) || 0;
+      const trailerWithMarkup = trailerBase * (1 + RATES.MARKUP_PERCENT);
+      
+      const rentalBase = parseFloat(wo.rental_cost) || 0;
+      const rentalWithMarkup = rentalBase * (1 + RATES.MARKUP_PERCENT);
+      
+      // Mileage
+      const mileageCost = totalMiles * RATES.MILEAGE_RATE;
+      
+      // Grand total (same calculation as CostSummarySection)
+      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
       
       setExistingCosts({
-        laborRT,
-        laborOT,
-        laborTotal,
         totalRT,
         totalOT,
-        materialCost,
+        totalMiles,
+        laborCost,
+        materialBase,
         materialWithMarkup,
-        equipmentCost,
+        equipmentBase,
         equipmentWithMarkup,
-        trailerCost,
+        trailerBase,
         trailerWithMarkup,
-        rentalCost,
+        rentalBase,
         rentalWithMarkup,
-        mileage: totalMileage,
         mileageCost,
-        adminFee,
         grandTotal
       });
     } catch (err) {
@@ -214,6 +220,7 @@ export default function NTEIncreasePage({
     const rtHours = parseFloat(formData.estimated_rt_hours) || 0;
     const otHours = parseFloat(formData.estimated_ot_hours) || 0;
     
+    // Labor for additional work (no admin fee here - that's already in existing costs)
     const laborTotal = (techs * rtHours * RATES.RT_RATE) + (techs * otHours * RATES.OT_RATE);
     
     // Materials - either from line items or lump sum
@@ -224,24 +231,22 @@ export default function NTEIncreasePage({
     } else {
       materialCost = parseFloat(formData.material_cost) || 0;
     }
-    const materialsWithMarkup = materialCost * (1 + RATES.MATERIAL_MARKUP);
+    const materialsWithMarkup = materialCost * (1 + RATES.MARKUP_PERCENT);
     
     const equipmentCost = parseFloat(formData.equipment_cost) || 0;
-    const equipmentWithMarkup = equipmentCost * (1 + RATES.EQUIPMENT_MARKUP);
+    const equipmentWithMarkup = equipmentCost * (1 + RATES.MARKUP_PERCENT);
     
     const rentalCost = parseFloat(formData.rental_cost) || 0;
-    const rentalWithMarkup = rentalCost * (1 + RATES.EQUIPMENT_MARKUP);
+    const rentalWithMarkup = rentalCost * (1 + RATES.MARKUP_PERCENT);
     
     const trailerCost = parseFloat(formData.trailer_cost) || 0;
-    const trailerWithMarkup = trailerCost * (1 + RATES.EQUIPMENT_MARKUP);
+    const trailerWithMarkup = trailerCost * (1 + RATES.MARKUP_PERCENT);
     
     const mileageTotal = (parseFloat(formData.estimated_miles) || 0) * RATES.MILEAGE_RATE;
     
-    // Admin fee for additional work
-    const adminFee = RATES.ADMIN_FEE;
-    
+    // Grand total for additional work
     const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + 
-                      rentalWithMarkup + trailerWithMarkup + mileageTotal + adminFee;
+                      rentalWithMarkup + trailerWithMarkup + mileageTotal;
     
     return {
       labor_total: laborTotal,
@@ -254,7 +259,6 @@ export default function NTEIncreasePage({
       trailer_cost: trailerCost,
       trailer_with_markup: trailerWithMarkup,
       mileage_total: mileageTotal,
-      admin_fee: adminFee,
       grand_total: grandTotal
     };
   };
@@ -264,7 +268,7 @@ export default function NTEIncreasePage({
   // Combined totals
   const projectedTotalCost = existingCosts.grandTotal + additionalCosts.grand_total;
   const originalNTE = parseFloat(wo.nte) || 0;
-  const increaseNeeded = projectedTotalCost - originalNTE;
+  const remaining = originalNTE - projectedTotalCost;
 
   const handleSave = async () => {
     const dataToSave = {
@@ -273,7 +277,8 @@ export default function NTEIncreasePage({
       // Store existing costs reference for the print/display
       existing_costs_total: existingCosts.grandTotal,
       projected_total: projectedTotalCost,
-      increase_needed: increaseNeeded > 0 ? increaseNeeded : 0
+      original_nte: originalNTE,
+      increase_needed: remaining < 0 ? Math.abs(remaining) : 0
     };
     
     if (useMaterialLineItems) {
@@ -361,7 +366,7 @@ export default function NTEIncreasePage({
           />
         </div>
 
-        {/* ===== SECTION 1: CURRENT ACCRUED COSTS ===== */}
+        {/* ===== SECTION 1: CURRENT ACCRUED COSTS (matches Cost Summary) ===== */}
         <div className="bg-blue-900 rounded-lg p-4 border-2 border-blue-500">
           <h3 className="font-bold mb-3 text-blue-300">
             📊 {language === 'en' ? 'Current Costs Accrued' : 'Costos Actuales Acumulados'}
@@ -371,34 +376,46 @@ export default function NTEIncreasePage({
             <div className="text-center py-4 text-gray-400">Loading...</div>
           ) : (
             <div className="space-y-2 text-sm">
+              {/* Labor breakdown */}
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Labor (RT + OT)' : 'Mano de Obra'}</span>
-                <span>${existingCosts.laborTotal.toFixed(2)}</span>
+                <span className="text-gray-300">RT Hours ({existingCosts.totalRT.toFixed(2)} hrs × $64)</span>
+                <span>${(existingCosts.totalRT * RATES.RT_RATE).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Materials' : 'Materiales'}</span>
+                <span className="text-gray-300">OT Hours ({existingCosts.totalOT.toFixed(2)} hrs × $96)</span>
+                <span>${(existingCosts.totalOT * RATES.OT_RATE).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-yellow-400">
+                <span>Admin (2 hrs × $64)</span>
+                <span>$128.00</span>
+              </div>
+              <div className="flex justify-between font-semibold border-t border-blue-600 pt-1">
+                <span>{language === 'en' ? 'Total Labor' : 'Total Mano de Obra'}</span>
+                <span>${existingCosts.laborCost.toFixed(2)}</span>
+              </div>
+              
+              {/* Materials, Equipment, etc. */}
+              <div className="flex justify-between pt-2">
+                <span className="text-gray-300">{language === 'en' ? 'Materials' : 'Materiales'} (+25%)</span>
                 <span>${existingCosts.materialWithMarkup.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Equipment' : 'Equipo'}</span>
+                <span className="text-gray-300">{language === 'en' ? 'Equipment' : 'Equipo'} (+25%)</span>
                 <span>${existingCosts.equipmentWithMarkup.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Rental' : 'Renta'}</span>
-                <span>${existingCosts.rentalWithMarkup.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Trailer' : 'Trailer'}</span>
+                <span className="text-gray-300">{language === 'en' ? 'Trailer' : 'Trailer'} (+25%)</span>
                 <span>${existingCosts.trailerWithMarkup.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Mileage' : 'Millaje'}</span>
-                <span>${existingCosts.mileageCost.toFixed(2)}</span>
+                <span className="text-gray-300">{language === 'en' ? 'Rental' : 'Renta'} (+25%)</span>
+                <span>${existingCosts.rentalWithMarkup.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">{language === 'en' ? 'Admin Fee' : 'Cargo Admin'}</span>
-                <span>${existingCosts.adminFee.toFixed(2)}</span>
+                <span className="text-gray-300">{language === 'en' ? 'Mileage' : 'Millaje'} ({existingCosts.totalMiles.toFixed(1)} mi)</span>
+                <span>${existingCosts.mileageCost.toFixed(2)}</span>
               </div>
+              
               <div className="flex justify-between text-lg font-bold border-t border-blue-400 pt-2 mt-2">
                 <span>{language === 'en' ? 'CURRENT TOTAL' : 'TOTAL ACTUAL'}</span>
                 <span className="text-blue-300">${existingCosts.grandTotal.toFixed(2)}</span>
@@ -512,7 +529,7 @@ export default function NTEIncreasePage({
                 <button
                   onClick={addMaterialLineItem}
                   className="text-yellow-400 text-sm"
-                >+ Add Material</button>
+                >+ {language === 'en' ? 'Add Material' : 'Agregar Material'}</button>
               </div>
             ) : (
               <input
@@ -592,28 +609,24 @@ export default function NTEIncreasePage({
               <span>${additionalCosts.labor_total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">Materials</span>
+              <span className="text-gray-300">Materials (+25%)</span>
               <span>${additionalCosts.materials_with_markup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">Equipment</span>
+              <span className="text-gray-300">Equipment (+25%)</span>
               <span>${additionalCosts.equipment_with_markup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">Rental</span>
+              <span className="text-gray-300">Rental (+25%)</span>
               <span>${additionalCosts.rental_with_markup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">Trailer</span>
+              <span className="text-gray-300">Trailer (+25%)</span>
               <span>${additionalCosts.trailer_with_markup.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-300">Mileage</span>
               <span>${additionalCosts.mileage_total.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-300">Admin Fee</span>
-              <span>${additionalCosts.admin_fee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-lg font-bold border-t border-yellow-400 pt-2 mt-2">
               <span>{language === 'en' ? 'ADDITIONAL WORK TOTAL' : 'TOTAL TRABAJO ADICIONAL'}</span>
@@ -630,11 +643,11 @@ export default function NTEIncreasePage({
           
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Current Costs Accrued' : 'Costos Actuales Acumulados'}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Current Costs Accrued' : 'Costos Actuales'}</span>
               <span className="text-blue-300">${existingCosts.grandTotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Additional Work Estimate' : 'Estimado Trabajo Adicional'}</span>
+              <span className="text-gray-300">{language === 'en' ? 'Additional Work Estimate' : 'Trabajo Adicional'}</span>
               <span className="text-yellow-300">${additionalCosts.grand_total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-lg font-bold border-t border-green-400 pt-2">
@@ -649,17 +662,15 @@ export default function NTEIncreasePage({
               <span>${originalNTE.toFixed(2)}</span>
             </div>
 
-            {increaseNeeded > 0 ? (
-              <>
-                <div className="flex justify-between text-xl font-bold bg-green-600 -mx-4 px-4 py-3 mt-2 rounded-b-lg">
-                  <span>{language === 'en' ? 'NEW NTE NEEDED' : 'NUEVO NTE NECESARIO'}</span>
-                  <span>${projectedTotalCost.toFixed(2)}</span>
-                </div>
-              </>
+            {remaining < 0 ? (
+              <div className="flex justify-between text-xl font-bold bg-red-600 -mx-4 px-4 py-3 mt-2 rounded-b-lg">
+                <span>{language === 'en' ? 'NEW NTE NEEDED' : 'NUEVO NTE NECESARIO'}</span>
+                <span>${projectedTotalCost.toFixed(2)}</span>
+              </div>
             ) : (
               <div className="flex justify-between text-lg font-bold text-green-400 border-t border-green-400 pt-2">
                 <span>✅ {language === 'en' ? 'WITHIN CURRENT NTE' : 'DENTRO DEL NTE ACTUAL'}</span>
-                <span>${Math.abs(increaseNeeded).toFixed(2)} {language === 'en' ? 'remaining' : 'restante'}</span>
+                <span>${remaining.toFixed(2)} {language === 'en' ? 'remaining' : 'restante'}</span>
               </div>
             )}
           </div>

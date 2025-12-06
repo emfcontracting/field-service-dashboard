@@ -247,7 +247,8 @@ export default function UserManagement() {
     total: users.length,
     leadTechs: users.filter(u => u.role === 'lead_tech').length,
     helpers: users.filter(u => u.role === 'helper').length,
-    active: users.filter(u => u.is_active).length
+    active: users.filter(u => u.is_active).length,
+    missingCarrier: users.filter(u => u.is_active && !u.sms_carrier && ['lead_tech', 'helper', 'tech'].includes(u.role)).length
   };
 
   function getRoleBadgeColor(role) {
@@ -309,7 +310,7 @@ export default function UserManagement() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white p-6 rounded-lg shadow">
             <p className="text-gray-500 text-sm">Total Users</p>
             <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
@@ -325,6 +326,15 @@ export default function UserManagement() {
           <div className="bg-white p-6 rounded-lg shadow">
             <p className="text-gray-500 text-sm">Active Users</p>
             <p className="text-3xl font-bold text-blue-600">{stats.active}</p>
+          </div>
+          <div className={`p-6 rounded-lg shadow ${stats.missingCarrier > 0 ? 'bg-yellow-50 border-2 border-yellow-400' : 'bg-white'}`}>
+            <p className="text-gray-500 text-sm">📱 Missing Carrier</p>
+            <p className={`text-3xl font-bold ${stats.missingCarrier > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+              {stats.missingCarrier}
+            </p>
+            {stats.missingCarrier > 0 && (
+              <p className="text-xs text-yellow-700 mt-1">Can't receive texts</p>
+            )}
           </div>
         </div>
 
@@ -363,7 +373,7 @@ export default function UserManagement() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone / Carrier</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rates (RT/OT)</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -381,8 +391,25 @@ export default function UserManagement() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {user.email}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.phone || 'N/A'}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {user.phone ? (
+                      <div>
+                        <div className="text-gray-900">
+                          {user.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}
+                        </div>
+                        {user.sms_carrier ? (
+                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                            📱 {user.sms_carrier.charAt(0).toUpperCase() + user.sms_carrier.slice(1)}
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full">
+                            ⚠️ No carrier
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">Not set</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>

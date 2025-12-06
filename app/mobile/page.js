@@ -24,6 +24,7 @@ import NTEIncreasePage from './components/quotes/NTEIncreasePage';
 import AvailabilityModal from './components/modals/AvailabilityModal';
 import ChangePinModal from './components/modals/ChangePinModal';
 import TeamModal from './components/modals/TeamModal';
+import CarrierSetupModal from './components/modals/CarrierSetupModal';
 
 // Offline Components
 import { SyncNotification } from './components/ConnectionStatus';
@@ -374,8 +375,44 @@ function MobileAppContent({
   cachedCount,
   isDownloading,
   onForceSync,
-  onDownloadOffline
+  onDownloadOffline,
+  // CARRIER SETUP
+  onUpdateUser
 }) {
+  // State for carrier setup modal
+  const [showCarrierModal, setShowCarrierModal] = useState(false);
+  const [carrierSkipped, setCarrierSkipped] = useState(false);
+  const [localUser, setLocalUser] = useState(currentUser);
+
+  // Check if we need to show carrier setup modal
+  useEffect(() => {
+    if (localUser && !localUser.sms_carrier && !carrierSkipped) {
+      // Check if they've skipped before (stored in localStorage)
+      const skippedBefore = localStorage.getItem(`carrier_skipped_${localUser.user_id}`);
+      const skipTime = skippedBefore ? parseInt(skippedBefore) : 0;
+      const hoursSinceSkip = (Date.now() - skipTime) / (1000 * 60 * 60);
+      
+      // Show modal if never skipped OR if it's been more than 24 hours since skip
+      if (!skippedBefore || hoursSinceSkip > 24) {
+        setShowCarrierModal(true);
+      }
+    }
+  }, [localUser, carrierSkipped]);
+
+  // Handle carrier setup complete
+  const handleCarrierComplete = (updatedUser) => {
+    setLocalUser(updatedUser);
+    setShowCarrierModal(false);
+    if (onUpdateUser) onUpdateUser(updatedUser);
+  };
+
+  // Handle carrier skip
+  const handleCarrierSkip = () => {
+    localStorage.setItem(`carrier_skipped_${localUser.user_id}`, Date.now().toString());
+    setCarrierSkipped(true);
+    setShowCarrierModal(false);
+  };
+
   // Login Screen
   if (!currentUser) {
     return (
@@ -383,6 +420,17 @@ function MobileAppContent({
         onLogin={handleLogin}
         error={error}
         setError={setError}
+      />
+    );
+  }
+
+  // Show Carrier Setup Modal if needed (before availability)
+  if (showCarrierModal) {
+    return (
+      <CarrierSetupModal
+        user={localUser}
+        onComplete={handleCarrierComplete}
+        onSkip={handleCarrierSkip}
       />
     );
   }

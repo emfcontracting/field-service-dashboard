@@ -122,7 +122,7 @@ export async function createQuote(supabase, quoteData, userId) {
       ...totals,
       // Combined costs (existing + additional = new NTE needed)
       existing_costs_total: quoteData.existing_costs_total || 0,
-      combined_total: quoteData.combined_total || totals.grand_total,
+      combined_total: quoteData.projected_total || quoteData.combined_total || totals.grand_total,
       original_nte: quoteData.original_nte || 0,
       increase_needed: quoteData.increase_needed || 0
     })
@@ -158,7 +158,7 @@ export async function updateQuote(supabase, quoteId, quoteData) {
       ...totals,
       // Combined costs (existing + additional = new NTE needed)
       existing_costs_total: quoteData.existing_costs_total || 0,
-      combined_total: quoteData.combined_total || totals.grand_total,
+      combined_total: quoteData.projected_total || quoteData.combined_total || totals.grand_total,
       original_nte: quoteData.original_nte || 0,
       increase_needed: quoteData.increase_needed || 0
     })

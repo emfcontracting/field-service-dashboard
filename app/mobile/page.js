@@ -409,11 +409,19 @@ function MobileAppContent({
       <NTEIncreasePage
         workOrder={selectedWO}
         currentUser={currentUser}
+        currentTeamList={currentTeamList}
         selectedQuote={selectedQuote}
         materials={materials}
         saving={quotesSaving}
         editMode={editMode}
-        onSave={saveQuote}
+        onSave={async (data) => {
+          try {
+            await saveQuote(data);
+            closeQuotePage();
+          } catch (err) {
+            alert('Error saving NTE Increase: ' + err.message);
+          }
+        }}
         onClose={closeQuotePage}
         onAddMaterial={addMaterial}
         onUpdateMaterial={updateMaterial}

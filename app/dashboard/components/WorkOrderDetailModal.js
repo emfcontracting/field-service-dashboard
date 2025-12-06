@@ -1804,38 +1804,33 @@ export default function WorkOrderDetailModal({
                           <p className="text-white font-semibold">${(quote.mileage_total || 0).toFixed(2)}</p>
                         )}
                       </div>
-                      <div>
-                        <label className="text-xs text-gray-400">Admin Fee</label>
-                        {editingNTE === quote.quote_id ? (
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={quote.admin_fee || 0}
-                            onChange={(e) => {
-                              const updated = nteIncreases.map(q => 
-                                q.quote_id === quote.quote_id ? { ...q, admin_fee: parseFloat(e.target.value) || 0 } : q
-                              );
-                              setNteIncreases(updated);
-                            }}
-                            onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { admin_fee: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
-                          />
-                        ) : (
-                          <p className="text-white font-semibold">${(quote.admin_fee || 0).toFixed(2)}</p>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Totals */}
+                    {/* Totals - Calculate from individual fields, NOT stored grand_total (admin fee is in current costs only) */}
                     <div className="border-t border-gray-600 pt-3 mt-3">
                       <div className="flex justify-between items-center text-lg">
                         <span className="text-yellow-400 font-bold">NTE Increase Amount:</span>
-                        <span className="text-yellow-400 font-bold">${(quote.grand_total || 0).toFixed(2)}</span>
+                        <span className="text-yellow-400 font-bold">${(
+                          (parseFloat(quote.labor_total) || 0) +
+                          (parseFloat(quote.materials_with_markup) || 0) +
+                          (parseFloat(quote.equipment_with_markup) || 0) +
+                          (parseFloat(quote.mileage_total) || 0)
+                        ).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm mt-2">
                         <span className="text-gray-400">Original NTE + Increase:</span>
                         <span className="text-green-400 font-bold">
-                          ${(selectedWO.nte || 0).toFixed(2)} + ${(quote.grand_total || 0).toFixed(2)} = ${((selectedWO.nte || 0) + (quote.grand_total || 0)).toFixed(2)}
+                          ${(selectedWO.nte || 0).toFixed(2)} + ${(
+                            (parseFloat(quote.labor_total) || 0) +
+                            (parseFloat(quote.materials_with_markup) || 0) +
+                            (parseFloat(quote.equipment_with_markup) || 0) +
+                            (parseFloat(quote.mileage_total) || 0)
+                          ).toFixed(2)} = ${((selectedWO.nte || 0) + 
+                            (parseFloat(quote.labor_total) || 0) +
+                            (parseFloat(quote.materials_with_markup) || 0) +
+                            (parseFloat(quote.equipment_with_markup) || 0) +
+                            (parseFloat(quote.mileage_total) || 0)
+                          ).toFixed(2)}
                         </span>
                       </div>
                     </div>

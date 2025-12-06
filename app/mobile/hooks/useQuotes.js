@@ -35,9 +35,17 @@ export function useQuotes(workOrder, currentUser) {
     }
   }
 
-  async function loadQuoteDetails(quoteId) {
+  async function loadQuoteDetails(quoteOrId) {
     try {
       setLoading(true);
+      
+      // Handle both quote object and quote_id string
+      const quoteId = typeof quoteOrId === 'object' ? quoteOrId.quote_id : quoteOrId;
+      
+      if (!quoteId) {
+        throw new Error('No quote ID provided');
+      }
+      
       const data = await quoteService.loadQuoteWithMaterials(supabase, quoteId);
       setSelectedQuote(data);
       setMaterials(data.materials || []);

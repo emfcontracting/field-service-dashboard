@@ -1807,16 +1807,50 @@ export default function WorkOrderDetailModal({
                     </div>
 
                     {/* NTE Summary - Shows Current + Additional = New NTE Needed */}
+                    {/* Uses same calculation as print function for consistency */}
                     {(() => {
-                      // Calculate additional work total
+                      // Calculate additional work total (from this quote)
                       const additionalTotal = 
                         (parseFloat(quote.labor_total) || 0) +
                         (parseFloat(quote.materials_with_markup) || 0) +
                         (parseFloat(quote.equipment_with_markup) || 0) +
                         (parseFloat(quote.mileage_total) || 0);
                       
-                      // Current costs = costSummary.grandTotal (already calculated above)
-                      const currentCosts = costSummary.grandTotal;
+                      // Calculate current costs SAME WAY AS PRINT FUNCTION
+                      // Use dailyHoursLog if available, otherwise legacy fields
+                      let laborRT = 0;
+                      let laborOT = 0;
+                      let totalMileageFromLogs = 0;
+                      
+                      if (dailyHoursLog && dailyHoursLog.length > 0) {
+                        // Use daily logs only (not combined with legacy)
+                        dailyHoursLog.forEach(log => {
+                          laborRT += parseFloat(log.hours_regular) || 0;
+                          laborOT += parseFloat(log.hours_overtime) || 0;
+                          totalMileageFromLogs += parseFloat(log.miles) || 0;
+                        });
+                      } else {
+                        // Legacy fields from work order + team members
+                        laborRT = parseFloat(selectedWO.hours_regular) || 0;
+                        laborOT = parseFloat(selectedWO.hours_overtime) || 0;
+                        totalMileageFromLogs = parseFloat(selectedWO.miles) || 0;
+                        
+                        (selectedWO.teamMembers || []).forEach(tm => {
+                          laborRT += parseFloat(tm.hours_regular) || 0;
+                          laborOT += parseFloat(tm.hours_overtime) || 0;
+                          totalMileageFromLogs += parseFloat(tm.miles) || 0;
+                        });
+                      }
+                      
+                      const laborCost = (laborRT * 64) + (laborOT * 96);
+                      const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
+                      const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+                      const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+                      const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+                      const mileageCost = totalMileageFromLogs * 1.00;
+                      const adminFee = 128;
+                      
+                      const currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
                       
                       // New NTE needed = current costs + additional work
                       const newNTENeeded = currentCosts + additionalTotal;

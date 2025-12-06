@@ -481,6 +481,8 @@ export default function WorkOrderDetail({
           <NTEIncreaseList
             quotes={quotes}
             loading={quotesLoading}
+            workOrder={wo}
+            currentTeamList={currentTeamList}
             onNewQuote={onNewQuote}
             onViewQuote={onViewQuote}
             onDeleteQuote={onDeleteQuote}

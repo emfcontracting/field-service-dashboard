@@ -1,5 +1,6 @@
 // components/quotes/NTEIncreaseList.js - Display NTE Increases on Work Order
 // CORRECTED: Shows Current Accrued + Additional = Projected Total (New NTE Needed)
+// Uses same calculation logic as CostSummarySection
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -12,6 +13,7 @@ export default function NTEIncreaseList({
   onDeleteQuote,
   // Also support alternate prop names for flexibility
   workOrder,
+  currentTeamList,
   nteIncreases,
   onEdit,
   onDelete,
@@ -55,70 +57,103 @@ export default function NTEIncreaseList({
     }
   };
   
-  // Calculate existing/accrued costs
+  // Calculate existing/accrued costs - SAME LOGIC AS CostSummarySection
   useEffect(() => {
     if (wo.wo_id) {
       calculateExistingCosts();
     }
-  }, [wo.wo_id]);
+  }, [wo.wo_id, currentTeamList]);
   
   const calculateExistingCosts = async () => {
     if (!wo.wo_id) return;
     
     setCalculatingCosts(true);
     try {
-      // Get daily hours logs
-      const { data: dailyLogs } = await supabase
-        .from('daily_hours_logs')
-        .select('*')
-        .eq('wo_id', wo.wo_id);
-      
-      // Get team member assignments  
-      const { data: teamMembers } = await supabase
-        .from('work_order_assignments')
-        .select('*')
-        .eq('wo_id', wo.wo_id);
-      
-      // Calculate labor from daily logs or legacy
-      let totalRT = 0;
-      let totalOT = 0;
-      
-      if (dailyLogs && dailyLogs.length > 0) {
-        dailyLogs.forEach(log => {
-          totalRT += parseFloat(log.regular_hours) || 0;
-          totalOT += parseFloat(log.overtime_hours) || 0;
+      // 1. Calculate legacy totals from work_orders and assignments
+      const primaryRT = parseFloat(wo.hours_regular) || 0;
+      const primaryOT = parseFloat(wo.hours_overtime) || 0;
+      const primaryMiles = parseFloat(wo.miles) || 0;
+
+      let teamRT = 0;
+      let teamOT = 0;
+      let teamMiles = 0;
+
+      // Use passed currentTeamList if available
+      if (currentTeamList && Array.isArray(currentTeamList)) {
+        currentTeamList.forEach(member => {
+          if (member) {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
+          }
         });
       } else {
-        totalRT = parseFloat(wo.hours_regular) || 0;
-        totalOT = parseFloat(wo.hours_overtime) || 0;
+        // Fallback: fetch team members from database
+        const { data: teamMembers } = await supabase
+          .from('work_order_assignments')
+          .select('hours_regular, hours_overtime, miles')
+          .eq('wo_id', wo.wo_id);
         
         if (teamMembers) {
-          teamMembers.forEach(tm => {
-            totalRT += parseFloat(tm.hours_regular) || 0;
-            totalOT += parseFloat(tm.hours_overtime) || 0;
+          teamMembers.forEach(member => {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
           });
         }
       }
-      
-      const laborTotal = (totalRT * 64) + (totalOT * 96);
-      const materialWithMarkup = (parseFloat(wo.material_cost) || 0) * 1.25;
-      const equipmentWithMarkup = (parseFloat(wo.emf_equipment_cost) || 0) * 1.25;
-      const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25;
-      const rentalWithMarkup = (parseFloat(wo.rental_cost) || 0) * 1.25;
-      
-      let totalMileage = parseFloat(wo.miles) || 0;
-      if (teamMembers) {
-        teamMembers.forEach(tm => {
-          totalMileage += parseFloat(tm.miles) || 0;
+
+      const legacyTotalRT = primaryRT + teamRT;
+      const legacyTotalOT = primaryOT + teamOT;
+      const legacyTotalMiles = primaryMiles + teamMiles;
+
+      // 2. Load daily hours totals from daily_hours_log table (NOTE: singular, not plural!)
+      const { data: dailyData, error: dailyError } = await supabase
+        .from('daily_hours_log')
+        .select('hours_regular, hours_overtime, miles')
+        .eq('wo_id', wo.wo_id);
+
+      let dailyTotalRT = 0;
+      let dailyTotalOT = 0;
+      let dailyTotalMiles = 0;
+
+      if (!dailyError && dailyData) {
+        dailyData.forEach(log => {
+          dailyTotalRT += parseFloat(log.hours_regular) || 0;
+          dailyTotalOT += parseFloat(log.hours_overtime) || 0;
+          dailyTotalMiles += parseFloat(log.miles) || 0;
         });
       }
-      const mileageCost = totalMileage * 1.00;
-      const adminFee = 128;
+
+      // Combined totals = legacy + daily hours (same as CostSummarySection)
+      const totalRT = legacyTotalRT + dailyTotalRT;
+      const totalOT = legacyTotalOT + dailyTotalOT;
+      const totalMiles = legacyTotalMiles + dailyTotalMiles;
       
-      const total = laborTotal + materialWithMarkup + equipmentWithMarkup + 
-                   trailerWithMarkup + rentalWithMarkup + mileageCost + adminFee;
+      // Labor includes admin hours (2 hrs × $64 = $128)
+      const adminHours = 2;
+      const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
       
-      setExistingCostsTotal(total);
+      // Materials, Equipment, Trailer, Rental with 25% markup
+      const materialBase = parseFloat(wo.material_cost) || 0;
+      const materialWithMarkup = materialBase * 1.25;
+      
+      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
+      const equipmentWithMarkup = equipmentBase * 1.25;
+      
+      const trailerBase = parseFloat(wo.trailer_cost) || 0;
+      const trailerWithMarkup = trailerBase * 1.25;
+      
+      const rentalBase = parseFloat(wo.rental_cost) || 0;
+      const rentalWithMarkup = rentalBase * 1.25;
+      
+      // Mileage
+      const mileageCost = totalMiles * 1.00;
+      
+      // Grand total (same calculation as CostSummarySection)
+      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+      
+      setExistingCostsTotal(grandTotal);
     } catch (err) {
       console.error('Error calculating existing costs:', err);
     }

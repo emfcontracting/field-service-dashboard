@@ -213,7 +213,15 @@ export default function NTEIncreaseList({
       ) : (
         <div className="space-y-4">
           {quotesList.map((quote) => {
-            const additionalTotal = parseFloat(quote.grand_total) || 0;
+            // Calculate additional total from individual fields (not stored grand_total)
+            // This ensures we don't include admin fee which was previously stored incorrectly
+            const laborTotal = parseFloat(quote.labor_total) || 0;
+            const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
+            const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
+            const mileageTotal = parseFloat(quote.mileage_total) || 0;
+            
+            // Additional total = labor + materials + equipment + mileage (NO admin fee)
+            const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
             const projectedTotal = existingCostsTotal + additionalTotal;
             const newNTENeeded = projectedTotal;
             

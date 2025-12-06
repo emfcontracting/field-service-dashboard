@@ -1806,34 +1806,52 @@ export default function WorkOrderDetailModal({
                       </div>
                     </div>
 
-                    {/* Totals - Calculate from individual fields, NOT stored grand_total (admin fee is in current costs only) */}
-                    <div className="border-t border-gray-600 pt-3 mt-3">
-                      <div className="flex justify-between items-center text-lg">
-                        <span className="text-yellow-400 font-bold">NTE Increase Amount:</span>
-                        <span className="text-yellow-400 font-bold">${(
-                          (parseFloat(quote.labor_total) || 0) +
-                          (parseFloat(quote.materials_with_markup) || 0) +
-                          (parseFloat(quote.equipment_with_markup) || 0) +
-                          (parseFloat(quote.mileage_total) || 0)
-                        ).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm mt-2">
-                        <span className="text-gray-400">Original NTE + Increase:</span>
-                        <span className="text-green-400 font-bold">
-                          ${(selectedWO.nte || 0).toFixed(2)} + ${(
-                            (parseFloat(quote.labor_total) || 0) +
-                            (parseFloat(quote.materials_with_markup) || 0) +
-                            (parseFloat(quote.equipment_with_markup) || 0) +
-                            (parseFloat(quote.mileage_total) || 0)
-                          ).toFixed(2)} = ${((selectedWO.nte || 0) + 
-                            (parseFloat(quote.labor_total) || 0) +
-                            (parseFloat(quote.materials_with_markup) || 0) +
-                            (parseFloat(quote.equipment_with_markup) || 0) +
-                            (parseFloat(quote.mileage_total) || 0)
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+                    {/* NTE Summary - Shows Current + Additional = New NTE Needed */}
+                    {(() => {
+                      // Calculate additional work total
+                      const additionalTotal = 
+                        (parseFloat(quote.labor_total) || 0) +
+                        (parseFloat(quote.materials_with_markup) || 0) +
+                        (parseFloat(quote.equipment_with_markup) || 0) +
+                        (parseFloat(quote.mileage_total) || 0);
+                      
+                      // Current costs = costSummary.grandTotal (already calculated above)
+                      const currentCosts = costSummary.grandTotal;
+                      
+                      // New NTE needed = current costs + additional work
+                      const newNTENeeded = currentCosts + additionalTotal;
+                      
+                      return (
+                        <div className="border-t border-gray-600 pt-3 mt-3 space-y-2">
+                          {/* Current Costs */}
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-blue-400">Current Costs Accrued:</span>
+                            <span className="text-blue-400 font-semibold">${currentCosts.toFixed(2)}</span>
+                          </div>
+                          
+                          {/* Additional Work */}
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-yellow-400">+ Additional Work Estimate:</span>
+                            <span className="text-yellow-400 font-semibold">${additionalTotal.toFixed(2)}</span>
+                          </div>
+                          
+                          {/* Divider */}
+                          <div className="border-t border-gray-500 my-2"></div>
+                          
+                          {/* New NTE Needed */}
+                          <div className="flex justify-between items-center text-lg">
+                            <span className="text-green-400 font-bold">NEW NTE NEEDED:</span>
+                            <span className="text-green-400 font-bold">${newNTENeeded.toFixed(2)}</span>
+                          </div>
+                          
+                          {/* Original NTE for reference */}
+                          <div className="flex justify-between items-center text-xs text-gray-500">
+                            <span>Original NTE Budget:</span>
+                            <span>${(selectedWO.nte || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Creator Info */}
                     <div className="text-xs text-gray-400 mt-3">

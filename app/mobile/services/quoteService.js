@@ -108,23 +108,23 @@ export async function createQuote(supabase, quoteData, userId) {
       created_by: userId,
       is_verbal_nte: quoteData.is_verbal_nte || false,
       verbal_approved_by: quoteData.verbal_approved_by || null,
-      estimated_techs: quoteData.estimated_techs || 1,
-      estimated_rt_hours: quoteData.estimated_rt_hours || 0,
-      estimated_ot_hours: quoteData.estimated_ot_hours || 0,
-      material_cost: quoteData.material_cost || 0,
-      equipment_cost: quoteData.equipment_cost || 0,
-      rental_cost: quoteData.rental_cost || 0,
-      trailer_cost: quoteData.trailer_cost || 0,
-      estimated_miles: quoteData.estimated_miles || 0,
+      estimated_techs: parseInt(quoteData.estimated_techs) || 1,
+      estimated_rt_hours: parseFloat(quoteData.estimated_rt_hours) || 0,
+      estimated_ot_hours: parseFloat(quoteData.estimated_ot_hours) || 0,
+      material_cost: parseFloat(quoteData.material_cost) || 0,
+      equipment_cost: parseFloat(quoteData.equipment_cost) || 0,
+      rental_cost: parseFloat(quoteData.rental_cost) || 0,
+      trailer_cost: parseFloat(quoteData.trailer_cost) || 0,
+      estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
-      // Additional costs totals
-      ...totals,
-      // Combined costs (existing + additional = new NTE needed)
-      existing_costs_total: quoteData.existing_costs_total || 0,
-      combined_total: quoteData.projected_total || quoteData.combined_total || totals.grand_total,
-      original_nte: quoteData.original_nte || 0,
-      increase_needed: quoteData.increase_needed || 0
+      // Calculated totals
+      labor_total: totals.labor_total,
+      materials_with_markup: totals.materials_with_markup,
+      equipment_with_markup: totals.equipment_with_markup,
+      mileage_total: totals.mileage_total,
+      admin_fee: totals.admin_fee,
+      grand_total: totals.grand_total
     })
     .select()
     .single();
@@ -143,24 +143,24 @@ export async function updateQuote(supabase, quoteId, quoteData) {
     .update({
       is_verbal_nte: quoteData.is_verbal_nte || false,
       verbal_approved_by: quoteData.verbal_approved_by || null,
-      estimated_techs: quoteData.estimated_techs || 1,
-      estimated_rt_hours: quoteData.estimated_rt_hours || 0,
-      estimated_ot_hours: quoteData.estimated_ot_hours || 0,
-      material_cost: quoteData.material_cost || 0,
-      equipment_cost: quoteData.equipment_cost || 0,
-      rental_cost: quoteData.rental_cost || 0,
-      trailer_cost: quoteData.trailer_cost || 0,
-      estimated_miles: quoteData.estimated_miles || 0,
+      estimated_techs: parseInt(quoteData.estimated_techs) || 1,
+      estimated_rt_hours: parseFloat(quoteData.estimated_rt_hours) || 0,
+      estimated_ot_hours: parseFloat(quoteData.estimated_ot_hours) || 0,
+      material_cost: parseFloat(quoteData.material_cost) || 0,
+      equipment_cost: parseFloat(quoteData.equipment_cost) || 0,
+      rental_cost: parseFloat(quoteData.rental_cost) || 0,
+      trailer_cost: parseFloat(quoteData.trailer_cost) || 0,
+      estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
       updated_at: new Date().toISOString(),
-      // Additional costs totals
-      ...totals,
-      // Combined costs (existing + additional = new NTE needed)
-      existing_costs_total: quoteData.existing_costs_total || 0,
-      combined_total: quoteData.projected_total || quoteData.combined_total || totals.grand_total,
-      original_nte: quoteData.original_nte || 0,
-      increase_needed: quoteData.increase_needed || 0
+      // Calculated totals
+      labor_total: totals.labor_total,
+      materials_with_markup: totals.materials_with_markup,
+      equipment_with_markup: totals.equipment_with_markup,
+      mileage_total: totals.mileage_total,
+      admin_fee: totals.admin_fee,
+      grand_total: totals.grand_total
     })
     .eq('quote_id', quoteId)
     .select()
@@ -270,7 +270,12 @@ export async function recalculateMaterialTotal(supabase, quoteId) {
     .from('work_order_quotes')
     .update({
       material_cost: totalMaterialCost,
-      ...totals,
+      labor_total: totals.labor_total,
+      materials_with_markup: totals.materials_with_markup,
+      equipment_with_markup: totals.equipment_with_markup,
+      mileage_total: totals.mileage_total,
+      admin_fee: totals.admin_fee,
+      grand_total: totals.grand_total,
       updated_at: new Date().toISOString()
     })
     .eq('quote_id', quoteId);

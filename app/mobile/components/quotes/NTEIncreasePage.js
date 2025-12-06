@@ -3,7 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { RATES } from '../../services/quoteService';
+
+// Define rate constants locally to avoid import issues
+const RATES = {
+  RT_RATE: 64,
+  OT_RATE: 96,
+  MILEAGE_RATE: 1.00,
+  MATERIAL_MARKUP: 0.25,
+  EQUIPMENT_MARKUP: 0.25,
+  ADMIN_FEE: 128
+};
 
 export default function NTEIncreasePage({
   workOrder,
@@ -38,7 +47,7 @@ export default function NTEIncreasePage({
     rentalWithMarkup: 0,
     mileage: 0,
     mileageCost: 0,
-    adminFee: 128,
+    adminFee: RATES.ADMIN_FEE,
     grandTotal: 0
   });
   const [loadingExisting, setLoadingExisting] = useState(true);
@@ -64,24 +73,39 @@ export default function NTEIncreasePage({
 
   // Load existing costs when component mounts
   useEffect(() => {
-    calculateExistingCosts();
+    if (wo.wo_id) {
+      calculateExistingCosts();
+    }
   }, [wo.wo_id]);
   
   // Calculate existing costs from ticket (same logic as CostSummarySection)
   const calculateExistingCosts = async () => {
+    if (!wo.wo_id) {
+      setLoadingExisting(false);
+      return;
+    }
+    
     setLoadingExisting(true);
     try {
       // Get daily hours logs
-      const { data: dailyLogs } = await supabase
+      const { data: dailyLogs, error: logsError } = await supabase
         .from('daily_hours_logs')
         .select('*')
         .eq('wo_id', wo.wo_id);
       
+      if (logsError) {
+        console.error('Error fetching daily logs:', logsError);
+      }
+      
       // Get team member assignments  
-      const { data: teamMembers } = await supabase
+      const { data: teamMembers, error: teamError } = await supabase
         .from('work_order_assignments')
         .select('*, users(first_name, last_name)')
         .eq('wo_id', wo.wo_id);
+      
+      if (teamError) {
+        console.error('Error fetching team members:', teamError);
+      }
       
       // Calculate labor from daily logs
       let totalRT = 0;

@@ -1,15 +1,15 @@
 // services/quoteService.js - NTE Increase/Quote Management
+// FIXED: Admin fee is only counted once (in current costs), NOT in additional work
 
 // Rate constants
 export const RATES = {
   RT_HOURLY: 64,
   OT_HOURLY: 96,
   MILEAGE: 1,
-  ADMIN_FEE: 128,
   MARKUP_PERCENT: 0.25
 };
 
-// Calculate all totals for a quote
+// Calculate all totals for a quote (ADDITIONAL work only - NO admin fee)
 export function calculateQuoteTotals(quoteData) {
   const {
     estimated_techs = 1,
@@ -23,6 +23,7 @@ export function calculateQuoteTotals(quoteData) {
   } = quoteData;
 
   // Labor: (RT hours * techs * $64) + (OT hours * techs * $96)
+  // NO admin fee here - admin is already included in current/accrued costs
   const laborTotal = 
     (parseFloat(estimated_rt_hours) * parseInt(estimated_techs) * RATES.RT_HOURLY) +
     (parseFloat(estimated_ot_hours) * parseInt(estimated_techs) * RATES.OT_HOURLY);
@@ -30,26 +31,29 @@ export function calculateQuoteTotals(quoteData) {
   // Materials with 25% markup
   const materialsWithMarkup = parseFloat(material_cost) * (1 + RATES.MARKUP_PERCENT);
 
-  // Equipment/Rental/Trailer with 25% markup
-  const equipmentWithMarkup = 
-    (parseFloat(equipment_cost) + parseFloat(rental_cost) + parseFloat(trailer_cost)) * 
-    (1 + RATES.MARKUP_PERCENT);
+  // Equipment with 25% markup
+  const equipmentWithMarkup = parseFloat(equipment_cost) * (1 + RATES.MARKUP_PERCENT);
+  
+  // Rental with 25% markup
+  const rentalWithMarkup = parseFloat(rental_cost) * (1 + RATES.MARKUP_PERCENT);
+  
+  // Trailer with 25% markup
+  const trailerWithMarkup = parseFloat(trailer_cost) * (1 + RATES.MARKUP_PERCENT);
 
   // Mileage @ $1/mile
   const mileageTotal = parseFloat(estimated_miles) * RATES.MILEAGE;
 
-  // Admin fee (2 hours @ $64)
-  const adminFee = RATES.ADMIN_FEE;
-
-  // Grand total
-  const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal + adminFee;
+  // Grand total for ADDITIONAL work (no admin fee - it's already in current costs)
+  const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + 
+                     rentalWithMarkup + trailerWithMarkup + mileageTotal;
 
   return {
     labor_total: Math.round(laborTotal * 100) / 100,
     materials_with_markup: Math.round(materialsWithMarkup * 100) / 100,
     equipment_with_markup: Math.round(equipmentWithMarkup * 100) / 100,
+    rental_with_markup: Math.round(rentalWithMarkup * 100) / 100,
+    trailer_with_markup: Math.round(trailerWithMarkup * 100) / 100,
     mileage_total: Math.round(mileageTotal * 100) / 100,
-    admin_fee: adminFee,
     grand_total: Math.round(grandTotal * 100) / 100
   };
 }
@@ -98,7 +102,7 @@ export async function loadQuoteWithMaterials(supabase, quoteId) {
 
 // Create a new quote
 export async function createQuote(supabase, quoteData, userId) {
-  // Calculate totals for the additional costs
+  // Calculate totals for the additional costs (no admin fee)
   const totals = calculateQuoteTotals(quoteData);
 
   const { data, error } = await supabase
@@ -118,12 +122,11 @@ export async function createQuote(supabase, quoteData, userId) {
       estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
-      // Calculated totals
+      // Calculated totals (no admin_fee - it's in current costs)
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
       mileage_total: totals.mileage_total,
-      admin_fee: totals.admin_fee,
       grand_total: totals.grand_total
     })
     .select()
@@ -135,7 +138,7 @@ export async function createQuote(supabase, quoteData, userId) {
 
 // Update an existing quote
 export async function updateQuote(supabase, quoteId, quoteData) {
-  // Calculate totals for the additional costs
+  // Calculate totals for the additional costs (no admin fee)
   const totals = calculateQuoteTotals(quoteData);
 
   const { data, error } = await supabase
@@ -154,12 +157,11 @@ export async function updateQuote(supabase, quoteId, quoteData) {
       description: quoteData.description || null,
       notes: quoteData.notes || null,
       updated_at: new Date().toISOString(),
-      // Calculated totals
+      // Calculated totals (no admin_fee - it's in current costs)
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
       mileage_total: totals.mileage_total,
-      admin_fee: totals.admin_fee,
       grand_total: totals.grand_total
     })
     .eq('quote_id', quoteId)
@@ -265,7 +267,7 @@ export async function recalculateMaterialTotal(supabase, quoteId) {
 
   const totals = calculateQuoteTotals(updatedQuote);
 
-  // Update quote
+  // Update quote (no admin_fee)
   const { error: updateError } = await supabase
     .from('work_order_quotes')
     .update({
@@ -274,7 +276,6 @@ export async function recalculateMaterialTotal(supabase, quoteId) {
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
       mileage_total: totals.mileage_total,
-      admin_fee: totals.admin_fee,
       grand_total: totals.grand_total,
       updated_at: new Date().toISOString()
     })

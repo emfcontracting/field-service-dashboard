@@ -284,7 +284,7 @@ export default function NTEIncreaseList({
                 
                 {/* Cost Summary - Corrected Display */}
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  {/* Left Column - Additional Work Costs */}
+                  {/* Left Column - Additional Work Costs (NO admin - that's in current costs) */}
                   <div className="space-y-1">
                     <div className="text-gray-400 text-xs uppercase mb-1">
                       {language === 'en' ? 'Additional Work' : 'Trabajo Adicional'}
@@ -304,10 +304,6 @@ export default function NTEIncreaseList({
                     <div className="flex justify-between">
                       <span className="text-gray-400">{language === 'en' ? 'Mileage' : 'Millaje'}</span>
                       <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Admin</span>
-                      <span>${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
                     </div>
                   </div>
                   

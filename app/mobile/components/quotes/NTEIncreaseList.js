@@ -1,31 +1,71 @@
-// components/quotes/NTEIncreaseList.js - Display saved NTE Increases on Work Order
+// components/quotes/NTEIncreaseList.js - Display NTE Increases on Work Order
 // CORRECTED: Shows Current Accrued + Additional = Projected Total (New NTE Needed)
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 export default function NTEIncreaseList({ 
-  workOrder, 
-  nteIncreases, 
-  onEdit, 
-  onDelete, 
+  quotes = [],
+  loading = false,
+  onNewQuote,
+  onViewQuote,
+  onDeleteQuote,
+  // Also support alternate prop names for flexibility
+  workOrder,
+  nteIncreases,
+  onEdit,
+  onDelete,
   onPrint,
   onRefresh 
 }) {
   const { language } = useLanguage();
   const supabase = createClientComponentClient();
-  const wo = workOrder || {};
+  
+  // Support both prop naming conventions
+  const quotesList = quotes.length > 0 ? quotes : (nteIncreases || []);
+  const isLoading = loading;
   
   const [existingCostsTotal, setExistingCostsTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [calculatingCosts, setCalculatingCosts] = useState(false);
+  const [wo, setWo] = useState(workOrder || {});
   
-  // Calculate existing/accrued costs on mount
+  // Get work order from first quote if not passed directly
   useEffect(() => {
-    calculateExistingCosts();
+    if (workOrder) {
+      setWo(workOrder);
+    } else if (quotesList.length > 0 && quotesList[0].wo_id) {
+      // Fetch work order data if we have quotes but no workOrder prop
+      fetchWorkOrder(quotesList[0].wo_id);
+    }
+  }, [workOrder, quotesList]);
+
+  const fetchWorkOrder = async (woId) => {
+    try {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', woId)
+        .single();
+      
+      if (!error && data) {
+        setWo(data);
+      }
+    } catch (err) {
+      console.error('Error fetching work order:', err);
+    }
+  };
+  
+  // Calculate existing/accrued costs
+  useEffect(() => {
+    if (wo.wo_id) {
+      calculateExistingCosts();
+    }
   }, [wo.wo_id]);
   
   const calculateExistingCosts = async () => {
-    setLoading(true);
+    if (!wo.wo_id) return;
+    
+    setCalculatingCosts(true);
     try {
       // Get daily hours logs
       const { data: dailyLogs } = await supabase
@@ -82,14 +122,22 @@ export default function NTEIncreaseList({
     } catch (err) {
       console.error('Error calculating existing costs:', err);
     }
-    setLoading(false);
+    setCalculatingCosts(false);
   };
   
-  if (!nteIncreases || nteIncreases.length === 0) {
-    return null;
-  }
-  
   const originalNTE = parseFloat(wo.nte) || 0;
+
+  // Handle view/edit action - support both prop names
+  const handleView = (quote) => {
+    if (onViewQuote) onViewQuote(quote);
+    else if (onEdit) onEdit(quote);
+  };
+
+  // Handle delete action - support both prop names
+  const handleDelete = (quoteId) => {
+    if (onDeleteQuote) onDeleteQuote(quoteId);
+    else if (onDelete) onDelete(quoteId);
+  };
 
   return (
     <div className="bg-yellow-900/50 rounded-lg p-4 border-2 border-yellow-600">
@@ -97,158 +145,188 @@ export default function NTEIncreaseList({
         <h3 className="font-bold text-yellow-300 flex items-center gap-2">
           💰 {language === 'en' ? 'NTE Increase Requests' : 'Solicitudes de Aumento NTE'}
         </h3>
-        {onRefresh && (
-          <button 
-            onClick={onRefresh}
-            className="text-yellow-400 text-sm flex items-center gap-1"
-          >
-            🔄 {language === 'en' ? 'Refresh' : 'Actualizar'}
-          </button>
-        )}
+        <div className="flex gap-2">
+          {onRefresh && (
+            <button 
+              onClick={onRefresh}
+              className="text-yellow-400 text-sm flex items-center gap-1"
+            >
+              🔄
+            </button>
+          )}
+          {onNewQuote && (
+            <button 
+              onClick={onNewQuote}
+              className="bg-yellow-600 hover:bg-yellow-500 px-3 py-1 rounded text-sm font-semibold"
+            >
+              + {language === 'en' ? 'New' : 'Nuevo'}
+            </button>
+          )}
+        </div>
       </div>
       
-      <div className="space-y-4">
-        {nteIncreases.map((quote) => {
-          const additionalTotal = parseFloat(quote.grand_total) || 0;
-          const projectedTotal = existingCostsTotal + additionalTotal;
-          const newNTENeeded = projectedTotal;
-          
-          return (
-            <div 
-              key={quote.quote_id} 
-              className="bg-gray-800 rounded-lg p-4 border border-yellow-700"
-            >
-              {/* Header with badge and actions */}
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                    quote.is_verbal_nte 
-                      ? 'bg-orange-500 text-white' 
-                      : 'bg-blue-500 text-white'
-                  }`}>
-                    {quote.is_verbal_nte ? '📞 Verbal NTE' : '📄 Written NTE'}
-                  </span>
-                  <div className="text-gray-400 text-xs mt-1">
-                    {new Date(quote.created_at).toLocaleDateString()}
+      {isLoading ? (
+        <div className="text-center py-4 text-gray-400">
+          {language === 'en' ? 'Loading...' : 'Cargando...'}
+        </div>
+      ) : quotesList.length === 0 ? (
+        <div className="text-center py-4 text-gray-400 text-sm">
+          {language === 'en' 
+            ? 'No NTE increase requests yet' 
+            : 'Sin solicitudes de aumento NTE'}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {quotesList.map((quote) => {
+            const additionalTotal = parseFloat(quote.grand_total) || 0;
+            const projectedTotal = existingCostsTotal + additionalTotal;
+            const newNTENeeded = projectedTotal;
+            
+            return (
+              <div 
+                key={quote.quote_id} 
+                className="bg-gray-800 rounded-lg p-4 border border-yellow-700"
+              >
+                {/* Header with badge and actions */}
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+                      quote.is_verbal_nte 
+                        ? 'bg-orange-500 text-white' 
+                        : 'bg-blue-500 text-white'
+                    }`}>
+                      {quote.is_verbal_nte ? '📞 Verbal NTE' : '📄 Written NTE'}
+                    </span>
+                    <div className="text-gray-400 text-xs mt-1">
+                      {new Date(quote.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    {onPrint && (
+                      <button
+                        onClick={() => onPrint(quote)}
+                        className="bg-gray-600 hover:bg-gray-500 p-2 rounded text-sm"
+                        title="Print"
+                      >
+                        🖨️
+                      </button>
+                    )}
+                    {(onViewQuote || onEdit) && (
+                      <button
+                        onClick={() => handleView(quote)}
+                        className="bg-yellow-600 hover:bg-yellow-500 p-2 rounded text-sm"
+                        title="View/Edit"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    {(onDeleteQuote || onDelete) && (
+                      <button
+                        onClick={() => handleDelete(quote.quote_id)}
+                        className="bg-red-600 hover:bg-red-500 p-2 rounded text-sm"
+                        title="Delete"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </div>
                 
-                <div className="flex gap-2">
-                  {onPrint && (
-                    <button
-                      onClick={() => onPrint(quote)}
-                      className="bg-gray-600 hover:bg-gray-500 p-2 rounded text-sm"
-                      title="Print"
-                    >
-                      🖨️
-                    </button>
-                  )}
-                  {onEdit && (
-                    <button
-                      onClick={() => onEdit(quote)}
-                      className="bg-yellow-600 hover:bg-yellow-500 p-2 rounded text-sm"
-                      title="Edit"
-                    >
-                      ✏️
-                    </button>
-                  )}
-                  {onDelete && (
-                    <button
-                      onClick={() => onDelete(quote.quote_id)}
-                      className="bg-red-600 hover:bg-red-500 p-2 rounded text-sm"
-                      title="Delete"
-                    >
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              {/* Description */}
-              {quote.description && (
-                <div className="text-sm text-gray-300 mb-3 italic">
-                  "{quote.description}"
-                </div>
-              )}
-              
-              {/* Verbal approved by */}
-              {quote.is_verbal_nte && quote.verbal_approved_by && (
-                <div className="text-sm text-orange-300 mb-3">
-                  Approved by: {quote.verbal_approved_by}
-                </div>
-              )}
-              
-              {/* Cost Summary - Corrected Display */}
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                {/* Left Column - Costs */}
-                <div className="space-y-1">
-                  <div className="text-gray-400 text-xs uppercase mb-1">Additional Work</div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Labor</span>
-                    <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+                {/* Description */}
+                {quote.description && (
+                  <div className="text-sm text-gray-300 mb-3 italic">
+                    "{quote.description}"
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Materials</span>
-                    <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+                )}
+                
+                {/* Verbal approved by */}
+                {quote.is_verbal_nte && quote.verbal_approved_by && (
+                  <div className="text-sm text-orange-300 mb-3">
+                    {language === 'en' ? 'Approved by' : 'Aprobado por'}: {quote.verbal_approved_by}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Equipment</span>
-                    <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+                )}
+                
+                {/* Cost Summary - Corrected Display */}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {/* Left Column - Additional Work Costs */}
+                  <div className="space-y-1">
+                    <div className="text-gray-400 text-xs uppercase mb-1">
+                      {language === 'en' ? 'Additional Work' : 'Trabajo Adicional'}
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Labor</span>
+                      <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">{language === 'en' ? 'Materials' : 'Materiales'}</span>
+                      <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">{language === 'en' ? 'Equipment' : 'Equipo'}</span>
+                      <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">{language === 'en' ? 'Mileage' : 'Millaje'}</span>
+                      <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Admin</span>
+                      <span>${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Mileage</span>
-                    <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Admin Fee</span>
-                    <span>${(parseFloat(quote.admin_fee) || 0).toFixed(2)}</span>
+                  
+                  {/* Right Column - Summary */}
+                  <div className="space-y-1">
+                    <div className="text-gray-400 text-xs uppercase mb-1">
+                      {language === 'en' ? 'Summary' : 'Resumen'}
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-300">{language === 'en' ? 'Current' : 'Actual'}</span>
+                      <span className="text-blue-300">${existingCostsTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-300">+ {language === 'en' ? 'Additional' : 'Adicional'}</span>
+                      <span className="text-yellow-300">${additionalTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold border-t border-gray-600 pt-1">
+                      <span>{language === 'en' ? 'Projected' : 'Proyectado'}</span>
+                      <span>${projectedTotal.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
                 
-                {/* Right Column - Summary */}
-                <div className="space-y-1">
-                  <div className="text-gray-400 text-xs uppercase mb-1">Summary</div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-300">Current Costs</span>
-                    <span className="text-blue-300">${existingCostsTotal.toFixed(2)}</span>
+                {/* NTE Summary Bar */}
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-400">{language === 'en' ? 'Original NTE:' : 'NTE Original:'}</span>
+                    <span>${originalNTE.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-yellow-300">+ Additional</span>
-                    <span className="text-yellow-300">${additionalTotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-gray-600 pt-1">
-                    <span>Projected Total</span>
-                    <span>${projectedTotal.toFixed(2)}</span>
+                  <div className="bg-green-800 rounded-lg p-3 flex justify-between items-center">
+                    <span className="font-bold text-green-300">
+                      {language === 'en' ? 'New NTE Needed:' : 'Nuevo NTE:'}
+                    </span>
+                    <span className="text-xl font-bold text-green-200">
+                      ${newNTENeeded.toFixed(2)}
+                    </span>
                   </div>
                 </div>
+                
+                {/* Created by */}
+                {(quote.users || quote.creator) && (
+                  <div className="text-xs text-gray-500 mt-2">
+                    {language === 'en' ? 'Created by' : 'Creado por'}: {
+                      quote.users?.first_name || quote.creator?.first_name || ''
+                    } {
+                      quote.users?.last_name || quote.creator?.last_name || ''
+                    }
+                  </div>
+                )}
               </div>
-              
-              {/* NTE Summary Bar */}
-              <div className="mt-3 pt-3 border-t border-gray-700">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-400">Original NTE Budget:</span>
-                  <span>${originalNTE.toFixed(2)}</span>
-                </div>
-                <div className="bg-green-800 rounded-lg p-3 flex justify-between items-center">
-                  <span className="font-bold text-green-300">
-                    {language === 'en' ? 'New NTE Needed:' : 'Nuevo NTE Necesario:'}
-                  </span>
-                  <span className="text-xl font-bold text-green-200">
-                    ${newNTENeeded.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Created by */}
-              {quote.users && (
-                <div className="text-xs text-gray-500 mt-2">
-                  Created by: {quote.users.first_name} {quote.users.last_name}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

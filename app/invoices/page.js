@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export default function InvoicingPage() {
   const [acknowledgedWOs, setAcknowledgedWOs] = useState([]);
+  const [woTotals, setWoTotals] = useState({}); // Store calculated totals for each WO
   const [invoices, setInvoices] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [lineItems, setLineItems] = useState([]);
@@ -52,13 +53,80 @@ export default function InvoicingPage() {
       .eq('is_locked', false)
       .order('acknowledged_at', { ascending: false });
 
-    console.log('Acknowledged WOs query result:', { data, error });
-
     if (error) {
       console.error('Error fetching acknowledged work orders:', error);
     } else {
       setAcknowledgedWOs(data || []);
+      
+      // Calculate totals for each work order
+      if (data && data.length > 0) {
+        calculateAllTotals(data);
+      }
     }
+  };
+
+  // Calculate totals for all work orders
+  const calculateAllTotals = async (workOrders) => {
+    const totals = {};
+    
+    for (const wo of workOrders) {
+      try {
+        // 1. Legacy totals from work_orders table
+        const primaryRT = parseFloat(wo.hours_regular) || 0;
+        const primaryOT = parseFloat(wo.hours_overtime) || 0;
+        const primaryMiles = parseFloat(wo.miles) || 0;
+
+        // 2. Team member legacy totals from work_order_assignments
+        const { data: teamAssignments } = await supabase
+          .from('work_order_assignments')
+          .select('hours_regular, hours_overtime, miles')
+          .eq('wo_id', wo.wo_id);
+
+        let teamRT = 0, teamOT = 0, teamMiles = 0;
+        if (teamAssignments) {
+          teamAssignments.forEach(member => {
+            teamRT += parseFloat(member.hours_regular) || 0;
+            teamOT += parseFloat(member.hours_overtime) || 0;
+            teamMiles += parseFloat(member.miles) || 0;
+          });
+        }
+
+        // 3. Daily hours log totals
+        const { data: dailyData } = await supabase
+          .from('daily_hours_log')
+          .select('hours_regular, hours_overtime, miles')
+          .eq('wo_id', wo.wo_id);
+
+        let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
+        if (dailyData) {
+          dailyData.forEach(log => {
+            dailyRT += parseFloat(log.hours_regular) || 0;
+            dailyOT += parseFloat(log.hours_overtime) || 0;
+            dailyMiles += parseFloat(log.miles) || 0;
+          });
+        }
+
+        // Combined totals
+        const totalRT = primaryRT + teamRT + dailyRT;
+        const totalOT = primaryOT + teamOT + dailyOT;
+        const totalMiles = primaryMiles + teamMiles + dailyMiles;
+
+        // Calculate costs
+        const laborCost = (totalRT * 64) + (totalOT * 96) + 128; // +128 for admin hours
+        const mileageCost = totalMiles * 1.00;
+        const materialWithMarkup = (parseFloat(wo.material_cost) || 0) * 1.25;
+        const equipmentWithMarkup = (parseFloat(wo.emf_equipment_cost) || 0) * 1.25;
+        const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25;
+        const rentalWithMarkup = (parseFloat(wo.rental_cost) || 0) * 1.25;
+
+        totals[wo.wo_id] = laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
+      } catch (error) {
+        console.error('Error calculating total for WO:', wo.wo_id, error);
+        totals[wo.wo_id] = 128; // Default to admin hours only
+      }
+    }
+    
+    setWoTotals(totals);
   };
 
   const fetchInvoices = async () => {
@@ -101,85 +169,6 @@ export default function InvoicingPage() {
     }
     
     setSelectedItem({ type: 'invoice', data: invoice });
-  };
-
-  // Helper function to calculate work order total for display - fetches from daily_hours_log
-  const calculateWOTotalAsync = async (wo) => {
-    try {
-      // 1. Legacy totals from work_orders table
-      const primaryRT = parseFloat(wo.hours_regular) || 0;
-      const primaryOT = parseFloat(wo.hours_overtime) || 0;
-      const primaryMiles = parseFloat(wo.miles) || 0;
-
-      // 2. Team member legacy totals from work_order_assignments
-      const { data: teamAssignments } = await supabase
-        .from('work_order_assignments')
-        .select('hours_regular, hours_overtime, miles')
-        .eq('wo_id', wo.wo_id);
-
-      let teamRT = 0, teamOT = 0, teamMiles = 0;
-      if (teamAssignments) {
-        teamAssignments.forEach(member => {
-          teamRT += parseFloat(member.hours_regular) || 0;
-          teamOT += parseFloat(member.hours_overtime) || 0;
-          teamMiles += parseFloat(member.miles) || 0;
-        });
-      }
-
-      // 3. Daily hours log totals (this is where most hours are tracked now)
-      const { data: dailyData } = await supabase
-        .from('daily_hours_log')
-        .select('hours_regular, hours_overtime, miles')
-        .eq('wo_id', wo.wo_id);
-
-      let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
-      if (dailyData) {
-        dailyData.forEach(log => {
-          dailyRT += parseFloat(log.hours_regular) || 0;
-          dailyOT += parseFloat(log.hours_overtime) || 0;
-          dailyMiles += parseFloat(log.miles) || 0;
-        });
-      }
-
-      // Combined totals
-      const totalRT = primaryRT + teamRT + dailyRT;
-      const totalOT = primaryOT + teamOT + dailyOT;
-      const totalMiles = primaryMiles + teamMiles + dailyMiles;
-
-      // Calculate costs
-      const laborCost = (totalRT * 64) + (totalOT * 96) + 128; // +128 for admin hours
-      const mileageCost = totalMiles * 1.00;
-      const materialWithMarkup = (parseFloat(wo.material_cost) || 0) * 1.25;
-      const equipmentWithMarkup = (parseFloat(wo.emf_equipment_cost) || 0) * 1.25;
-      const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25;
-      const rentalWithMarkup = (parseFloat(wo.rental_cost) || 0) * 1.25;
-
-      return laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
-    } catch (error) {
-      console.error('Error calculating WO total:', error);
-      return 128; // Default to admin hours only
-    }
-  };
-
-  // Synchronous version for initial display (uses cached data)
-  const calculateWOTotal = (wo) => {
-    // Just return admin hours for initial display - the real calculation happens in generateInvoicePreview
-    const hoursRegular = parseFloat(wo.hours_regular) || 0;
-    const hoursOvertime = parseFloat(wo.hours_overtime) || 0;
-    const woMiles = parseFloat(wo.miles) || 0;
-    const materialCost = parseFloat(wo.material_cost) || 0;
-    const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
-    const trailerCost = parseFloat(wo.trailer_cost) || 0;
-    const rentalCost = parseFloat(wo.rental_cost) || 0;
-
-    const laborCost = (hoursRegular * 64) + (hoursOvertime * 96) + 128;
-    const mileageCost = woMiles * 1.00;
-    const materialWithMarkup = materialCost * 1.25;
-    const equipmentWithMarkup = equipmentCost * 1.25;
-    const trailerWithMarkup = trailerCost * 1.25;
-    const rentalWithMarkup = rentalCost * 1.25;
-
-    return laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
   };
 
   const generateInvoicePreview = async (woId) => {
@@ -720,7 +709,7 @@ export default function InvoicingPage() {
                       <th className="px-4 py-3 text-left">Building</th>
                       <th className="px-4 py-3 text-left">Lead Tech</th>
                       <th className="px-4 py-3 text-left">Acknowledged</th>
-                      <th className="px-4 py-3 text-right">NTE</th>
+                      <th className="px-4 py-3 text-right">Est. Total</th>
                       <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -739,7 +728,10 @@ export default function InvoicingPage() {
                           {wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : 'N/A'}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-green-400">
-                          ${(wo.nte || 0).toFixed(2)}
+                          {woTotals[wo.wo_id] !== undefined 
+                            ? `$${woTotals[wo.wo_id].toFixed(2)}`
+                            : <span className="text-gray-500">calculating...</span>
+                          }
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -852,9 +844,20 @@ export default function InvoicingPage() {
                     <span className="text-gray-400">Acknowledged:</span>
                     <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-400">NTE Budget:</span>
-                    <span className="ml-2 font-bold text-green-400">${(selectedItem.data.nte || 0).toFixed(2)}</span>
+                  <div className="flex gap-4">
+                    <div>
+                      <span className="text-gray-400">NTE Budget:</span>
+                      <span className="ml-2 font-bold text-yellow-400">${(selectedItem.data.nte || 0).toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Est. Invoice Total:</span>
+                      <span className="ml-2 font-bold text-green-400">
+                        {woTotals[selectedItem.data.wo_id] !== undefined 
+                          ? `$${woTotals[selectedItem.data.wo_id].toFixed(2)}`
+                          : 'calculating...'
+                        }
+                      </span>
+                    </div>
                   </div>
 
                   {selectedItem.data.comments && (

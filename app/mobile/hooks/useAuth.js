@@ -37,7 +37,9 @@ export function useAuth() {
 
   function logout() {
     authService.clearCredentials();
-    setCurrentUser(null);
+    authService.clearCachedUser(); // Also clear cached user data
+    // Force page reload to ensure clean state
+    window.location.href = '/mobile';
   }
 
   async function changePin(newPin) {

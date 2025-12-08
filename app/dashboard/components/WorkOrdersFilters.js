@@ -22,10 +22,18 @@ export default function WorkOrdersFilters({
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
 
-  // Get only techs (lead_tech, tech, helper roles)
+  // Get techs (lead_tech, tech, helper roles)
   const techs = (users || []).filter(u => 
     ['lead_tech', 'tech', 'helper'].includes(u.role) && u.is_active
   ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
+
+  // Get admins and office staff
+  const admins = (users || []).filter(u => 
+    ['admin', 'office_staff', 'operations'].includes(u.role) && u.is_active
+  ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
+
+  // Combined list for finding selected user name
+  const allUsers = [...techs, ...admins];
 
   // Sync CBRE status from Gmail labels
   const handleSyncCBRE = async () => {
@@ -48,6 +56,17 @@ export default function WorkOrdersFilters({
       setSyncResult({ success: false, error: error.message });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Get role badge for dropdown
+  const getRoleBadge = (role) => {
+    switch (role) {
+      case 'admin': return ' 👑';
+      case 'office_staff': return ' 🏢';
+      case 'operations': return ' 📋';
+      case 'lead_tech': return ' ⭐';
+      default: return '';
     }
   };
 
@@ -75,7 +94,7 @@ export default function WorkOrdersFilters({
           <option value="completed">Completed</option>
         </select>
 
-        {/* Tech Filter */}
+        {/* Tech/Staff Filter */}
         <select
           value={techFilter || 'all'}
           onChange={(e) => setTechFilter && setTechFilter(e.target.value)}
@@ -85,14 +104,30 @@ export default function WorkOrdersFilters({
               : 'bg-gray-700 text-white'
           }`}
         >
-          <option value="all">👷 All Techs</option>
+          <option value="all">👷 All Staff</option>
           <option value="unassigned">⚠️ Unassigned</option>
-          {techs.map(tech => (
-            <option key={tech.user_id} value={tech.user_id}>
-              {tech.first_name} {tech.last_name}
-              {tech.role === 'lead_tech' ? ' ⭐' : ''}
-            </option>
-          ))}
+          
+          {/* Techs Group */}
+          {techs.length > 0 && (
+            <optgroup label="── Field Techs ──">
+              {techs.map(tech => (
+                <option key={tech.user_id} value={tech.user_id}>
+                  {tech.first_name} {tech.last_name}{getRoleBadge(tech.role)}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          
+          {/* Admins/Office Group */}
+          {admins.length > 0 && (
+            <optgroup label="── Admin/Office ──">
+              {admins.map(admin => (
+                <option key={admin.user_id} value={admin.user_id}>
+                  {admin.first_name} {admin.last_name}{getRoleBadge(admin.role)}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
 
         {/* CBRE Status Filter */}
@@ -153,16 +188,19 @@ export default function WorkOrdersFilters({
         {exportDropdown}
       </div>
 
-      {/* Active Tech Filter Indicator */}
+      {/* Active Tech/Staff Filter Indicator */}
       {techFilter && techFilter !== 'all' && (
         <div className="mt-3 bg-blue-900/50 border border-blue-600 rounded-lg p-2 flex justify-between items-center">
           <span className="text-blue-200 text-sm">
-            <strong>👷 Tech Filter:</strong>{' '}
+            <strong>👷 Staff Filter:</strong>{' '}
             {techFilter === 'unassigned' 
               ? 'Unassigned Work Orders' 
-              : techs.find(t => t.user_id === techFilter)
-                ? `${techs.find(t => t.user_id === techFilter).first_name} ${techs.find(t => t.user_id === techFilter).last_name}`
-                : techFilter
+              : (() => {
+                  const user = allUsers.find(u => u.user_id === techFilter);
+                  return user 
+                    ? `${user.first_name} ${user.last_name}` 
+                    : techFilter;
+                })()
             }
           </span>
           <button

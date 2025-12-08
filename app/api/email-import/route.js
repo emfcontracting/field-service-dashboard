@@ -221,6 +221,11 @@ async function markAsRead(accessToken, messageId) {
 // GET: Fetch and preview emails
 export async function GET(request) {
   try {
+    // Check for query params
+    const { searchParams } = new URL(request.url);
+    const includeRead = searchParams.get('includeRead') === 'true';
+    const days = parseInt(searchParams.get('days')) || 3;
+    
     // Check if Gmail is configured
     const clientId = process.env.GMAIL_CLIENT_ID;
     const clientSecret = process.env.GMAIL_CLIENT_SECRET;
@@ -240,8 +245,18 @@ export async function GET(request) {
 
     const accessToken = await getAccessToken();
     
-    // Search for unread emails with "Dispatch of Work Order" in subject
-    const query = encodeURIComponent('is:unread subject:"Dispatch of Work Order"');
+    // Search for emails with "Dispatch of Work Order" in subject
+    // If includeRead is true, search recent emails regardless of read status
+    let query;
+    if (includeRead) {
+      // Get emails from the last N days
+      const afterDate = new Date();
+      afterDate.setDate(afterDate.getDate() - days);
+      const afterTimestamp = Math.floor(afterDate.getTime() / 1000);
+      query = encodeURIComponent(`subject:"Dispatch of Work Order" after:${afterTimestamp}`);
+    } else {
+      query = encodeURIComponent('is:unread subject:"Dispatch of Work Order"');
+    }
     
     const listResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,

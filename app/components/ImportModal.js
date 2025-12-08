@@ -22,6 +22,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   const [gmailError, setGmailError] = useState('');
   const [gmailMessage, setGmailMessage] = useState('');
   const [importResult, setImportResult] = useState(null);
+  const [includeRead, setIncludeRead] = useState(false);
   
   // Manual entry states
   const [manualWO, setManualWO] = useState({
@@ -36,7 +37,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   if (!isOpen) return null;
 
   // ============== GMAIL FETCH FUNCTIONS ==============
-  const fetchGmailEmails = async () => {
+  const fetchGmailEmails = async (includeReadEmails = false) => {
     setGmailLoading(true);
     setGmailError('');
     setGmailMessage('');
@@ -46,7 +47,10 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     setImportResult(null);
 
     try {
-      const response = await fetch('/api/email-import');
+      const url = includeReadEmails 
+        ? '/api/email-import?includeRead=true&days=3' 
+        : '/api/email-import';
+      const response = await fetch(url);
       const data = await response.json();
 
       if (!data.success) {
@@ -423,13 +427,24 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               <div className="text-center py-12 text-gray-400">
                 <div className="text-6xl mb-4">📭</div>
                 <p className="text-xl font-semibold mb-2">No New Work Order Emails</p>
-                <p className="text-sm">All CBRE dispatch emails have been imported or marked as read.</p>
-                <button
-                  onClick={fetchGmailEmails}
-                  className="mt-4 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg"
-                >
-                  🔄 Check Again
-                </button>
+                <p className="text-sm mb-4">All CBRE dispatch emails have been imported or marked as read.</p>
+                
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={() => fetchGmailEmails(false)}
+                    className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg"
+                  >
+                    🔄 Check Again (Unread Only)
+                  </button>
+                  
+                  <button
+                    onClick={() => fetchGmailEmails(true)}
+                    className="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg"
+                  >
+                    📥 Include Read Emails (Last 3 Days)
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">Use "Include Read" if a new WO was already opened in Gmail</p>
+                </div>
               </div>
             )}
 
@@ -457,9 +472,14 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                     >Select None</button>
                     <span className="text-gray-600">|</span>
                     <button
-                      onClick={fetchGmailEmails}
+                      onClick={() => fetchGmailEmails(false)}
                       className="text-purple-400 hover:text-purple-300 text-sm"
                     >🔄 Refresh</button>
+                    <span className="text-gray-600">|</span>
+                    <button
+                      onClick={() => fetchGmailEmails(true)}
+                      className="text-orange-400 hover:text-orange-300 text-sm"
+                    >📥 Include Read</button>
                   </div>
                 </div>
 

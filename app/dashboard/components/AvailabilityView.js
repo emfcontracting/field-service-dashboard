@@ -3,9 +3,28 @@
 
 import { useState, useEffect } from 'react';
 
+// Helper function to get local date string (YYYY-MM-DD) without timezone issues
+const getLocalDateString = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Helper function to parse date string as local date
+const parseLocalDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export default function AvailabilityView({ supabase, users }) {
   const [availabilityData, setAvailabilityData] = useState({});
-  const [selectedAvailDate, setSelectedAvailDate] = useState(new Date());
+  const [selectedAvailDate, setSelectedAvailDate] = useState(() => {
+    // Initialize with today's date at midnight local time
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [availLoading, setAvailLoading] = useState(false);
 
   useEffect(() => {
@@ -51,7 +70,7 @@ export default function AvailabilityView({ supabase, users }) {
         .order('first_name');
 
       // Get availability for selected date
-      const dateStr = selectedAvailDate.toISOString().split('T')[0];
+      const dateStr = getLocalDateString(selectedAvailDate);
       const { data: availability } = await supabase
         .from('daily_availability')
         .select('*')
@@ -191,8 +210,8 @@ export default function AvailabilityView({ supabase, users }) {
             </button>
             <input
               type="date"
-              value={selectedAvailDate.toISOString().split('T')[0]}
-              onChange={(e) => setSelectedAvailDate(new Date(e.target.value))}
+              value={getLocalDateString(selectedAvailDate)}
+              onChange={(e) => setSelectedAvailDate(parseLocalDate(e.target.value))}
               className="bg-gray-700 text-white px-4 py-2 rounded-lg"
             />
             <button
@@ -206,7 +225,11 @@ export default function AvailabilityView({ supabase, users }) {
               →
             </button>
             <button
-              onClick={() => setSelectedAvailDate(new Date())}
+              onClick={() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                setSelectedAvailDate(today);
+              }}
               className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
             >
               Today

@@ -29,16 +29,22 @@ export default function ContractorDashboard() {
       router.push('/contractor');
       return;
     }
-    const parsed = JSON.parse(userData);
-    setUser(parsed);
     
-    if (parsed.needsPinSetup) {
-      router.push('/contractor/settings');
-      return;
+    try {
+      const parsed = JSON.parse(userData);
+      setUser(parsed);
+      
+      if (parsed.needsPinSetup) {
+        router.push('/contractor/settings');
+        return;
+      }
+      
+      loadDashboardData(parsed.user_id, parsed.profile);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      router.push('/contractor');
     }
-    
-    loadDashboardData(parsed.user_id, parsed.profile);
-  }, []);
+  }, [router]);
 
   async function loadDashboardData(userId, profile) {
     try {
@@ -48,11 +54,15 @@ export default function ContractorDashboard() {
       const periodStartStr = periodStart.toISOString().split('T')[0];
 
       // Get hours and mileage for current period
-      const { data: hoursData } = await supabase
+      const { data: hoursData, error: hoursError } = await supabase
         .from('daily_hours_log')
         .select('hours_regular, hours_overtime, miles')
         .eq('user_id', userId)
         .gte('work_date', periodStartStr);
+
+      if (hoursError) {
+        console.error('Error fetching hours:', hoursError);
+      }
 
       let totalRegular = 0;
       let totalOT = 0;
@@ -64,20 +74,24 @@ export default function ContractorDashboard() {
         totalMiles += parseFloat(entry.miles || 0);
       });
 
-      const hourlyRate = parseFloat(profile.hourly_rate || 35);
-      const otRate = parseFloat(profile.ot_rate || 52.50);
-      const mileageRate = parseFloat(profile.mileage_rate || 0.67);
+      const hourlyRate = parseFloat(profile?.hourly_rate || 35);
+      const otRate = parseFloat(profile?.ot_rate || 52.50);
+      const mileageRate = parseFloat(profile?.mileage_rate || 0.67);
 
       const hoursAmount = (totalRegular * hourlyRate) + (totalOT * otRate);
       const mileageAmount = totalMiles * mileageRate;
 
       // Get recent invoices
-      const { data: invoices } = await supabase
+      const { data: invoices, error: invoicesError } = await supabase
         .from('subcontractor_invoices')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
+
+      if (invoicesError) {
+        console.error('Error fetching invoices:', invoicesError);
+      }
 
       // Count pending/sent invoices
       const pending = (invoices || []).filter(i => i.status === 'sent').length;
@@ -110,12 +124,16 @@ export default function ContractorDashboard() {
     router.push('/contractor');
   }
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
@@ -173,15 +191,15 @@ export default function ContractorDashboard() {
           <h2 className="font-bold mb-3">📊 Your Rates</h2>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-2xl font-bold">${parseFloat(user.profile.hourly_rate || 35).toFixed(2)}</p>
+              <p className="text-2xl font-bold">${parseFloat(user.profile?.hourly_rate || 35).toFixed(2)}</p>
               <p className="text-xs text-gray-400">Hourly Rate</p>
             </div>
             <div>
-              <p className="text-2xl font-bold">${parseFloat(user.profile.ot_rate || 52.50).toFixed(2)}</p>
+              <p className="text-2xl font-bold">${parseFloat(user.profile?.ot_rate || 52.50).toFixed(2)}</p>
               <p className="text-xs text-gray-400">OT Rate</p>
             </div>
             <div>
-              <p className="text-2xl font-bold">${parseFloat(user.profile.mileage_rate || 0.67).toFixed(2)}</p>
+              <p className="text-2xl font-bold">${parseFloat(user.profile?.mileage_rate || 0.67).toFixed(2)}</p>
               <p className="text-xs text-gray-400">Per Mile</p>
             </div>
           </div>

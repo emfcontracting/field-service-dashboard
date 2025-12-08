@@ -42,27 +42,33 @@ export default function CreateInvoice() {
       router.push('/contractor');
       return;
     }
-    const parsed = JSON.parse(userData);
-    setUser(parsed);
+    
+    try {
+      const parsed = JSON.parse(userData);
+      setUser(parsed);
 
-    // Set default date range (last 2 weeks)
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 14);
-    setPeriodEnd(end.toISOString().split('T')[0]);
-    setPeriodStart(start.toISOString().split('T')[0]);
+      // Set default date range (last 2 weeks)
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 14);
+      setPeriodEnd(end.toISOString().split('T')[0]);
+      setPeriodStart(start.toISOString().split('T')[0]);
 
-    // Set rates from profile
-    if (parsed.profile) {
-      setRates({
-        hourly: parseFloat(parsed.profile.hourly_rate || 35),
-        ot: parseFloat(parsed.profile.ot_rate || 52.50),
-        mileage: parseFloat(parsed.profile.mileage_rate || 0.67)
-      });
+      // Set rates from profile
+      if (parsed.profile) {
+        setRates({
+          hourly: parseFloat(parsed.profile.hourly_rate || 35),
+          ot: parseFloat(parsed.profile.ot_rate || 52.50),
+          mileage: parseFloat(parsed.profile.mileage_rate || 0.67)
+        });
+      }
+
+      setLoading(false);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      router.push('/contractor');
     }
-
-    setLoading(false);
-  }, []);
+  }, [router]);
 
   async function pullHours() {
     if (!periodStart || !periodEnd) {
@@ -86,12 +92,18 @@ export default function CreateInvoice() {
         .lte('work_date', periodEnd)
         .order('work_date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error pulling hours:', error);
+        throw error;
+      }
 
       setHoursData(data || []);
 
       if (!data || data.length === 0) {
         setMessage({ type: 'warning', text: 'No hours found for this period' });
+      } else {
+        setMessage({ type: 'success', text: `Found ${data.length} entries` });
+        setTimeout(() => setMessage(null), 3000);
       }
     } catch (error) {
       console.error('Error pulling hours:', error);
@@ -181,7 +193,10 @@ export default function CreateInvoice() {
         .select()
         .single();
 
-      if (invoiceError) throw invoiceError;
+      if (invoiceError) {
+        console.error('Invoice create error:', invoiceError);
+        throw invoiceError;
+      }
 
       // Save line items (hours entries)
       const itemsToInsert = [];
@@ -241,34 +256,41 @@ export default function CreateInvoice() {
       }
 
       if (itemsToInsert.length > 0) {
-        await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
+        const { error: itemsError } = await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
+        if (itemsError) {
+          console.error('Error saving line items:', itemsError);
+        }
       }
 
       // Send email if requested
       if (sendEmail) {
-        const emailResult = await fetch('/api/contractor/send-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            invoice,
-            user,
-            hoursData,
-            lineItems,
-            rates,
-            totals: {
-              totalRegularHours,
-              totalOTHours,
-              totalMiles,
-              hoursAmount,
-              mileageAmount,
-              lineItemsAmount,
-              grandTotal
-            }
-          })
-        });
+        try {
+          const emailResult = await fetch('/api/contractor/send-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invoice,
+              user,
+              hoursData,
+              lineItems,
+              rates,
+              totals: {
+                totalRegularHours,
+                totalOTHours,
+                totalMiles,
+                hoursAmount,
+                mileageAmount,
+                lineItemsAmount,
+                grandTotal
+              }
+            })
+          });
 
-        if (!emailResult.ok) {
-          console.error('Email send failed');
+          if (!emailResult.ok) {
+            console.error('Email send failed');
+          }
+        } catch (emailError) {
+          console.error('Email error:', emailError);
         }
       }
 
@@ -285,19 +307,23 @@ export default function CreateInvoice() {
 
     } catch (error) {
       console.error('Error saving invoice:', error);
-      setMessage({ type: 'error', text: 'Failed to save invoice' });
+      setMessage({ type: 'error', text: 'Failed to save invoice: ' + (error.message || 'Unknown error') });
     } finally {
       setSaving(false);
       setSending(false);
     }
   }
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
@@ -475,7 +501,7 @@ export default function CreateInvoice() {
           </div>
 
           {lineItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">No additional items. Click "Add Item" to add materials, supplies, etc.</p>
+            <p className="text-gray-500 text-sm">No additional items. Click &quot;Add Item&quot; to add materials, supplies, etc.</p>
           ) : (
             <div className="space-y-3">
               {lineItems.map(item => (

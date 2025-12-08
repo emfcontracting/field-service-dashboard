@@ -41,25 +41,31 @@ export default function ContractorSettings() {
       router.push('/contractor');
       return;
     }
-    const parsed = JSON.parse(userData);
-    setUser(parsed);
     
-    // Set initial values from profile
-    if (parsed.profile) {
-      setRates({
-        hourly_rate: parseFloat(parsed.profile.hourly_rate || 35).toFixed(2),
-        ot_rate: parseFloat(parsed.profile.ot_rate || 52.50).toFixed(2),
-        mileage_rate: parseFloat(parsed.profile.mileage_rate || 0.67).toFixed(2)
-      });
-      setBusinessInfo({
-        business_name: parsed.profile.business_name || '',
-        business_address: parsed.profile.business_address || '',
-        tax_id: parsed.profile.tax_id || ''
-      });
+    try {
+      const parsed = JSON.parse(userData);
+      setUser(parsed);
+      
+      // Set initial values from profile
+      if (parsed.profile) {
+        setRates({
+          hourly_rate: parseFloat(parsed.profile.hourly_rate || 35).toFixed(2),
+          ot_rate: parseFloat(parsed.profile.ot_rate || 52.50).toFixed(2),
+          mileage_rate: parseFloat(parsed.profile.mileage_rate || 0.67).toFixed(2)
+        });
+        setBusinessInfo({
+          business_name: parsed.profile.business_name || '',
+          business_address: parsed.profile.business_address || '',
+          tax_id: parsed.profile.tax_id || ''
+        });
+      }
+      
+      setLoading(false);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      router.push('/contractor');
     }
-    
-    setLoading(false);
-  }, []);
+  }, [router]);
 
   async function saveRates(e) {
     e.preventDefault();
@@ -93,7 +99,9 @@ export default function ContractorSettings() {
       setUser({ ...user, profile: updatedProfile });
 
       setMessage({ type: 'success', text: 'Rates updated successfully!' });
+      setTimeout(() => setMessage(null), 3000);
     } catch (error) {
+      console.error('Save rates error:', error);
       setMessage({ type: 'error', text: 'Failed to update rates' });
     } finally {
       setSaving(false);
@@ -129,7 +137,9 @@ export default function ContractorSettings() {
       }));
 
       setMessage({ type: 'success', text: 'Business info updated!' });
+      setTimeout(() => setMessage(null), 3000);
     } catch (error) {
+      console.error('Save business info error:', error);
       setMessage({ type: 'error', text: 'Failed to update business info' });
     } finally {
       setSaving(false);
@@ -151,7 +161,7 @@ export default function ContractorSettings() {
     }
 
     // Verify current PIN (if one exists)
-    if (user.profile.pin_hash && btoa(pinChange.current) !== user.profile.pin_hash) {
+    if (user.profile?.pin_hash && btoa(pinChange.current) !== user.profile.pin_hash) {
       setMessage({ type: 'error', text: 'Current PIN is incorrect' });
       return;
     }
@@ -186,15 +196,18 @@ export default function ContractorSettings() {
       // If this was first-time setup, redirect to dashboard
       if (user.needsPinSetup) {
         setTimeout(() => router.push('/contractor/dashboard'), 1500);
+      } else {
+        setTimeout(() => setMessage(null), 3000);
       }
     } catch (error) {
+      console.error('Change PIN error:', error);
       setMessage({ type: 'error', text: 'Failed to update PIN' });
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
@@ -202,17 +215,23 @@ export default function ContractorSettings() {
     );
   }
 
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
-          <Link
-            href="/contractor/dashboard"
-            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
-          >
-            ← Back
-          </Link>
+          {!user.needsPinSetup && (
+            <Link
+              href="/contractor/dashboard"
+              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+            >
+              ← Back
+            </Link>
+          )}
           <div>
             <h1 className="text-xl font-bold">⚙️ Settings</h1>
             <p className="text-sm text-gray-400">{user.first_name} {user.last_name}</p>
@@ -241,9 +260,9 @@ export default function ContractorSettings() {
 
         {/* PIN Change */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-4">🔒 {user.profile.pin_hash ? 'Change PIN' : 'Set PIN'}</h2>
+          <h2 className="font-bold mb-4">🔒 {user.profile?.pin_hash ? 'Change PIN' : 'Set PIN'}</h2>
           <form onSubmit={changePin} className="space-y-4">
-            {user.profile.pin_hash && (
+            {user.profile?.pin_hash && (
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Current PIN</label>
                 <input
@@ -289,7 +308,7 @@ export default function ContractorSettings() {
               disabled={saving}
               className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium disabled:opacity-50"
             >
-              {saving ? 'Saving...' : user.profile.pin_hash ? 'Change PIN' : 'Set PIN'}
+              {saving ? 'Saving...' : user.profile?.pin_hash ? 'Change PIN' : 'Set PIN'}
             </button>
           </form>
         </div>
@@ -405,16 +424,16 @@ export default function ContractorSettings() {
           <div className="flex items-center justify-between">
             <div>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                user.profile.subscription_status === 'active'
+                user.profile?.subscription_status === 'active'
                   ? 'bg-green-500/20 text-green-400'
-                  : user.profile.subscription_status === 'trial'
+                  : user.profile?.subscription_status === 'trial'
                     ? 'bg-yellow-500/20 text-yellow-400'
                     : 'bg-red-500/20 text-red-400'
               }`}>
-                {user.profile.subscription_status?.toUpperCase() || 'TRIAL'}
+                {(user.profile?.subscription_status || 'trial').toUpperCase()}
               </span>
             </div>
-            {user.profile.subscription_expires_at && (
+            {user.profile?.subscription_expires_at && (
               <p className="text-sm text-gray-400">
                 Expires: {new Date(user.profile.subscription_expires_at).toLocaleDateString()}
               </p>

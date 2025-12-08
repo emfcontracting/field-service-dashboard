@@ -23,10 +23,16 @@ export default function ContractorInvoices() {
       router.push('/contractor');
       return;
     }
-    const parsed = JSON.parse(userData);
-    setUser(parsed);
-    loadInvoices(parsed.user_id);
-  }, []);
+    
+    try {
+      const parsed = JSON.parse(userData);
+      setUser(parsed);
+      loadInvoices(parsed.user_id);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      router.push('/contractor');
+    }
+  }, [router]);
 
   async function loadInvoices(userId) {
     try {
@@ -36,7 +42,9 @@ export default function ContractorInvoices() {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading invoices:', error);
+      }
       setInvoices(data || []);
     } catch (error) {
       console.error('Error loading invoices:', error);
@@ -56,12 +64,16 @@ export default function ContractorInvoices() {
     paid: invoices.filter(i => i.status === 'paid').length
   };
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
@@ -131,10 +143,9 @@ export default function ContractorInvoices() {
         ) : (
           <div className="space-y-3">
             {filteredInvoices.map(invoice => (
-              <Link
+              <div
                 key={invoice.invoice_id}
-                href={`/contractor/invoices/${invoice.invoice_id}`}
-                className="block bg-gray-800 rounded-xl border border-gray-700 p-4 hover:bg-gray-750 transition"
+                className="bg-gray-800 rounded-xl border border-gray-700 p-4"
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -178,7 +189,7 @@ export default function ContractorInvoices() {
                     Sent: {new Date(invoice.sent_at).toLocaleString()}
                   </p>
                 )}
-              </Link>
+              </div>
             ))}
           </div>
         )}

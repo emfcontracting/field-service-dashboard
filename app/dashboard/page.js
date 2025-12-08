@@ -19,10 +19,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Superuser email - only this user can bulk delete
+const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
+
 export default function Dashboard() {
   // State Management
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [selectedWO, setSelectedWO] = useState(null);
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -40,10 +44,30 @@ export default function Dashboard() {
     quote_approved: 0
   });
 
+  // Check if current user is superuser
+  const isSuperuser = currentUser?.email === SUPERUSER_EMAIL;
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
+    fetchCurrentUser();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('auth_id', user.id)
+          .single();
+        setCurrentUser(userData);
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+  };
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -113,6 +137,7 @@ export default function Dashboard() {
             onNewWorkOrder={() => setShowNewWOModal(true)}
             onImport={handleImportClick}
             refreshWorkOrders={refreshWorkOrders}
+            isSuperuser={isSuperuser}
           />
         );
     }

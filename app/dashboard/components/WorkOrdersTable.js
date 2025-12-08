@@ -55,7 +55,13 @@ export default function WorkOrdersTable({
   onSelectWorkOrder,
   searchTerm,
   statusFilter,
-  priorityFilter 
+  priorityFilter,
+  // Superuser bulk delete props
+  isSuperuser = false,
+  selectedWOs = new Set(),
+  onToggleSelect,
+  onSelectAll,
+  onClearSelection
 }) {
   
   // Check if work order is "new" (unassigned and less than 24 hours old)
@@ -69,6 +75,26 @@ export default function WorkOrdersTable({
     const hoursSinceCreation = (now - createdDate) / (1000 * 60 * 60);
     
     return hoursSinceCreation <= 24;
+  };
+
+  // Check if all visible WOs are selected
+  const allSelected = workOrders.length > 0 && workOrders.every(wo => selectedWOs.has(wo.wo_id));
+  const someSelected = workOrders.some(wo => selectedWOs.has(wo.wo_id));
+
+  // Handle header checkbox click
+  const handleHeaderCheckbox = (e) => {
+    e.stopPropagation();
+    if (allSelected) {
+      onClearSelection();
+    } else {
+      onSelectAll();
+    }
+  };
+
+  // Handle row checkbox click
+  const handleRowCheckbox = (e, woId) => {
+    e.stopPropagation();
+    onToggleSelect(woId);
   };
 
   if (loading) {
@@ -92,9 +118,26 @@ export default function WorkOrdersTable({
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
+        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: isSuperuser ? '1440px' : '1400px' }}>
           <thead className="bg-gray-700">
             <tr>
+              {/* Checkbox column - Superuser only */}
+              {isSuperuser && (
+                <th className="px-2 py-2 text-center" style={{ width: '40px' }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={input => {
+                      if (input) {
+                        input.indeterminate = someSelected && !allSelected;
+                      }
+                    }}
+                    onChange={handleHeaderCheckbox}
+                    className="w-4 h-4 rounded cursor-pointer"
+                    title={allSelected ? 'Deselect all' : 'Select all'}
+                  />
+                </th>
+              )}
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Building</th>
@@ -114,6 +157,7 @@ export default function WorkOrdersTable({
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
               const isNew = isNewWorkOrder(wo);
+              const isSelected = selectedWOs.has(wo.wo_id);
               // CBRE status badge from Gmail labels
               const cbreBadge = getCBREStatusBadge(wo.cbre_status);
 
@@ -122,11 +166,23 @@ export default function WorkOrdersTable({
                   key={wo.wo_id}
                   onClick={() => onSelectWorkOrder(wo)}
                   className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
+                    isSelected ? 'bg-red-900/40' :
                     wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
                     wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
                     wo.cbre_status === 'pending_quote' ? 'bg-orange-900/20' : ''
                   }`}
                 >
+                  {/* Checkbox cell - Superuser only */}
+                  {isSuperuser && (
+                    <td className="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => handleRowCheckbox(e, wo.wo_id)}
+                        className="w-4 h-4 rounded cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{wo.wo_number}</span>

@@ -266,11 +266,13 @@ Type "DELETE" to confirm permanent deletion:`;
 
   function getRoleBadgeColor(role) {
     switch (role) {
-      case 'admin': return 'bg-purple-100 text-purple-800';
-      case 'office_staff': return 'bg-blue-100 text-blue-800';
-      case 'lead_tech': return 'bg-green-100 text-green-800';
-      case 'helper': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'admin': return 'bg-purple-600';
+      case 'office_staff': return 'bg-blue-600';
+      case 'office': return 'bg-blue-600';
+      case 'lead_tech': return 'bg-green-600';
+      case 'tech': return 'bg-teal-600';
+      case 'helper': return 'bg-gray-600';
+      default: return 'bg-gray-600';
     }
   }
 
@@ -278,7 +280,9 @@ Type "DELETE" to confirm permanent deletion:`;
     switch (role) {
       case 'admin': return 'Admin';
       case 'office_staff': return 'Office Staff';
+      case 'office': return 'Office';
       case 'lead_tech': return 'Lead Tech';
+      case 'tech': return 'Tech';
       case 'helper': return 'Helper';
       default: return role;
     }
@@ -286,188 +290,201 @@ Type "DELETE" to confirm permanent deletion:`;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading users...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading users...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-4">
+            <img 
+              src="/emf-logo.png" 
+              alt="EMF Contracting LLC" 
+              className="h-12 w-auto"
+            />
             <div>
-              <button 
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-600 hover:text-gray-900 mb-2 flex items-center gap-2"
-              >
-                ← Back to Dashboard
-              </button>
-              <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+              <h1 className="text-2xl font-bold">👥 User Management</h1>
+              <p className="text-sm text-gray-400">Manage team members and access</p>
               {isSuperuser && (
-                <p className="text-sm text-green-600 mt-1">🔑 Superuser Access</p>
+                <p className="text-xs text-green-400 mt-1">🔑 Superuser Access</p>
               )}
             </div>
+          </div>
+          <div className="flex gap-3">
             <button 
               onClick={openNewUserModal}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-semibold transition"
             >
               + Add User
             </button>
+            <button 
+              onClick={() => router.push('/dashboard')}
+              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              ← Back to Dashboard
+            </button>
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-500 text-sm">Total Users</p>
-            <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <p className="text-gray-400 text-sm">Total Users</p>
+            <p className="text-3xl font-bold">{stats.total}</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-500 text-sm">Lead Techs</p>
-            <p className="text-3xl font-bold text-green-600">{stats.leadTechs}</p>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <p className="text-gray-400 text-sm">Lead Techs</p>
+            <p className="text-3xl font-bold text-green-400">{stats.leadTechs}</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-500 text-sm">Helpers</p>
-            <p className="text-3xl font-bold text-gray-600">{stats.helpers}</p>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <p className="text-gray-400 text-sm">Helpers</p>
+            <p className="text-3xl font-bold text-gray-400">{stats.helpers}</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-500 text-sm">Active Users</p>
-            <p className="text-3xl font-bold text-blue-600">{stats.active}</p>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <p className="text-gray-400 text-sm">Active Users</p>
+            <p className="text-3xl font-bold text-blue-400">{stats.active}</p>
           </div>
-          <div className={`p-6 rounded-lg shadow ${stats.missingCarrier > 0 ? 'bg-yellow-50 border-2 border-yellow-400' : 'bg-white'}`}>
-            <p className="text-gray-500 text-sm">📱 Missing Carrier</p>
-            <p className={`text-3xl font-bold ${stats.missingCarrier > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+          <div className={`p-4 rounded-lg ${stats.missingCarrier > 0 ? 'bg-yellow-900/50 border border-yellow-600' : 'bg-gray-800'}`}>
+            <p className="text-gray-400 text-sm">📱 Missing Carrier</p>
+            <p className={`text-3xl font-bold ${stats.missingCarrier > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
               {stats.missingCarrier}
             </p>
             {stats.missingCarrier > 0 && (
-              <p className="text-xs text-yellow-700 mt-1">Can't receive texts</p>
+              <p className="text-xs text-yellow-500 mt-1">Can't receive texts</p>
             )}
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
+        {/* Filters */}
+        <div className="bg-gray-800 p-4 rounded-lg mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Search</label>
               <input
                 type="text"
                 placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Role</label>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
               >
                 <option value="all">All Roles</option>
                 <option value="lead_tech">Lead Techs</option>
+                <option value="tech">Techs</option>
                 <option value="helper">Helpers</option>
-                <option value="office_staff">Office Staff</option>
+                <option value="office">Office</option>
                 <option value="admin">Admins</option>
               </select>
             </div>
           </div>
         </div>
 
-        <div className="bg-white shadow rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone / Carrier</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rates (RT/OT)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => (
-                <tr key={user.user_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">
-                      {user.first_name} {user.last_name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {user.phone ? (
-                      <div>
-                        <div className="text-gray-900">
-                          {user.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}
+        {/* Users Table */}
+        <div className="bg-gray-800 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Email</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Phone / Carrier</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Role</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Rates (RT/OT)</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-300">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map((user) => (
+                  <tr key={user.user_id} className="border-t border-gray-700 hover:bg-gray-700/50 transition">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold">
+                        {user.first_name} {user.last_name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-400">
+                      {user.email}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {user.phone ? (
+                        <div>
+                          <div className="text-gray-300">
+                            {user.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}
+                          </div>
+                          {user.sms_carrier ? (
+                            <span className="text-xs px-2 py-0.5 bg-green-900 text-green-300 rounded-full">
+                              📱 {user.sms_carrier.charAt(0).toUpperCase() + user.sms_carrier.slice(1)}
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 bg-yellow-900 text-yellow-300 rounded-full">
+                              ⚠️ No carrier
+                            </span>
+                          )}
                         </div>
-                        {user.sms_carrier ? (
-                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
-                            📱 {user.sms_carrier.charAt(0).toUpperCase() + user.sms_carrier.slice(1)}
-                          </span>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full">
-                            ⚠️ No carrier
-                          </span>
+                      ) : (
+                        <span className="text-gray-500">Not set</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
+                        {getRoleDisplayName(user.role)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-400">
+                      ${user.regular_rate || 64} / ${user.overtime_rate || 96}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        user.is_active ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
+                      }`}>
+                        {user.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openEditModal(user)}
+                          className="text-blue-400 hover:text-blue-300 font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => toggleUserStatus(user)}
+                          className={user.is_active ? 'text-orange-400 hover:text-orange-300' : 'text-green-400 hover:text-green-300'}
+                        >
+                          {user.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        {isSuperuser && user.email !== 'jones.emfcontracting@gmail.com' && (
+                          <button
+                            onClick={() => handleDeleteUser(user)}
+                            className="text-red-400 hover:text-red-300 font-semibold"
+                            title="Permanently delete user"
+                          >
+                            🗑️
+                          </button>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-gray-400">Not set</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
-                      {getRoleDisplayName(user.role)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${user.regular_rate || 64}.00 / ${user.overtime_rate || 96}.00
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => openEditModal(user)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => toggleUserStatus(user)}
-                        className={user.is_active ? 'text-orange-600 hover:text-orange-800' : 'text-green-600 hover:text-green-800'}
-                      >
-                        {user.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      {isSuperuser && user.email !== 'jones.emfcontracting@gmail.com' && (
-                        <button
-                          onClick={() => handleDeleteUser(user)}
-                          className="text-red-600 hover:text-red-800 font-semibold"
-                          title="Permanently delete user"
-                        >
-                          🗑️ Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {filteredUsers.length === 0 && (
@@ -477,26 +494,27 @@ Type "DELETE" to confirm permanent deletion:`;
         )}
       </div>
 
+      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-2xl font-bold">
                   {editingUser ? 'Edit User' : 'Add New User'}
                 </h2>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-white text-2xl"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
                       First Name *
                     </label>
                     <input
@@ -504,12 +522,12 @@ Type "DELETE" to confirm permanent deletion:`;
                       required
                       value={formData.first_name}
                       onChange={(e) => setFormData({...formData, first_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
                       Last Name *
                     </label>
                     <input
@@ -517,13 +535,13 @@ Type "DELETE" to confirm permanent deletion:`;
                       required
                       value={formData.last_name}
                       onChange={(e) => setFormData({...formData, last_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
                     Email *
                   </label>
                   <input
@@ -531,31 +549,31 @@ Type "DELETE" to confirm permanent deletion:`;
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
                     Phone
                   </label>
                   <input
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                     placeholder="(555) 123-4567"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
                     Phone Carrier (for SMS alerts)
                   </label>
                   <select
                     value={formData.sms_carrier}
                     onChange={(e) => setFormData({...formData, sms_carrier: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">-- Select Carrier --</option>
                     <option value="verizon">Verizon</option>
@@ -573,60 +591,61 @@ Type "DELETE" to confirm permanent deletion:`;
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
                     Role *
                   </label>
                   <select
                     required
                     value={formData.role}
                     onChange={(e) => setFormData({...formData, role: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                   >
                     <option value="lead_tech">Lead Tech</option>
+                    <option value="tech">Tech</option>
                     <option value="helper">Helper</option>
-                    <option value="office_staff">Office Staff</option>
+                    <option value="office">Office</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
                       Regular Rate ($/hr)
                     </label>
                     <input
                       type="number"
                       value={formData.regular_rate}
                       onChange={(e) => setFormData({...formData, regular_rate: parseFloat(e.target.value)})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                     />
                     <p className="text-xs text-gray-500 mt-1">RT (up to 8 hrs)</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
                       Overtime Rate ($/hr)
                     </label>
                     <input
                       type="number"
                       value={formData.overtime_rate}
                       onChange={(e) => setFormData({...formData, overtime_rate: parseFloat(e.target.value)})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                     />
                     <p className="text-xs text-gray-500 mt-1">OT (over 8 hrs)</p>
                   </div>
                 </div>
 
                 {isSuperuser && editingUser && (
-                  <div className="border-t pt-4 mt-4">
+                  <div className="border-t border-gray-700 pt-4 mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-gray-400">
                         🔑 Reset Password
                       </label>
                       <button
                         type="button"
                         onClick={() => setShowPasswordReset(!showPasswordReset)}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="text-sm text-blue-400 hover:text-blue-300"
                       >
                         {showPasswordReset ? 'Cancel' : 'Change Password'}
                       </button>
@@ -639,7 +658,7 @@ Type "DELETE" to confirm permanent deletion:`;
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           placeholder="Enter new password (min 6 characters)"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                         />
                         <p className="text-xs text-gray-500">
                           New password will be saved when you click "Update User"
@@ -655,9 +674,9 @@ Type "DELETE" to confirm permanent deletion:`;
                     id="is_active"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                   />
-                  <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+                  <label htmlFor="is_active" className="ml-2 block text-sm text-gray-300">
                     Active User
                   </label>
                 </div>
@@ -666,14 +685,14 @@ Type "DELETE" to confirm permanent deletion:`;
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300"
+                    className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-4 py-3 rounded-lg font-semibold transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-3 rounded-lg font-semibold transition"
                   >
                     {saving ? 'Saving...' : editingUser ? 'Update User' : 'Create User'}
                   </button>

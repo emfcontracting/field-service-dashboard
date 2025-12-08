@@ -24,9 +24,12 @@ export default function InvoiceVerification() {
   const [claimedMiles, setClaimedMiles] = useState('');
   const [claimedTotal, setClaimedTotal] = useState('');
   
-  // Imported line items from CSV
+  // Imported line items
   const [importedItems, setImportedItems] = useState([]);
   const [showImportedItems, setShowImportedItems] = useState(false);
+  const [importedText, setImportedText] = useState('');
+  const [processingFile, setProcessingFile] = useState(false);
+  const [filePreview, setFilePreview] = useState(null);
   
   // Comparison results
   const [emfData, setEmfData] = useState([]);
@@ -76,16 +79,121 @@ export default function InvoiceVerification() {
     }
   }
 
-  function handleFileUpload(e) {
+  async function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      parseCSV(text);
-    };
-    reader.readAsText(file);
+    setProcessingFile(true);
+    setImportedText('');
+    setFilePreview(null);
+
+    const fileType = file.type;
+    const fileName = file.name.toLowerCase();
+
+    try {
+      if (fileName.endsWith('.csv') || fileType === 'text/csv') {
+        // CSV file
+        const text = await file.text();
+        parseCSV(text);
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || 
+                 fileType.includes('spreadsheet') || fileType.includes('excel')) {
+        // Excel file
+        await parseExcel(file);
+      } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+        // PDF file - extract text or use AI
+        await processPDFOrImage(file, 'pdf');
+      } else if (fileType.startsWith('image/') || 
+                 fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || 
+                 fileName.endsWith('.png') || fileName.endsWith('.heic')) {
+        // Image file - show preview and use AI
+        const imageUrl = URL.createObjectURL(file);
+        setFilePreview({ type: 'image', url: imageUrl, name: file.name });
+        await processPDFOrImage(file, 'image');
+      } else {
+        // Try as text
+        const text = await file.text();
+        parseCSV(text);
+      }
+    } catch (error) {
+      console.error('Error processing file:', error);
+      alert('Error processing file: ' + error.message);
+    } finally {
+      setProcessingFile(false);
+    }
+  }
+
+  async function parseExcel(file) {
+    // Dynamic import of xlsx library
+    const XLSX = await import('xlsx');
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    
+    // Get first sheet
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    
+    // Convert to CSV then parse
+    const csv = XLSX.utils.sheet_to_csv(sheet);
+    parseCSV(csv);
+  }
+
+  async function processPDFOrImage(file, type) {
+    // Convert file to base64
+    const base64 = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+
+    // Send to our API to extract data
+    try {
+      const response = await fetch('/api/extract-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: base64,
+          fileType: type,
+          mimeType: file.type
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process file');
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Set extracted text for reference
+      if (data.rawText) {
+        setImportedText(data.rawText);
+      }
+
+      // Set extracted values
+      if (data.invoiceNumber) setInvoiceNumber(data.invoiceNumber);
+      if (data.periodStart) setPeriodStart(data.periodStart);
+      if (data.periodEnd) setPeriodEnd(data.periodEnd);
+      if (data.regularHours) setClaimedRegularHours(data.regularHours.toString());
+      if (data.otHours) setClaimedOTHours(data.otHours.toString());
+      if (data.miles) setClaimedMiles(data.miles.toString());
+      if (data.total) setClaimedTotal(data.total.toString());
+      
+      if (data.lineItems && data.lineItems.length > 0) {
+        setImportedItems(data.lineItems);
+        setShowImportedItems(true);
+      }
+
+      alert(`Extracted from ${type.toUpperCase()}!\nRegular: ${data.regularHours || 0}h, OT: ${data.otHours || 0}h, Miles: ${data.miles || 0}`);
+    } catch (error) {
+      console.error('Error extracting from file:', error);
+      // Fall back to manual entry
+      setImportedText(`Could not automatically extract data from ${type.toUpperCase()}. Please enter values manually.`);
+      alert(`Could not automatically extract data. Please enter the values manually.\n\nError: ${error.message}`);
+    }
   }
 
   function parseCSV(text) {
@@ -101,11 +209,11 @@ export default function InvoiceVerification() {
     // Find column indices (flexible matching)
     const dateIdx = header.findIndex(h => h.includes('date'));
     const descIdx = header.findIndex(h => h.includes('desc') || h.includes('work') || h.includes('wo'));
-    const regHoursIdx = header.findIndex(h => (h.includes('reg') && h.includes('hour')) || h === 'regular' || h === 'reg hrs');
+    const regHoursIdx = header.findIndex(h => (h.includes('reg') && h.includes('hour')) || h === 'regular' || h === 'reg hrs' || h === 'reg');
     const otHoursIdx = header.findIndex(h => (h.includes('ot') || h.includes('overtime')) && (h.includes('hour') || h.includes('hrs') || h === 'ot'));
     const milesIdx = header.findIndex(h => h.includes('mile') || h.includes('mileage'));
     const amountIdx = header.findIndex(h => h.includes('amount') || h.includes('total') || h.includes('$'));
-    const hoursIdx = header.findIndex(h => h === 'hours' || h === 'hrs'); // Generic hours column
+    const hoursIdx = header.findIndex(h => h === 'hours' || h === 'hrs');
 
     const items = [];
     let totalRegHours = 0;
@@ -125,7 +233,6 @@ export default function InvoiceVerification() {
         amount: amountIdx >= 0 ? parseFloat(values[amountIdx]) || 0 : 0
       };
 
-      // Skip empty rows
       if (!item.date && !item.description && item.regularHours === 0 && item.otHours === 0 && item.miles === 0) {
         continue;
       }
@@ -144,10 +251,9 @@ export default function InvoiceVerification() {
     setClaimedTotal(totalAmount.toString());
     setShowImportedItems(true);
 
-    // Try to detect date range from imported items
+    // Try to detect date range
     const dates = items.map(i => i.date).filter(d => d).sort();
     if (dates.length > 0) {
-      // Try to parse dates
       const parseDate = (dateStr) => {
         const d = new Date(dateStr);
         if (!isNaN(d.getTime())) {
@@ -263,6 +369,8 @@ export default function InvoiceVerification() {
     setComparisonDone(false);
     setImportedItems([]);
     setShowImportedItems(false);
+    setImportedText('');
+    setFilePreview(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -417,22 +525,53 @@ export default function InvoiceVerification() {
                         : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
                     }`}
                   >
-                    📥 Import CSV
+                    📥 Import File
                   </button>
                 </div>
 
                 {entryMode === 'import' && (
                   <div className="mb-4">
-                    <label className="block text-sm text-gray-400 mb-2">Upload Invoice CSV</label>
+                    <label className="block text-sm text-gray-400 mb-2">Upload Invoice File</label>
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".csv"
+                      accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.heic"
                       onChange={handleFileUpload}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer"
+                      disabled={processingFile}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer disabled:opacity-50"
                     />
-                    <p className="text-xs text-gray-500 mt-2">
-                      CSV should have columns like: Date, Description, Regular Hours, OT Hours, Miles, Amount
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">CSV</span>
+                      <span className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">Excel</span>
+                      <span className="text-xs px-2 py-1 bg-blue-900/30 text-blue-400 rounded">PDF</span>
+                      <span className="text-xs px-2 py-1 bg-blue-900/30 text-blue-400 rounded">Image</span>
+                    </div>
+                    {processingFile && (
+                      <div className="mt-2 text-sm text-yellow-400">
+                        ⏳ Processing file...
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* File Preview */}
+                {filePreview && filePreview.type === 'image' && (
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-400 mb-2">Preview: {filePreview.name}</p>
+                    <img 
+                      src={filePreview.url} 
+                      alt="Invoice preview" 
+                      className="max-h-48 rounded-lg border border-gray-600"
+                    />
+                  </div>
+                )}
+
+                {/* Extracted Text */}
+                {importedText && (
+                  <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
+                    <p className="text-xs text-gray-400 mb-1">Extracted/Notes:</p>
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap max-h-24 overflow-y-auto">
+                      {importedText}
                     </p>
                   </div>
                 )}
@@ -492,7 +631,7 @@ export default function InvoiceVerification() {
 
                   <p className="text-sm text-gray-400">
                     {entryMode === 'import' && importedItems.length > 0 
-                      ? `Totals from imported CSV (${importedItems.length} items):` 
+                      ? `Totals from imported file (${importedItems.length} items):` 
                       : 'Enter hours/miles from their invoice:'}
                   </p>
 
@@ -565,7 +704,7 @@ export default function InvoiceVerification() {
                       onClick={() => setShowImportedItems(!showImportedItems)}
                       className="text-sm text-gray-400 hover:text-white"
                     >
-                      {showImportedItems ? 'Hide' : 'Show'}
+                      Hide
                     </button>
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-1">

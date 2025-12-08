@@ -220,6 +220,13 @@ export default function SettingsPage() {
                 <span>Invoice Review</span>
               </button>
               <button
+                onClick={() => router.push('/admin/invoice-verification')}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
+              >
+                <span className="text-2xl">🧾</span>
+                <span>External Invoices</span>
+              </button>
+              <button
                 onClick={() => router.push('/messages')}
                 className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
               >

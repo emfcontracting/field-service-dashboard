@@ -19,13 +19,13 @@ const SMS_GATEWAYS = {
 };
 
 // Create email transporter using Gmail
-// You'll need to set up an App Password in your Google account
+// Uses same credentials as aging alerts
 const createTransporter = () => {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.GMAIL_USER || 'emfcbre@gmail.com',
-      pass: process.env.GMAIL_APP_PASSWORD // App-specific password from Google
+      user: process.env.EMAIL_USER || 'emfcbre@gmail.com',
+      pass: process.env.EMAIL_PASS
     }
   });
 };
@@ -60,7 +60,7 @@ const buildSmsEmail = (phone, carrier) => {
 
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder } = await request.json();
+    const { type, recipients, workOrder, customMessage } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -95,7 +95,7 @@ export async function POST(request) {
           break;
           
         case 'emergency_work_order':
-          subject = '🚨 EMERGENCY WO';
+          subject = 'EMERGENCY WO';
           message = `EMF EMERGENCY!\nWO: ${workOrder.wo_number}\n${workOrder.building || 'No location'}\nCheck app NOW!`;
           break;
           
@@ -103,15 +103,20 @@ export async function POST(request) {
           subject = 'WO Update';
           message = `EMF: WO ${workOrder.wo_number} status changed to ${workOrder.status?.toUpperCase()}`;
           break;
+
+        case 'custom':
+          subject = 'EMF Message';
+          message = customMessage || 'You have a new message from EMF Contracting.';
+          break;
           
         default:
           subject = 'EMF Notification';
-          message = 'You have a new notification from EMF Contracting.';
+          message = customMessage || 'You have a new notification from EMF Contracting.';
       }
 
       try {
         await transporter.sendMail({
-          from: process.env.GMAIL_USER || 'emfcbre@gmail.com',
+          from: process.env.EMAIL_USER || 'emfcbre@gmail.com',
           to: smsEmail,
           subject: subject,
           text: message

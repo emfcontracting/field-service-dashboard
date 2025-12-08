@@ -35,6 +35,12 @@ export default function DashboardHeader({ activeView, setActiveView }) {
             🏠 Home
           </button>
           <button
+            onClick={() => window.location.href = '/messages'}
+            className="bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
+          >
+            💬 Messages
+          </button>
+          <button
             onClick={() => window.location.href = '/invoices'}
             className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
           >

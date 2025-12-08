@@ -269,3 +269,200 @@ export const generateDailyAvailability = (dateStr) => {
     };
   });
 };
+
+// Generate daily hours log entries for a work order
+export const generateDailyHoursLog = (woId, status, leadTechId) => {
+  if (!['in_progress', 'completed', 'needs_return'].includes(status)) return [];
+  
+  const logs = [];
+  const numDays = randomBetween(1, 3);
+  
+  for (let i = 0; i < numDays; i++) {
+    // Lead tech hours
+    if (leadTechId) {
+      logs.push({
+        log_id: `demo-log-${woId}-lead-${i}`,
+        wo_id: woId,
+        user_id: leadTechId,
+        log_date: daysAgo(i).split('T')[0],
+        hours_regular: randomBetween(2, 8),
+        hours_overtime: Math.random() > 0.7 ? randomBetween(1, 3) : 0,
+        miles: randomBetween(15, 50),
+        notes: randomFrom(['Work in progress', 'Completed section A', 'Waiting for parts', 'Testing complete']),
+        created_at: daysAgo(i)
+      });
+    }
+    
+    // Sometimes add helper hours
+    if (Math.random() > 0.5) {
+      const helper = randomFrom(DEMO_USERS.filter(u => u.role === 'helper'));
+      logs.push({
+        log_id: `demo-log-${woId}-helper-${i}`,
+        wo_id: woId,
+        user_id: helper.user_id,
+        log_date: daysAgo(i).split('T')[0],
+        hours_regular: randomBetween(2, 6),
+        hours_overtime: 0,
+        miles: 0,
+        notes: 'Assisted lead tech',
+        created_at: daysAgo(i)
+      });
+    }
+  }
+  
+  return logs;
+};
+
+// Generate invoices for completed/acknowledged work orders
+export const generateDemoInvoices = (workOrders) => {
+  const invoices = [];
+  let invoiceNum = 1;
+  
+  // Only create invoices for some completed work orders
+  const completedWOs = workOrders.filter(wo => wo.status === 'completed');
+  const numInvoices = Math.min(completedWOs.length, randomBetween(3, 6));
+  
+  for (let i = 0; i < numInvoices; i++) {
+    const wo = completedWOs[i];
+    if (!wo) continue;
+    
+    // Calculate invoice totals based on work order data
+    const laborRT = (wo.hours_regular || randomBetween(4, 12)) * 50;
+    const laborOT = (wo.hours_overtime || randomBetween(0, 4)) * 75;
+    const adminHours = 100; // Always 2 hours @ $50
+    const mileage = (wo.miles || randomBetween(20, 60)) * 1.00;
+    const materials = (wo.material_cost || randomBetween(0, 300)) * 1.15;
+    const equipment = (wo.emf_equipment_cost || 0) * 1.15;
+    
+    const subtotal = laborRT + laborOT + adminHours + mileage + materials + equipment;
+    const status = randomFrom(['draft', 'draft', 'approved', 'synced']);
+    
+    const invoice = {
+      invoice_id: `demo-inv-${String(invoiceNum).padStart(3, '0')}`,
+      invoice_number: `INV-2024-${String(invoiceNum).padStart(5, '0')}`,
+      wo_id: wo.wo_id,
+      invoice_date: daysAgo(randomBetween(1, 15)),
+      due_date: daysFromNow(30),
+      subtotal: subtotal,
+      tax: 0,
+      total: subtotal,
+      status: status,
+      notes: 'Invoice generated from work order',
+      created_at: daysAgo(randomBetween(1, 15)),
+      work_order: {
+        wo_number: wo.wo_number,
+        building: wo.building,
+        work_order_description: wo.work_order_description,
+        comments: wo.comments || 'Work completed as requested.',
+        lead_tech: wo.lead_tech
+      }
+    };
+    
+    invoices.push(invoice);
+    invoiceNum++;
+  }
+  
+  return invoices;
+};
+
+// Generate invoice line items
+export const generateInvoiceLineItems = (invoice, wo) => {
+  const items = [];
+  let itemNum = 1;
+  
+  // Labor - Regular
+  const rtHours = wo.hours_regular || randomBetween(4, 10);
+  if (rtHours > 0) {
+    items.push({
+      line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+      invoice_id: invoice.invoice_id,
+      description: `Labor - Regular Time (${rtHours} hrs @ $50/hr)`,
+      quantity: rtHours,
+      unit_price: 50,
+      amount: rtHours * 50,
+      line_type: 'labor'
+    });
+  }
+  
+  // Labor - Overtime
+  const otHours = wo.hours_overtime || (Math.random() > 0.6 ? randomBetween(1, 4) : 0);
+  if (otHours > 0) {
+    items.push({
+      line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+      invoice_id: invoice.invoice_id,
+      description: `Labor - Overtime (${otHours} hrs @ $75/hr)`,
+      quantity: otHours,
+      unit_price: 75,
+      amount: otHours * 75,
+      line_type: 'labor'
+    });
+  }
+  
+  // Admin Hours - Always
+  items.push({
+    line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+    invoice_id: invoice.invoice_id,
+    description: 'Administrative Hours (2 hrs @ $50/hr)',
+    quantity: 2,
+    unit_price: 50,
+    amount: 100,
+    line_type: 'labor'
+  });
+  
+  // Mileage
+  const miles = wo.miles || randomBetween(20, 50);
+  if (miles > 0) {
+    items.push({
+      line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+      invoice_id: invoice.invoice_id,
+      description: `Mileage (${miles} miles @ $1.00/mile)`,
+      quantity: miles,
+      unit_price: 1.00,
+      amount: miles * 1.00,
+      line_type: 'mileage'
+    });
+  }
+  
+  // Materials (with 15% markup)
+  const materialBase = wo.material_cost || (Math.random() > 0.4 ? randomBetween(50, 400) : 0);
+  if (materialBase > 0) {
+    const materialMarkup = materialBase * 1.15;
+    items.push({
+      line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+      invoice_id: invoice.invoice_id,
+      description: 'Materials',
+      quantity: 1,
+      unit_price: materialMarkup,
+      amount: materialMarkup,
+      line_type: 'material'
+    });
+  }
+  
+  // Equipment (with 15% markup)
+  const equipmentBase = wo.emf_equipment_cost || (Math.random() > 0.8 ? randomBetween(50, 150) : 0);
+  if (equipmentBase > 0) {
+    const equipmentMarkup = equipmentBase * 1.15;
+    items.push({
+      line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+      invoice_id: invoice.invoice_id,
+      description: 'Equipment',
+      quantity: 1,
+      unit_price: equipmentMarkup,
+      amount: equipmentMarkup,
+      line_type: 'equipment'
+    });
+  }
+  
+  // Work Performed description
+  items.push({
+    line_item_id: `demo-li-${invoice.invoice_id}-${itemNum++}`,
+    invoice_id: invoice.invoice_id,
+    description: wo.comments || wo.work_order_description || 'Work completed as requested. All systems tested and operational.',
+    quantity: 1,
+    unit_price: 0,
+    amount: 0,
+    line_type: 'description'
+  });
+  
+  return items;
+};

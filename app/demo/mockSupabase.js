@@ -1,7 +1,7 @@
 // app/demo/mockSupabase.js
 // A mock Supabase client that uses local state instead of real database
 
-import { generateDemoWorkOrders, generateTeamAssignments, generateComments, generateDailyAvailability, DEMO_USERS } from './mockData';
+import { generateDemoWorkOrders, generateTeamAssignments, generateComments, generateDailyAvailability, generateDailyHoursLog, generateDemoInvoices, generateInvoiceLineItems, DEMO_USERS } from './mockData';
 
 class MockSupabaseClient {
   constructor() {
@@ -10,14 +10,27 @@ class MockSupabaseClient {
     this.assignments = {};
     this.comments = {};
     this.availability = {};
+    this.dailyHoursLog = {};
+    this.invoices = [];
+    this.invoiceLineItems = {};
     this.listeners = [];
     
-    // Pre-generate some assignments and comments
+    // Pre-generate some assignments, comments, and daily hours
     this.workOrders.forEach(wo => {
       if (wo.lead_tech_id) {
         this.assignments[wo.wo_id] = generateTeamAssignments(wo.wo_id, wo.lead_tech_id);
+        this.dailyHoursLog[wo.wo_id] = generateDailyHoursLog(wo.wo_id, wo.status, wo.lead_tech_id);
       }
       this.comments[wo.wo_id] = generateComments(wo.wo_id, wo.status);
+    });
+    
+    // Generate invoices
+    this.invoices = generateDemoInvoices(this.workOrders);
+    this.invoices.forEach(inv => {
+      const wo = this.workOrders.find(w => w.wo_id === inv.wo_id);
+      if (wo) {
+        this.invoiceLineItems[inv.invoice_id] = generateInvoiceLineItems(inv, wo);
+      }
     });
   }
 
@@ -26,12 +39,25 @@ class MockSupabaseClient {
     this.workOrders = generateDemoWorkOrders();
     this.assignments = {};
     this.comments = {};
+    this.dailyHoursLog = {};
+    this.invoices = [];
+    this.invoiceLineItems = {};
     
     this.workOrders.forEach(wo => {
       if (wo.lead_tech_id) {
         this.assignments[wo.wo_id] = generateTeamAssignments(wo.wo_id, wo.lead_tech_id);
+        this.dailyHoursLog[wo.wo_id] = generateDailyHoursLog(wo.wo_id, wo.status, wo.lead_tech_id);
       }
       this.comments[wo.wo_id] = generateComments(wo.wo_id, wo.status);
+    });
+    
+    // Generate invoices
+    this.invoices = generateDemoInvoices(this.workOrders);
+    this.invoices.forEach(inv => {
+      const wo = this.workOrders.find(w => w.wo_id === inv.wo_id);
+      if (wo) {
+        this.invoiceLineItems[inv.invoice_id] = generateInvoiceLineItems(inv, wo);
+      }
     });
     
     this.notifyListeners();
@@ -98,6 +124,21 @@ class MockQueryBuilder {
     return this;
   }
 
+  limit(n) {
+    this.limitCount = n;
+    return this;
+  }
+
+  single() {
+    this.singleResult = true;
+    return this;
+  }
+
+  like(field, pattern) {
+    this.filters.push({ type: 'like', field, pattern });
+    return this;
+  }
+
   update(data) {
     this.updateData = data;
     return this;
@@ -133,6 +174,15 @@ class MockQueryBuilder {
           break;
         case 'daily_availability':
           result = this.handleAvailability();
+          break;
+        case 'daily_hours_log':
+          result = this.handleDailyHoursLog();
+          break;
+        case 'invoices':
+          result = this.handleInvoices();
+          break;
+        case 'invoice_line_items':
+          result = this.handleInvoiceLineItems();
           break;
         default:
           result = { data: [], error: null };
@@ -313,6 +363,129 @@ class MockQueryBuilder {
       }
       return { data: this.client.availability[dateFilter.value], error: null };
     }
+    return { data: [], error: null };
+  }
+
+  handleDailyHoursLog() {
+    const woIdFilter = this.filters.find(f => f.field === 'wo_id');
+    if (woIdFilter) {
+      return { data: this.client.dailyHoursLog[woIdFilter.value] || [], error: null };
+    }
+    return { data: [], error: null };
+  }
+
+  handleInvoices() {
+    if (this.updateData) {
+      const invIdFilter = this.filters.find(f => f.field === 'invoice_id');
+      if (invIdFilter) {
+        const index = this.client.invoices.findIndex(inv => inv.invoice_id === invIdFilter.value);
+        if (index !== -1) {
+          this.client.invoices[index] = { ...this.client.invoices[index], ...this.updateData };
+          this.client.notifyListeners();
+        }
+      }
+      return { data: null, error: null };
+    }
+
+    if (this.deleteMode) {
+      const invIdFilter = this.filters.find(f => f.field === 'invoice_id');
+      if (invIdFilter) {
+        this.client.invoices = this.client.invoices.filter(inv => inv.invoice_id !== invIdFilter.value);
+        delete this.client.invoiceLineItems[invIdFilter.value];
+        this.client.notifyListeners();
+      }
+      return { data: null, error: null };
+    }
+
+    if (this.insertData) {
+      const newInvoice = {
+        invoice_id: `demo-inv-${Date.now()}`,
+        ...this.insertData,
+        created_at: new Date().toISOString()
+      };
+      this.client.invoices.unshift(newInvoice);
+      this.client.notifyListeners();
+      return { data: newInvoice, error: null };
+    }
+
+    // Select invoices
+    let data = [...this.client.invoices];
+    
+    // Apply filters
+    this.filters.forEach(filter => {
+      if (filter.type === 'like') {
+        const regex = new RegExp(filter.pattern.replace(/%/g, '.*'));
+        data = data.filter(inv => regex.test(inv[filter.field] || ''));
+      }
+    });
+    
+    // Apply ordering
+    if (this.orderByField) {
+      data.sort((a, b) => {
+        const aVal = a[this.orderByField];
+        const bVal = b[this.orderByField];
+        if (aVal < bVal) return this.orderAscending ? -1 : 1;
+        if (aVal > bVal) return this.orderAscending ? 1 : -1;
+        return 0;
+      });
+    }
+    
+    // Apply limit
+    if (this.limitCount) {
+      data = data.slice(0, this.limitCount);
+    }
+    
+    // Return single result if requested
+    if (this.singleResult) {
+      return { data: data[0] || null, error: data.length === 0 ? { message: 'No rows found' } : null };
+    }
+
+    return { data, error: null };
+  }
+
+  handleInvoiceLineItems() {
+    if (this.insertData) {
+      const items = Array.isArray(this.insertData) ? this.insertData : [this.insertData];
+      items.forEach(item => {
+        if (!this.client.invoiceLineItems[item.invoice_id]) {
+          this.client.invoiceLineItems[item.invoice_id] = [];
+        }
+        this.client.invoiceLineItems[item.invoice_id].push({
+          line_item_id: `demo-li-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          ...item
+        });
+      });
+      this.client.notifyListeners();
+      return { data: null, error: null };
+    }
+
+    if (this.deleteMode) {
+      const invIdFilter = this.filters.find(f => f.field === 'invoice_id');
+      if (invIdFilter) {
+        delete this.client.invoiceLineItems[invIdFilter.value];
+        this.client.notifyListeners();
+      }
+      return { data: null, error: null };
+    }
+
+    const invIdFilter = this.filters.find(f => f.field === 'invoice_id');
+    if (invIdFilter) {
+      let items = this.client.invoiceLineItems[invIdFilter.value] || [];
+      
+      // Apply ordering
+      if (this.orderByField) {
+        items = [...items].sort((a, b) => {
+          const aVal = a[this.orderByField];
+          const bVal = b[this.orderByField];
+          if (aVal < bVal) return this.orderAscending ? -1 : 1;
+          if (aVal > bVal) return this.orderAscending ? 1 : -1;
+          return 0;
+        });
+      }
+      
+      return { data: items, error: null };
+    }
+
     return { data: [], error: null };
   }
 }

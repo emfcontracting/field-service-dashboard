@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 
@@ -12,6 +12,7 @@ const supabase = createClient(
 export default function InvoiceVerification() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const fileInputRef = useRef(null);
   
   // Invoice entry form
   const [selectedUser, setSelectedUser] = useState('');
@@ -23,6 +24,10 @@ export default function InvoiceVerification() {
   const [claimedMiles, setClaimedMiles] = useState('');
   const [claimedTotal, setClaimedTotal] = useState('');
   
+  // Imported line items from CSV
+  const [importedItems, setImportedItems] = useState([]);
+  const [showImportedItems, setShowImportedItems] = useState(false);
+  
   // Comparison results
   const [emfData, setEmfData] = useState([]);
   const [comparing, setComparing] = useState(false);
@@ -31,6 +36,9 @@ export default function InvoiceVerification() {
   // Saved verifications
   const [savedVerifications, setSavedVerifications] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  
+  // View mode: 'manual', 'import'
+  const [entryMode, setEntryMode] = useState('manual');
 
   useEffect(() => {
     loadUsers();
@@ -66,6 +74,96 @@ export default function InvoiceVerification() {
     } catch (error) {
       console.error('Error loading verifications:', error);
     }
+  }
+
+  function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      parseCSV(text);
+    };
+    reader.readAsText(file);
+  }
+
+  function parseCSV(text) {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      alert('CSV file appears to be empty');
+      return;
+    }
+
+    // Parse header to find columns
+    const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+    
+    // Find column indices (flexible matching)
+    const dateIdx = header.findIndex(h => h.includes('date'));
+    const descIdx = header.findIndex(h => h.includes('desc') || h.includes('work') || h.includes('wo'));
+    const regHoursIdx = header.findIndex(h => (h.includes('reg') && h.includes('hour')) || h === 'regular' || h === 'reg hrs');
+    const otHoursIdx = header.findIndex(h => (h.includes('ot') || h.includes('overtime')) && (h.includes('hour') || h.includes('hrs') || h === 'ot'));
+    const milesIdx = header.findIndex(h => h.includes('mile') || h.includes('mileage'));
+    const amountIdx = header.findIndex(h => h.includes('amount') || h.includes('total') || h.includes('$'));
+    const hoursIdx = header.findIndex(h => h === 'hours' || h === 'hrs'); // Generic hours column
+
+    const items = [];
+    let totalRegHours = 0;
+    let totalOTHours = 0;
+    let totalMiles = 0;
+    let totalAmount = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/['"$]/g, ''));
+      
+      const item = {
+        date: dateIdx >= 0 ? values[dateIdx] : '',
+        description: descIdx >= 0 ? values[descIdx] : '',
+        regularHours: regHoursIdx >= 0 ? parseFloat(values[regHoursIdx]) || 0 : (hoursIdx >= 0 ? parseFloat(values[hoursIdx]) || 0 : 0),
+        otHours: otHoursIdx >= 0 ? parseFloat(values[otHoursIdx]) || 0 : 0,
+        miles: milesIdx >= 0 ? parseFloat(values[milesIdx]) || 0 : 0,
+        amount: amountIdx >= 0 ? parseFloat(values[amountIdx]) || 0 : 0
+      };
+
+      // Skip empty rows
+      if (!item.date && !item.description && item.regularHours === 0 && item.otHours === 0 && item.miles === 0) {
+        continue;
+      }
+
+      items.push(item);
+      totalRegHours += item.regularHours;
+      totalOTHours += item.otHours;
+      totalMiles += item.miles;
+      totalAmount += item.amount;
+    }
+
+    setImportedItems(items);
+    setClaimedRegularHours(totalRegHours.toString());
+    setClaimedOTHours(totalOTHours.toString());
+    setClaimedMiles(totalMiles.toString());
+    setClaimedTotal(totalAmount.toString());
+    setShowImportedItems(true);
+
+    // Try to detect date range from imported items
+    const dates = items.map(i => i.date).filter(d => d).sort();
+    if (dates.length > 0) {
+      // Try to parse dates
+      const parseDate = (dateStr) => {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().split('T')[0];
+        }
+        return null;
+      };
+      
+      const startDate = parseDate(dates[0]);
+      const endDate = parseDate(dates[dates.length - 1]);
+      
+      if (startDate) setPeriodStart(startDate);
+      if (endDate) setPeriodEnd(endDate);
+    }
+
+    alert(`Imported ${items.length} line items!\nTotal: ${totalRegHours}h reg, ${totalOTHours}h OT, ${totalMiles} miles`);
   }
 
   async function runComparison() {
@@ -163,6 +261,11 @@ export default function InvoiceVerification() {
     setClaimedTotal('');
     setEmfData([]);
     setComparisonDone(false);
+    setImportedItems([]);
+    setShowImportedItems(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }
 
   // Calculate EMF totals
@@ -293,8 +396,48 @@ export default function InvoiceVerification() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left: Invoice Entry */}
             <div className="space-y-4">
+              {/* Entry Mode Toggle */}
               <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-                <h2 className="font-bold mb-4">📄 External Invoice Details</h2>
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setEntryMode('manual')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                      entryMode === 'manual' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    }`}
+                  >
+                    ✏️ Manual Entry
+                  </button>
+                  <button
+                    onClick={() => setEntryMode('import')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                      entryMode === 'import' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                    }`}
+                  >
+                    📥 Import CSV
+                  </button>
+                </div>
+
+                {entryMode === 'import' && (
+                  <div className="mb-4">
+                    <label className="block text-sm text-gray-400 mb-2">Upload Invoice CSV</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      CSV should have columns like: Date, Description, Regular Hours, OT Hours, Miles, Amount
+                    </p>
+                  </div>
+                )}
+
+                <h2 className="font-bold mb-4">📄 Invoice Details</h2>
                 
                 <div className="space-y-4">
                   <div>
@@ -347,11 +490,15 @@ export default function InvoiceVerification() {
 
                   <hr className="border-gray-700" />
 
-                  <p className="text-sm text-gray-400">Enter hours/miles from their invoice:</p>
+                  <p className="text-sm text-gray-400">
+                    {entryMode === 'import' && importedItems.length > 0 
+                      ? `Totals from imported CSV (${importedItems.length} items):` 
+                      : 'Enter hours/miles from their invoice:'}
+                  </p>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Regular Hours Claimed</label>
+                      <label className="block text-sm text-gray-400 mb-1">Regular Hours</label>
                       <input
                         type="number"
                         step="0.1"
@@ -362,7 +509,7 @@ export default function InvoiceVerification() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">OT Hours Claimed</label>
+                      <label className="block text-sm text-gray-400 mb-1">OT Hours</label>
                       <input
                         type="number"
                         step="0.1"
@@ -376,7 +523,7 @@ export default function InvoiceVerification() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Miles Claimed</label>
+                      <label className="block text-sm text-gray-400 mb-1">Miles</label>
                       <input
                         type="number"
                         step="1"
@@ -387,7 +534,7 @@ export default function InvoiceVerification() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Total $ Claimed</label>
+                      <label className="block text-sm text-gray-400 mb-1">Total $</label>
                       <input
                         type="number"
                         step="0.01"
@@ -408,6 +555,32 @@ export default function InvoiceVerification() {
                   </button>
                 </div>
               </div>
+
+              {/* Imported Items Detail */}
+              {showImportedItems && importedItems.length > 0 && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-bold">📋 Imported Line Items ({importedItems.length})</h3>
+                    <button
+                      onClick={() => setShowImportedItems(!showImportedItems)}
+                      className="text-sm text-gray-400 hover:text-white"
+                    >
+                      {showImportedItems ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {importedItems.map((item, idx) => (
+                      <div key={idx} className="text-xs p-2 bg-gray-700/50 rounded flex justify-between">
+                        <span className="text-gray-400">{item.date || '-'}</span>
+                        <span className="truncate max-w-[150px]">{item.description || '-'}</span>
+                        <span className="font-mono">
+                          {item.regularHours}h + {item.otHours}h OT | {item.miles}mi
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right: Comparison Results */}

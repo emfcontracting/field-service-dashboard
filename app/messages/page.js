@@ -31,7 +31,6 @@ export default function MessagesPage() {
         .from('users')
         .select('*')
         .eq('is_active', true)
-        .in('role', ['lead_tech', 'tech', 'helper'])
         .order('first_name');
 
       if (error) throw error;

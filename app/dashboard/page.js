@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import DashboardHeader from './components/DashboardHeader';
 import WorkOrdersView from './components/WorkOrdersView';
 import AvailabilityView from './components/AvailabilityView';
+import MissingHoursView from './components/MissingHoursView';
 import WorkOrderDetailModal from './components/WorkOrderDetailModal';
 import NewWorkOrderModal from './components/NewWorkOrderModal';
 import ImportModal from '../components/ImportModal';
@@ -31,7 +32,8 @@ export default function Dashboard() {
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'aging' | 'availability'
+  const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'aging' | 'missing-hours' | 'availability'
+  const [missingHoursCount, setMissingHoursCount] = useState(0);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -52,6 +54,13 @@ export default function Dashboard() {
     loadInitialData();
     fetchCurrentUser();
   }, []);
+
+  // Calculate missing hours count when work orders change
+  useEffect(() => {
+    if (workOrders.length > 0) {
+      calculateMissingHoursCount();
+    }
+  }, [workOrders]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -86,9 +95,57 @@ export default function Dashboard() {
     setStats(calculateStats(workOrdersData));
   };
 
+  // Calculate missing hours count for stats card
+  const calculateMissingHoursCount = async () => {
+    try {
+      // Get work orders that should have hours (last 30 days, assigned/in_progress/completed)
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      
+      const eligibleWOs = workOrders.filter(wo => {
+        const hasAssignment = wo.lead_tech_id;
+        const relevantStatus = ['assigned', 'in_progress', 'completed'].includes(wo.status);
+        const withinDateRange = new Date(wo.date_entered || wo.created_at) >= cutoffDate;
+        return hasAssignment && relevantStatus && withinDateRange;
+      });
+
+      if (eligibleWOs.length === 0) {
+        setMissingHoursCount(0);
+        return;
+      }
+
+      // Get hours logged
+      const woIds = eligibleWOs.map(wo => wo.wo_id);
+      const { data: hoursData } = await supabase
+        .from('daily_hours_log')
+        .select('wo_id, regular_hours, overtime_hours')
+        .in('wo_id', woIds);
+
+      // Sum hours per WO
+      const hoursPerWO = {};
+      (hoursData || []).forEach(entry => {
+        const woId = entry.wo_id;
+        const totalHours = (entry.regular_hours || 0) + (entry.overtime_hours || 0);
+        hoursPerWO[woId] = (hoursPerWO[woId] || 0) + totalHours;
+      });
+
+      // Count WOs with zero hours
+      const missingCount = eligibleWOs.filter(wo => !hoursPerWO[wo.wo_id] || hoursPerWO[wo.wo_id] === 0).length;
+      setMissingHoursCount(missingCount);
+    } catch (error) {
+      console.error('Error calculating missing hours:', error);
+      setMissingHoursCount(0);
+    }
+  };
+
   // Import Handler
   const handleImportClick = () => {
     setShowImportModal(true);
+  };
+
+  // Handle Missing Hours card click
+  const handleMissingHoursClick = () => {
+    setActiveView('missing-hours');
   };
 
   // Render the active view
@@ -116,6 +173,17 @@ export default function Dashboard() {
           />
         );
       
+      case 'missing-hours':
+        return (
+          <MissingHoursView
+            workOrders={workOrders}
+            users={users}
+            supabase={supabase}
+            onSelectWorkOrder={setSelectedWO}
+            refreshWorkOrders={refreshWorkOrders}
+          />
+        );
+      
       case 'availability':
         return (
           <AvailabilityView 
@@ -138,6 +206,8 @@ export default function Dashboard() {
             onImport={handleImportClick}
             refreshWorkOrders={refreshWorkOrders}
             isSuperuser={isSuperuser}
+            missingHoursCount={missingHoursCount}
+            onMissingHoursClick={handleMissingHoursClick}
           />
         );
     }
@@ -149,6 +219,7 @@ export default function Dashboard() {
         <DashboardHeader 
           activeView={activeView}
           setActiveView={setActiveView}
+          missingHoursCount={missingHoursCount}
         />
 
         {renderActiveView()}

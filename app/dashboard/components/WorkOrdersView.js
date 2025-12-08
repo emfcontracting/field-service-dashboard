@@ -17,7 +17,9 @@ export default function WorkOrdersView({
   onNewWorkOrder, 
   onImport,
   refreshWorkOrders,
-  isSuperuser = false
+  isSuperuser = false,
+  missingHoursCount = 0,
+  onMissingHoursClick
 }) {
   const [filteredWorkOrders, setFilteredWorkOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -183,6 +185,8 @@ export default function WorkOrdersView({
       <StatsCards 
         stats={stats} 
         onFilterByCbreStatus={handleFilterByCbreStatus}
+        onMissingHoursClick={onMissingHoursClick}
+        missingHoursCount={missingHoursCount}
       />
       
       <WorkOrdersFilters

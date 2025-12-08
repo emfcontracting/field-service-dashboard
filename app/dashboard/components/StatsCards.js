@@ -1,11 +1,11 @@
 // app/dashboard/components/StatsCards.js
 'use client';
 
-export default function StatsCards({ stats, onFilterByCbreStatus }) {
+export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHoursClick, missingHoursCount = 0 }) {
   return (
     <div className="space-y-4 mb-6">
       {/* Work Status Row */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="text-gray-400 text-sm">Total</div>
           <div className="text-3xl font-bold">{stats.total}</div>
@@ -30,6 +30,23 @@ export default function StatsCards({ stats, onFilterByCbreStatus }) {
           <div className="text-green-300 text-sm">Completed</div>
           <div className="text-3xl font-bold">{stats.completed}</div>
         </div>
+        
+        {/* Missing Hours Card - Clickable */}
+        <button
+          onClick={onMissingHoursClick}
+          className={`rounded-lg p-4 text-left transition cursor-pointer ${
+            missingHoursCount > 0 
+              ? 'bg-red-800 hover:bg-red-700 animate-pulse' 
+              : 'bg-gray-700 hover:bg-gray-600'
+          }`}
+        >
+          <div className={`text-sm ${missingHoursCount > 0 ? 'text-red-200' : 'text-gray-400'}`}>
+            ⚠️ Missing Hours
+          </div>
+          <div className={`text-3xl font-bold ${missingHoursCount > 0 ? 'text-red-100' : 'text-white'}`}>
+            {missingHoursCount}
+          </div>
+        </button>
       </div>
 
       {/* CBRE Status Row - Show if there are items needing attention */}

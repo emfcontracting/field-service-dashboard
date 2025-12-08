@@ -1,12 +1,13 @@
 // app/dashboard/components/DashboardHeader.js
 'use client';
 
-export default function DashboardHeader({ activeView, setActiveView }) {
+export default function DashboardHeader({ activeView, setActiveView, missingHoursCount = 0 }) {
   // View navigation tabs
   const viewTabs = [
     { id: 'workorders', label: 'Work Orders', icon: '📋' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'aging', label: 'Aging', icon: '⚠️' },
+    { id: 'aging', label: 'Aging', icon: '⏰' },
+    { id: 'missing-hours', label: 'Missing Hours', icon: '⚠️', alert: missingHoursCount > 0 },
     { id: 'availability', label: 'Availability', icon: '👥' },
   ];
 
@@ -83,17 +84,25 @@ export default function DashboardHeader({ activeView, setActiveView }) {
               key={tab.id}
               onClick={() => setActiveView(tab.id)}
               className={`
-                flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition
+                flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition relative
                 ${isActive 
-                  ? tab.id === 'aging' 
-                    ? 'bg-red-600 text-white' 
-                    : 'bg-blue-600 text-white'
+                  ? tab.id === 'missing-hours'
+                    ? 'bg-orange-600 text-white'
+                    : tab.id === 'aging' 
+                      ? 'bg-red-600 text-white' 
+                      : 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
                 }
               `}
             >
               <span>{tab.icon}</span>
               {tab.label}
+              {/* Alert badge for missing hours */}
+              {tab.alert && !isActive && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                  {missingHoursCount > 99 ? '99+' : missingHoursCount}
+                </span>
+              )}
             </button>
           );
         })}

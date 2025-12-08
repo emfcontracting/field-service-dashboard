@@ -245,17 +245,17 @@ export async function GET(request) {
 
     const accessToken = await getAccessToken();
     
-    // Search for emails with "Dispatch of Work Order" in subject
+    // Search for emails with "dispatch" label
     // If includeRead is true, search recent emails regardless of read status
     let query;
     if (includeRead) {
-      // Get emails from the last N days
+      // Get emails from the last N days with dispatch label
       const afterDate = new Date();
       afterDate.setDate(afterDate.getDate() - days);
       const afterTimestamp = Math.floor(afterDate.getTime() / 1000);
-      query = encodeURIComponent(`subject:"Dispatch of Work Order" after:${afterTimestamp}`);
+      query = encodeURIComponent(`label:dispatch after:${afterTimestamp}`);
     } else {
-      query = encodeURIComponent('is:unread subject:"Dispatch of Work Order"');
+      query = encodeURIComponent('is:unread label:dispatch');
     }
     
     const listResponse = await fetch(

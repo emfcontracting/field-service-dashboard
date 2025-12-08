@@ -80,12 +80,12 @@ function getEmailBody(message) {
 // Extract WO number from email subject or body
 function extractWONumber(subject, body) {
   // Try subject first - common patterns:
-  // "Work Order C2926480" or "WO# C2926480" or just "C2926480"
+  // "Work Order C2926480" or "WO# C2926480" or "WO# ST2652325" or just "C2926480"
   const patterns = [
-    /Work Order\s+([A-Z]?\d{6,})/i,
-    /WO#?\s*([A-Z]?\d{6,})/i,
-    /\b([A-Z]\d{6,})\b/,  // C2926480 pattern
-    /\b(\d{7,})\b/,       // Just numbers
+    /Work Order\s+([A-Z]{0,2}\d{6,})/i,
+    /WO#?\s*([A-Z]{0,2}\d{6,})/i,
+    /\b([A-Z]{1,2}\d{6,})\b/,  // C2926480 or ST2652325 pattern
+    /\b(\d{7,})\b/,             // Just numbers
   ];
 
   for (const pattern of patterns) {
@@ -350,6 +350,55 @@ export async function GET(request) {
             newNTE = extractApprovedNTE(subject, body);
             if (newNTE) {
               updateData.nte = newNTE;
+            } else {
+              // If we couldn't extract NTE from email, calculate it from current costs + pending quotes
+              // Get daily hours for this work order
+              const { data: dailyLogs } = await supabase
+                .from('daily_hours_log')
+                .select('hours_regular, hours_overtime, miles')
+                .eq('wo_id', workOrder.wo_id);
+              
+              // Get pending NTE increase requests
+              const { data: pendingQuotes } = await supabase
+                .from('work_order_quotes')
+                .select('grand_total')
+                .eq('wo_id', workOrder.wo_id)
+                .in('nte_status', ['pending', 'submitted']);
+              
+              // Calculate current labor costs from daily logs
+              let laborRT = 0, laborOT = 0, totalMileage = 0;
+              (dailyLogs || []).forEach(log => {
+                laborRT += parseFloat(log.hours_regular) || 0;
+                laborOT += parseFloat(log.hours_overtime) || 0;
+                totalMileage += parseFloat(log.miles) || 0;
+              });
+              
+              const laborCost = (laborRT * 64) + (laborOT * 96);
+              const adminFee = 128;
+              const mileageCost = totalMileage * 1.00;
+              
+              // Get material/equipment costs from work order (we'd need to fetch full WO data)
+              const { data: fullWO } = await supabase
+                .from('work_orders')
+                .select('material_cost, emf_equipment_cost, rental_cost, trailer_cost')
+                .eq('wo_id', workOrder.wo_id)
+                .single();
+              
+              const materialsCost = (parseFloat(fullWO?.material_cost) || 0) * 1.25;
+              const equipmentCost = (parseFloat(fullWO?.emf_equipment_cost) || 0) * 1.25;
+              const rentalCost = (parseFloat(fullWO?.rental_cost) || 0) * 1.25;
+              const trailerCost = (parseFloat(fullWO?.trailer_cost) || 0) * 1.25;
+              
+              const currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
+              
+              // Sum up pending quote totals
+              const additionalWork = (pendingQuotes || []).reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0);
+              
+              // Only update NTE if we have meaningful costs
+              if (currentCosts > 0 || additionalWork > 0) {
+                newNTE = currentCosts + additionalWork;
+                updateData.nte = newNTE;
+              }
             }
           }
 

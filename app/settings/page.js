@@ -265,6 +265,18 @@ export default function SettingsPage() {
                 👥 Manage Users
               </button>
               <button
+                onClick={() => router.push('/settings/automations')}
+                className="bg-white hover:bg-gray-50 border-2 border-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg transition"
+              >
+                🤖 Automated Messages
+              </button>
+              <button
+                onClick={() => router.push('/messages')}
+                className="bg-white hover:bg-gray-50 border-2 border-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg transition"
+              >
+                💬 Send Messages
+              </button>
+              <button
                 onClick={() => router.push('/dashboard')}
                 className="bg-white hover:bg-gray-50 border-2 border-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg transition"
               >

@@ -1,5 +1,5 @@
 // app/api/availability/reminder-cron/route.js
-// Automated daily reminder for techs who haven't submitted availability
+// Automated daily reminder - reads settings from automated_messages table
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
@@ -55,213 +55,268 @@ const buildSmsEmail = (phone, carrier) => {
   return `${formattedPhone}@${gateway}`;
 };
 
-// Get tomorrow's date in YYYY-MM-DD format (EST timezone)
-const getTomorrowDate = () => {
-  const now = new Date();
-  // Convert to EST
-  const estOffset = -5 * 60; // EST is UTC-5
-  const utcOffset = now.getTimezoneOffset();
-  const estTime = new Date(now.getTime() + (utcOffset + estOffset) * 60 * 1000);
-  
-  // Add one day for tomorrow
-  estTime.setDate(estTime.getDate() + 1);
-  
-  return estTime.toISOString().split('T')[0];
-};
-
-// Get today's date in YYYY-MM-DD format (EST timezone)
-const getTodayDate = () => {
+// Get current EST time info
+const getESTInfo = () => {
   const now = new Date();
   const estOffset = -5 * 60;
   const utcOffset = now.getTimezoneOffset();
   const estTime = new Date(now.getTime() + (utcOffset + estOffset) * 60 * 1000);
-  return estTime.toISOString().split('T')[0];
+  
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayName = days[estTime.getDay()];
+  const hours = estTime.getHours().toString().padStart(2, '0');
+  const minutes = estTime.getMinutes().toString().padStart(2, '0');
+  const currentTime = `${hours}:${minutes}`;
+  const todayDate = estTime.toISOString().split('T')[0];
+  
+  return { dayName, currentTime, todayDate, estTime };
 };
 
 export async function GET(request) {
-  // Verify cron secret for security (optional but recommended)
-  const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Allow without auth for testing, but log warning
-    console.warn('Cron request without valid auth - allowing for now');
+  try {
+    const { dayName, currentTime, todayDate } = getESTInfo();
+    
+    console.log(`Cron running: ${dayName} ${currentTime} EST, date: ${todayDate}`);
+
+    // Get all enabled automations
+    let automations = [];
+    try {
+      const { data, error } = await supabase
+        .from('automated_messages')
+        .select('*')
+        .eq('is_enabled', true);
+      
+      if (!error && data) {
+        automations = data;
+      }
+    } catch (e) {
+      console.log('automated_messages table not found, using defaults');
+    }
+
+    // If no automations in DB, check if availability_reminder should run (default behavior)
+    if (automations.length === 0) {
+      // Default: run availability reminder at 7 PM on weekdays and Sunday
+      const defaultDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'sunday'];
+      if (defaultDays.includes(dayName)) {
+        automations = [{
+          automation_key: 'availability_reminder',
+          name: 'Availability Reminder',
+          target_roles: ['lead_tech', 'tech', 'helper'],
+          send_sms: true,
+          send_email: true,
+          sms_message: 'EMF: Please submit your availability for tomorrow in the mobile app.',
+          email_subject: '⏰ Daily Availability Reminder - EMF',
+          condition_type: 'missing_submission',
+          condition_table: 'daily_availability'
+        }];
+      }
+    }
+
+    // Filter automations that should run today
+    const toRun = automations.filter(a => {
+      const scheduleDays = a.schedule_days || [];
+      return scheduleDays.includes(dayName);
+    });
+
+    if (toRun.length === 0) {
+      return Response.json({
+        success: true,
+        message: `No automations scheduled for ${dayName}`,
+        day: dayName,
+        time: currentTime
+      });
+    }
+
+    const allResults = [];
+
+    for (const automation of toRun) {
+      console.log(`Processing automation: ${automation.name}`);
+      
+      const result = await runAutomation(automation, todayDate);
+      allResults.push({
+        name: automation.name,
+        ...result
+      });
+
+      // Update last_run_at
+      if (automation.id) {
+        await supabase
+          .from('automated_messages')
+          .update({ last_run_at: new Date().toISOString() })
+          .eq('id', automation.id);
+      }
+    }
+
+    return Response.json({
+      success: true,
+      day: dayName,
+      time: currentTime,
+      date: todayDate,
+      automations_run: allResults.length,
+      results: allResults
+    });
+
+  } catch (error) {
+    console.error('Cron error:', error);
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
+}
+
+async function runAutomation(automation, todayDate) {
+  const results = {
+    sms_sent: 0,
+    sms_failed: 0,
+    email_sent: 0,
+    email_failed: 0,
+    skipped: 0,
+    details: []
+  };
 
   try {
-    const tomorrowDate = getTomorrowDate();
-    const todayDate = getTodayDate();
-    
-    console.log(`Running availability reminder check for: ${todayDate}`);
-
-    // Get all active field workers
-    const { data: fieldWorkers, error: usersError } = await supabase
+    // Get target users
+    const { data: users, error: usersError } = await supabase
       .from('users')
       .select('user_id, first_name, last_name, email, phone, sms_carrier')
       .eq('is_active', true)
-      .in('role', ['lead_tech', 'tech', 'helper']);
+      .in('role', automation.target_roles || ['lead_tech', 'tech', 'helper']);
 
     if (usersError) throw usersError;
-
-    if (!fieldWorkers || fieldWorkers.length === 0) {
-      return Response.json({ 
-        success: true, 
-        message: 'No active field workers found',
-        reminders_sent: 0 
-      });
+    if (!users || users.length === 0) {
+      return { ...results, message: 'No target users found' };
     }
 
-    console.log(`Found ${fieldWorkers.length} active field workers`);
+    let targetUsers = users;
 
-    // Get today's availability submissions
-    const { data: submissions, error: submissionsError } = await supabase
-      .from('daily_availability')
-      .select('user_id')
-      .eq('availability_date', todayDate);
+    // Apply condition filtering
+    if (automation.condition_type === 'missing_submission' && automation.condition_table === 'daily_availability') {
+      // Only send to users who haven't submitted availability
+      const { data: submissions } = await supabase
+        .from('daily_availability')
+        .select('user_id')
+        .eq('availability_date', todayDate);
 
-    if (submissionsError) throw submissionsError;
-
-    const submittedUserIds = new Set((submissions || []).map(s => s.user_id));
-
-    // Find workers who haven't submitted
-    const needsReminder = fieldWorkers.filter(w => !submittedUserIds.has(w.user_id));
-
-    console.log(`${needsReminder.length} workers need reminder`);
-
-    if (needsReminder.length === 0) {
-      return Response.json({ 
-        success: true, 
-        message: 'All field workers have submitted availability',
-        reminders_sent: 0,
-        total_workers: fieldWorkers.length
-      });
+      const submittedIds = new Set((submissions || []).map(s => s.user_id));
+      targetUsers = users.filter(u => !submittedIds.has(u.user_id));
+      results.skipped = users.length - targetUsers.length;
     }
 
-    // Send reminders
-    const results = {
-      sms_sent: 0,
-      sms_failed: 0,
-      email_sent: 0,
-      email_failed: 0,
-      details: []
-    };
+    if (targetUsers.length === 0) {
+      return { ...results, message: 'All users already submitted / no users need notification' };
+    }
 
-    for (const worker of needsReminder) {
-      const workerName = `${worker.first_name} ${worker.last_name}`;
-      const workerResult = { name: workerName, sms: null, email: null };
+    // Send notifications
+    for (const user of targetUsers) {
+      const userName = `${user.first_name} ${user.last_name}`;
+      const userResult = { name: userName, sms: null, email: null };
 
-      // Send SMS if phone and carrier are set
-      if (worker.phone && worker.sms_carrier) {
-        const smsEmail = buildSmsEmail(worker.phone, worker.sms_carrier);
+      // Send SMS
+      if (automation.send_sms && user.phone && user.sms_carrier) {
+        const smsEmail = buildSmsEmail(user.phone, user.sms_carrier);
         if (smsEmail) {
           try {
             await transporter.sendMail({
               from: process.env.EMAIL_USER || 'emfcbre@gmail.com',
               to: smsEmail,
-              subject: 'Availability',
-              text: `EMF: Please submit your availability for tomorrow in the mobile app.`
+              subject: 'EMF',
+              text: automation.sms_message || 'You have a notification from EMF.'
             });
             results.sms_sent++;
-            workerResult.sms = 'sent';
-          } catch (smsError) {
-            console.error(`SMS failed for ${workerName}:`, smsError.message);
+            userResult.sms = 'sent';
+          } catch (e) {
             results.sms_failed++;
-            workerResult.sms = 'failed';
+            userResult.sms = 'failed';
           }
         }
-      } else {
-        workerResult.sms = 'no_carrier';
       }
 
-      // Send email if email is set
-      if (worker.email) {
+      // Send Email
+      if (automation.send_email && user.email) {
         try {
           await transporter.sendMail({
             from: `"EMF Contracting" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
-            to: worker.email,
-            subject: '⏰ Daily Availability Reminder - EMF',
-            html: `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <style>
-                  body { font-family: Arial, sans-serif; background-color: #1f2937; color: #ffffff; padding: 20px; }
-                  .container { max-width: 500px; margin: 0 auto; background-color: #111827; border-radius: 8px; overflow: hidden; }
-                  .header { background-color: #f59e0b; padding: 20px; text-align: center; }
-                  .header h1 { margin: 0; color: white; font-size: 20px; }
-                  .content { padding: 20px; }
-                  .btn { display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
-                  .footer { padding: 15px; text-align: center; background-color: #1f2937; font-size: 12px; color: #6b7280; }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <div class="header">
-                    <h1>⏰ Availability Reminder</h1>
-                  </div>
-                  <div class="content">
-                    <p>Hi ${worker.first_name},</p>
-                    <p>You haven't submitted your availability for tomorrow yet.</p>
-                    <p>Please open the EMF mobile app and submit your status so we can plan accordingly.</p>
-                    <div style="text-align: center; margin: 25px 0;">
-                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://field-service-dashboard.vercel.app'}/mobile" class="btn">
-                        📱 Open Mobile App
-                      </a>
-                    </div>
-                    <p style="color: #9ca3af; font-size: 13px;">This helps us schedule jobs and ensure we have proper coverage.</p>
-                  </div>
-                  <div class="footer">
-                    <p>EMF Contracting LLC</p>
-                    <p>Automated reminder sent at 7 PM EST</p>
-                  </div>
-                </div>
-              </body>
-              </html>
-            `
+            to: user.email,
+            subject: automation.email_subject || 'EMF Notification',
+            html: buildEmailHtml(automation, user)
           });
           results.email_sent++;
-          workerResult.email = 'sent';
-        } catch (emailError) {
-          console.error(`Email failed for ${workerName}:`, emailError.message);
+          userResult.email = 'sent';
+        } catch (e) {
           results.email_failed++;
-          workerResult.email = 'failed';
+          userResult.email = 'failed';
         }
-      } else {
-        workerResult.email = 'no_email';
       }
 
-      results.details.push(workerResult);
+      results.details.push(userResult);
     }
 
-    // Log the reminder batch
+    // Log to message_log
     try {
       await supabase.from('message_log').insert({
-        message_type: 'availability_reminder_auto',
-        message_text: 'Automated 7 PM availability reminder',
-        recipient_count: needsReminder.length,
+        message_type: automation.automation_key,
+        message_text: automation.sms_message,
+        recipient_count: targetUsers.length,
         sent_count: results.sms_sent + results.email_sent,
         failed_count: results.sms_failed + results.email_failed,
+        automation_id: automation.id || null,
         sent_at: new Date().toISOString()
       });
-    } catch (logError) {
-      console.log('Could not log reminder (table may not exist)');
+    } catch (e) {
+      console.log('Could not log message');
     }
 
-    console.log('Reminder results:', results);
-
-    return Response.json({
-      success: true,
-      message: `Sent reminders to ${needsReminder.length} workers`,
-      date_checked: todayDate,
-      total_workers: fieldWorkers.length,
-      already_submitted: submittedUserIds.size,
-      needs_reminder: needsReminder.length,
-      results
-    });
+    return results;
 
   } catch (error) {
-    console.error('Availability reminder error:', error);
-    return Response.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+    console.error(`Error in automation ${automation.name}:`, error);
+    return { ...results, error: error.message };
   }
+}
+
+function buildEmailHtml(automation, user) {
+  const iconColors = {
+    '📅': '#f59e0b',
+    '⏱️': '#3b82f6',
+    '⚠️': '#ef4444',
+    '📋': '#8b5cf6',
+    '📨': '#10b981'
+  };
+  
+  const headerColor = iconColors[automation.icon] || '#3b82f6';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #1f2937; color: #ffffff; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; background-color: #111827; border-radius: 8px; overflow: hidden; }
+        .header { background-color: ${headerColor}; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; color: white; font-size: 20px; }
+        .content { padding: 20px; }
+        .btn { display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .footer { padding: 15px; text-align: center; background-color: #1f2937; font-size: 12px; color: #6b7280; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>${automation.icon || '📨'} ${automation.name}</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${user.first_name},</p>
+          <p>${automation.sms_message || 'You have a notification from EMF Contracting.'}</p>
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://field-service-dashboard.vercel.app'}/mobile" class="btn">
+              📱 Open Mobile App
+            </a>
+          </div>
+        </div>
+        <div class="footer">
+          <p>EMF Contracting LLC</p>
+          <p>Automated message</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 }

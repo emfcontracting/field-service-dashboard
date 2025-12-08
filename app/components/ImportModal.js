@@ -3,7 +3,6 @@
 
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { parsePriorityFromImport, getPriorityOptions } from '../dashboard/utils/priorityHelpers';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -11,9 +10,16 @@ const supabase = createClient(
 );
 
 export default function ImportModal({ isOpen, onClose, onImportComplete }) {
-  const [importMethod, setImportMethod] = useState(''); // 'sheets' or 'manual'
+  const [importMethod, setImportMethod] = useState('');
   const [sheetsUrl, setSheetsUrl] = useState('');
   const [importing, setImporting] = useState(false);
+  
+  // Gmail fetch states
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailEmails, setGmailEmails] = useState([]);
+  const [selectedEmails, setSelectedEmails] = useState({});
+  const [gmailError, setGmailError] = useState('');
+  const [importResult, setImportResult] = useState(null);
   
   // Manual entry states
   const [manualWO, setManualWO] = useState({
@@ -27,9 +33,109 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
   if (!isOpen) return null;
 
-  // Import from Google Sheets - Enhanced with default sheet and duplicate checking
+  // ============== GMAIL FETCH FUNCTIONS ==============
+  const fetchGmailEmails = async () => {
+    setGmailLoading(true);
+    setGmailError('');
+    setGmailEmails([]);
+    setSelectedEmails({});
+    setImportResult(null);
+
+    try {
+      const response = await fetch('/api/email-import');
+      const data = await response.json();
+
+      if (!data.success) {
+        setGmailError(data.error || 'Failed to fetch emails');
+        return;
+      }
+
+      setGmailEmails(data.emails || []);
+      
+      // Select all by default
+      const selected = {};
+      (data.emails || []).forEach((_, idx) => {
+        selected[idx] = true;
+      });
+      setSelectedEmails(selected);
+
+    } catch (err) {
+      setGmailError('Failed to connect: ' + err.message);
+    } finally {
+      setGmailLoading(false);
+    }
+  };
+
+  const toggleEmailSelect = (idx) => {
+    setSelectedEmails(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const updateEmailField = (idx, field, value) => {
+    setGmailEmails(prev => {
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        parsedData: { ...updated[idx].parsedData, [field]: value }
+      };
+      return updated;
+    });
+  };
+
+  const handleGmailImport = async () => {
+    const selectedIndexes = Object.keys(selectedEmails).filter(k => selectedEmails[k]).map(Number);
+    
+    if (selectedIndexes.length === 0) {
+      alert('Please select at least one email to import');
+      return;
+    }
+
+    setImporting(true);
+    setGmailError('');
+
+    try {
+      const emailIds = selectedIndexes.map(idx => gmailEmails[idx].emailId);
+      const workOrders = selectedIndexes.map(idx => gmailEmails[idx].parsedData);
+
+      const response = await fetch('/api/email-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailIds, workOrders, markAsRead: true })
+      });
+
+      const result = await response.json();
+      setImportResult(result);
+
+      if (result.success && result.imported > 0) {
+        onImportComplete();
+      }
+
+    } catch (err) {
+      setGmailError('Import failed: ' + err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const getPriorityBadge = (priority) => {
+    switch (priority) {
+      case 'emergency': return { bg: 'bg-red-600', text: '🔴 EMERGENCY' };
+      case 'high': return { bg: 'bg-orange-500', text: '🟠 HIGH' };
+      case 'medium': return { bg: 'bg-yellow-500 text-black', text: '🟡 MEDIUM' };
+      case 'low': return { bg: 'bg-blue-500', text: '🔵 LOW' };
+      default: return { bg: 'bg-gray-500', text: priority?.toUpperCase() || 'N/A' };
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    return new Date(dateStr).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+  };
+
+  // ============== GOOGLE SHEETS IMPORT ==============
   const importFromSheets = async () => {
-    // Use default spreadsheet URL if none provided - specifically the OPEN WO sheet
     const defaultSheetUrl = 'https://docs.google.com/spreadsheets/d/1sm7HjR4PdZLCNbaCQkswktGKEZX61fiVdTUaA5Rg6IE/edit?gid=1945903606#gid=1945903606';
     const urlToUse = sheetsUrl || defaultSheetUrl;
     
@@ -44,53 +150,30 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       }
 
       const spreadsheetId = match[1];
-      
-      // Extract GID (sheet ID) from URL if present
       let gid = null;
       const gidMatch = urlToUse.match(/[#&?]gid=([0-9]+)/);
+      if (gidMatch) gid = gidMatch[1];
       
-      if (gidMatch) {
-        gid = gidMatch[1];
-        console.log('Using specific sheet with GID:', gid);
-      }
-      
-      // Build CSV export URL with GID if available
       const csvUrl = gid 
         ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`
         : `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
 
-      console.log('Fetching from:', csvUrl);
-
       const response = await fetch(csvUrl);
       const csvText = await response.text();
 
-      console.log('Raw CSV (first 500 chars):', csvText.substring(0, 500));
-
-      // First, get existing WO numbers to avoid duplicates
-      const { data: existingWOs, error: fetchError } = await supabase
+      const { data: existingWOs } = await supabase
         .from('work_orders')
         .select('wo_number');
       
-      if (fetchError) {
-        console.error('Error fetching existing work orders:', fetchError);
-      }
-      
       const existingWONumbers = new Set((existingWOs || []).map(wo => wo.wo_number));
-      console.log('Existing WO numbers:', existingWONumbers.size);
 
-      // Split into lines
       const lines = csvText.split('\n');
-      const header = lines[0];
-      console.log('Header:', header);
-      
       const dataRows = [];
       
-      // Parse each line properly handling quotes
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        // Better CSV parsing that handles quoted commas
         const result = [];
         let current = '';
         let inQuotes = false;
@@ -100,9 +183,8 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
           const nextChar = line[j + 1];
           
           if (char === '"' && nextChar === '"') {
-            // Escaped quote
             current += '"';
-            j++; // Skip next quote
+            j++;
           } else if (char === '"') {
             inQuotes = !inQuotes;
           } else if (char === ',' && !inQuotes) {
@@ -112,115 +194,44 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
             current += char;
           }
         }
-        result.push(current.trim()); // Don't forget last column
+        result.push(current.trim());
         
-        // Only add if has valid WO# format and is NOT already in database
         const woNumber = result[0]?.trim();
-        
-        // Skip rows that don't look like valid work orders
-        // Valid WO# should start with letters/numbers (like ST, C, WO-, etc.)
-        // Skip rows that start with "Assignment", "OPEN", or other non-WO text
         const isValidWO = woNumber && 
-                         /^[A-Z0-9]/.test(woNumber) && // Starts with letter or number
+                         /^[A-Z0-9]/.test(woNumber) &&
                          !woNumber.toLowerCase().includes('assignment') &&
                          !woNumber.toLowerCase().includes('open') &&
-                         !woNumber.toLowerCase().includes('name:') &&
-                         !woNumber.toLowerCase().includes('phone:') &&
-                         woNumber.length > 2; // At least 3 characters
+                         woNumber.length > 2;
         
         if (isValidWO && !existingWONumbers.has(woNumber)) {
           dataRows.push(result);
-          console.log(`✓ Adding WO: ${woNumber}`);
-        } else if (isValidWO && existingWONumbers.has(woNumber)) {
-          console.log(`⊘ Skipping existing WO: ${woNumber}`);
-        } else if (woNumber) {
-          console.log(`✗ Skipping invalid row: ${woNumber}`);
         }
       }
 
-      console.log(`Found ${dataRows.length} NEW work orders to import (after filtering existing)`);
-
       if (dataRows.length === 0) {
-        alert('No new work orders to import. All work orders in the spreadsheet already exist in the database.');
+        alert('No new work orders to import.');
         setImporting(false);
-        setSheetsUrl('');
         return;
       }
 
-      const workOrdersToImport = dataRows.map((row, idx) => {
-        // Based on your spreadsheet structure:
-        // Column 0: WO#
-        // Column 1: Building
-        // Column 2: Priority  
-        // Column 3: Date entered (format: "11/19/2024 11:57:29")
-        // Column 4: Work Order Description
-        // Column 5: NTE
-        // Column 6: CONTACT
-        
-        console.log(`Processing row ${idx + 2}:`, {
-          wo: row[0],
-          building: row[1],
-          priority: row[2],
-          date: row[3]
-        });
-        
-        // Parse date - handle format like "11/19/2024 11:57:29"
-        let dateEntered;
+      const workOrdersToImport = dataRows.map((row) => {
+        let dateEntered = new Date().toISOString();
         const dateStr = String(row[3] || '').trim();
-        
         if (dateStr) {
-          // Try to parse the date string
           const parsed = new Date(dateStr);
-          
-          if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2000) {
-            dateEntered = parsed.toISOString();
-            console.log(`  ✓ Parsed date: "${dateStr}" → ${dateEntered}`);
-          } else {
-            console.warn(`  ✗ Failed to parse date: "${dateStr}"`);
-            dateEntered = new Date().toISOString();
-          }
-        } else {
-          console.warn(`  ✗ No date in row ${idx + 2}`);
-          dateEntered = new Date().toISOString();
+          if (!isNaN(parsed.getTime())) dateEntered = parsed.toISOString();
         }
 
-        // Parse priority - based on your spreadsheet values
-        let priority = 'P4'; // Default to P4 (Non-Urgent)
+        let priority = 'P4';
         const priorityStr = String(row[2] || '').toUpperCase().trim();
-        
-        // Direct P-code matches (exact from sheet)
-        if (priorityStr === 'P1') {
-          priority = 'P1';
-        } else if (priorityStr === 'P2') {
-          priority = 'P2';
-        } else if (priorityStr === 'P3') {
-          priority = 'P3';
-        } else if (priorityStr === 'P4') {
-          priority = 'P4';
-        } else if (priorityStr === 'P5') {
-          priority = 'P5';
-        } else if (priorityStr === 'P6') {
-          priority = 'P6';
-        } else if (priorityStr === 'P10') {
-          priority = 'P10';
-        } else if (priorityStr === 'P11') {
-          priority = 'P11';
-        } else if (priorityStr === 'P23') {
-          priority = 'P23';
-        } 
-        // Legacy text-based priorities (for backwards compatibility)
-        else if (priorityStr.includes('EMERGENCY')) {
-          priority = 'P1';
-        } else if (priorityStr.includes('URGENT')) {
-          priority = 'P2';
+        if (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P10', 'P11', 'P23'].includes(priorityStr)) {
+          priority = priorityStr;
         }
-        
-        console.log(`  Priority: "${priorityStr}" → ${priority}`);
 
         return {
           wo_number: String(row[0] || '').trim(),
           building: String(row[1] || '').trim(),
-          priority: priority,
+          priority,
           date_entered: dateEntered,
           work_order_description: String(row[4] || '').trim(),
           nte: parseFloat(String(row[5] || '').replace(/[^0-9.]/g, '')) || 0,
@@ -230,34 +241,28 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
         };
       });
 
-      console.log('Sample work order to import:', workOrdersToImport[0]);
-      console.log(`Importing ${workOrdersToImport.length} new work orders...`);
-
       const { data, error } = await supabase
         .from('work_orders')
         .insert(workOrdersToImport)
         .select();
 
       if (error) {
-        console.error('Import error:', error);
         alert('❌ Import error: ' + error.message);
       } else {
-        console.log(`✅ Imported ${data.length} work orders`);
-        alert(`✅ Successfully imported ${data.length} NEW work orders!\n\nSkipped ${existingWOs?.length || 0} existing work orders.`);
+        alert(`✅ Imported ${data.length} work orders!`);
         setSheetsUrl('');
         setImportMethod('');
         onImportComplete();
         onClose();
       }
     } catch (error) {
-      console.error('Import exception:', error);
-      alert('❌ Failed to import: ' + error.message);
+      alert('❌ Failed: ' + error.message);
     } finally {
       setImporting(false);
     }
   };
 
-  // Manual entry submission
+  // ============== MANUAL ENTRY ==============
   const handleManualSubmit = async () => {
     if (!manualWO.wo_number || !manualWO.building || !manualWO.work_order_description) {
       alert('Please fill in WO#, Building, and Description');
@@ -278,55 +283,48 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
         .select();
 
       if (error) {
-        console.error('Error creating work order:', error);
-        alert('Error creating work order: ' + error.message);
+        alert('Error: ' + error.message);
       } else {
-        alert('✅ Work order created successfully!');
-        setManualWO({
-          wo_number: '',
-          building: '',
-          work_order_description: '',
-          requestor: '',
-          priority: 'P4',
-          nte: 0
-        });
+        alert('✅ Work order created!');
+        setManualWO({ wo_number: '', building: '', work_order_description: '', requestor: '', priority: 'P4', nte: 0 });
         setImportMethod('');
         onImportComplete();
         onClose();
       }
     } catch (error) {
-      alert('Failed to create work order: ' + error.message);
+      alert('Failed: ' + error.message);
     } finally {
       setImporting(false);
     }
   };
 
-  // Method selection screen
+  // ============== METHOD SELECTION ==============
   if (!importMethod) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
         <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-white">Import Work Orders</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white text-3xl leading-none"
-            >
-              ×
-            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl">×</button>
           </div>
           
-          <p className="text-gray-300 mb-6">
-            Choose how you want to import work orders:
-          </p>
+          <p className="text-gray-300 mb-6">Choose how you want to import:</p>
           
           <div className="space-y-3">
+            <button
+              onClick={() => { setImportMethod('gmail'); fetchGmailEmails(); }}
+              className="w-full bg-purple-600 hover:bg-purple-700 px-6 py-4 rounded-lg text-white text-left transition"
+            >
+              <div className="font-bold text-lg mb-1">📧 Fetch from Gmail</div>
+              <div className="text-sm opacity-90">Auto-fetch CBRE dispatch emails from wo.emfcontractingsc@gmail.com</div>
+            </button>
+            
             <button
               onClick={() => setImportMethod('sheets')}
               className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-4 rounded-lg text-white text-left transition"
             >
               <div className="font-bold text-lg mb-1">📊 Import from Google Sheets</div>
-              <div className="text-sm opacity-90">Bulk import from a spreadsheet URL</div>
+              <div className="text-sm opacity-90">Bulk import from spreadsheet</div>
             </button>
             
             <button
@@ -334,16 +332,251 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               className="w-full bg-green-600 hover:bg-green-700 px-6 py-4 rounded-lg text-white text-left transition"
             >
               <div className="font-bold text-lg mb-1">✏️ Manual Entry</div>
-              <div className="text-sm opacity-90">Create a single work order manually</div>
+              <div className="text-sm opacity-90">Type in work order details</div>
             </button>
           </div>
           
-          <div className="mt-6">
+          <button
+            onClick={onClose}
+            className="w-full mt-6 bg-gray-600 hover:bg-gray-700 px-4 py-3 rounded-lg text-white font-bold"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============== GMAIL FETCH SCREEN ==============
+  if (importMethod === 'gmail') {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-800 rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="border-b border-gray-700 p-6 flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">📧 CBRE Email Import</h2>
+              <p className="text-gray-400 text-sm mt-1">Fetching from wo.emfcontractingsc@gmail.com</p>
+            </div>
             <button
-              onClick={onClose}
-              className="w-full bg-gray-600 hover:bg-gray-700 px-4 py-3 rounded-lg text-white font-bold"
+              onClick={() => { setImportMethod(''); setGmailEmails([]); setGmailError(''); setImportResult(null); }}
+              className="text-gray-400 hover:text-white text-3xl"
+            >←</button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Error */}
+            {gmailError && (
+              <div className="bg-red-900 text-red-200 p-4 rounded-lg">
+                ⚠️ {gmailError}
+              </div>
+            )}
+
+            {/* Import Result */}
+            {importResult && (
+              <div className={`p-4 rounded-lg ${importResult.success ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
+                <strong>{importResult.success ? '✅' : '❌'} {importResult.message}</strong>
+                {importResult.errors?.length > 0 && (
+                  <ul className="mt-2 text-sm">
+                    {importResult.errors.map((err, i) => <li key={i}>• {err}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Loading */}
+            {gmailLoading && (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                <p className="text-gray-400">Fetching emails from Gmail...</p>
+              </div>
+            )}
+
+            {/* No Emails */}
+            {!gmailLoading && gmailEmails.length === 0 && !gmailError && (
+              <div className="text-center py-12 text-gray-400">
+                <div className="text-6xl mb-4">📭</div>
+                <p className="text-xl font-semibold mb-2">No New Work Order Emails</p>
+                <p className="text-sm">All CBRE dispatch emails have been imported or marked as read.</p>
+                <button
+                  onClick={fetchGmailEmails}
+                  className="mt-4 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg"
+                >
+                  🔄 Check Again
+                </button>
+              </div>
+            )}
+
+            {/* Email List */}
+            {!gmailLoading && gmailEmails.length > 0 && (
+              <>
+                {/* Selection Controls */}
+                <div className="flex justify-between items-center mb-2">
+                  <div className="text-sm text-gray-400">
+                    {Object.values(selectedEmails).filter(Boolean).length} of {gmailEmails.length} selected
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const all = {};
+                        gmailEmails.forEach((_, idx) => { all[idx] = true; });
+                        setSelectedEmails(all);
+                      }}
+                      className="text-purple-400 hover:text-purple-300 text-sm"
+                    >Select All</button>
+                    <span className="text-gray-600">|</span>
+                    <button
+                      onClick={() => setSelectedEmails({})}
+                      className="text-purple-400 hover:text-purple-300 text-sm"
+                    >Select None</button>
+                    <span className="text-gray-600">|</span>
+                    <button
+                      onClick={fetchGmailEmails}
+                      className="text-purple-400 hover:text-purple-300 text-sm"
+                    >🔄 Refresh</button>
+                  </div>
+                </div>
+
+                {/* Email Cards */}
+                <div className="space-y-4">
+                  {gmailEmails.map((email, idx) => {
+                    const badge = getPriorityBadge(email.parsedData.priority);
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`border rounded-lg p-4 transition ${
+                          selectedEmails[idx] ? 'border-purple-500 bg-gray-700' : 'border-gray-600 bg-gray-750 opacity-60'
+                        }`}
+                      >
+                        {/* Card Header */}
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedEmails[idx]}
+                            onChange={() => toggleEmailSelect(idx)}
+                            className="mt-1 h-5 w-5 rounded"
+                          />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="font-bold text-lg text-white">
+                                  {email.parsedData.wo_number || 'Unknown WO#'}
+                                </span>
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${badge.bg}`}>
+                                  {badge.text}
+                                </span>
+                              </div>
+                              <span className="text-xs text-gray-400">
+                                {formatDate(email.receivedAt)}
+                              </span>
+                            </div>
+                            <p className="text-gray-300 mt-1">
+                              📍 {email.parsedData.building || 'No building specified'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Expanded Details */}
+                        {selectedEmails[idx] && (
+                          <div className="mt-4 pl-8 space-y-3">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Work Order #</label>
+                                <input
+                                  type="text"
+                                  value={email.parsedData.wo_number || ''}
+                                  onChange={(e) => updateEmailField(idx, 'wo_number', e.target.value)}
+                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Building</label>
+                                <input
+                                  type="text"
+                                  value={email.parsedData.building || ''}
+                                  onChange={(e) => updateEmailField(idx, 'building', e.target.value)}
+                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Priority</label>
+                                <select
+                                  value={email.parsedData.priority || 'medium'}
+                                  onChange={(e) => updateEmailField(idx, 'priority', e.target.value)}
+                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                >
+                                  <option value="emergency">🔴 Emergency</option>
+                                  <option value="high">🟠 High</option>
+                                  <option value="medium">🟡 Medium</option>
+                                  <option value="low">🔵 Low</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Requestor</label>
+                                <input
+                                  type="text"
+                                  value={email.parsedData.requestor || ''}
+                                  onChange={(e) => updateEmailField(idx, 'requestor', e.target.value)}
+                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">NTE ($)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={email.parsedData.nte || ''}
+                                  onChange={(e) => updateEmailField(idx, 'nte', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  placeholder="Enter NTE"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Description</label>
+                              <textarea
+                                value={email.parsedData.work_order_description || ''}
+                                onChange={(e) => updateEmailField(idx, 'work_order_description', e.target.value)}
+                                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                rows="3"
+                              />
+                            </div>
+
+                            {email.parsedData.comments && (
+                              <div className="bg-gray-800 rounded p-3 text-xs text-gray-400">
+                                <pre className="whitespace-pre-wrap">{email.parsedData.comments}</pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-gray-700 p-4 flex justify-between">
+            <button
+              onClick={() => { setImportMethod(''); setGmailEmails([]); setGmailError(''); setImportResult(null); }}
+              className="bg-gray-600 hover:bg-gray-700 px-6 py-2 rounded-lg font-semibold"
             >
-              Cancel
+              Back
+            </button>
+            <button
+              onClick={handleGmailImport}
+              disabled={importing || Object.values(selectedEmails).filter(Boolean).length === 0}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-8 py-2 rounded-lg font-bold"
+            >
+              {importing ? '⏳ Importing...' : `✅ Import ${Object.values(selectedEmails).filter(Boolean).length} Work Order(s)`}
             </button>
           </div>
         </div>
@@ -351,80 +584,43 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     );
   }
 
-  // Google Sheets import screen
+  // ============== GOOGLE SHEETS SCREEN ==============
   if (importMethod === 'sheets') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
         <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Import from Google Sheets</h2>
-            <button
-              onClick={() => {
-                setImportMethod('');
-                setSheetsUrl('');
-              }}
-              className="text-gray-400 hover:text-white text-3xl leading-none"
-            >
-              ←
-            </button>
+            <h2 className="text-2xl font-bold">📊 Import from Google Sheets</h2>
+            <button onClick={() => { setImportMethod(''); setSheetsUrl(''); }} className="text-gray-400 hover:text-white text-3xl">←</button>
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Google Sheets URL (Optional - Leave blank to use default sheet)
-            </label>
+            <label className="block text-sm text-gray-300 mb-2">Google Sheets URL (optional)</label>
             <input
               type="text"
               value={sheetsUrl}
               onChange={(e) => setSheetsUrl(e.target.value)}
-              placeholder="Leave empty to use default EMF sheet or paste custom URL..."
-              className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+              placeholder="Leave empty for default EMF sheet..."
+              className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg"
               disabled={importing}
             />
-            <p className="mt-2 text-sm text-gray-400">
-              {sheetsUrl ? 
-                'Using custom spreadsheet URL' : 
-                '📊 Will import from default EMF Work Orders sheet'}
-            </p>
           </div>
 
-          <div className="bg-green-900 bg-opacity-50 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold text-green-300 mb-2">✨ Smart Import Features:</h3>
-            <ul className="text-sm text-green-200 space-y-1">
-              <li>• Automatically skips existing work orders</li>
-              <li>• Only imports NEW work orders not in database</li>
-              <li>• Shows count of new vs skipped items</li>
-            </ul>
-          </div>
-
-          <div className="bg-blue-900 bg-opacity-50 rounded-lg p-4 mb-6">
-            <h3 className="font-semibold text-blue-300 mb-2">Expected Column Format:</h3>
-            <ul className="text-sm text-blue-200 space-y-1">
-              <li>• Column A: WO Number</li>
-              <li>• Column B: Building</li>
-              <li>• Column C: Priority (P1-P5)</li>
-              <li>• Column D: Date Entered</li>
-              <li>• Column E: Description</li>
-              <li>• Column F: NTE Amount</li>
-              <li>• Column G: Requestor/Contact</li>
-            </ul>
+          <div className="bg-green-900/50 rounded-lg p-4 mb-6">
+            <p className="text-green-200 text-sm">✨ Automatically skips existing work orders</p>
           </div>
 
           <div className="flex gap-3">
             <button
               onClick={importFromSheets}
               disabled={importing}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-white transition"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold"
             >
-              {importing ? 'Importing...' : '🔄 Import New Work Orders'}
+              {importing ? 'Importing...' : '🔄 Import'}
             </button>
             <button
-              onClick={() => {
-                setImportMethod('');
-                setSheetsUrl('');
-              }}
-              disabled={importing}
-              className="bg-gray-600 hover:bg-gray-700 disabled:opacity-50 px-6 py-3 rounded-lg font-semibold text-white transition"
+              onClick={() => { setImportMethod(''); setSheetsUrl(''); }}
+              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold"
             >
               Back
             </button>
@@ -434,29 +630,14 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
     );
   }
 
-  // Manual entry screen
+  // ============== MANUAL ENTRY SCREEN ==============
   if (importMethod === 'manual') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
         <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Manual Work Order Entry</h2>
-            <button
-              onClick={() => {
-                setImportMethod('');
-                setManualWO({
-                  wo_number: '',
-                  building: '',
-                  work_order_description: '',
-                  requestor: '',
-                  priority: 'P4',
-                  nte: 0
-                });
-              }}
-              className="text-gray-400 hover:text-white text-3xl leading-none"
-            >
-              ←
-            </button>
+            <h2 className="text-2xl font-bold">✏️ Manual Entry</h2>
+            <button onClick={() => setImportMethod('')} className="text-gray-400 hover:text-white text-3xl">←</button>
           </div>
 
           <div className="space-y-4">
@@ -468,7 +649,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                   value={manualWO.wo_number}
                   onChange={(e) => setManualWO({ ...manualWO, wo_number: e.target.value })}
                   className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                  placeholder="WO-2025-001"
+                  placeholder="C1234567"
                 />
               </div>
               <div>
@@ -478,7 +659,6 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                   value={manualWO.building}
                   onChange={(e) => setManualWO({ ...manualWO, building: e.target.value })}
                   className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                  placeholder="Building A"
                 />
               </div>
             </div>
@@ -490,22 +670,19 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 onChange={(e) => setManualWO({ ...manualWO, work_order_description: e.target.value })}
                 className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
                 rows="3"
-                placeholder="Describe the work to be done..."
               />
             </div>
 
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Requestor</label>
-              <input
-                type="text"
-                value={manualWO.requestor}
-                onChange={(e) => setManualWO({ ...manualWO, requestor: e.target.value })}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                placeholder="John Smith"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+                <input
+                  type="text"
+                  value={manualWO.requestor}
+                  onChange={(e) => setManualWO({ ...manualWO, requestor: e.target.value })}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                />
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Priority</label>
                 <select
@@ -515,25 +692,17 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 >
                   <option value="P1">🔴 P1 - Emergency</option>
                   <option value="P2">🟠 P2 - Urgent</option>
-                  <option value="P3">🟡 P3 - Urgent (Non-Emerg)</option>
-                  <option value="P4">🔵 P4 - Non-Urgent</option>
-                  <option value="P5">🟢 P5 - Handyman</option>
-                  <option value="P6">🟣 P6 - Tech/Vendor</option>
-                  <option value="P10">🔷 P10 - PM</option>
-                  <option value="P11">💎 P11 - PM Compliance</option>
-                  <option value="P23">💬 P23 - Complaints</option>
+                  <option value="P3">🟡 P3</option>
+                  <option value="P4">🔵 P4</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm text-gray-400 mb-1">NTE Budget ($)</label>
+                <label className="block text-sm text-gray-400 mb-1">NTE ($)</label>
                 <input
                   type="number"
-                  step="0.01"
                   value={manualWO.nte}
                   onChange={(e) => setManualWO({ ...manualWO, nte: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
-                  placeholder="5000.00"
                 />
               </div>
             </div>
@@ -543,24 +712,13 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
             <button
               onClick={handleManualSubmit}
               disabled={importing}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-white transition"
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold"
             >
               {importing ? 'Creating...' : 'Create Work Order'}
             </button>
             <button
-              onClick={() => {
-                setImportMethod('');
-                setManualWO({
-                  wo_number: '',
-                  building: '',
-                  work_order_description: '',
-                  requestor: '',
-                  priority: 'P4',
-                  nte: 0
-                });
-              }}
-              disabled={importing}
-              className="bg-gray-600 hover:bg-gray-700 disabled:opacity-50 px-6 py-3 rounded-lg font-semibold text-white transition"
+              onClick={() => setImportMethod('')}
+              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold"
             >
               Back
             </button>

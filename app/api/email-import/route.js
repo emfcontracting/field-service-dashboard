@@ -1,5 +1,6 @@
 // app/api/email-import/route.js
 // Fetches work order emails from Gmail and parses CBRE dispatch format
+// Supports both regular dispatch and PM (Preventive Maintenance) work orders
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -85,7 +86,7 @@ function getEmailBody(message) {
   return body;
 }
 
-// Parse CBRE work order email
+// Parse CBRE work order email (supports both regular dispatch and PM work orders)
 function parseCBREEmail(subject, body) {
   const workOrder = {
     wo_number: '',
@@ -103,99 +104,165 @@ function parseCBREEmail(subject, body) {
     nte: 0
   };
 
-  // Clean the content
+  // Detect if this is a PM (Preventive Maintenance) work order
+  const isPM = (subject || '').toLowerCase().includes('pm work order') || 
+               (body || '').toLowerCase().includes('preventive maintenance description');
+
+  // Clean the content - handle quoted-printable encoding
   const cleanBody = (body || '')
-    .replace(/=\r?\n/g, '')
-    .replace(/=3D/g, '=')
-    .replace(/=20/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/=\r?\n/g, '')           // Remove soft line breaks
+    .replace(/=3D/g, '=')             // Decode =3D to =
+    .replace(/=20/g, ' ')             // Decode =20 to space
+    .replace(/=2F/g, '/')             // Decode =2F to /
+    .replace(/=2C/g, ',')             // Decode =2C to comma
+    .replace(/<[^>]+>/g, ' ')         // Remove HTML tags
+    .replace(/&nbsp;/g, ' ')          // Replace &nbsp;
+    .replace(/&amp;/g, '&')           // Replace &amp;
+    .replace(/\s+/g, ' ')             // Normalize whitespace
     .trim();
 
-  // Extract WO number from subject: "Dispatch of Work Order C2926480 - Priority: P1-Emergency"
-  const woMatch = (subject || '').match(/Work Order\s+([A-Z]?\d+)/i);
+  // Extract WO number from subject
+  // Regular: "Dispatch of Work Order C2926480 - Priority: P1-Emergency"
+  // PM: "Dispatch of PM Work Order P2919408"
+  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]?\d+)/i);
   if (woMatch) {
     workOrder.wo_number = woMatch[1];
   }
 
-  // Extract Priority
-  const priorityMatch = (body || '').match(/Priority:\s*(P\d)[^a-z]*(\w*)/i) || (subject || '').match(/Priority:\s*(P\d)/i);
+  // Extract Priority - handle both formats
+  // Regular: "Priority: P1-Emergency" or "Priority: P2"
+  // PM: "Priority: P10 - 1 Month" or "Priority: P5 - 1 Week"
+  const priorityMatch = cleanBody.match(/Priority[:\s]*(P\d+)[\s\-]*([^<\n]*)/i) || 
+                        (subject || '').match(/Priority[:\s]*(P\d+)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
     const pText = (priorityMatch[2] || '').toLowerCase();
+    const pNum = parseInt(pCode.replace('P', ''));
     
-    if (pCode === 'P1' || pText.includes('emergency')) {
+    if (pNum === 1 || pText.includes('emergency')) {
       workOrder.priority = 'emergency';
-    } else if (pCode === 'P2' || pText.includes('urgent')) {
+    } else if (pNum === 2 || pText.includes('urgent') || pText.includes('24 hour')) {
       workOrder.priority = 'high';
-    } else if (pCode === 'P3') {
+    } else if (pNum === 3 || pNum === 4 || pText.includes('48 hour') || pText.includes('72 hour')) {
       workOrder.priority = 'medium';
     } else {
+      // P5+ (1 week, 1 month, etc.) = low priority
       workOrder.priority = 'low';
     }
   }
 
-  // Extract Date Entered
-  const dateMatch = cleanBody.match(/Date Entered:\s*([A-Za-z]+\s+\d+\s+\d+\s+[\d:]+\s*[AP]M)/i);
+  // Extract Date Entered - handle various formats
+  // "Date Entered: Dec  2 2025  8:17AM UTC-05"
+  // "Date Entered: January 15 2025 10:30 AM"
+  const dateMatch = cleanBody.match(/Date Entered:\s*([A-Za-z]+\s+\d+\s+\d+\s+[\d:]+\s*[AP]?M?)/i);
   if (dateMatch) {
     try {
-      const parsed = new Date(dateMatch[1].replace(/\s+/g, ' '));
+      const dateStr = dateMatch[1].replace(/\s+/g, ' ').trim();
+      const parsed = new Date(dateStr);
       if (!isNaN(parsed.getTime())) {
         workOrder.date_entered = parsed.toISOString();
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('Date parse error:', e);
+    }
   }
 
   // Extract Building
-  const buildingMatch = cleanBody.match(/Building:\s*([^\n]+?)(?=Floor|Area|Country|$)/i);
+  const buildingMatch = cleanBody.match(/Building:\s*([^<\n]+?)(?=\s*Floor|\s*Area|\s*Country|$)/i);
   if (buildingMatch) {
     workOrder.building = buildingMatch[1].trim().substring(0, 200);
   }
 
-  // Extract Address
-  const addressMatch = cleanBody.match(/Address:\s*([^\n]+?)(?=Country|Building|$)/i);
+  // Extract Address - handle PM format: "Address: 124 CREEKSIDE ROAD, , WEST COLUMBIA, SC, 29172,"
+  const addressMatch = cleanBody.match(/Address:\s*([^<\n]+?)(?=\s*Country|\s*Building|$)/i);
   if (addressMatch) {
-    workOrder.address = addressMatch[1].trim();
+    // Clean up extra commas and spaces
+    workOrder.address = addressMatch[1].replace(/,\s*,/g, ',').replace(/,\s*$/, '').trim();
   }
 
-  // Extract City, State
-  const locationMatch = cleanBody.match(/Country,?\s*St,?\s*City[:\s]*[A-Z]+,?\s*([A-Z]{2}),?\s*([A-Z\s]+)/i);
+  // Extract City, State - handle both formats
+  // "Country, St, City: USA, ME, Portland"
+  // "Country, St, City: US, SC, West Columbia"
+  const locationMatch = cleanBody.match(/Country,?\s*St,?\s*City[:\s]*(?:USA?),?\s*([A-Z]{2}),?\s*([A-Za-z\s]+)/i);
   if (locationMatch) {
     workOrder.state = locationMatch[1].trim();
     workOrder.city = locationMatch[2].trim();
   }
 
-  // Extract Requestor - "Work Order Requestor Name and Phone: Warren Newton, 207-341-3521"
-  const requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,]+),?\s*([\d\-\(\)\s]+)/i);
+  // Extract Requestor/Site Contact
+  // Regular: "Work Order Requestor Name and Phone: Warren Newton, 207-341-3521"
+  // PM: "UPS Site Contact: Adriana Davis (980-298-0331) Adriana.Davis@cbre.com"
+  let requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,<\n]+),?\s*([\d\-\(\)\s]+)?/i);
+  if (!requestorMatch) {
+    // Try PM format - UPS Site Contact
+    requestorMatch = cleanBody.match(/UPS Site Contact:\s*([^(<\n]+)\s*\(?([\d\-]+)\)?/i);
+  }
   if (requestorMatch) {
     workOrder.requestor = requestorMatch[1].trim();
     if (requestorMatch[2]) {
-      workOrder.requestor_phone = requestorMatch[2].trim();
+      workOrder.requestor_phone = requestorMatch[2].replace(/[^\d\-]/g, '').trim();
     }
   }
 
-  // Extract NTE - "The charge for this work order should not exceed 2500.00 USD"
-  const nteMatch = cleanBody.match(/should not exceed\s*([\d,]+\.?\d*)\s*USD/i);
+  // Extract NTE - "should not exceed 500.00 USD" or "should not exceed 2500.00 USD"
+  const nteMatch = cleanBody.match(/should not exceed\s*\*?\*?([\d,]+\.?\d*)\s*USD\*?\*?/i);
   if (nteMatch) {
     workOrder.nte = parseFloat(nteMatch[1].replace(/,/g, '')) || 0;
   }
 
-  // Extract Problem Description
-  const descMatch = cleanBody.match(/Problem Description:\s*(.+?)(?=Assignment Name|Notes to Vendor|$)/is);
-  if (descMatch) {
-    workOrder.work_order_description = descMatch[1]
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 2000);
+  // Extract Description - try multiple patterns
+  let description = '';
+  
+  // Try regular dispatch format first
+  let descMatch = cleanBody.match(/Problem Description:\s*(.+?)(?=Assignment Name|Notes to Vendor|Service Location|$)/is);
+  
+  // Try PM format if regular didn't match
+  if (!descMatch || !descMatch[1].trim()) {
+    descMatch = cleanBody.match(/Preventive Maintenance Description:\s*(.+?)(?=Service Location|Asset|PM Action|$)/is);
   }
+  
+  // Also try to get PM Action Steps for additional context
+  const pmActionMatch = cleanBody.match(/PM Action Steps:\s*[-]+\s*(.+?)(?=If you have any questions|Assignment Name|$)/is);
+  
+  if (descMatch && descMatch[1]) {
+    description = descMatch[1].replace(/\s+/g, ' ').trim();
+  }
+  
+  // Append PM Action if found and different
+  if (pmActionMatch && pmActionMatch[1]) {
+    const pmAction = pmActionMatch[1].replace(/\s+/g, ' ').trim();
+    if (pmAction && !description.includes(pmAction)) {
+      description = description ? `${description}\n\nPM Action: ${pmAction}` : pmAction;
+    }
+  }
+  
+  workOrder.work_order_description = description.substring(0, 2000);
 
-  // Build comments
+  // Build comments with additional info
   const comments = [];
+  
+  // Add work order type indicator
+  if (isPM) {
+    comments.push('[PM - Preventive Maintenance]');
+  }
+  
   if (workOrder.address) comments.push(`Address: ${workOrder.address}`);
   if (workOrder.city && workOrder.state) comments.push(`Location: ${workOrder.city}, ${workOrder.state}`);
-  if (workOrder.requestor_phone) comments.push(`Requestor Phone: ${workOrder.requestor_phone}`);
-  comments.push(`[Imported from CBRE email on ${new Date().toLocaleString()}]`);
+  if (workOrder.requestor_phone) comments.push(`Contact Phone: ${workOrder.requestor_phone}`);
+  
+  // Extract Target Completion if available
+  const targetMatch = cleanBody.match(/Target Completion:\s*([A-Za-z]+\s+\d+\s+\d+)/i);
+  if (targetMatch) {
+    comments.push(`Target Completion: ${targetMatch[1].trim()}`);
+  }
+  
+  // Extract Asset/Tag info for PM orders
+  const tagMatch = cleanBody.match(/Tag Number:\s*(\d+)/i);
+  if (tagMatch) {
+    comments.push(`Asset Tag: ${tagMatch[1]}`);
+  }
+  
+  comments.push(`[Imported from CBRE ${isPM ? 'PM ' : ''}email on ${new Date().toLocaleString()}]`);
   workOrder.comments = comments.join('\n');
 
   return workOrder;

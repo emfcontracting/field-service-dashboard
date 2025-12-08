@@ -7,25 +7,36 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Gmail API configuration
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-
 // Get a fresh access token using refresh token
 async function getAccessToken() {
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+
+  console.log('Gmail config check:', {
+    hasClientId: !!clientId,
+    hasClientSecret: !!clientSecret,
+    hasRefreshToken: !!refreshToken
+  });
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Gmail credentials not configured');
+  }
+
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      refresh_token: GMAIL_REFRESH_TOKEN,
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
       grant_type: 'refresh_token'
     })
   });
 
   const data = await response.json();
+  console.log('OAuth response:', data.error ? data : 'Success');
+  
   if (data.error) {
     throw new Error(`OAuth error: ${data.error_description || data.error}`);
   }
@@ -51,9 +62,9 @@ function decodeBase64Url(data) {
 function getEmailBody(message) {
   let body = '';
   
-  if (message.payload.body?.data) {
+  if (message.payload?.body?.data) {
     body = decodeBase64Url(message.payload.body.data);
-  } else if (message.payload.parts) {
+  } else if (message.payload?.parts) {
     for (const part of message.payload.parts) {
       if (part.mimeType === 'text/html' && part.body?.data) {
         body = decodeBase64Url(part.body.data);
@@ -93,7 +104,7 @@ function parseCBREEmail(subject, body) {
   };
 
   // Clean the content
-  const cleanBody = body
+  const cleanBody = (body || '')
     .replace(/=\r?\n/g, '')
     .replace(/=3D/g, '=')
     .replace(/=20/g, ' ')
@@ -103,13 +114,13 @@ function parseCBREEmail(subject, body) {
     .trim();
 
   // Extract WO number from subject: "Dispatch of Work Order C2926480 - Priority: P1-Emergency"
-  const woMatch = subject.match(/Work Order\s+([A-Z]?\d+)/i);
+  const woMatch = (subject || '').match(/Work Order\s+([A-Z]?\d+)/i);
   if (woMatch) {
     workOrder.wo_number = woMatch[1];
   }
 
   // Extract Priority
-  const priorityMatch = body.match(/Priority:\s*(P\d)[^a-z]*(\w*)/i) || subject.match(/Priority:\s*(P\d)/i);
+  const priorityMatch = (body || '').match(/Priority:\s*(P\d)[^a-z]*(\w*)/i) || (subject || '').match(/Priority:\s*(P\d)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
     const pText = (priorityMatch[2] || '').toLowerCase();
@@ -205,10 +216,19 @@ async function markAsRead(accessToken, messageId) {
 export async function GET(request) {
   try {
     // Check if Gmail is configured
-    if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
+    const clientId = process.env.GMAIL_CLIENT_ID;
+    const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+    const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+
+    if (!clientId || !clientSecret || !refreshToken) {
       return Response.json({
         success: false,
-        error: 'Gmail API not configured. Please add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN to environment variables.'
+        error: 'Gmail API not configured. Please add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN to environment variables.',
+        debug: {
+          hasClientId: !!clientId,
+          hasClientSecret: !!clientSecret,
+          hasRefreshToken: !!refreshToken
+        }
       }, { status: 400 });
     }
 
@@ -226,6 +246,10 @@ export async function GET(request) {
 
     const listData = await listResponse.json();
     
+    if (listData.error) {
+      throw new Error(`Gmail API error: ${listData.error.message}`);
+    }
+    
     if (!listData.messages || listData.messages.length === 0) {
       return Response.json({
         success: true,
@@ -237,30 +261,39 @@ export async function GET(request) {
     // Fetch full message details for each email
     const emails = [];
     for (const msg of listData.messages) {
-      const msgResponse = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` }
+      try {
+        const msgResponse = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          }
+        );
+        const msgData = await msgResponse.json();
+        
+        if (msgData.error) {
+          console.error('Error fetching message:', msgData.error);
+          continue;
         }
-      );
-      const msgData = await msgResponse.json();
-      
-      // Get subject
-      const subjectHeader = msgData.payload.headers.find(h => h.name.toLowerCase() === 'subject');
-      const subject = subjectHeader?.value || '';
+        
+        // Get subject
+        const subjectHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
+        const subject = subjectHeader?.value || '';
 
-      // Get body
-      const body = getEmailBody(msgData);
+        // Get body
+        const body = getEmailBody(msgData);
 
-      // Parse CBRE format
-      const workOrder = parseCBREEmail(subject, body);
+        // Parse CBRE format
+        const workOrder = parseCBREEmail(subject, body);
 
-      emails.push({
-        emailId: msgData.id,
-        subject,
-        receivedAt: new Date(parseInt(msgData.internalDate)).toISOString(),
-        parsedData: workOrder
-      });
+        emails.push({
+          emailId: msgData.id,
+          subject,
+          receivedAt: new Date(parseInt(msgData.internalDate)).toISOString(),
+          parsedData: workOrder
+        });
+      } catch (msgErr) {
+        console.error('Error processing message:', msgErr);
+      }
     }
 
     return Response.json({

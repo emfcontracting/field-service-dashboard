@@ -36,7 +36,7 @@ export default function WorkOrdersFilters({
         // Refresh page to show updates
         setTimeout(() => {
           window.location.reload();
-        }, 2000);
+        }, 3000);
       }
     } catch (error) {
       setSyncResult({ success: false, error: error.message });
@@ -153,17 +153,37 @@ export default function WorkOrdersFilters({
             <>
               <strong>✅ {syncResult.message}</strong>
               {syncResult.updates && syncResult.updates.length > 0 && (
-                <ul className="mt-2 text-sm">
+                <ul className="mt-2 text-sm space-y-1">
                   {syncResult.updates.map((update, i) => (
-                    <li key={i}>
-                      • {update.wo_number} → {update.new_status.toUpperCase()}
-                      {update.notified && ' (notified)'}
+                    <li key={i} className="flex flex-wrap items-center gap-2">
+                      <span>• <strong>{update.wo_number}</strong> → {update.new_status.toUpperCase()}</span>
+                      {update.new_nte && (
+                        <span className="bg-green-700 px-2 py-0.5 rounded text-xs">
+                          💰 NTE: ${update.old_nte?.toFixed(2) || '0'} → ${update.new_nte.toFixed(2)}
+                        </span>
+                      )}
+                      {update.notified && (
+                        <span className="bg-blue-700 px-2 py-0.5 rounded text-xs">📱 Notified</span>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
+              {syncResult.errors && syncResult.errors.length > 0 && (
+                <div className="mt-2 text-yellow-300 text-xs">
+                  <strong>⚠️ Notes:</strong>
+                  <ul className="ml-4">
+                    {syncResult.errors.slice(0, 5).map((err, i) => (
+                      <li key={i}>• {err}</li>
+                    ))}
+                    {syncResult.errors.length > 5 && (
+                      <li>...and {syncResult.errors.length - 5} more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
               {syncResult.updated > 0 && (
-                <p className="text-xs mt-2">Refreshing page...</p>
+                <p className="text-xs mt-2 animate-pulse">🔄 Refreshing page in 3 seconds...</p>
               )}
             </>
           ) : (

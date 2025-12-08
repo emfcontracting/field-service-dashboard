@@ -10,7 +10,7 @@ const supabase = createClient(
 // Gmail label to CBRE status mapping
 const LABEL_STATUS_MAP = {
   'escalation': { cbre_status: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
-  'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false },
+  'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false, extractNTE: true },
   'quote-rejected': { cbre_status: 'quote_rejected', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false },
   'reassignment-of': { cbre_status: 'reassigned', notify: true, notifyRoles: ['admin', 'office'] },
@@ -107,6 +107,61 @@ function extractWONumber(subject, body) {
   return null;
 }
 
+// Extract approved NTE amount from quote approval email
+function extractApprovedNTE(subject, body) {
+  // Clean the body for parsing
+  const cleanBody = (body || '')
+    .replace(/=\r?\n/g, '')
+    .replace(/=3D/g, '=')
+    .replace(/=20/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Common patterns for approved amounts in CBRE emails:
+  // "approved for $5,000.00" or "approved amount: $5000" or "NTE: $5,000.00"
+  // "new NTE of $5000" or "increased to $5,000" or "total NTE $5000.00"
+  // "not to exceed $5,000.00" or "NTE has been increased to 5000.00 USD"
+  const patterns = [
+    /approved\s+(?:for|amount[:\s]*)?[\s:]*\$?([\d,]+\.?\d*)/i,
+    /new\s+NTE[:\s]+(?:of\s+)?\$?([\d,]+\.?\d*)/i,
+    /NTE[:\s]+\$?([\d,]+\.?\d*)/i,
+    /increased\s+to\s+\$?([\d,]+\.?\d*)/i,
+    /total\s+(?:NTE|amount)[:\s]+\$?([\d,]+\.?\d*)/i,
+    /not\s+to\s+exceed\s+\$?([\d,]+\.?\d*)/i,
+    /NTE\s+has\s+been\s+(?:increased|approved|set)\s+to\s+\$?([\d,]+\.?\d*)/i,
+    /\$?([\d,]+\.?\d*)\s*USD\s*(?:approved|NTE)/i,
+    /approved[^$]*\$\s*([\d,]+\.?\d*)/i,
+    /quote\s+(?:of|for)\s+\$?([\d,]+\.?\d*)\s+(?:has\s+been\s+)?approved/i,
+  ];
+
+  // Try each pattern
+  for (const pattern of patterns) {
+    const match = cleanBody.match(pattern);
+    if (match) {
+      const amount = parseFloat(match[1].replace(/,/g, ''));
+      // Sanity check - NTE should be reasonable (between $100 and $1,000,000)
+      if (amount >= 100 && amount <= 1000000) {
+        return amount;
+      }
+    }
+  }
+
+  // Also check subject line
+  for (const pattern of patterns) {
+    const match = (subject || '').match(pattern);
+    if (match) {
+      const amount = parseFloat(match[1].replace(/,/g, ''));
+      if (amount >= 100 && amount <= 1000000) {
+        return amount;
+      }
+    }
+  }
+
+  return null;
+}
+
 // Mark email as read
 async function markAsRead(accessToken, messageId) {
   await fetch(
@@ -125,7 +180,7 @@ async function markAsRead(accessToken, messageId) {
 }
 
 // Send notification to office/admin staff
-async function sendNotification(type, workOrder, emailSubject) {
+async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
   try {
     // Get office/admin users with phone and carrier
     const { data: users } = await supabase
@@ -151,6 +206,9 @@ async function sendNotification(type, workOrder, emailSubject) {
         break;
       case 'reassigned':
         message = `🔄 REASSIGNED: WO ${workOrder.wo_number} - ${workOrder.building} has been reassigned by CBRE.`;
+        break;
+      case 'quote_approved':
+        message = `✅ QUOTE APPROVED: WO ${workOrder.wo_number} - ${workOrder.building}${newNTE ? `. New NTE: $${newNTE.toFixed(2)}` : ''}`;
         break;
       default:
         message = `📋 CBRE Update: WO ${workOrder.wo_number} - Status: ${type}`;
@@ -263,7 +321,7 @@ export async function GET(request) {
           // Find the work order in database
           const { data: workOrder, error: woError } = await supabase
             .from('work_orders')
-            .select('wo_id, wo_number, building, cbre_status, billing_status, comments')
+            .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
             .eq('wo_number', woNumber)
             .single();
 
@@ -286,9 +344,21 @@ export async function GET(request) {
             updateData.billing_status = labelConfig.billing_status;
           }
 
+          // Extract and update NTE for quote approvals
+          let newNTE = null;
+          if (labelConfig.extractNTE) {
+            newNTE = extractApprovedNTE(subject, body);
+            if (newNTE) {
+              updateData.nte = newNTE;
+            }
+          }
+
           // Add to comments
           const timestamp = new Date().toLocaleString();
-          const newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${subject}`;
+          let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${subject}`;
+          if (newNTE) {
+            newComment += `\n✅ NTE Updated: $${workOrder.nte?.toFixed(2) || '0.00'} → $${newNTE.toFixed(2)}`;
+          }
           const updatedComments = workOrder.comments 
             ? `${workOrder.comments}\n\n${newComment}`
             : newComment;
@@ -307,12 +377,24 @@ export async function GET(request) {
               continue;
             }
 
+            // Also update any pending NTE increase requests to 'approved' status
+            if (labelConfig.cbre_status === 'quote_approved') {
+              await supabase
+                .from('work_order_quotes')
+                .update({ 
+                  nte_status: 'approved',
+                  approved_at: new Date().toISOString()
+                })
+                .eq('wo_id', workOrder.wo_id)
+                .in('nte_status', ['pending', 'submitted']);
+            }
+
             // Mark email as read
             await markAsRead(accessToken, msg.id);
 
-            // Send notification if needed
-            if (labelConfig.notify) {
-              await sendNotification(labelConfig.cbre_status, workOrder, subject);
+            // Send notification if needed (also notify for quote approvals with NTE update)
+            if (labelConfig.notify || newNTE) {
+              await sendNotification(labelConfig.cbre_status, workOrder, subject, newNTE);
             }
           }
 
@@ -322,8 +404,10 @@ export async function GET(request) {
             building: workOrder.building,
             label: label,
             new_status: labelConfig.cbre_status,
+            new_nte: newNTE,
+            old_nte: workOrder.nte,
             subject: subject.substring(0, 80),
-            notified: labelConfig.notify
+            notified: labelConfig.notify || !!newNTE
           });
 
         } catch (msgErr) {

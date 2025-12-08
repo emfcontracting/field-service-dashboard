@@ -131,13 +131,11 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Handle updating an NTE increase
-  // NOTE: Admin fee is NOT included in additional work - it's already in current/accrued costs
+  // Handle updating an NTE increase - NOW UPDATES WORK ORDER NTE WHEN APPROVED
   const handleUpdateNTEIncrease = async (quoteId, updates) => {
     try {
       setSavingNTE(true);
       
-      // Recalculate grand total if cost fields changed (NO admin fee - that's in current costs)
       const quote = nteIncreases.find(q => q.quote_id === quoteId);
       const updatedQuote = { ...quote, ...updates };
       
@@ -145,7 +143,6 @@ export default function WorkOrderDetailModal({
       const materialsWithMarkup = parseFloat(updatedQuote.materials_with_markup) || 0;
       const equipmentWithMarkup = parseFloat(updatedQuote.equipment_with_markup) || 0;
       const mileageTotal = parseFloat(updatedQuote.mileage_total) || 0;
-      // NO admin fee here - it's already included in current/accrued costs
       const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
       
       const finalUpdates = { ...updates, grand_total: grandTotal };
@@ -157,7 +154,78 @@ export default function WorkOrderDetailModal({
 
       if (error) throw error;
 
-      // Update local state
+      // If status changed to 'approved', update the work order's NTE
+      if (updates.nte_status === 'approved') {
+        // Calculate current costs
+        let currentCosts = 0;
+        
+        if (dailyHoursLog && dailyHoursLog.length > 0) {
+          let laborRT = 0, laborOT = 0, totalMileage = 0;
+          dailyHoursLog.forEach(log => {
+            laborRT += parseFloat(log.hours_regular) || 0;
+            laborOT += parseFloat(log.hours_overtime) || 0;
+            totalMileage += parseFloat(log.miles) || 0;
+          });
+          const laborCost = (laborRT * 64) + (laborOT * 96);
+          const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
+          const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+          const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+          const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+          const mileageCost = totalMileage * 1.00;
+          const adminFee = 128;
+          currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
+        } else {
+          // Use legacy calculation
+          const legacyRT = parseFloat(selectedWO.hours_regular) || 0;
+          const legacyOT = parseFloat(selectedWO.hours_overtime) || 0;
+          const legacyMiles = parseFloat(selectedWO.miles) || 0;
+          let teamRT = 0, teamOT = 0, teamMiles = 0;
+          (selectedWO.teamMembers || []).forEach(m => {
+            teamRT += parseFloat(m.hours_regular) || 0;
+            teamOT += parseFloat(m.hours_overtime) || 0;
+            teamMiles += parseFloat(m.miles) || 0;
+          });
+          const totalRT = legacyRT + teamRT;
+          const totalOT = legacyOT + teamOT;
+          const totalMiles = legacyMiles + teamMiles;
+          const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
+          const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
+          const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+          const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+          const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+          const mileageCost = totalMiles * 1.00;
+          currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost;
+        }
+        
+        const newNTE = currentCosts + grandTotal;
+        const oldNTE = selectedWO.nte || 0;
+        
+        // Update work order NTE and CBRE status
+        const { error: woError } = await supabase
+          .from('work_orders')
+          .update({ 
+            nte: newNTE,
+            cbre_status: 'quote_approved',
+            cbre_status_updated_at: new Date().toISOString()
+          })
+          .eq('wo_id', selectedWO.wo_id);
+        
+        if (woError) {
+          console.error('Error updating work order NTE:', woError);
+          alert('Quote approved but failed to update NTE: ' + woError.message);
+        } else {
+          setSelectedWO({ 
+            ...selectedWO, 
+            nte: newNTE,
+            cbre_status: 'quote_approved',
+            cbre_status_updated_at: new Date().toISOString()
+          });
+          alert(`✅ Quote Approved!\n\nNTE Updated: ${oldNTE.toFixed(2)} → ${newNTE.toFixed(2)}`);
+          refreshWorkOrders();
+        }
+      }
+
+      // Update local state for quotes
       setNteIncreases(nteIncreases.map(q => 
         q.quote_id === quoteId ? { ...q, ...finalUpdates } : q
       ));
@@ -1301,35 +1369,53 @@ export default function WorkOrderDetailModal({
             </div>
           </div>
 
-          {/* Billing Status - Separate from Work Status */}
-          <div className="bg-orange-900/30 border border-orange-600 rounded-lg p-4">
+          {/* CBRE Status - Synced from Gmail Labels */}
+          <div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
             <div className="flex justify-between items-center">
               <div>
-                <label className="block text-sm text-orange-300 font-semibold mb-1">💰 Billing Status</label>
-                <p className="text-xs text-gray-400">Track quote/billing status separately from work completion</p>
+                <label className="block text-sm text-gray-300 font-semibold mb-1">📧 CBRE Status</label>
+                <p className="text-xs text-gray-400">Status from Gmail labels (auto-synced or manual)</p>
               </div>
               <select
-                value={selectedWO.billing_status || ''}
-                onChange={(e) => handleUpdateField('billing_status', e.target.value || null)}
+                value={selectedWO.cbre_status || ''}
+                onChange={(e) => handleUpdateField('cbre_status', e.target.value || null)}
                 className={`px-4 py-2 rounded-lg font-semibold ${
-                  selectedWO.billing_status === 'pending_cbre_quote' 
-                    ? 'bg-orange-600 text-white' 
-                    : selectedWO.billing_status === 'quoted'
-                    ? 'bg-blue-600 text-white'
-                    : selectedWO.billing_status === 'quote_approved'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-white'
+                  selectedWO.cbre_status === 'escalation' ? 'bg-red-600 text-white' :
+                  selectedWO.cbre_status === 'quote_rejected' ? 'bg-red-700 text-white' :
+                  selectedWO.cbre_status === 'pending_quote' ? 'bg-orange-600 text-white' :
+                  selectedWO.cbre_status === 'quote_submitted' ? 'bg-blue-600 text-white' :
+                  selectedWO.cbre_status === 'quote_approved' ? 'bg-green-600 text-white' :
+                  selectedWO.cbre_status === 'reassigned' ? 'bg-purple-600 text-white' :
+                  'bg-gray-600 text-white'
                 }`}
               >
-                <option value="">— No Billing Flag —</option>
-                <option value="pending_cbre_quote">📋 Needs CBRE Quote</option>
-                <option value="quoted">📤 Quote Submitted</option>
+                <option value="">— No CBRE Status —</option>
+                <option value="escalation">🚨 Escalation</option>
+                <option value="pending_quote">📋 Pending Quote</option>
+                <option value="quote_submitted">📤 Quote Submitted</option>
                 <option value="quote_approved">✅ Quote Approved</option>
+                <option value="quote_rejected">❌ Quote Rejected</option>
+                <option value="reassigned">🔄 Reassigned</option>
               </select>
             </div>
-            {selectedWO.billing_status === 'pending_cbre_quote' && (
+            {selectedWO.cbre_status === 'escalation' && (
+              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200 animate-pulse">
+                🚨 ESCALATION - This ticket requires immediate attention!
+              </div>
+            )}
+            {selectedWO.cbre_status === 'quote_rejected' && (
+              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200">
+                ❌ Quote was rejected by CBRE. Review and resubmit if needed.
+              </div>
+            )}
+            {selectedWO.cbre_status === 'pending_quote' && (
               <div className="mt-3 bg-orange-800/50 rounded p-2 text-sm text-orange-200">
-                ⚠️ This ticket requires a CBRE quote. NTE was too low for actual cost.
+                📋 This ticket requires a CBRE quote submission.
+              </div>
+            )}
+            {selectedWO.cbre_status_updated_at && (
+              <div className="mt-2 text-xs text-gray-500">
+                Last updated: {new Date(selectedWO.cbre_status_updated_at).toLocaleString()}
               </div>
             )}
           </div>

@@ -5,79 +5,6 @@ import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 
-// NTE Status badge helper - determines status from nte_quotes array
-const getNTEStatusBadge = (nteQuotes) => {
-  if (!nteQuotes || nteQuotes.length === 0) return null;
-  
-  // Check for any approved quotes (verbal or written)
-  const approvedQuote = nteQuotes.find(q => q.nte_status === 'approved');
-  if (approvedQuote) {
-    return {
-      text: '✅ NTE APPROVED',
-      color: 'bg-green-600 text-green-100',
-      shortText: '✅ Approved'
-    };
-  }
-  
-  // Check for verbal approved
-  const verbalApproved = nteQuotes.find(q => q.nte_status === 'verbal_approved' || (q.is_verbal_nte && q.nte_status === 'approved'));
-  if (verbalApproved) {
-    return {
-      text: '📞 VERBAL APPROVED',
-      color: 'bg-yellow-600 text-yellow-100',
-      shortText: '📞 Verbal'
-    };
-  }
-  
-  // Check for submitted/pending quotes
-  const submittedQuote = nteQuotes.find(q => q.nte_status === 'submitted');
-  if (submittedQuote) {
-    return {
-      text: '📤 NTE SUBMITTED',
-      color: 'bg-blue-600 text-blue-100',
-      shortText: '📤 Submitted'
-    };
-  }
-  
-  // Has quotes but pending (needs to be sent)
-  const pendingQuote = nteQuotes.find(q => q.nte_status === 'pending' || !q.nte_status);
-  if (pendingQuote) {
-    return {
-      text: '📋 NTE PENDING',
-      color: 'bg-orange-600 text-orange-100',
-      shortText: '📋 Pending'
-    };
-  }
-  
-  return null;
-};
-
-// Billing status badge helper (legacy - keeping for backward compatibility)
-const getBillingStatusBadge = (billingStatus) => {
-  switch (billingStatus) {
-    case 'pending_cbre_quote':
-      return {
-        text: '📋 NEEDS QUOTE',
-        color: 'bg-orange-600 text-orange-100',
-        shortText: '📋 Quote'
-      };
-    case 'quoted':
-      return {
-        text: '📤 QUOTED',
-        color: 'bg-blue-600 text-blue-100',
-        shortText: '📤 Quoted'
-      };
-    case 'quote_approved':
-      return {
-        text: '✅ APPROVED',
-        color: 'bg-green-600 text-green-100',
-        shortText: '✅ Approved'
-      };
-    default:
-      return null;
-  }
-};
-
 // CBRE Status badge helper - from Gmail labels
 const getCBREStatusBadge = (cbreStatus) => {
   switch (cbreStatus) {
@@ -110,6 +37,12 @@ const getCBREStatusBadge = (cbreStatus) => {
         text: '🔄 REASSIGNED',
         color: 'bg-purple-600 text-purple-100',
         shortText: '🔄 Reassign'
+      };
+    case 'pending_quote':
+      return {
+        text: '📋 PENDING QUOTE',
+        color: 'bg-orange-600 text-orange-100',
+        shortText: '📋 Pending'
       };
     default:
       return null;
@@ -159,20 +92,19 @@ export default function WorkOrdersTable({
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1600px' }}>
+        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1400px' }}>
           <thead className="bg-gray-700">
             <tr>
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
-              <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Building</th>
-              <th className="px-2 py-2 text-left" style={{ width: '220px' }}>Description</th>
+              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Building</th>
+              <th className="px-2 py-2 text-left" style={{ width: '280px' }}>Description</th>
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Work Status</th>
-              <th className="px-2 py-2 text-left" style={{ width: '85px' }}>CBRE</th>
-              <th className="px-2 py-2 text-left" style={{ width: '85px' }}>Billing</th>
+              <th className="px-2 py-2 text-left" style={{ width: '90px' }}>CBRE</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Priority</th>
-              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Lead Tech</th>
-              <th className="px-2 py-2 text-right" style={{ width: '70px' }}>NTE</th>
-              <th className="px-2 py-2 text-right" style={{ width: '70px' }}>Est Cost</th>
+              <th className="px-2 py-2 text-left" style={{ width: '110px' }}>Lead Tech</th>
+              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>NTE</th>
+              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>Est Cost</th>
               <th className="px-2 py-2 text-center" style={{ width: '40px' }}>🔒</th>
               <th className="px-2 py-2 text-center" style={{ width: '60px' }}>Action</th>
             </tr>
@@ -182,9 +114,6 @@ export default function WorkOrdersTable({
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
               const isNew = isNewWorkOrder(wo);
-              // Prioritize NTE status badge over billing status
-              const nteBadge = getNTEStatusBadge(wo.nte_quotes);
-              const billingBadge = nteBadge || getBillingStatusBadge(wo.billing_status);
               // CBRE status badge from Gmail labels
               const cbreBadge = getCBREStatusBadge(wo.cbre_status);
 
@@ -195,7 +124,7 @@ export default function WorkOrdersTable({
                   className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
                     wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
                     wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
-                    wo.billing_status === 'pending_cbre_quote' ? 'bg-orange-900/20' : ''
+                    wo.cbre_status === 'pending_quote' ? 'bg-orange-900/20' : ''
                   }`}
                 >
                   <td className="px-2 py-2">
@@ -251,19 +180,6 @@ export default function WorkOrdersTable({
                         title={cbreBadge.text}
                       >
                         {cbreBadge.shortText}
-                      </span>
-                    ) : (
-                      <span className="text-gray-500 text-[10px]">—</span>
-                    )}
-                  </td>
-                  {/* Billing Status Column */}
-                  <td className="px-2 py-2">
-                    {billingBadge ? (
-                      <span 
-                        className={`px-2 py-1 rounded text-[10px] font-bold ${billingBadge.color}`}
-                        title={billingBadge.text}
-                      >
-                        {billingBadge.shortText}
                       </span>
                     ) : (
                       <span className="text-gray-500 text-[10px]">—</span>

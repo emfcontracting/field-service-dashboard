@@ -8,10 +8,13 @@ export function calculateStats(orders) {
     in_progress: orders.filter(wo => wo.status === 'in_progress').length,
     completed: orders.filter(wo => wo.status === 'completed').length,
     needs_return: orders.filter(wo => wo.status === 'needs_return').length,
-    // Billing status counts (separate from work status)
-    pending_cbre_quote: orders.filter(wo => wo.billing_status === 'pending_cbre_quote').length,
-    quoted: orders.filter(wo => wo.billing_status === 'quoted').length,
-    quote_approved: orders.filter(wo => wo.billing_status === 'quote_approved').length
+    // CBRE status counts (from Gmail labels)
+    escalation: orders.filter(wo => wo.cbre_status === 'escalation').length,
+    quote_approved: orders.filter(wo => wo.cbre_status === 'quote_approved').length,
+    quote_rejected: orders.filter(wo => wo.cbre_status === 'quote_rejected').length,
+    quote_submitted: orders.filter(wo => wo.cbre_status === 'quote_submitted').length,
+    pending_quote: orders.filter(wo => wo.cbre_status === 'pending_quote').length,
+    reassigned: orders.filter(wo => wo.cbre_status === 'reassigned').length
   };
 }
 

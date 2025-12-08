@@ -10,8 +10,6 @@ export default function WorkOrdersFilters({
   setStatusFilter,
   priorityFilter,
   setPriorityFilter,
-  billingStatusFilter,
-  setBillingStatusFilter,
   cbreStatusFilter,
   setCbreStatusFilter,
   onNewWorkOrder,
@@ -70,39 +68,22 @@ export default function WorkOrdersFilters({
         </select>
 
         {/* CBRE Status Filter */}
-        {setCbreStatusFilter && (
-          <select
-            value={cbreStatusFilter || 'all'}
-            onChange={(e) => setCbreStatusFilter(e.target.value)}
-            className={`px-4 py-2 rounded-lg ${
-              cbreStatusFilter && cbreStatusFilter !== 'all' 
-                ? 'bg-red-700 text-white' 
-                : 'bg-gray-700 text-white'
-            }`}
-          >
-            <option value="all">All CBRE Status</option>
-            <option value="escalation">🚨 Escalation</option>
-            <option value="quote_approved">✅ Quote Approved</option>
-            <option value="quote_rejected">❌ Quote Rejected</option>
-            <option value="quote_submitted">📤 Quote Submitted</option>
-            <option value="reassigned">🔄 Reassigned</option>
-          </select>
-        )}
-
         <select
-          value={billingStatusFilter || 'all'}
-          onChange={(e) => setBillingStatusFilter && setBillingStatusFilter(e.target.value)}
+          value={cbreStatusFilter || 'all'}
+          onChange={(e) => setCbreStatusFilter && setCbreStatusFilter(e.target.value)}
           className={`px-4 py-2 rounded-lg ${
-            billingStatusFilter && billingStatusFilter !== 'all' 
-              ? 'bg-orange-700 text-white' 
+            cbreStatusFilter && cbreStatusFilter !== 'all' 
+              ? 'bg-red-700 text-white' 
               : 'bg-gray-700 text-white'
           }`}
         >
-          <option value="all">All Billing Status</option>
-          <option value="none">No Billing Flag</option>
-          <option value="pending_cbre_quote">📋 Needs CBRE Quote</option>
-          <option value="quoted">📤 Quote Submitted</option>
+          <option value="all">All CBRE Status</option>
+          <option value="escalation">🚨 Escalation</option>
           <option value="quote_approved">✅ Quote Approved</option>
+          <option value="quote_rejected">❌ Quote Rejected</option>
+          <option value="quote_submitted">📤 Quote Submitted</option>
+          <option value="reassigned">🔄 Reassigned</option>
+          <option value="pending_quote">📋 Pending Quote</option>
         </select>
 
         <select

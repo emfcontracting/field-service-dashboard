@@ -1,5 +1,5 @@
 // app/api/contractor/send-invoice/route.js
-// Sends subcontractor invoice to EMF via email
+// Sends subcontractor invoice via email
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -12,8 +12,9 @@ const transporter = nodemailer.createTransport({
 
 export async function POST(request) {
   try {
-    const { invoice, user, hoursData, lineItems, rates, totals } = await request.json();
+    const { invoice, user, hoursData, lineItems, rates, totals, sendToEmail } = await request.json();
 
+    const toEmail = sendToEmail || 'emfcontractingsc2@gmail.com';
     const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
     const businessAddress = user.profile?.business_address || '';
 
@@ -76,7 +77,7 @@ export async function POST(request) {
                 <td style="vertical-align: top; width: 50%; text-align: right;">
                   <p style="margin: 0 0 10px; color: #6b7280; font-size: 12px; text-transform: uppercase; font-weight: bold;">To</p>
                   <p style="margin: 0; font-weight: bold; font-size: 16px;">EMF Contracting LLC</p>
-                  <p style="margin: 5px 0 0; color: #6b7280; font-size: 13px;">emfcontractingsc2@gmail.com</p>
+                  <p style="margin: 5px 0 0; color: #6b7280; font-size: 13px;">${toEmail}</p>
                 </td>
               </tr>
             </table>
@@ -169,7 +170,7 @@ export async function POST(request) {
     // Send email
     await transporter.sendMail({
       from: `"${businessName}" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
-      to: 'emfcontractingsc2@gmail.com',
+      to: toEmail,
       replyTo: user.email,
       subject: `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${totals.grandTotal.toFixed(2)}`,
       html: emailHtml

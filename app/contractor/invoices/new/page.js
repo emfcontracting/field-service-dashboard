@@ -36,6 +36,9 @@ export default function CreateInvoice() {
     mileage: 0.67
   });
 
+  // Email to send invoice to
+  const [sendToEmail, setSendToEmail] = useState('emfcontractingsc2@gmail.com');
+
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
     if (!userData) {
@@ -151,6 +154,11 @@ export default function CreateInvoice() {
       return;
     }
 
+    if (sendEmail && !sendToEmail) {
+      setMessage({ type: 'error', text: 'Please enter an email address' });
+      return;
+    }
+
     setSaving(true);
     if (sendEmail) setSending(true);
     setMessage(null);
@@ -187,7 +195,7 @@ export default function CreateInvoice() {
           ot_rate_used: rates.ot,
           mileage_rate_used: rates.mileage,
           status: sendEmail ? 'sent' : 'draft',
-          sent_to_email: sendEmail ? 'emfcontractingsc2@gmail.com' : null,
+          sent_to_email: sendEmail ? sendToEmail : null,
           sent_at: sendEmail ? new Date().toISOString() : null
         })
         .select()
@@ -274,6 +282,7 @@ export default function CreateInvoice() {
               hoursData,
               lineItems,
               rates,
+              sendToEmail,
               totals: {
                 totalRegularHours,
                 totalOTHours,
@@ -297,7 +306,7 @@ export default function CreateInvoice() {
       setMessage({ 
         type: 'success', 
         text: sendEmail 
-          ? `Invoice ${invoiceNumber} sent to emfcontractingsc2@gmail.com!` 
+          ? `Invoice ${invoiceNumber} sent to ${sendToEmail}!` 
           : `Invoice ${invoiceNumber} saved as draft`
       });
 
@@ -577,6 +586,18 @@ export default function CreateInvoice() {
           </div>
         </div>
 
+        {/* Send To Email */}
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+          <h2 className="font-bold mb-3">📧 Send Invoice To</h2>
+          <input
+            type="email"
+            value={sendToEmail}
+            onChange={(e) => setSendToEmail(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white"
+            placeholder="Enter email address"
+          />
+        </div>
+
         {/* Actions */}
         <div className="flex gap-4">
           <button
@@ -588,16 +609,12 @@ export default function CreateInvoice() {
           </button>
           <button
             onClick={() => saveInvoice(true)}
-            disabled={saving || (hoursData.length === 0 && lineItems.length === 0)}
+            disabled={saving || !sendToEmail || (hoursData.length === 0 && lineItems.length === 0)}
             className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg font-medium disabled:opacity-50"
           >
             {sending ? '📧 Sending...' : '📧 Send Invoice'}
           </button>
         </div>
-
-        <p className="text-center text-sm text-gray-500">
-          Invoice will be sent to: emfcontractingsc2@gmail.com
-        </p>
       </div>
     </div>
   );

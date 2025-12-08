@@ -1,8 +1,10 @@
 // components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive) - WITH OFFLINE SUPPORT
+import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import ConnectionStatus from './ConnectionStatus';
+import WeatherWidget from './WeatherWidget';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 
 export default function WorkOrdersList({
@@ -24,6 +26,7 @@ export default function WorkOrdersList({
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
+  const [weatherExpanded, setWeatherExpanded] = useState(false);
 
   // Format last sync time
   const formatLastSync = () => {
@@ -171,6 +174,14 @@ export default function WorkOrdersList({
 
       {/* Content */}
       <div className="p-4">
+        {/* Weather Widget */}
+        {isOnline && (
+          <WeatherWidget 
+            expanded={weatherExpanded} 
+            onToggle={() => setWeatherExpanded(!weatherExpanded)} 
+          />
+        )}
+
         <div className="mb-4">
           <h2 className="text-xl font-bold">{t('myWorkOrders')}</h2>
           <p className="text-gray-400 text-sm">

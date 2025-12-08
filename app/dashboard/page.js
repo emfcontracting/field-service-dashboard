@@ -49,6 +49,15 @@ export default function Dashboard() {
   // Check if current user is superuser
   const isSuperuser = currentUser?.email === SUPERUSER_EMAIL;
 
+  // Helper function to batch array into chunks
+  const chunkArray = (array, size) => {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  };
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
@@ -95,7 +104,7 @@ export default function Dashboard() {
     setStats(calculateStats(workOrdersData));
   };
 
-  // Calculate missing hours count for stats card
+  // Calculate missing hours count for stats card - with batched queries
   const calculateMissingHoursCount = async () => {
     try {
       // Get work orders that should have hours (last 30 days, assigned/in_progress/completed)
@@ -114,16 +123,25 @@ export default function Dashboard() {
         return;
       }
 
-      // Get hours logged
+      // Batch the queries to avoid URL length issues
       const woIds = eligibleWOs.map(wo => wo.wo_id);
-      const { data: hoursData } = await supabase
-        .from('daily_hours_log')
-        .select('wo_id, regular_hours, overtime_hours')
-        .in('wo_id', woIds);
+      const woIdChunks = chunkArray(woIds, 10);
+      
+      let allHoursData = [];
+      for (const chunk of woIdChunks) {
+        const { data: hoursData, error } = await supabase
+          .from('daily_hours_log')
+          .select('wo_id, regular_hours, overtime_hours')
+          .in('wo_id', chunk);
+        
+        if (!error && hoursData) {
+          allHoursData = [...allHoursData, ...hoursData];
+        }
+      }
 
       // Sum hours per WO
       const hoursPerWO = {};
-      (hoursData || []).forEach(entry => {
+      allHoursData.forEach(entry => {
         const woId = entry.wo_id;
         const totalHours = (entry.regular_hours || 0) + (entry.overtime_hours || 0);
         hoursPerWO[woId] = (hoursPerWO[woId] || 0) + totalHours;

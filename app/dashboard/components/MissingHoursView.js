@@ -16,23 +16,29 @@ export default function MissingHoursView({
   const [techFilter, setTechFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateRange, setDateRange] = useState('30'); // days
-  const [debugInfo, setDebugInfo] = useState('');
 
   // Get techs for filter dropdown
   const techs = (users || []).filter(u => 
     ['lead_tech', 'tech', 'helper'].includes(u.role) && u.is_active
   ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
 
+  // Helper function to batch array into chunks
+  const chunkArray = (array, size) => {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  };
+
   const fetchMissingHours = useCallback(async () => {
     if (!workOrders || workOrders.length === 0) {
-      setDebugInfo('No work orders available');
       setMissingHoursWOs([]);
       setLoading(false);
       return;
     }
 
     if (!supabase) {
-      setDebugInfo('Supabase not available');
       setMissingHoursWOs([]);
       setLoading(false);
       return;
@@ -57,34 +63,37 @@ export default function MissingHoursView({
         return hasAssignment && relevantStatus && withinDateRange;
       });
 
-      setDebugInfo(`Total WOs: ${workOrders.length}, Eligible (assigned/in_progress/completed with lead tech in last ${dateRange} days): ${eligibleWOs.length}`);
-
       if (eligibleWOs.length === 0) {
         setMissingHoursWOs([]);
         setLoading(false);
         return;
       }
 
-      // Get hours logged for these work orders
+      // Get hours logged for these work orders - batch to avoid URL length issues
       const woIds = eligibleWOs.map(wo => wo.wo_id);
-      const { data: hoursData, error } = await supabase
-        .from('daily_hours_log')
-        .select('wo_id, user_id, regular_hours, overtime_hours')
-        .in('wo_id', woIds);
+      const woIdChunks = chunkArray(woIds, 10); // Batch in groups of 10
+      
+      let allHoursData = [];
+      for (const chunk of woIdChunks) {
+        const { data: hoursData, error } = await supabase
+          .from('daily_hours_log')
+          .select('wo_id, user_id, regular_hours, overtime_hours')
+          .in('wo_id', chunk);
 
-      if (error) {
-        console.error('Error fetching hours:', error);
-        setDebugInfo(`Error fetching hours: ${error.message}`);
-        setMissingHoursWOs([]);
-        setLoading(false);
-        return;
+        if (error) {
+          console.error('Error fetching hours batch:', error);
+          continue;
+        }
+        if (hoursData) {
+          allHoursData = [...allHoursData, ...hoursData];
+        }
       }
 
       // Calculate total hours per work order
       const hoursPerWO = {};
       const techHoursPerWO = {}; // Track which techs logged hours
       
-      (hoursData || []).forEach(entry => {
+      allHoursData.forEach(entry => {
         const woId = entry.wo_id;
         const totalHours = (entry.regular_hours || 0) + (entry.overtime_hours || 0);
         
@@ -98,21 +107,28 @@ export default function MissingHoursView({
         }
       });
 
-      // Get team assignments for each WO
-      const { data: assignments } = await supabase
-        .from('work_order_assignments')
-        .select('wo_id, user_id, user:users(first_name, last_name)')
-        .in('wo_id', woIds);
+      // Get team assignments for each WO - also batch
+      let allAssignments = [];
+      for (const chunk of woIdChunks) {
+        const { data: assignments, error } = await supabase
+          .from('work_order_assignments')
+          .select('wo_id, user_id, user:users(first_name, last_name)')
+          .in('wo_id', chunk);
+
+        if (!error && assignments) {
+          allAssignments = [...allAssignments, ...assignments];
+        }
+      }
 
       const assignmentsPerWO = {};
-      (assignments || []).forEach(a => {
+      allAssignments.forEach(a => {
         if (!assignmentsPerWO[a.wo_id]) {
           assignmentsPerWO[a.wo_id] = [];
         }
         assignmentsPerWO[a.wo_id].push(a);
       });
 
-      // Find work orders with missing hours (ONLY zero hours - simpler logic)
+      // Find work orders with missing hours (ONLY zero hours)
       const missing = eligibleWOs
         .map(wo => {
           const totalHours = hoursPerWO[wo.wo_id] || 0;
@@ -147,18 +163,16 @@ export default function MissingHoursView({
             assignedTechIds: Array.from(assignedTechIds),
             techsMissingHours,
             teamAssignments: woAssignments,
-            // Only flag as missing if ZERO hours logged (matches stats card logic)
+            // Only flag as missing if ZERO hours logged
             hasMissingHours: totalHours === 0
           };
         })
         .filter(wo => wo.hasMissingHours)
         .sort((a, b) => b.daysSinceStart - a.daysSinceStart); // Oldest first
 
-      setDebugInfo(`Eligible: ${eligibleWOs.length}, Hours records: ${hoursData?.length || 0}, Missing hours: ${missing.length}`);
       setMissingHoursWOs(missing);
     } catch (err) {
       console.error('Error in fetchMissingHours:', err);
-      setDebugInfo(`Error: ${err.message}`);
       setMissingHoursWOs([]);
     } finally {
       setLoading(false);
@@ -238,13 +252,6 @@ export default function MissingHoursView({
           </div>
         </div>
       </div>
-
-      {/* Debug Info - Remove in production */}
-      {debugInfo && (
-        <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mb-4 text-xs text-gray-400">
-          🔍 Debug: {debugInfo}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="bg-gray-800 rounded-lg p-4 mb-6">

@@ -49,6 +49,18 @@ const getCBREStatusBadge = (cbreStatus) => {
   }
 };
 
+// Helper to get compact priority text (e.g., "🔴 P1" from "🔴 P1 - Emergency")
+const getCompactPriorityText = (badge) => {
+  if (!badge || !badge.text) return '—';
+  
+  const parts = badge.text.split(' ');
+  // Get first two parts (emoji and P-code), but handle fallbacks
+  if (parts.length >= 2) {
+    return `${parts[0]} ${parts[1]}`;
+  }
+  return badge.text;
+};
+
 export default function WorkOrdersTable({ 
   workOrders, 
   loading, 
@@ -160,6 +172,8 @@ export default function WorkOrdersTable({
               const isSelected = selectedWOs.has(wo.wo_id);
               // CBRE status badge from Gmail labels
               const cbreBadge = getCBREStatusBadge(wo.cbre_status);
+              // Priority badge
+              const priorityBadge = getPriorityBadge(wo.priority);
 
               return (
                 <tr
@@ -241,22 +255,14 @@ export default function WorkOrdersTable({
                       <span className="text-gray-500 text-[10px]">—</span>
                     )}
                   </td>
+                  {/* Priority Column */}
                   <td className="px-2 py-2 text-center">
-                    {(() => {
-                      const badge = getPriorityBadge(wo.priority);
-                      
-                      // Compact version - just show emoji and code (e.g. "🔴 P1")
-                      const compactText = badge.text.split(' ')[0] + ' ' + badge.text.split(' ')[1];
-                      
-                      return (
-                        <span 
-                          className={`px-2 py-1 rounded text-xs font-semibold text-white ${badge.color} whitespace-nowrap`}
-                          title={badge.text} // Full text on hover
-                        >
-                          {compactText}
-                        </span>
-                      );
-                    })()}
+                    <span 
+                      className={`px-2 py-1 rounded text-xs font-semibold text-white ${priorityBadge.color} whitespace-nowrap`}
+                      title={priorityBadge.text}
+                    >
+                      {getCompactPriorityText(priorityBadge)}
+                    </span>
                   </td>
                   <td className="px-2 py-2">
                     {wo.lead_tech ? (

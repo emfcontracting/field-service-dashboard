@@ -70,6 +70,7 @@ export default function MissingHoursView({
       }
 
       // Get hours logged for these work orders - batch to avoid URL length issues
+      // NOTE: Column names are hours_regular and hours_overtime (not regular_hours/overtime_hours)
       const woIds = eligibleWOs.map(wo => wo.wo_id);
       const woIdChunks = chunkArray(woIds, 10); // Batch in groups of 10
       
@@ -77,7 +78,7 @@ export default function MissingHoursView({
       for (const chunk of woIdChunks) {
         const { data: hoursData, error } = await supabase
           .from('daily_hours_log')
-          .select('wo_id, user_id, regular_hours, overtime_hours')
+          .select('wo_id, user_id, hours_regular, hours_overtime')
           .in('wo_id', chunk);
 
         if (error) {
@@ -95,7 +96,8 @@ export default function MissingHoursView({
       
       allHoursData.forEach(entry => {
         const woId = entry.wo_id;
-        const totalHours = (entry.regular_hours || 0) + (entry.overtime_hours || 0);
+        // Use correct column names: hours_regular and hours_overtime
+        const totalHours = (parseFloat(entry.hours_regular) || 0) + (parseFloat(entry.hours_overtime) || 0);
         
         if (!hoursPerWO[woId]) {
           hoursPerWO[woId] = 0;

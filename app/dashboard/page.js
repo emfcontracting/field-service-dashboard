@@ -129,9 +129,10 @@ export default function Dashboard() {
       
       let allHoursData = [];
       for (const chunk of woIdChunks) {
+        // NOTE: Column names are hours_regular and hours_overtime (not regular_hours/overtime_hours)
         const { data: hoursData, error } = await supabase
           .from('daily_hours_log')
-          .select('wo_id, regular_hours, overtime_hours')
+          .select('wo_id, hours_regular, hours_overtime')
           .in('wo_id', chunk);
         
         if (!error && hoursData) {
@@ -143,7 +144,8 @@ export default function Dashboard() {
       const hoursPerWO = {};
       allHoursData.forEach(entry => {
         const woId = entry.wo_id;
-        const totalHours = (entry.regular_hours || 0) + (entry.overtime_hours || 0);
+        // Use correct column names: hours_regular and hours_overtime
+        const totalHours = (parseFloat(entry.hours_regular) || 0) + (parseFloat(entry.hours_overtime) || 0);
         hoursPerWO[woId] = (hoursPerWO[woId] || 0) + totalHours;
       });
 

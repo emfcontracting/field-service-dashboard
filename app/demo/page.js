@@ -55,13 +55,21 @@ export default function DemoLandingPage() {
             Full-featured FSM for electrical contractors serving commercial facilities.
           </p>
 
-          {/* Main CTA */}
-          <Link 
-            href="/demo/dashboard" 
-            className="inline-block bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition transform hover:scale-105 mb-12"
-          >
-            🚀 Launch Dashboard Demo
-          </Link>
+          {/* Main CTAs */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <Link 
+              href="/demo/dashboard" 
+              className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition transform hover:scale-105"
+            >
+              🖥️ Dashboard Demo
+            </Link>
+            <Link 
+              href="/demo/mobile" 
+              className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition transform hover:scale-105"
+            >
+              📱 Mobile App Demo
+            </Link>
+          </div>
 
           {/* What's Included */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 max-w-2xl mx-auto">

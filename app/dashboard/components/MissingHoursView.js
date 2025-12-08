@@ -13,14 +13,27 @@ export default function MissingHoursView({
 }) {
   const [missingHoursWOs, setMissingHoursWOs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [techFilter, setTechFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [dateRange, setDateRange] = useState('30'); // days
+  
+  // Multi-select filters - arrays instead of single values
+  const [selectedTechs, setSelectedTechs] = useState([]); // empty = all
+  const [selectedStatuses, setSelectedStatuses] = useState([]); // empty = all
+  
+  // Dropdown visibility
+  const [showTechDropdown, setShowTechDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
   // Get techs for filter dropdown
   const techs = (users || []).filter(u => 
     ['lead_tech', 'tech', 'helper'].includes(u.role) && u.is_active
   ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
+
+  // Status options
+  const statusOptions = [
+    { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
+    { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },
+    { value: 'completed', label: 'Completed', color: 'bg-green-600' }
+  ];
 
   // Helper function to batch array into chunks
   const chunkArray = (array, size) => {
@@ -30,6 +43,66 @@ export default function MissingHoursView({
     }
     return chunks;
   };
+
+  // Toggle tech selection
+  const toggleTech = (techId) => {
+    setSelectedTechs(prev => {
+      if (prev.includes(techId)) {
+        return prev.filter(id => id !== techId);
+      } else {
+        return [...prev, techId];
+      }
+    });
+  };
+
+  // Toggle status selection
+  const toggleStatus = (status) => {
+    setSelectedStatuses(prev => {
+      if (prev.includes(status)) {
+        return prev.filter(s => s !== status);
+      } else {
+        return [...prev, status];
+      }
+    });
+  };
+
+  // Select/deselect all techs
+  const toggleAllTechs = () => {
+    if (selectedTechs.length === techs.length) {
+      setSelectedTechs([]);
+    } else {
+      setSelectedTechs(techs.map(t => t.user_id));
+    }
+  };
+
+  // Select/deselect all statuses
+  const toggleAllStatuses = () => {
+    if (selectedStatuses.length === statusOptions.length) {
+      setSelectedStatuses([]);
+    } else {
+      setSelectedStatuses(statusOptions.map(s => s.value));
+    }
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedTechs([]);
+    setSelectedStatuses([]);
+  };
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.tech-dropdown') && !e.target.closest('.tech-dropdown-btn')) {
+        setShowTechDropdown(false);
+      }
+      if (!e.target.closest('.status-dropdown') && !e.target.closest('.status-dropdown-btn')) {
+        setShowStatusDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const fetchMissingHours = useCallback(async () => {
     if (!workOrders || workOrders.length === 0) {
@@ -51,10 +124,7 @@ export default function MissingHoursView({
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - parseInt(dateRange));
       
-      // Filter work orders that should have hours:
-      // - Status is assigned, in_progress, or completed
-      // - Has a lead tech assigned
-      // - Created within date range
+      // Filter work orders that should have hours
       const eligibleWOs = workOrders.filter(wo => {
         const hasAssignment = wo.lead_tech_id;
         const relevantStatus = ['assigned', 'in_progress', 'completed'].includes(wo.status);
@@ -70,9 +140,8 @@ export default function MissingHoursView({
       }
 
       // Get hours logged for these work orders - batch to avoid URL length issues
-      // NOTE: Column names are hours_regular and hours_overtime (not regular_hours/overtime_hours)
       const woIds = eligibleWOs.map(wo => wo.wo_id);
-      const woIdChunks = chunkArray(woIds, 10); // Batch in groups of 10
+      const woIdChunks = chunkArray(woIds, 10);
       
       let allHoursData = [];
       for (const chunk of woIdChunks) {
@@ -92,11 +161,10 @@ export default function MissingHoursView({
 
       // Calculate total hours per work order
       const hoursPerWO = {};
-      const techHoursPerWO = {}; // Track which techs logged hours
+      const techHoursPerWO = {};
       
       allHoursData.forEach(entry => {
         const woId = entry.wo_id;
-        // Use correct column names: hours_regular and hours_overtime
         const totalHours = (parseFloat(entry.hours_regular) || 0) + (parseFloat(entry.hours_overtime) || 0);
         
         if (!hoursPerWO[woId]) {
@@ -130,24 +198,21 @@ export default function MissingHoursView({
         assignmentsPerWO[a.wo_id].push(a);
       });
 
-      // Find work orders with missing hours (ONLY zero hours)
+      // Find work orders with missing hours
       const missing = eligibleWOs
         .map(wo => {
           const totalHours = hoursPerWO[wo.wo_id] || 0;
           const techsWithHours = techHoursPerWO[wo.wo_id] || new Set();
           const woAssignments = assignmentsPerWO[wo.wo_id] || [];
           
-          // Calculate days since started
           const startDate = new Date(wo.date_entered || wo.created_at);
           const now = new Date();
           const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
 
-          // Get all assigned tech IDs (lead + team)
           const assignedTechIds = new Set();
           if (wo.lead_tech_id) assignedTechIds.add(wo.lead_tech_id);
           woAssignments.forEach(a => assignedTechIds.add(a.user_id));
 
-          // Find techs missing hours
           const techsMissingHours = [];
           assignedTechIds.forEach(techId => {
             if (!techsWithHours.has(techId)) {
@@ -165,12 +230,11 @@ export default function MissingHoursView({
             assignedTechIds: Array.from(assignedTechIds),
             techsMissingHours,
             teamAssignments: woAssignments,
-            // Only flag as missing if ZERO hours logged
             hasMissingHours: totalHours === 0
           };
         })
         .filter(wo => wo.hasMissingHours)
-        .sort((a, b) => b.daysSinceStart - a.daysSinceStart); // Oldest first
+        .sort((a, b) => b.daysSinceStart - a.daysSinceStart);
 
       setMissingHoursWOs(missing);
     } catch (err) {
@@ -181,24 +245,25 @@ export default function MissingHoursView({
     }
   }, [workOrders, users, supabase, dateRange]);
 
-  // Fetch when component mounts or dependencies change
   useEffect(() => {
     fetchMissingHours();
   }, [fetchMissingHours]);
 
-  // Apply filters
+  // Apply multi-select filters
   const filteredWOs = missingHoursWOs.filter(wo => {
-    // Tech filter
-    if (techFilter !== 'all') {
-      const hasTech = wo.lead_tech_id === techFilter || 
-                      wo.assignedTechIds.includes(techFilter) ||
-                      wo.techsMissingHours.some(t => t.user_id === techFilter);
+    // Tech filter (if any selected)
+    if (selectedTechs.length > 0) {
+      const hasTech = selectedTechs.some(techId => 
+        wo.lead_tech_id === techId || 
+        wo.assignedTechIds.includes(techId) ||
+        wo.techsMissingHours.some(t => t.user_id === techId)
+      );
       if (!hasTech) return false;
     }
 
-    // Status filter
-    if (statusFilter !== 'all' && wo.status !== statusFilter) {
-      return false;
+    // Status filter (if any selected)
+    if (selectedStatuses.length > 0) {
+      if (!selectedStatuses.includes(wo.status)) return false;
     }
 
     return true;
@@ -228,11 +293,10 @@ export default function MissingHoursView({
     URL.revokeObjectURL(url);
   };
 
-  // Get selected tech name for display
-  const getSelectedTechName = () => {
-    if (techFilter === 'all') return null;
-    const tech = techs.find(t => t.user_id === techFilter);
-    return tech ? `${tech.first_name} ${tech.last_name}` : null;
+  // Get tech name by ID
+  const getTechName = (techId) => {
+    const tech = techs.find(t => t.user_id === techId);
+    return tech ? `${tech.first_name} ${tech.last_name.charAt(0)}.` : '';
   };
 
   return (
@@ -258,36 +322,117 @@ export default function MissingHoursView({
       {/* Filters */}
       <div className="bg-gray-800 rounded-lg p-4 mb-6">
         <div className="flex flex-wrap gap-3 items-center">
-          {/* Tech Filter */}
-          <select
-            value={techFilter}
-            onChange={(e) => setTechFilter(e.target.value)}
-            className={`px-4 py-2 rounded-lg ${
-              techFilter !== 'all' ? 'bg-blue-700 text-white' : 'bg-gray-700 text-white'
-            }`}
-          >
-            <option value="all">👷 All Techs</option>
-            {techs.map(tech => (
-              <option key={tech.user_id} value={tech.user_id}>
-                {tech.first_name} {tech.last_name}
-                {tech.role === 'lead_tech' ? ' ⭐' : ''}
-              </option>
-            ))}
-          </select>
+          
+          {/* Multi-Select Tech Filter */}
+          <div className="relative">
+            <button
+              onClick={() => setShowTechDropdown(!showTechDropdown)}
+              className={`tech-dropdown-btn px-4 py-2 rounded-lg flex items-center gap-2 ${
+                selectedTechs.length > 0 ? 'bg-blue-700 text-white' : 'bg-gray-700 text-white'
+              }`}
+            >
+              <span>👷</span>
+              {selectedTechs.length === 0 
+                ? 'All Techs' 
+                : selectedTechs.length === 1 
+                  ? getTechName(selectedTechs[0])
+                  : `${selectedTechs.length} Techs`
+              }
+              <span className="ml-1">▼</span>
+            </button>
+            
+            {showTechDropdown && (
+              <div className="tech-dropdown absolute top-full left-0 mt-1 bg-gray-700 rounded-lg shadow-xl z-50 min-w-[250px] max-h-[300px] overflow-y-auto">
+                {/* Select All */}
+                <div 
+                  className="px-4 py-2 hover:bg-gray-600 cursor-pointer border-b border-gray-600 flex items-center gap-2"
+                  onClick={toggleAllTechs}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={selectedTechs.length === techs.length}
+                    onChange={() => {}}
+                    className="w-4 h-4"
+                  />
+                  <span className="font-semibold">Select All</span>
+                </div>
+                {/* Individual Techs */}
+                {techs.map(tech => (
+                  <div 
+                    key={tech.user_id}
+                    className="px-4 py-2 hover:bg-gray-600 cursor-pointer flex items-center gap-2"
+                    onClick={() => toggleTech(tech.user_id)}
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={selectedTechs.includes(tech.user_id)}
+                      onChange={() => {}}
+                      className="w-4 h-4"
+                    />
+                    <span>{tech.first_name} {tech.last_name}</span>
+                    {tech.role === 'lead_tech' && <span className="text-yellow-400">⭐</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-lg"
-          >
-            <option value="all">All Status</option>
-            <option value="assigned">Assigned</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-          </select>
+          {/* Multi-Select Status Filter */}
+          <div className="relative">
+            <button
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              className={`status-dropdown-btn px-4 py-2 rounded-lg flex items-center gap-2 ${
+                selectedStatuses.length > 0 ? 'bg-blue-700 text-white' : 'bg-gray-700 text-white'
+              }`}
+            >
+              <span>📋</span>
+              {selectedStatuses.length === 0 
+                ? 'All Status' 
+                : selectedStatuses.length === 1 
+                  ? statusOptions.find(s => s.value === selectedStatuses[0])?.label
+                  : `${selectedStatuses.length} Statuses`
+              }
+              <span className="ml-1">▼</span>
+            </button>
+            
+            {showStatusDropdown && (
+              <div className="status-dropdown absolute top-full left-0 mt-1 bg-gray-700 rounded-lg shadow-xl z-50 min-w-[200px]">
+                {/* Select All */}
+                <div 
+                  className="px-4 py-2 hover:bg-gray-600 cursor-pointer border-b border-gray-600 flex items-center gap-2"
+                  onClick={toggleAllStatuses}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStatuses.length === statusOptions.length}
+                    onChange={() => {}}
+                    className="w-4 h-4"
+                  />
+                  <span className="font-semibold">Select All</span>
+                </div>
+                {/* Individual Statuses */}
+                {statusOptions.map(status => (
+                  <div 
+                    key={status.value}
+                    className="px-4 py-2 hover:bg-gray-600 cursor-pointer flex items-center gap-2"
+                    onClick={() => toggleStatus(status.value)}
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={selectedStatuses.includes(status.value)}
+                      onChange={() => {}}
+                      className="w-4 h-4"
+                    />
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${status.color}`}>
+                      {status.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Date Range */}
+          {/* Date Range (single select) */}
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -309,6 +454,16 @@ export default function MissingHoursView({
             🔄 Refresh
           </button>
 
+          {/* Clear Filters */}
+          {(selectedTechs.length > 0 || selectedStatuses.length > 0) && (
+            <button
+              onClick={clearAllFilters}
+              className="bg-red-700 hover:bg-red-600 px-4 py-2 rounded-lg font-semibold transition"
+            >
+              ✕ Clear Filters
+            </button>
+          )}
+
           {/* Export Button */}
           <button
             onClick={exportToCSV}
@@ -319,18 +474,43 @@ export default function MissingHoursView({
           </button>
         </div>
 
-        {/* Active Filter Indicator */}
-        {techFilter !== 'all' && (
-          <div className="mt-3 bg-blue-900/50 border border-blue-600 rounded-lg p-2 flex justify-between items-center">
-            <span className="text-blue-200 text-sm">
-              <strong>👷 Tech Filter:</strong> {getSelectedTechName()}
-            </span>
-            <button
-              onClick={() => setTechFilter('all')}
-              className="bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded text-xs font-semibold"
-            >
-              Clear
-            </button>
+        {/* Active Filter Tags */}
+        {(selectedTechs.length > 0 || selectedStatuses.length > 0) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectedTechs.map(techId => {
+              const tech = techs.find(t => t.user_id === techId);
+              return tech ? (
+                <span 
+                  key={techId}
+                  className="bg-blue-700 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                >
+                  👷 {tech.first_name} {tech.last_name.charAt(0)}.
+                  <button 
+                    onClick={() => toggleTech(techId)}
+                    className="hover:text-red-300"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ) : null;
+            })}
+            {selectedStatuses.map(status => {
+              const opt = statusOptions.find(s => s.value === status);
+              return opt ? (
+                <span 
+                  key={status}
+                  className={`${opt.color} text-white px-3 py-1 rounded-full text-sm flex items-center gap-2`}
+                >
+                  {opt.label}
+                  <button 
+                    onClick={() => toggleStatus(status)}
+                    className="hover:text-red-300"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ) : null;
+            })}
           </div>
         )}
       </div>
@@ -346,8 +526,8 @@ export default function MissingHoursView({
           <div className="text-green-400 text-4xl mb-4">✅</div>
           <div className="text-xl font-semibold text-green-400">All Caught Up!</div>
           <div className="text-gray-400 mt-2">
-            {techFilter !== 'all' 
-              ? `No missing hours for ${getSelectedTechName()}`
+            {(selectedTechs.length > 0 || selectedStatuses.length > 0)
+              ? 'No work orders match your filters'
               : 'No work orders with missing hours in the selected date range'
             }
           </div>
@@ -422,7 +602,14 @@ export default function MissingHoursView({
                           {wo.techsMissingHours.slice(0, 3).map(tech => (
                             <span 
                               key={tech.user_id}
-                              className="bg-red-700 text-white px-2 py-0.5 rounded text-xs"
+                              className="bg-red-700 hover:bg-red-600 text-white px-2 py-0.5 rounded text-xs cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!selectedTechs.includes(tech.user_id)) {
+                                  setSelectedTechs([...selectedTechs, tech.user_id]);
+                                }
+                              }}
+                              title={`Click to filter by ${tech.first_name} ${tech.last_name}`}
                             >
                               {tech.first_name} {tech.last_name.charAt(0)}.
                             </span>

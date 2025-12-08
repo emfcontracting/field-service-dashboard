@@ -657,12 +657,20 @@ export default function InvoicingPage() {
             <h1 className="text-3xl font-bold">💰 Invoicing</h1>
             <p className="text-gray-400 mt-1">Generate and manage invoices for completed work orders</p>
           </div>
-          <button
-            onClick={() => window.location.href = '/dashboard'}
-            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
-          >
-            ← Back to Dashboard
-          </button>
+          <div className="flex gap-3">
+            <a
+              href="/invoices/cbre"
+              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold"
+            >
+              🏢 CBRE Workflow
+            </a>
+            <button
+              onClick={() => window.location.href = '/dashboard'}
+              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}

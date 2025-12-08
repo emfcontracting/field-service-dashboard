@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import DashboardHeader from '../../dashboard/components/DashboardHeader';
+import DemoDashboardHeader from '../components/DemoDashboardHeader';
 import WorkOrdersView from '../../dashboard/components/WorkOrdersView';
 import AvailabilityView from '../../dashboard/components/AvailabilityView';
 import WorkOrderDetailModal from '../../dashboard/components/WorkOrderDetailModal';
@@ -201,7 +201,7 @@ export default function DemoDashboard() {
       <div className="max-w-7xl mx-auto">
         <DemoBanner onReset={handleReset} />
         
-        <DashboardHeader 
+        <DemoDashboardHeader 
           activeView={activeView}
           setActiveView={setActiveView}
         />

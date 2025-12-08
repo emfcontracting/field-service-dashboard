@@ -22,12 +22,13 @@ export default function WorkOrdersView({
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [cbreStatusFilter, setCbreStatusFilter] = useState('all');
+  const [techFilter, setTechFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Apply filters whenever workOrders or filters change
   useEffect(() => {
     applyFilters();
-  }, [workOrders, statusFilter, priorityFilter, cbreStatusFilter, searchTerm]);
+  }, [workOrders, statusFilter, priorityFilter, cbreStatusFilter, techFilter, searchTerm]);
 
   const applyFilters = () => {
     let filtered = [...workOrders];
@@ -47,14 +48,36 @@ export default function WorkOrdersView({
       filtered = filtered.filter(wo => wo.priority === priorityFilter);
     }
 
+    // Tech filter
+    if (techFilter !== 'all') {
+      if (techFilter === 'unassigned') {
+        // Show only unassigned work orders
+        filtered = filtered.filter(wo => !wo.lead_tech_id);
+      } else {
+        // Filter by specific tech (as lead or team member)
+        filtered = filtered.filter(wo => {
+          // Check if tech is lead
+          if (wo.lead_tech_id === techFilter) return true;
+          // Check if tech is in team members (if available)
+          if (wo.teamMembers && wo.teamMembers.some(tm => tm.user_id === techFilter)) return true;
+          // Check lead_tech object
+          if (wo.lead_tech?.user_id === techFilter) return true;
+          return false;
+        });
+      }
+    }
+
     // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter(wo =>
-        wo.wo_number.toLowerCase().includes(search) ||
-        wo.building.toLowerCase().includes(search) ||
-        wo.work_order_description.toLowerCase().includes(search) ||
-        wo.requestor?.toLowerCase().includes(search)
+        wo.wo_number?.toLowerCase().includes(search) ||
+        wo.building?.toLowerCase().includes(search) ||
+        wo.work_order_description?.toLowerCase().includes(search) ||
+        wo.requestor?.toLowerCase().includes(search) ||
+        // Also search by tech name
+        (wo.lead_tech && 
+          `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`.toLowerCase().includes(search))
       );
     }
 
@@ -95,6 +118,9 @@ export default function WorkOrdersView({
         setPriorityFilter={setPriorityFilter}
         cbreStatusFilter={cbreStatusFilter}
         setCbreStatusFilter={setCbreStatusFilter}
+        techFilter={techFilter}
+        setTechFilter={setTechFilter}
+        users={users}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
         exportDropdown={<ExportDropdown workOrders={workOrders} />}

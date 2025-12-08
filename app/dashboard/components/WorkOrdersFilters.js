@@ -12,12 +12,20 @@ export default function WorkOrdersFilters({
   setPriorityFilter,
   cbreStatusFilter,
   setCbreStatusFilter,
+  techFilter,
+  setTechFilter,
+  users,
   onNewWorkOrder,
   onImport,     
   exportDropdown
 }) {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+
+  // Get only techs (lead_tech, tech, helper roles)
+  const techs = (users || []).filter(u => 
+    ['lead_tech', 'tech', 'helper'].includes(u.role) && u.is_active
+  ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
 
   // Sync CBRE status from Gmail labels
   const handleSyncCBRE = async () => {
@@ -65,6 +73,26 @@ export default function WorkOrdersFilters({
           <option value="in_progress">In Progress</option>
           <option value="needs_return">Needs Return</option>
           <option value="completed">Completed</option>
+        </select>
+
+        {/* Tech Filter */}
+        <select
+          value={techFilter || 'all'}
+          onChange={(e) => setTechFilter && setTechFilter(e.target.value)}
+          className={`px-4 py-2 rounded-lg ${
+            techFilter && techFilter !== 'all' 
+              ? 'bg-blue-700 text-white' 
+              : 'bg-gray-700 text-white'
+          }`}
+        >
+          <option value="all">👷 All Techs</option>
+          <option value="unassigned">⚠️ Unassigned</option>
+          {techs.map(tech => (
+            <option key={tech.user_id} value={tech.user_id}>
+              {tech.first_name} {tech.last_name}
+              {tech.role === 'lead_tech' ? ' ⭐' : ''}
+            </option>
+          ))}
         </select>
 
         {/* CBRE Status Filter */}
@@ -124,6 +152,27 @@ export default function WorkOrdersFilters({
 		
         {exportDropdown}
       </div>
+
+      {/* Active Tech Filter Indicator */}
+      {techFilter && techFilter !== 'all' && (
+        <div className="mt-3 bg-blue-900/50 border border-blue-600 rounded-lg p-2 flex justify-between items-center">
+          <span className="text-blue-200 text-sm">
+            <strong>👷 Tech Filter:</strong>{' '}
+            {techFilter === 'unassigned' 
+              ? 'Unassigned Work Orders' 
+              : techs.find(t => t.user_id === techFilter)
+                ? `${techs.find(t => t.user_id === techFilter).first_name} ${techs.find(t => t.user_id === techFilter).last_name}`
+                : techFilter
+            }
+          </span>
+          <button
+            onClick={() => setTechFilter('all')}
+            className="bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded text-xs font-semibold"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Sync Result Message */}
       {syncResult && (

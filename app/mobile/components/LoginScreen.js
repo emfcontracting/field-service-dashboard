@@ -85,6 +85,16 @@ export default function LoginScreen({ onLogin, error, setError }) {
               {t('login')}
             </button>
           </form>
+          
+          {/* Subcontractor Portal Link */}
+          <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+            <a 
+              href="/contractor" 
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              🧱 Subcontractor Portal →
+            </a>
+          </div>
         </div>
       </div>
     </div>

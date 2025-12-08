@@ -206,6 +206,13 @@ export default function SettingsPage() {
                 <span>Automations</span>
               </button>
               <button
+                onClick={() => router.push('/settings/subcontractors')}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
+              >
+                <span className="text-2xl">🧱</span>
+                <span>Subcontractors</span>
+              </button>
+              <button
                 onClick={() => router.push('/messages')}
                 className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
               >

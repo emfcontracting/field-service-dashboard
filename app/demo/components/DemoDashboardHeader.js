@@ -34,12 +34,12 @@ export default function DemoDashboardHeader({ activeView, setActiveView }) {
           >
             ← Demo Home
           </Link>
-          <button
-            onClick={() => alert('Invoicing page available in full version')}
+          <Link
+            href="/demo/invoices"
             className="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
           >
             💰 Invoicing
-          </button>
+          </Link>
           <button
             onClick={() => alert('Users page available in full version')}
             className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-semibold transition text-sm"

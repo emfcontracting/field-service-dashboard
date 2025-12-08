@@ -60,16 +60,16 @@ const WORK_DESCRIPTIONS = [
 
 // Demo Users (matching your schema)
 export const DEMO_USERS = [
-  { user_id: 'demo-001', first_name: 'John', last_name: 'Mitchell', email: 'john@demo.com', role: 'admin', phone: '803-555-0101', is_active: true },
-  { user_id: 'demo-002', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@demo.com', role: 'office', phone: '803-555-0102', is_active: true },
-  { user_id: 'demo-003', first_name: 'Marcus', last_name: 'Williams', email: 'marcus@demo.com', role: 'lead_tech', phone: '803-555-0201', is_active: true },
-  { user_id: 'demo-004', first_name: 'Roberto', last_name: 'Garcia', email: 'roberto@demo.com', role: 'lead_tech', phone: '803-555-0202', is_active: true },
-  { user_id: 'demo-005', first_name: 'David', last_name: 'Thompson', email: 'david@demo.com', role: 'lead_tech', phone: '803-555-0203', is_active: true },
-  { user_id: 'demo-006', first_name: 'James', last_name: 'Wilson', email: 'james@demo.com', role: 'tech', phone: '803-555-0301', is_active: true },
-  { user_id: 'demo-007', first_name: 'Anthony', last_name: 'Brown', email: 'anthony@demo.com', role: 'tech', phone: '803-555-0302', is_active: true },
-  { user_id: 'demo-008', first_name: 'Michael', last_name: 'Davis', email: 'michael@demo.com', role: 'tech', phone: '803-555-0303', is_active: true },
-  { user_id: 'demo-009', first_name: 'Tyler', last_name: 'Anderson', email: 'tyler@demo.com', role: 'helper', phone: '803-555-0401', is_active: true },
-  { user_id: 'demo-010', first_name: 'Kevin', last_name: 'Martinez', email: 'kevin@demo.com', role: 'helper', phone: '803-555-0402', is_active: true },
+  { user_id: 'demo-001', first_name: 'John', last_name: 'Mitchell', email: 'john@pcsfield.demo', role: 'admin', phone: '803-555-0101', is_active: true },
+  { user_id: 'demo-002', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@pcsfield.demo', role: 'office', phone: '803-555-0102', is_active: true },
+  { user_id: 'demo-003', first_name: 'Marcus', last_name: 'Williams', email: 'marcus@pcsfield.demo', role: 'lead_tech', phone: '803-555-0201', is_active: true },
+  { user_id: 'demo-004', first_name: 'Roberto', last_name: 'Garcia', email: 'roberto@pcsfield.demo', role: 'lead_tech', phone: '803-555-0202', is_active: true },
+  { user_id: 'demo-005', first_name: 'David', last_name: 'Thompson', email: 'david@pcsfield.demo', role: 'lead_tech', phone: '803-555-0203', is_active: true },
+  { user_id: 'demo-006', first_name: 'James', last_name: 'Wilson', email: 'james@pcsfield.demo', role: 'tech', phone: '803-555-0301', is_active: true },
+  { user_id: 'demo-007', first_name: 'Anthony', last_name: 'Brown', email: 'anthony@pcsfield.demo', role: 'tech', phone: '803-555-0302', is_active: true },
+  { user_id: 'demo-008', first_name: 'Michael', last_name: 'Davis', email: 'michael@pcsfield.demo', role: 'tech', phone: '803-555-0303', is_active: true },
+  { user_id: 'demo-009', first_name: 'Tyler', last_name: 'Anderson', email: 'tyler@pcsfield.demo', role: 'helper', phone: '803-555-0401', is_active: true },
+  { user_id: 'demo-010', first_name: 'Kevin', last_name: 'Martinez', email: 'kevin@pcsfield.demo', role: 'helper', phone: '803-555-0402', is_active: true },
 ];
 
 // Generate a random work order

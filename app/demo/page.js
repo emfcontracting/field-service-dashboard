@@ -21,11 +21,11 @@ export default function DemoLandingPage() {
       <nav className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">E</span>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xl">⚡</span>
             </div>
             <div>
-              <span className="text-white font-bold text-xl">EMF FSM</span>
+              <span className="text-white font-bold text-xl">PCS FieldService</span>
               <span className="text-blue-300 text-sm block -mt-1">Interactive Demo</span>
             </div>
           </div>
@@ -46,13 +46,13 @@ export default function DemoLandingPage() {
           </div>
           
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
-            Field Service Management
+            PCS FieldService
             <span className="text-blue-400"> Demo</span>
           </h1>
           
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Experience the complete EMF field service management system with realistic sample data.
-            This is an exact copy of the production system - just with demo data.
+            Experience the complete PCS field service management system with realistic sample data.
+            Full-featured FSM for electrical contractors serving commercial facilities.
           </p>
 
           {/* Main CTA */}
@@ -144,10 +144,10 @@ export default function DemoLandingPage() {
       <footer className="container mx-auto px-6 py-8 border-t border-slate-800">
         <div className="flex flex-col md:flex-row justify-between items-center text-slate-400 text-sm">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
-              <span className="text-white font-bold text-xs">E</span>
+            <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded flex items-center justify-center">
+              <span className="text-white font-bold text-xs">⚡</span>
             </div>
-            <span>EMF Contracting LLC - Field Service Management</span>
+            <span>PCS FieldService - Professional Commercial Solutions</span>
           </div>
           <div>Demo Version</div>
         </div>

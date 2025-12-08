@@ -16,6 +16,7 @@ export default function ContractorInvoices() {
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [filter, setFilter] = useState('all'); // all, draft, sent, paid
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
@@ -50,6 +51,38 @@ export default function ContractorInvoices() {
       console.error('Error loading invoices:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteInvoice(invoiceId, invoiceNumber) {
+    if (!confirm(`Are you sure you want to delete invoice ${invoiceNumber}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeleting(invoiceId);
+
+    try {
+      // Delete line items first (foreign key constraint)
+      await supabase
+        .from('subcontractor_invoice_items')
+        .delete()
+        .eq('invoice_id', invoiceId);
+
+      // Delete the invoice
+      const { error } = await supabase
+        .from('subcontractor_invoices')
+        .delete()
+        .eq('invoice_id', invoiceId);
+
+      if (error) throw error;
+
+      // Remove from state
+      setInvoices(invoices.filter(inv => inv.invoice_id !== invoiceId));
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      alert('Failed to delete invoice');
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -148,21 +181,31 @@ export default function ContractorInvoices() {
                 className="bg-gray-800 rounded-xl border border-gray-700 p-4"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-bold text-lg">{invoice.invoice_number}</h3>
+                  <Link href={`/contractor/invoices/${invoice.invoice_id}`}>
+                    <h3 className="font-bold text-lg hover:text-blue-400 transition">{invoice.invoice_number}</h3>
                     <p className="text-sm text-gray-400">
                       {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
                     </p>
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      invoice.status === 'paid'
+                        ? 'bg-green-500/20 text-green-400'
+                        : invoice.status === 'sent'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {invoice.status.toUpperCase()}
+                    </span>
+                    <button
+                      onClick={() => deleteInvoice(invoice.invoice_id, invoice.invoice_number)}
+                      disabled={deleting === invoice.invoice_id}
+                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-lg transition disabled:opacity-50"
+                      title="Delete invoice"
+                    >
+                      {deleting === invoice.invoice_id ? '...' : '🗑️'}
+                    </button>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    invoice.status === 'paid'
-                      ? 'bg-green-500/20 text-green-400'
-                      : invoice.status === 'sent'
-                        ? 'bg-yellow-500/20 text-yellow-400'
-                        : 'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {invoice.status.toUpperCase()}
-                  </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 text-sm mt-3">
@@ -186,7 +229,7 @@ export default function ContractorInvoices() {
 
                 {invoice.sent_at && (
                   <p className="text-xs text-gray-500 mt-3">
-                    Sent: {new Date(invoice.sent_at).toLocaleString()}
+                    Sent to {invoice.sent_to_email}: {new Date(invoice.sent_at).toLocaleString()}
                   </p>
                 )}
               </div>

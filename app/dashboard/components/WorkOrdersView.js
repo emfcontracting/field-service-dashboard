@@ -46,37 +46,70 @@ export default function WorkOrdersView({
   const applyFilters = () => {
     let filtered = [...workOrders];
 
-    // Work status filter
+    // Work status filter - handle both single value and array
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(wo => wo.status === statusFilter);
-    }
-
-    // CBRE status filter
-    if (cbreStatusFilter !== 'all') {
-      filtered = filtered.filter(wo => wo.cbre_status === cbreStatusFilter);
-    }
-
-    // Priority filter
-    if (priorityFilter !== 'all') {
-      filtered = filtered.filter(wo => wo.priority === priorityFilter);
-    }
-
-    // Tech filter
-    if (techFilter !== 'all') {
-      if (techFilter === 'unassigned') {
-        // Show only unassigned work orders
-        filtered = filtered.filter(wo => !wo.lead_tech_id);
+      if (Array.isArray(statusFilter)) {
+        // Multi-select: filter by any of the selected statuses
+        filtered = filtered.filter(wo => statusFilter.includes(wo.status));
       } else {
-        // Filter by specific tech (as lead or team member)
+        // Single select
+        filtered = filtered.filter(wo => wo.status === statusFilter);
+      }
+    }
+
+    // CBRE status filter - handle both single value and array
+    if (cbreStatusFilter !== 'all') {
+      if (Array.isArray(cbreStatusFilter)) {
+        filtered = filtered.filter(wo => cbreStatusFilter.includes(wo.cbre_status));
+      } else {
+        filtered = filtered.filter(wo => wo.cbre_status === cbreStatusFilter);
+      }
+    }
+
+    // Priority filter - handle both single value and array
+    if (priorityFilter !== 'all') {
+      if (Array.isArray(priorityFilter)) {
+        filtered = filtered.filter(wo => priorityFilter.includes(wo.priority));
+      } else {
+        filtered = filtered.filter(wo => wo.priority === priorityFilter);
+      }
+    }
+
+    // Tech filter - handle both single value and array
+    if (techFilter !== 'all') {
+      if (Array.isArray(techFilter)) {
+        // Multi-select tech filter
         filtered = filtered.filter(wo => {
-          // Check if tech is lead
-          if (wo.lead_tech_id === techFilter) return true;
-          // Check if tech is in team members (if available)
-          if (wo.teamMembers && wo.teamMembers.some(tm => tm.user_id === techFilter)) return true;
+          // Check for unassigned
+          if (techFilter.includes('unassigned') && !wo.lead_tech_id) {
+            return true;
+          }
+          // Check if any selected tech is the lead
+          if (techFilter.includes(wo.lead_tech_id)) {
+            return true;
+          }
+          // Check if any selected tech is in team members
+          if (wo.teamMembers && wo.teamMembers.some(tm => techFilter.includes(tm.user_id))) {
+            return true;
+          }
           // Check lead_tech object
-          if (wo.lead_tech?.user_id === techFilter) return true;
+          if (wo.lead_tech && techFilter.includes(wo.lead_tech.user_id)) {
+            return true;
+          }
           return false;
         });
+      } else {
+        // Single select
+        if (techFilter === 'unassigned') {
+          filtered = filtered.filter(wo => !wo.lead_tech_id);
+        } else {
+          filtered = filtered.filter(wo => {
+            if (wo.lead_tech_id === techFilter) return true;
+            if (wo.teamMembers && wo.teamMembers.some(tm => tm.user_id === techFilter)) return true;
+            if (wo.lead_tech?.user_id === techFilter) return true;
+            return false;
+          });
+        }
       }
     }
 
@@ -88,7 +121,6 @@ export default function WorkOrdersView({
         wo.building?.toLowerCase().includes(search) ||
         wo.work_order_description?.toLowerCase().includes(search) ||
         wo.requestor?.toLowerCase().includes(search) ||
-        // Also search by tech name
         (wo.lead_tech && 
           `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`.toLowerCase().includes(search))
       );
@@ -99,7 +131,8 @@ export default function WorkOrdersView({
 
   // Handle clicking on CBRE status cards
   const handleFilterByCbreStatus = (status) => {
-    setCbreStatusFilter(status);
+    // Set as array for multi-select compatibility
+    setCbreStatusFilter([status]);
   };
 
   const selectWorkOrderEnhanced = async (wo) => {
@@ -206,28 +239,6 @@ export default function WorkOrdersView({
         exportDropdown={<ExportDropdown workOrders={workOrders} />}
       />
 
-      {/* Active CBRE Filter Indicator */}
-      {cbreStatusFilter !== 'all' && (
-        <div className="bg-red-900/50 border border-red-600 rounded-lg p-3 mb-4 flex justify-between items-center">
-          <span className="text-red-200">
-            <strong>CBRE Filter Active:</strong>{' '}
-            {cbreStatusFilter === 'escalation' && '🚨 Escalation'}
-            {cbreStatusFilter === 'quote_approved' && '✅ Quote Approved'}
-            {cbreStatusFilter === 'quote_rejected' && '❌ Quote Rejected'}
-            {cbreStatusFilter === 'quote_submitted' && '📤 Quote Submitted'}
-            {cbreStatusFilter === 'reassigned' && '🔄 Reassigned'}
-            {cbreStatusFilter === 'pending_quote' && '📋 Pending Quote'}
-            {' '}({filteredWorkOrders.length} results)
-          </span>
-          <button
-            onClick={() => setCbreStatusFilter('all')}
-            className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-sm font-semibold"
-          >
-            Clear Filter
-          </button>
-        </div>
-      )}
-
       {/* Bulk Delete Bar - Superuser Only */}
       {isSuperuser && selectedWOs.size > 0 && (
         <div className="bg-red-900/70 border border-red-500 rounded-lg p-3 mb-4 flex justify-between items-center">
@@ -287,6 +298,11 @@ export default function WorkOrdersView({
           </div>
         </div>
       )}
+
+      {/* Results count */}
+      <div className="mb-2 text-sm text-gray-400">
+        Showing {filteredWorkOrders.length} of {workOrders.length} work orders
+      </div>
 
       <WorkOrdersTable
         workOrders={filteredWorkOrders}

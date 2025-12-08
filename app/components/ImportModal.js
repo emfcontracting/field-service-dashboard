@@ -17,8 +17,10 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   // Gmail fetch states
   const [gmailLoading, setGmailLoading] = useState(false);
   const [gmailEmails, setGmailEmails] = useState([]);
+  const [gmailDuplicates, setGmailDuplicates] = useState([]);
   const [selectedEmails, setSelectedEmails] = useState({});
   const [gmailError, setGmailError] = useState('');
+  const [gmailMessage, setGmailMessage] = useState('');
   const [importResult, setImportResult] = useState(null);
   
   // Manual entry states
@@ -37,7 +39,9 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   const fetchGmailEmails = async () => {
     setGmailLoading(true);
     setGmailError('');
+    setGmailMessage('');
     setGmailEmails([]);
+    setGmailDuplicates([]);
     setSelectedEmails({});
     setImportResult(null);
 
@@ -51,6 +55,8 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       }
 
       setGmailEmails(data.emails || []);
+      setGmailDuplicates(data.duplicates || []);
+      setGmailMessage(data.message || '');
       
       // Select all by default
       const selected = {};
@@ -390,6 +396,25 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
                 <p className="text-gray-400">Fetching emails from Gmail...</p>
+              </div>
+            )}
+
+            {/* Status Message */}
+            {!gmailLoading && gmailMessage && (
+              <div className="bg-blue-900/50 text-blue-200 p-4 rounded-lg">
+                ℹ️ {gmailMessage}
+              </div>
+            )}
+
+            {/* Duplicates Info */}
+            {!gmailLoading && gmailDuplicates.length > 0 && (
+              <div className="bg-yellow-900/50 text-yellow-200 p-4 rounded-lg">
+                <div className="font-semibold mb-2">⚠️ {gmailDuplicates.length} duplicate(s) skipped (already in system):</div>
+                <ul className="text-sm space-y-1">
+                  {gmailDuplicates.map((dup, i) => (
+                    <li key={i}>• {dup.wo_number} - {dup.building}</li>
+                  ))}
+                </ul>
               </div>
             )}
 

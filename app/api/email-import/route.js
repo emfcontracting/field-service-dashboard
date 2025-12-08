@@ -264,8 +264,16 @@ export async function GET(request) {
       });
     }
 
+    // Get existing WO numbers to check for duplicates
+    const { data: existingWOs } = await supabase
+      .from('work_orders')
+      .select('wo_number');
+    const existingWONumbers = new Set((existingWOs || []).map(wo => wo.wo_number));
+
     // Fetch full message details for each email
     const emails = [];
+    const duplicates = [];
+    
     for (const msg of listData.messages) {
       try {
         const msgResponse = await fetch(
@@ -291,6 +299,16 @@ export async function GET(request) {
         // Parse CBRE format
         const workOrder = parseCBREEmail(subject, body);
 
+        // Check if this WO already exists
+        if (workOrder.wo_number && existingWONumbers.has(workOrder.wo_number)) {
+          duplicates.push({
+            wo_number: workOrder.wo_number,
+            building: workOrder.building,
+            subject
+          });
+          continue; // Skip duplicates
+        }
+
         emails.push({
           emailId: msgData.id,
           subject,
@@ -304,8 +322,13 @@ export async function GET(request) {
 
     return Response.json({
       success: true,
-      message: `Found ${emails.length} work order email(s)`,
-      emails
+      message: emails.length > 0 
+        ? `Found ${emails.length} new work order email(s)${duplicates.length > 0 ? ` (${duplicates.length} duplicates skipped)` : ''}`
+        : duplicates.length > 0 
+          ? `All ${duplicates.length} email(s) are duplicates of existing work orders`
+          : 'No new work order emails found',
+      emails,
+      duplicates
     });
 
   } catch (error) {

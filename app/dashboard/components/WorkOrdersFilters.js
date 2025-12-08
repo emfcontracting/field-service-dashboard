@@ -143,6 +143,11 @@ export default function WorkOrdersFilters({
                           💰 NTE: ${update.old_nte?.toFixed(2) || '0'} → ${update.new_nte.toFixed(2)}
                         </span>
                       )}
+                      {update.submitted_quote && (
+                        <span className="bg-yellow-700 px-2 py-0.5 rounded text-xs">
+                          📤 Quote: ${update.submitted_quote.toFixed(2)}
+                        </span>
+                      )}
                       {update.notified && (
                         <span className="bg-blue-700 px-2 py-0.5 rounded text-xs">📱 Notified</span>
                       )}

@@ -131,7 +131,8 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Handle updating an NTE increase - NOW UPDATES WORK ORDER NTE WHEN APPROVED
+  // Handle updating an NTE increase (EMF internal tracking only - does NOT auto-update work order NTE)
+  // Work order NTE is updated via Gmail sync when CBRE sends quote approval email
   const handleUpdateNTEIncrease = async (quoteId, updates) => {
     try {
       setSavingNTE(true);
@@ -153,77 +154,6 @@ export default function WorkOrderDetailModal({
         .eq('quote_id', quoteId);
 
       if (error) throw error;
-
-      // If status changed to 'approved', update the work order's NTE
-      if (updates.nte_status === 'approved') {
-        // Calculate current costs
-        let currentCosts = 0;
-        
-        if (dailyHoursLog && dailyHoursLog.length > 0) {
-          let laborRT = 0, laborOT = 0, totalMileage = 0;
-          dailyHoursLog.forEach(log => {
-            laborRT += parseFloat(log.hours_regular) || 0;
-            laborOT += parseFloat(log.hours_overtime) || 0;
-            totalMileage += parseFloat(log.miles) || 0;
-          });
-          const laborCost = (laborRT * 64) + (laborOT * 96);
-          const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
-          const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-          const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-          const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-          const mileageCost = totalMileage * 1.00;
-          const adminFee = 128;
-          currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
-        } else {
-          // Use legacy calculation
-          const legacyRT = parseFloat(selectedWO.hours_regular) || 0;
-          const legacyOT = parseFloat(selectedWO.hours_overtime) || 0;
-          const legacyMiles = parseFloat(selectedWO.miles) || 0;
-          let teamRT = 0, teamOT = 0, teamMiles = 0;
-          (selectedWO.teamMembers || []).forEach(m => {
-            teamRT += parseFloat(m.hours_regular) || 0;
-            teamOT += parseFloat(m.hours_overtime) || 0;
-            teamMiles += parseFloat(m.miles) || 0;
-          });
-          const totalRT = legacyRT + teamRT;
-          const totalOT = legacyOT + teamOT;
-          const totalMiles = legacyMiles + teamMiles;
-          const laborCost = (totalRT * 64) + (totalOT * 96) + 128;
-          const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
-          const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-          const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-          const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-          const mileageCost = totalMiles * 1.00;
-          currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost;
-        }
-        
-        const newNTE = currentCosts + grandTotal;
-        const oldNTE = selectedWO.nte || 0;
-        
-        // Update work order NTE and CBRE status
-        const { error: woError } = await supabase
-          .from('work_orders')
-          .update({ 
-            nte: newNTE,
-            cbre_status: 'quote_approved',
-            cbre_status_updated_at: new Date().toISOString()
-          })
-          .eq('wo_id', selectedWO.wo_id);
-        
-        if (woError) {
-          console.error('Error updating work order NTE:', woError);
-          alert('Quote approved but failed to update NTE: ' + woError.message);
-        } else {
-          setSelectedWO({ 
-            ...selectedWO, 
-            nte: newNTE,
-            cbre_status: 'quote_approved',
-            cbre_status_updated_at: new Date().toISOString()
-          });
-          alert(`✅ Quote Approved!\n\nNTE Updated: ${oldNTE.toFixed(2)} → ${newNTE.toFixed(2)}`);
-          refreshWorkOrders();
-        }
-      }
 
       // Update local state for quotes
       setNteIncreases(nteIncreases.map(q => 

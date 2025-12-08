@@ -8,11 +8,12 @@ const supabase = createClient(
 );
 
 // Gmail label to CBRE status mapping
+// Label names should match Gmail labels (case-insensitive search)
 const LABEL_STATUS_MAP = {
   'escalation': { cbre_status: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false, extractNTE: true },
   'quote-rejected': { cbre_status: 'quote_rejected', notify: true, notifyRoles: ['admin', 'office'] },
-  'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false },
+  'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false, extractQuoteAmount: true },
   'reassignment-of': { cbre_status: 'reassigned', notify: true, notifyRoles: ['admin', 'office'] },
 };
 
@@ -142,6 +143,57 @@ function extractApprovedNTE(subject, body) {
     if (match) {
       const amount = parseFloat(match[1].replace(/,/g, ''));
       // Sanity check - NTE should be reasonable (between $100 and $1,000,000)
+      if (amount >= 100 && amount <= 1000000) {
+        return amount;
+      }
+    }
+  }
+
+  // Also check subject line
+  for (const pattern of patterns) {
+    const match = (subject || '').match(pattern);
+    if (match) {
+      const amount = parseFloat(match[1].replace(/,/g, ''));
+      if (amount >= 100 && amount <= 1000000) {
+        return amount;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Extract submitted quote amount from quote submitted email
+function extractSubmittedQuoteAmount(subject, body) {
+  // Clean the body for parsing
+  const cleanBody = (body || '')
+    .replace(/=\r?\n/g, '')
+    .replace(/=3D/g, '=')
+    .replace(/=20/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Common patterns for quote amounts in submitted emails:
+  // "quote for $5,000.00" or "quote amount: $5000" or "submitted quote: $5,000.00"
+  // "requesting $5000" or "NTE increase to $5,000" or "total: $5000.00"
+  const patterns = [
+    /quote\s+(?:for|of|amount)?[:\s]*\$?([\d,]+\.?\d*)/i,
+    /submitted\s+(?:quote|for)?[:\s]*\$?([\d,]+\.?\d*)/i,
+    /requesting\s+\$?([\d,]+\.?\d*)/i,
+    /NTE\s+(?:increase|request)?\s+(?:to|of|for)?[:\s]*\$?([\d,]+\.?\d*)/i,
+    /total[:\s]+\$?([\d,]+\.?\d*)/i,
+    /amount[:\s]+\$?([\d,]+\.?\d*)/i,
+    /\$([\d,]+\.?\d*)\s*(?:quote|NTE|total)/i,
+  ];
+
+  // Try each pattern
+  for (const pattern of patterns) {
+    const match = cleanBody.match(pattern);
+    if (match) {
+      const amount = parseFloat(match[1].replace(/,/g, ''));
+      // Sanity check - quote should be reasonable (between $100 and $1,000,000)
       if (amount >= 100 && amount <= 1000000) {
         return amount;
       }
@@ -345,68 +397,31 @@ export async function GET(request) {
           }
 
           // Extract and update NTE for quote approvals
+          // The approved NTE amount comes directly from CBRE's approval email
           let newNTE = null;
           if (labelConfig.extractNTE) {
             newNTE = extractApprovedNTE(subject, body);
             if (newNTE) {
               updateData.nte = newNTE;
-            } else {
-              // If we couldn't extract NTE from email, calculate it from current costs + pending quotes
-              // Get daily hours for this work order
-              const { data: dailyLogs } = await supabase
-                .from('daily_hours_log')
-                .select('hours_regular, hours_overtime, miles')
-                .eq('wo_id', workOrder.wo_id);
-              
-              // Get pending NTE increase requests
-              const { data: pendingQuotes } = await supabase
-                .from('work_order_quotes')
-                .select('grand_total')
-                .eq('wo_id', workOrder.wo_id)
-                .in('nte_status', ['pending', 'submitted']);
-              
-              // Calculate current labor costs from daily logs
-              let laborRT = 0, laborOT = 0, totalMileage = 0;
-              (dailyLogs || []).forEach(log => {
-                laborRT += parseFloat(log.hours_regular) || 0;
-                laborOT += parseFloat(log.hours_overtime) || 0;
-                totalMileage += parseFloat(log.miles) || 0;
-              });
-              
-              const laborCost = (laborRT * 64) + (laborOT * 96);
-              const adminFee = 128;
-              const mileageCost = totalMileage * 1.00;
-              
-              // Get material/equipment costs from work order (we'd need to fetch full WO data)
-              const { data: fullWO } = await supabase
-                .from('work_orders')
-                .select('material_cost, emf_equipment_cost, rental_cost, trailer_cost')
-                .eq('wo_id', workOrder.wo_id)
-                .single();
-              
-              const materialsCost = (parseFloat(fullWO?.material_cost) || 0) * 1.25;
-              const equipmentCost = (parseFloat(fullWO?.emf_equipment_cost) || 0) * 1.25;
-              const rentalCost = (parseFloat(fullWO?.rental_cost) || 0) * 1.25;
-              const trailerCost = (parseFloat(fullWO?.trailer_cost) || 0) * 1.25;
-              
-              const currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
-              
-              // Sum up pending quote totals
-              const additionalWork = (pendingQuotes || []).reduce((sum, q) => sum + (parseFloat(q.grand_total) || 0), 0);
-              
-              // Only update NTE if we have meaningful costs
-              if (currentCosts > 0 || additionalWork > 0) {
-                newNTE = currentCosts + additionalWork;
-                updateData.nte = newNTE;
-              }
             }
+            // If we can't extract NTE from email, don't update it - leave current value
+            // The NTE Increase feature in the app is for EMF internal tracking only
+          }
+
+          // Extract submitted quote amount for tracking (doesn't update NTE)
+          let submittedQuoteAmount = null;
+          if (labelConfig.extractQuoteAmount) {
+            submittedQuoteAmount = extractSubmittedQuoteAmount(subject, body);
           }
 
           // Add to comments
           const timestamp = new Date().toLocaleString();
           let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${subject}`;
           if (newNTE) {
-            newComment += `\n✅ NTE Updated: $${workOrder.nte?.toFixed(2) || '0.00'} → $${newNTE.toFixed(2)}`;
+            newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
+          }
+          if (submittedQuoteAmount) {
+            newComment += `\n📤 Quote Submitted: ${submittedQuoteAmount.toFixed(2)}`;
           }
           const updatedComments = workOrder.comments 
             ? `${workOrder.comments}\n\n${newComment}`
@@ -455,6 +470,7 @@ export async function GET(request) {
             new_status: labelConfig.cbre_status,
             new_nte: newNTE,
             old_nte: workOrder.nte,
+            submitted_quote: submittedQuoteAmount,
             subject: subject.substring(0, 80),
             notified: labelConfig.notify || !!newNTE
           });

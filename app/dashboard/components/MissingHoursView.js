@@ -1,7 +1,7 @@
 // app/dashboard/components/MissingHoursView.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getStatusColor } from '../utils/styleHelpers';
 
 export default function MissingHoursView({ 
@@ -16,17 +16,28 @@ export default function MissingHoursView({
   const [techFilter, setTechFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateRange, setDateRange] = useState('30'); // days
+  const [debugInfo, setDebugInfo] = useState('');
 
   // Get techs for filter dropdown
   const techs = (users || []).filter(u => 
     ['lead_tech', 'tech', 'helper'].includes(u.role) && u.is_active
   ).sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
 
-  useEffect(() => {
-    fetchMissingHours();
-  }, [workOrders, dateRange]);
+  const fetchMissingHours = useCallback(async () => {
+    if (!workOrders || workOrders.length === 0) {
+      setDebugInfo('No work orders available');
+      setMissingHoursWOs([]);
+      setLoading(false);
+      return;
+    }
 
-  const fetchMissingHours = async () => {
+    if (!supabase) {
+      setDebugInfo('Supabase not available');
+      setMissingHoursWOs([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -41,9 +52,12 @@ export default function MissingHoursView({
       const eligibleWOs = workOrders.filter(wo => {
         const hasAssignment = wo.lead_tech_id;
         const relevantStatus = ['assigned', 'in_progress', 'completed'].includes(wo.status);
-        const withinDateRange = new Date(wo.date_entered || wo.created_at) >= cutoffDate;
+        const woDate = new Date(wo.date_entered || wo.created_at);
+        const withinDateRange = woDate >= cutoffDate;
         return hasAssignment && relevantStatus && withinDateRange;
       });
+
+      setDebugInfo(`Total WOs: ${workOrders.length}, Eligible (assigned/in_progress/completed with lead tech in last ${dateRange} days): ${eligibleWOs.length}`);
 
       if (eligibleWOs.length === 0) {
         setMissingHoursWOs([]);
@@ -60,6 +74,7 @@ export default function MissingHoursView({
 
       if (error) {
         console.error('Error fetching hours:', error);
+        setDebugInfo(`Error fetching hours: ${error.message}`);
         setMissingHoursWOs([]);
         setLoading(false);
         return;
@@ -97,7 +112,7 @@ export default function MissingHoursView({
         assignmentsPerWO[a.wo_id].push(a);
       });
 
-      // Find work orders with missing hours
+      // Find work orders with missing hours (ONLY zero hours - simpler logic)
       const missing = eligibleWOs
         .map(wo => {
           const totalHours = hoursPerWO[wo.wo_id] || 0;
@@ -132,20 +147,28 @@ export default function MissingHoursView({
             assignedTechIds: Array.from(assignedTechIds),
             techsMissingHours,
             teamAssignments: woAssignments,
-            hasMissingHours: totalHours === 0 || techsMissingHours.length > 0
+            // Only flag as missing if ZERO hours logged (matches stats card logic)
+            hasMissingHours: totalHours === 0
           };
         })
         .filter(wo => wo.hasMissingHours)
         .sort((a, b) => b.daysSinceStart - a.daysSinceStart); // Oldest first
 
+      setDebugInfo(`Eligible: ${eligibleWOs.length}, Hours records: ${hoursData?.length || 0}, Missing hours: ${missing.length}`);
       setMissingHoursWOs(missing);
     } catch (err) {
       console.error('Error in fetchMissingHours:', err);
+      setDebugInfo(`Error: ${err.message}`);
       setMissingHoursWOs([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [workOrders, users, supabase, dateRange]);
+
+  // Fetch when component mounts or dependencies change
+  useEffect(() => {
+    fetchMissingHours();
+  }, [fetchMissingHours]);
 
   // Apply filters
   const filteredWOs = missingHoursWOs.filter(wo => {
@@ -215,6 +238,13 @@ export default function MissingHoursView({
           </div>
         </div>
       </div>
+
+      {/* Debug Info - Remove in production */}
+      {debugInfo && (
+        <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mb-4 text-xs text-gray-400">
+          🔍 Debug: {debugInfo}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-gray-800 rounded-lg p-4 mb-6">
@@ -299,6 +329,7 @@ export default function MissingHoursView({
       {/* Table */}
       {loading ? (
         <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
+          <div className="animate-spin text-4xl mb-4">⏳</div>
           Loading missing hours data...
         </div>
       ) : filteredWOs.length === 0 ? (

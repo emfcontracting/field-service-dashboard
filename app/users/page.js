@@ -586,6 +586,7 @@ Type "DELETE" to confirm permanent deletion:`;
                     <option value="uscellular">US Cellular</option>
                     <option value="googlefi">Google Fi</option>
                     <option value="straight_talk">Straight Talk</option>
+                    <option value="bellsouth">BellSouth</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">Required to receive text notifications</p>
                 </div>

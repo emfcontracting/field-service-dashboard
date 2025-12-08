@@ -18,6 +18,7 @@ const SMS_CARRIERS = [
   { value: 'xfinity', label: 'Xfinity Mobile', gateway: 'vtext.com' },
   { value: 'visible', label: 'Visible', gateway: 'vtext.com' },
   { value: 'spectrum', label: 'Spectrum Mobile', gateway: 'vtext.com' },
+  { value: 'bellsouth', label: 'BellSouth', gateway: 'sms.bellsouth.com' },
   { value: 'other', label: 'Other / Not Listed', gateway: '' }
 ];
 

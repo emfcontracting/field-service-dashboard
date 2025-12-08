@@ -16,6 +16,7 @@ const SMS_GATEWAYS = {
   republic: 'text.republicwireless.com',
   googlefi: 'msg.fi.google.com',
   straight_talk: 'vtext.com', // Uses Verizon network typically
+  bellsouth: 'sms.bellsouth.com',
 };
 
 // Create email transporter using Gmail

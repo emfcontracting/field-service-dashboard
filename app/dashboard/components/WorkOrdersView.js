@@ -22,12 +22,13 @@ export default function WorkOrdersView({
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [billingStatusFilter, setBillingStatusFilter] = useState('all');
+  const [cbreStatusFilter, setCbreStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Apply filters whenever workOrders or filters change
   useEffect(() => {
     applyFilters();
-  }, [workOrders, statusFilter, priorityFilter, billingStatusFilter, searchTerm]);
+  }, [workOrders, statusFilter, priorityFilter, billingStatusFilter, cbreStatusFilter, searchTerm]);
 
   const applyFilters = () => {
     let filtered = [...workOrders];
@@ -35,6 +36,11 @@ export default function WorkOrdersView({
     // Work status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(wo => wo.status === statusFilter);
+    }
+
+    // CBRE status filter
+    if (cbreStatusFilter !== 'all') {
+      filtered = filtered.filter(wo => wo.cbre_status === cbreStatusFilter);
     }
 
     // Billing status filter
@@ -100,10 +106,33 @@ export default function WorkOrdersView({
         setPriorityFilter={setPriorityFilter}
         billingStatusFilter={billingStatusFilter}
         setBillingStatusFilter={setBillingStatusFilter}
+        cbreStatusFilter={cbreStatusFilter}
+        setCbreStatusFilter={setCbreStatusFilter}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
         exportDropdown={<ExportDropdown workOrders={workOrders} />}
       />
+
+      {/* Active CBRE Filter Indicator */}
+      {cbreStatusFilter !== 'all' && (
+        <div className="bg-red-900/50 border border-red-600 rounded-lg p-3 mb-4 flex justify-between items-center">
+          <span className="text-red-200">
+            <strong>CBRE Filter Active:</strong>{' '}
+            {cbreStatusFilter === 'escalation' && '🚨 Escalation'}
+            {cbreStatusFilter === 'quote_approved' && '✅ Quote Approved'}
+            {cbreStatusFilter === 'quote_rejected' && '❌ Quote Rejected'}
+            {cbreStatusFilter === 'quote_submitted' && '📤 Quote Submitted'}
+            {cbreStatusFilter === 'reassigned' && '🔄 Reassigned'}
+            {' '}({filteredWorkOrders.length} results)
+          </span>
+          <button
+            onClick={() => setCbreStatusFilter('all')}
+            className="bg-red-700 hover:bg-red-600 px-3 py-1 rounded text-sm font-semibold"
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       {/* Active Billing Filter Indicator */}
       {billingStatusFilter !== 'all' && (

@@ -78,6 +78,44 @@ const getBillingStatusBadge = (billingStatus) => {
   }
 };
 
+// CBRE Status badge helper - from Gmail labels
+const getCBREStatusBadge = (cbreStatus) => {
+  switch (cbreStatus) {
+    case 'escalation':
+      return {
+        text: '🚨 ESCALATION',
+        color: 'bg-red-600 text-red-100 animate-pulse',
+        shortText: '🚨 ESC'
+      };
+    case 'quote_approved':
+      return {
+        text: '✅ QUOTE APPROVED',
+        color: 'bg-green-600 text-green-100',
+        shortText: '✅ Approved'
+      };
+    case 'quote_rejected':
+      return {
+        text: '❌ QUOTE REJECTED',
+        color: 'bg-red-700 text-red-100',
+        shortText: '❌ Rejected'
+      };
+    case 'quote_submitted':
+      return {
+        text: '📤 QUOTE SUBMITTED',
+        color: 'bg-blue-600 text-blue-100',
+        shortText: '📤 Submitted'
+      };
+    case 'reassigned':
+      return {
+        text: '🔄 REASSIGNED',
+        color: 'bg-purple-600 text-purple-100',
+        shortText: '🔄 Reassign'
+      };
+    default:
+      return null;
+  }
+};
+
 export default function WorkOrdersTable({ 
   workOrders, 
   loading, 
@@ -121,19 +159,20 @@ export default function WorkOrdersTable({
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1500px' }}>
+        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: '1600px' }}>
           <thead className="bg-gray-700">
             <tr>
               <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Building</th>
-              <th className="px-2 py-2 text-left" style={{ width: '280px' }}>Description</th>
-              <th className="px-2 py-2 text-left" style={{ width: '120px' }}>Work Status</th>
-              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Billing</th>
+              <th className="px-2 py-2 text-left" style={{ width: '220px' }}>Description</th>
+              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Work Status</th>
+              <th className="px-2 py-2 text-left" style={{ width: '85px' }}>CBRE</th>
+              <th className="px-2 py-2 text-left" style={{ width: '85px' }}>Billing</th>
               <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Priority</th>
-              <th className="px-2 py-2 text-left" style={{ width: '110px' }}>Lead Tech</th>
-              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>NTE</th>
-              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>Est Cost</th>
+              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Lead Tech</th>
+              <th className="px-2 py-2 text-right" style={{ width: '70px' }}>NTE</th>
+              <th className="px-2 py-2 text-right" style={{ width: '70px' }}>Est Cost</th>
               <th className="px-2 py-2 text-center" style={{ width: '40px' }}>🔒</th>
               <th className="px-2 py-2 text-center" style={{ width: '60px' }}>Action</th>
             </tr>
@@ -146,12 +185,16 @@ export default function WorkOrdersTable({
               // Prioritize NTE status badge over billing status
               const nteBadge = getNTEStatusBadge(wo.nte_quotes);
               const billingBadge = nteBadge || getBillingStatusBadge(wo.billing_status);
+              // CBRE status badge from Gmail labels
+              const cbreBadge = getCBREStatusBadge(wo.cbre_status);
 
               return (
                 <tr
                   key={wo.wo_id}
                   onClick={() => onSelectWorkOrder(wo)}
                   className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
+                    wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
+                    wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
                     wo.billing_status === 'pending_cbre_quote' ? 'bg-orange-900/20' : ''
                   }`}
                 >
@@ -200,6 +243,20 @@ export default function WorkOrdersTable({
                       )}
                     </div>
                   </td>
+                  {/* CBRE Status Column */}
+                  <td className="px-2 py-2">
+                    {cbreBadge ? (
+                      <span 
+                        className={`px-2 py-1 rounded text-[10px] font-bold ${cbreBadge.color}`}
+                        title={cbreBadge.text}
+                      >
+                        {cbreBadge.shortText}
+                      </span>
+                    ) : (
+                      <span className="text-gray-500 text-[10px]">—</span>
+                    )}
+                  </td>
+                  {/* Billing Status Column */}
                   <td className="px-2 py-2">
                     {billingBadge ? (
                       <span 

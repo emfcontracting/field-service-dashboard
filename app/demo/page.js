@@ -52,7 +52,7 @@ export default function DemoLandingPage() {
           
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Experience the complete PCS field service management system with realistic sample data.
-            Full-featured FSM for electrical contractors serving commercial facilities.
+            Full-featured FSM for contractors serving commercial and industrial facilities.
           </p>
 
           {/* Main CTAs */}

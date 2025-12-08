@@ -166,13 +166,19 @@ function parseCBREEmail(subject, body) {
     workOrder.city = locationMatch[2].trim();
   }
 
-  // Extract Requestor
-  const requestorMatch = cleanBody.match(/Requestor[^:]*:\s*([A-Za-z\s]+),?\s*([\d\-\(\)\s]+)?/i);
+  // Extract Requestor - "Work Order Requestor Name and Phone: Warren Newton, 207-341-3521"
+  const requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,]+),?\s*([\d\-\(\)\s]+)/i);
   if (requestorMatch) {
     workOrder.requestor = requestorMatch[1].trim();
     if (requestorMatch[2]) {
       workOrder.requestor_phone = requestorMatch[2].trim();
     }
+  }
+
+  // Extract NTE - "The charge for this work order should not exceed 2500.00 USD"
+  const nteMatch = cleanBody.match(/should not exceed\s*([\d,]+\.?\d*)\s*USD/i);
+  if (nteMatch) {
+    workOrder.nte = parseFloat(nteMatch[1].replace(/,/g, '')) || 0;
   }
 
   // Extract Problem Description

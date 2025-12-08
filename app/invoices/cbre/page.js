@@ -289,7 +289,7 @@ export default function CBREInvoicingPage() {
                 </div>
 
                 <a
-                  href="https://vwas.verisae.com"
+                  href="https://enterprise.serviceinsight.cbre.com/PRD40177VWS"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold inline-block"
@@ -476,7 +476,7 @@ export default function CBREInvoicingPage() {
                 
                 <div className="flex flex-wrap gap-3">
                   <a
-                    href="https://vwas.verisae.com"
+                    href="https://enterprise.serviceinsight.cbre.com/PRD40177VWS"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-semibold inline-block"

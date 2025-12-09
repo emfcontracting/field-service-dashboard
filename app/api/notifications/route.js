@@ -17,6 +17,7 @@ const SMS_GATEWAYS = {
   googlefi: 'msg.fi.google.com',
   straight_talk: 'vtext.com', // Uses Verizon network typically
   bellsouth: 'sms.bellsouth.com',
+  aerial: 'voicestream.net', // Aerial Communications
 };
 
 // Create email transporter using Gmail

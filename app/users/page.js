@@ -576,17 +576,18 @@ Type "DELETE" to confirm permanent deletion:`;
                     className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">-- Select Carrier --</option>
-                    <option value="verizon">Verizon</option>
+                    <option value="aerial">Aerial Communications</option>
                     <option value="att">AT&T</option>
-                    <option value="tmobile">T-Mobile</option>
-                    <option value="sprint">Sprint</option>
+                    <option value="bellsouth">BellSouth</option>
                     <option value="boost">Boost Mobile</option>
                     <option value="cricket">Cricket</option>
-                    <option value="metro">Metro PCS</option>
-                    <option value="uscellular">US Cellular</option>
                     <option value="googlefi">Google Fi</option>
+                    <option value="metro">Metro PCS</option>
+                    <option value="sprint">Sprint</option>
                     <option value="straight_talk">Straight Talk</option>
-                    <option value="bellsouth">BellSouth</option>
+                    <option value="tmobile">T-Mobile</option>
+                    <option value="uscellular">US Cellular</option>
+                    <option value="verizon">Verizon</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">Required to receive text notifications</p>
                 </div>

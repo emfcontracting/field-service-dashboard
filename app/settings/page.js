@@ -75,7 +75,8 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentPassword,
-          newPassword
+          newPassword,
+          userEmail: currentUser?.email
         })
       });
 

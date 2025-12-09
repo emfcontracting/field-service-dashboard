@@ -88,6 +88,12 @@ class MockSupabaseClient {
   }
 
   removeChannel() {}
+  
+  // Mock auth for demo
+  auth = {
+    getUser: async () => ({ data: { user: { id: 'demo-user', email: 'demo@pcsfield.demo' } }, error: null }),
+    signOut: async () => ({ error: null })
+  };
 }
 
 class MockQueryBuilder {
@@ -184,6 +190,9 @@ class MockQueryBuilder {
         case 'invoice_line_items':
           result = this.handleInvoiceLineItems();
           break;
+        case 'work_order_quotes':
+          result = this.handleWorkOrderQuotes();
+          break;
         default:
           result = { data: [], error: null };
       }
@@ -210,7 +219,12 @@ class MockQueryBuilder {
 
     if (this.deleteMode) {
       const woIdFilter = this.filters.find(f => f.field === 'wo_id');
-      if (woIdFilter) {
+      const woIdInFilter = this.filters.find(f => f.field === 'wo_id' && f.type === 'in');
+      
+      if (woIdInFilter) {
+        this.client.workOrders = this.client.workOrders.filter(wo => !woIdInFilter.values.includes(wo.wo_id));
+        this.client.notifyListeners();
+      } else if (woIdFilter) {
         this.client.workOrders = this.client.workOrders.filter(wo => wo.wo_id !== woIdFilter.value);
         this.client.notifyListeners();
       }
@@ -224,6 +238,9 @@ class MockQueryBuilder {
     this.filters.forEach(filter => {
       if (filter.type === 'eq') {
         data = data.filter(wo => wo[filter.field] === filter.value);
+      }
+      if (filter.type === 'in') {
+        data = data.filter(wo => filter.values.includes(wo[filter.field]));
       }
     });
 
@@ -266,6 +283,10 @@ class MockQueryBuilder {
         if (aVal > bVal) return this.orderAscending ? 1 : -1;
         return 0;
       });
+    }
+    
+    if (this.singleResult) {
+      return { data: data[0] || null, error: data.length === 0 ? { message: 'No rows found' } : null };
     }
 
     return { data, error: null };
@@ -319,7 +340,19 @@ class MockQueryBuilder {
     }
 
     // Select assignments
-    const woIdFilter = this.filters.find(f => f.field === 'wo_id');
+    const woIdFilter = this.filters.find(f => f.field === 'wo_id' && f.type === 'eq');
+    const woIdInFilter = this.filters.find(f => f.field === 'wo_id' && f.type === 'in');
+    
+    if (woIdInFilter) {
+      // Handle .in('wo_id', [...])
+      let allAssignments = [];
+      woIdInFilter.values.forEach(woId => {
+        const assignments = this.client.assignments[woId] || [];
+        allAssignments = [...allAssignments, ...assignments];
+      });
+      return { data: allAssignments, error: null };
+    }
+    
     if (woIdFilter) {
       return { data: this.client.assignments[woIdFilter.value] || [], error: null };
     }
@@ -367,9 +400,64 @@ class MockQueryBuilder {
   }
 
   handleDailyHoursLog() {
+    // Handle insert
+    if (this.insertData) {
+      const woId = this.insertData.wo_id;
+      if (!this.client.dailyHoursLog[woId]) {
+        this.client.dailyHoursLog[woId] = [];
+      }
+      const user = this.client.users.find(u => u.user_id === this.insertData.user_id);
+      this.client.dailyHoursLog[woId].push({
+        log_id: `demo-log-${Date.now()}`,
+        ...this.insertData,
+        created_at: new Date().toISOString(),
+        user: user ? {
+          first_name: user.first_name,
+          last_name: user.last_name
+        } : null
+      });
+      this.client.notifyListeners();
+      return { data: null, error: null };
+    }
+
+    // Handle select with .in('wo_id', [...])
+    const woIdInFilter = this.filters.find(f => f.field === 'wo_id' && f.type === 'in');
+    if (woIdInFilter) {
+      let allLogs = [];
+      woIdInFilter.values.forEach(woId => {
+        const logs = this.client.dailyHoursLog[woId] || [];
+        allLogs = [...allLogs, ...logs];
+      });
+      return { data: allLogs, error: null };
+    }
+
+    // Handle select with .eq('wo_id', ...)
+    const woIdFilter = this.filters.find(f => f.field === 'wo_id' && f.type === 'eq');
+    if (woIdFilter) {
+      let logs = this.client.dailyHoursLog[woIdFilter.value] || [];
+      
+      // Apply ordering
+      if (this.orderByField) {
+        logs = [...logs].sort((a, b) => {
+          const aVal = a[this.orderByField];
+          const bVal = b[this.orderByField];
+          if (aVal < bVal) return this.orderAscending ? -1 : 1;
+          if (aVal > bVal) return this.orderAscending ? 1 : -1;
+          return 0;
+        });
+      }
+      
+      return { data: logs, error: null };
+    }
+
+    return { data: [], error: null };
+  }
+
+  handleWorkOrderQuotes() {
     const woIdFilter = this.filters.find(f => f.field === 'wo_id');
     if (woIdFilter) {
-      return { data: this.client.dailyHoursLog[woIdFilter.value] || [], error: null };
+      const wo = this.client.workOrders.find(w => w.wo_id === woIdFilter.value);
+      return { data: wo?.nte_quotes || [], error: null };
     }
     return { data: [], error: null };
   }

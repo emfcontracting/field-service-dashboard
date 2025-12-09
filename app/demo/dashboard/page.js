@@ -1,11 +1,12 @@
 // app/demo/dashboard/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import DemoDashboardHeader from '../components/DemoDashboardHeader';
 import WorkOrdersView from '../../dashboard/components/WorkOrdersView';
 import AvailabilityView from '../../dashboard/components/AvailabilityView';
+import MissingHoursView from '../../dashboard/components/MissingHoursView';
 import WorkOrderDetailModal from '../../dashboard/components/WorkOrderDetailModal';
 import NewWorkOrderModal from '../../dashboard/components/NewWorkOrderModal';
 import { CalendarView } from '../../dashboard/components/calendar';
@@ -22,7 +23,7 @@ function DemoBanner({ onReset }) {
   
   return (
     <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 mb-4 rounded-lg">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🎯</span>
           <div>
@@ -32,12 +33,18 @@ function DemoBanner({ onReset }) {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             href="/demo"
             className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition"
           >
-            ← Back to Demo Home
+            ← Demo Home
+          </Link>
+          <Link
+            href="/demo/mobile"
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition"
+          >
+            📱 Mobile
           </Link>
           <button
             onClick={onReset}
@@ -99,6 +106,7 @@ export default function DemoDashboard() {
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState('workorders');
+  const [missingHoursCount, setMissingHoursCount] = useState(0);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -123,6 +131,13 @@ export default function DemoDashboard() {
     return () => unsubscribe();
   }, []);
 
+  // Calculate missing hours when work orders change
+  useEffect(() => {
+    if (workOrders.length > 0) {
+      calculateMissingHoursCount();
+    }
+  }, [workOrders]);
+
   const loadInitialData = async () => {
     setLoading(true);
     const workOrdersData = await fetchDemoWorkOrders(supabase);
@@ -140,9 +155,60 @@ export default function DemoDashboard() {
     setStats(calculateStats(workOrdersData));
   };
 
+  // Calculate missing hours count
+  const calculateMissingHoursCount = useCallback(async () => {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      
+      const eligibleWOs = workOrders.filter(wo => {
+        const hasAssignment = wo.lead_tech_id;
+        const relevantStatus = ['assigned', 'in_progress', 'completed'].includes(wo.status);
+        const withinDateRange = new Date(wo.date_entered || wo.created_at) >= cutoffDate;
+        return hasAssignment && relevantStatus && withinDateRange;
+      });
+
+      if (eligibleWOs.length === 0) {
+        setMissingHoursCount(0);
+        return;
+      }
+
+      // Get hours logged for these work orders
+      let totalHoursPerWO = {};
+      
+      for (const wo of eligibleWOs) {
+        const { data: hoursData } = await supabase
+          .from('daily_hours_log')
+          .select('wo_id, hours_regular, hours_overtime')
+          .eq('wo_id', wo.wo_id);
+
+        if (hoursData && hoursData.length > 0) {
+          const total = hoursData.reduce((sum, entry) => {
+            return sum + (parseFloat(entry.hours_regular) || 0) + (parseFloat(entry.hours_overtime) || 0);
+          }, 0);
+          totalHoursPerWO[wo.wo_id] = total;
+        } else {
+          totalHoursPerWO[wo.wo_id] = 0;
+        }
+      }
+
+      // Count WOs with zero hours
+      const missingCount = eligibleWOs.filter(wo => !totalHoursPerWO[wo.wo_id] || totalHoursPerWO[wo.wo_id] === 0).length;
+      setMissingHoursCount(missingCount);
+    } catch (error) {
+      console.error('Error calculating missing hours:', error);
+      setMissingHoursCount(0);
+    }
+  }, [workOrders, supabase]);
+
   const handleReset = () => {
     resetMockSupabase();
     loadInitialData();
+  };
+
+  // Handle Missing Hours card click
+  const handleMissingHoursClick = () => {
+    setActiveView('missing-hours');
   };
 
   // Render the active view
@@ -170,6 +236,17 @@ export default function DemoDashboard() {
           />
         );
       
+      case 'missing-hours':
+        return (
+          <MissingHoursView
+            workOrders={workOrders}
+            users={users}
+            supabase={supabase}
+            onSelectWorkOrder={setSelectedWO}
+            refreshWorkOrders={refreshWorkOrders}
+          />
+        );
+      
       case 'availability':
         return (
           <AvailabilityView 
@@ -189,8 +266,11 @@ export default function DemoDashboard() {
             supabase={supabase}
             onSelectWorkOrder={setSelectedWO}
             onNewWorkOrder={() => setShowNewWOModal(true)}
-            onImport={() => {}} // Disabled in demo
+            onImport={() => alert('Import feature available in full version')}
             refreshWorkOrders={refreshWorkOrders}
+            isSuperuser={false}
+            missingHoursCount={missingHoursCount}
+            onMissingHoursClick={handleMissingHoursClick}
           />
         );
     }
@@ -204,6 +284,7 @@ export default function DemoDashboard() {
         <DemoDashboardHeader 
           activeView={activeView}
           setActiveView={setActiveView}
+          missingHoursCount={missingHoursCount}
         />
 
         {renderActiveView()}

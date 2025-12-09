@@ -3,12 +3,13 @@
 
 import Link from 'next/link';
 
-export default function DemoDashboardHeader({ activeView, setActiveView }) {
+export default function DemoDashboardHeader({ activeView, setActiveView, missingHoursCount = 0 }) {
   // View navigation tabs
   const viewTabs = [
     { id: 'workorders', label: 'Work Orders', icon: '📋' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
     { id: 'aging', label: 'Aging', icon: '⚠️' },
+    { id: 'missing-hours', label: 'Missing Hours', icon: '⏰', badge: missingHoursCount },
     { id: 'availability', label: 'Availability', icon: '👥' },
   ];
 
@@ -22,7 +23,7 @@ export default function DemoDashboardHeader({ activeView, setActiveView }) {
           </div>
           <div>
             <h1 className="text-2xl font-bold">PCS FieldService</h1>
-            <p className="text-sm text-gray-400">Field Service Dashboard</p>
+            <p className="text-sm text-gray-400">Field Service Dashboard • Demo Mode</p>
           </div>
         </div>
         
@@ -33,6 +34,12 @@ export default function DemoDashboardHeader({ activeView, setActiveView }) {
             className="bg-gray-600 hover:bg-gray-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
           >
             ← Demo Home
+          </Link>
+          <Link
+            href="/demo/mobile"
+            className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
+          >
+            📱 Mobile App
           </Link>
           <Link
             href="/demo/invoices"
@@ -56,7 +63,7 @@ export default function DemoDashboardHeader({ activeView, setActiveView }) {
       </div>
 
       {/* View tabs */}
-      <div className="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit flex-wrap">
         {viewTabs.map(tab => {
           const isActive = activeView === tab.id;
           
@@ -65,17 +72,27 @@ export default function DemoDashboardHeader({ activeView, setActiveView }) {
               key={tab.id}
               onClick={() => setActiveView(tab.id)}
               className={`
-                flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition
+                flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition relative
                 ${isActive 
                   ? tab.id === 'aging' 
                     ? 'bg-red-600 text-white' 
-                    : 'bg-blue-600 text-white'
+                    : tab.id === 'missing-hours'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
                 }
               `}
             >
               <span>{tab.icon}</span>
               {tab.label}
+              {tab.badge > 0 && (
+                <span className={`
+                  px-1.5 py-0.5 text-xs rounded-full font-bold
+                  ${isActive ? 'bg-white/20' : 'bg-orange-600 text-white'}
+                `}>
+                  {tab.badge}
+                </span>
+              )}
             </button>
           );
         })}

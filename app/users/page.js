@@ -19,6 +19,10 @@ export default function UserManagement() {
   const [newPassword, setNewPassword] = useState('');
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   
+  // Carrier lookup state
+  const [lookingUpCarrier, setLookingUpCarrier] = useState(false);
+  const [carrierLookupResult, setCarrierLookupResult] = useState(null);
+  
   const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
 
   const [formData, setFormData] = useState({
@@ -74,6 +78,7 @@ export default function UserManagement() {
     setEditingUser(null);
     setNewPassword('');
     setShowPasswordReset(false);
+    setCarrierLookupResult(null);
     setFormData({
       first_name: '',
       last_name: '',
@@ -92,6 +97,7 @@ export default function UserManagement() {
     setEditingUser(user);
     setNewPassword('');
     setShowPasswordReset(false);
+    setCarrierLookupResult(null);
     setFormData({
       first_name: user.first_name,
       last_name: user.last_name,
@@ -104,6 +110,47 @@ export default function UserManagement() {
       is_active: user.is_active
     });
     setShowModal(true);
+  }
+
+  // Carrier lookup function
+  async function handleCarrierLookup() {
+    if (!formData.phone) {
+      setCarrierLookupResult({ success: false, message: 'Enter a phone number first' });
+      return;
+    }
+
+    setLookingUpCarrier(true);
+    setCarrierLookupResult(null);
+
+    try {
+      const response = await fetch(`/api/carrier-lookup?phone=${encodeURIComponent(formData.phone)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Lookup failed');
+      }
+
+      if (data.carrier_code) {
+        setFormData({ ...formData, sms_carrier: data.carrier_code });
+        setCarrierLookupResult({ 
+          success: true, 
+          message: `✅ Detected: ${data.carrier_name} (${data.line_type || 'wireless'})`
+        });
+      } else {
+        setCarrierLookupResult({ 
+          success: false, 
+          message: `⚠️ Carrier "${data.carrier_name}" not in our list. Please select manually.`
+        });
+      }
+    } catch (error) {
+      console.error('Carrier lookup error:', error);
+      setCarrierLookupResult({ 
+        success: false, 
+        message: `❌ ${error.message}`
+      });
+    } finally {
+      setLookingUpCarrier(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -570,25 +617,43 @@ Type "DELETE" to confirm permanent deletion:`;
                   <label className="block text-sm font-medium text-gray-400 mb-1">
                     Phone Carrier (for SMS alerts)
                   </label>
-                  <select
-                    value={formData.sms_carrier}
-                    onChange={(e) => setFormData({...formData, sms_carrier: e.target.value})}
-                    className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- Select Carrier --</option>
-                    <option value="aerial">Aerial Communications</option>
-                    <option value="att">AT&T</option>
-                    <option value="bellsouth">BellSouth</option>
-                    <option value="boost">Boost Mobile</option>
-                    <option value="cricket">Cricket</option>
-                    <option value="googlefi">Google Fi</option>
-                    <option value="metro">Metro PCS</option>
-                    <option value="sprint">Sprint</option>
-                    <option value="straight_talk">Straight Talk</option>
-                    <option value="tmobile">T-Mobile</option>
-                    <option value="uscellular">US Cellular</option>
-                    <option value="verizon">Verizon</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.sms_carrier}
+                      onChange={(e) => setFormData({...formData, sms_carrier: e.target.value})}
+                      className="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="">-- Select Carrier --</option>
+                      <option value="aerial">Aerial Communications</option>
+                      <option value="att">AT&T</option>
+                      <option value="bellsouth">BellSouth</option>
+                      <option value="boost">Boost Mobile</option>
+                      <option value="cricket">Cricket</option>
+                      <option value="googlefi">Google Fi</option>
+                      <option value="metro">Metro PCS</option>
+                      <option value="republic">Republic Wireless</option>
+                      <option value="sprint">Sprint</option>
+                      <option value="straight_talk">Straight Talk</option>
+                      <option value="tmobile">T-Mobile</option>
+                      <option value="uscellular">US Cellular</option>
+                      <option value="verizon">Verizon</option>
+                      <option value="virgin">Virgin Mobile</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleCarrierLookup}
+                      disabled={!formData.phone || lookingUpCarrier}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap"
+                      title="Auto-detect carrier from phone number"
+                    >
+                      {lookingUpCarrier ? '⏳' : '🔍 Detect'}
+                    </button>
+                  </div>
+                  {carrierLookupResult && (
+                    <p className={`text-xs mt-1 ${carrierLookupResult.success ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {carrierLookupResult.message}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">Required to receive text notifications</p>
                 </div>
 

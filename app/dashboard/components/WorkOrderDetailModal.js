@@ -422,6 +422,14 @@ export default function WorkOrderDetailModal({
             <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
           </div>
           <div class="summary-row">
+            <span>Rental</span>
+            <span>${(parseFloat(quote.rental_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Trailer</span>
+            <span>${(parseFloat(quote.trailer_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
             <span>Mileage</span>
             <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
           </div>

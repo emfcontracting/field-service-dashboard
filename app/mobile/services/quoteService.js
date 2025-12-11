@@ -126,6 +126,8 @@ export async function createQuote(supabase, quoteData, userId) {
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
+      rental_with_markup: totals.rental_with_markup,
+      trailer_with_markup: totals.trailer_with_markup,
       mileage_total: totals.mileage_total,
       grand_total: totals.grand_total
     })
@@ -161,6 +163,8 @@ export async function updateQuote(supabase, quoteId, quoteData) {
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
+      rental_with_markup: totals.rental_with_markup,
+      trailer_with_markup: totals.trailer_with_markup,
       mileage_total: totals.mileage_total,
       grand_total: totals.grand_total
     })
@@ -275,6 +279,8 @@ export async function recalculateMaterialTotal(supabase, quoteId) {
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
+      rental_with_markup: totals.rental_with_markup,
+      trailer_with_markup: totals.trailer_with_markup,
       mileage_total: totals.mileage_total,
       grand_total: totals.grand_total,
       updated_at: new Date().toISOString()

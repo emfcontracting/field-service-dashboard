@@ -140,11 +140,14 @@ export default function WorkOrderDetailModal({
       const quote = nteIncreases.find(q => q.quote_id === quoteId);
       const updatedQuote = { ...quote, ...updates };
       
+      // Calculate grand total including ALL components: labor + materials + equipment + rental + trailer + mileage
       const laborTotal = parseFloat(updatedQuote.labor_total) || 0;
       const materialsWithMarkup = parseFloat(updatedQuote.materials_with_markup) || 0;
       const equipmentWithMarkup = parseFloat(updatedQuote.equipment_with_markup) || 0;
+      const rentalWithMarkup = parseFloat(updatedQuote.rental_with_markup) || 0;
+      const trailerWithMarkup = parseFloat(updatedQuote.trailer_with_markup) || 0;
       const mileageTotal = parseFloat(updatedQuote.mileage_total) || 0;
-      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
+      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
       
       const finalUpdates = { ...updates, grand_total: grandTotal };
       
@@ -262,12 +265,15 @@ export default function WorkOrderDetailModal({
     }
     
     // Additional work estimate from the quote - calculate from individual fields (NO admin fee)
+    // MUST include ALL components: labor + materials + equipment + rental + trailer + mileage
     const laborTotal = parseFloat(quote.labor_total) || 0;
     const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
     const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
+    const rentalWithMarkup = parseFloat(quote.rental_with_markup) || 0;
+    const trailerWithMarkup = parseFloat(quote.trailer_with_markup) || 0;
     const mileageTotal = parseFloat(quote.mileage_total) || 0;
     // NO admin fee in additional work - it's already in current/accrued costs
-    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
+    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
     
     // Projected total = existing + additional
     const projectedTotal = existingCostsTotal + additionalTotal;
@@ -1823,10 +1829,13 @@ export default function WorkOrderDetailModal({
                     {/* Uses same calculation as print function for consistency */}
                     {(() => {
                       // Calculate additional work total (from this quote)
+                      // MUST include ALL components: labor + materials + equipment + rental + trailer + mileage
                       const additionalTotal = 
                         (parseFloat(quote.labor_total) || 0) +
                         (parseFloat(quote.materials_with_markup) || 0) +
                         (parseFloat(quote.equipment_with_markup) || 0) +
+                        (parseFloat(quote.rental_with_markup) || 0) +
+                        (parseFloat(quote.trailer_with_markup) || 0) +
                         (parseFloat(quote.mileage_total) || 0);
                       
                       // Calculate current costs SAME WAY AS PRINT FUNCTION

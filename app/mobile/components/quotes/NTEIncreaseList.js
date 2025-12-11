@@ -214,14 +214,16 @@ export default function NTEIncreaseList({
         <div className="space-y-4">
           {quotesList.map((quote) => {
             // Calculate additional total from individual fields (not stored grand_total)
-            // This ensures we don't include admin fee which was previously stored incorrectly
+            // MUST include all cost components: labor + materials + equipment + rental + trailer + mileage
             const laborTotal = parseFloat(quote.labor_total) || 0;
             const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
             const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
+            const rentalWithMarkup = parseFloat(quote.rental_with_markup) || 0;
+            const trailerWithMarkup = parseFloat(quote.trailer_with_markup) || 0;
             const mileageTotal = parseFloat(quote.mileage_total) || 0;
             
-            // Additional total = labor + materials + equipment + mileage (NO admin fee)
-            const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + mileageTotal;
+            // Additional total = labor + materials + equipment + rental + trailer + mileage
+            const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
             const projectedTotal = existingCostsTotal + additionalTotal;
             const newNTENeeded = projectedTotal;
             
@@ -292,26 +294,38 @@ export default function NTEIncreaseList({
                 
                 {/* Cost Summary - Corrected Display */}
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  {/* Left Column - Additional Work Costs (NO admin - that's in current costs) */}
+                  {/* Left Column - Additional Work Costs */}
                   <div className="space-y-1">
                     <div className="text-gray-400 text-xs uppercase mb-1">
                       {language === 'en' ? 'Additional Work' : 'Trabajo Adicional'}
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Labor</span>
-                      <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+                      <span>${laborTotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">{language === 'en' ? 'Materials' : 'Materiales'}</span>
-                      <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+                      <span>${materialsWithMarkup.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">{language === 'en' ? 'Equipment' : 'Equipo'}</span>
-                      <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+                      <span>${equipmentWithMarkup.toFixed(2)}</span>
                     </div>
+                    {rentalWithMarkup > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">{language === 'en' ? 'Rental' : 'Renta'}</span>
+                        <span>${rentalWithMarkup.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {trailerWithMarkup > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Trailer</span>
+                        <span>${trailerWithMarkup.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-400">{language === 'en' ? 'Mileage' : 'Millaje'}</span>
-                      <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+                      <span>${mileageTotal.toFixed(2)}</span>
                     </div>
                   </div>
                   

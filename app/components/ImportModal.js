@@ -444,6 +444,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                     📥 Include Read Emails (Last 3 Days)
                   </button>
                   <p className="text-xs text-gray-500 mt-2">Use "Include Read" if a new WO was already opened in Gmail</p>
+                  <p className="text-xs text-gray-500">💡 Auto-import runs every 15 min and may have processed new emails</p>
                 </div>
               </div>
             )}

@@ -40,8 +40,16 @@ async function getAccessToken() {
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
+  console.log('Gmail credentials check:', {
+    hasClientId: !!clientId,
+    hasClientSecret: !!clientSecret,
+    hasRefreshToken: !!refreshToken,
+    clientIdPrefix: clientId?.substring(0, 10) + '...',
+  });
+
   if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Gmail credentials not configured');
+    throw new Error('Gmail credentials not configured - missing: ' + 
+      [!clientId && 'CLIENT_ID', !clientSecret && 'CLIENT_SECRET', !refreshToken && 'REFRESH_TOKEN'].filter(Boolean).join(', '));
   }
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -56,6 +64,8 @@ async function getAccessToken() {
   });
 
   const data = await response.json();
+  
+  console.log('OAuth token response:', data.error ? data : 'Success - token obtained');
   
   if (data.error) {
     throw new Error(`OAuth error: ${data.error_description || data.error}`);
@@ -322,16 +332,27 @@ async function logImportActivity(results) {
 export async function GET(request) {
   const startTime = Date.now();
   console.log('=== Auto Email Import Cron Started ===');
+  console.log('Request URL:', request.url);
+  console.log('Timestamp:', new Date().toISOString());
   
   // Verify cron secret if configured (Vercel cron protection)
   const authHeader = request.headers.get('authorization');
+  const { searchParams } = new URL(request.url);
+  const isManual = searchParams.get('manual') === 'true';
+  
+  console.log('Auth check:', {
+    hasCronSecret: !!process.env.CRON_SECRET,
+    hasAuthHeader: !!authHeader,
+    isManual
+  });
+  
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     // Allow manual trigger without secret for testing
-    const { searchParams } = new URL(request.url);
-    if (!searchParams.get('manual')) {
-      console.log('Unauthorized cron request');
+    if (!isManual) {
+      console.log('Unauthorized cron request - no manual flag and auth mismatch');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    console.log('Manual trigger allowed without CRON_SECRET');
   }
 
   const results = {
@@ -363,10 +384,13 @@ export async function GET(request) {
       return Response.json(results);
     }
 
+    console.log('Getting Gmail access token...');
     const accessToken = await getAccessToken();
+    console.log('Access token obtained successfully');
     
     // Search for unread emails with "dispatch" label
     const query = encodeURIComponent('is:unread label:dispatch');
+    console.log('Gmail search query:', decodeURIComponent(query));
     
     const listResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
@@ -377,13 +401,20 @@ export async function GET(request) {
 
     const listData = await listResponse.json();
     
+    console.log('Gmail API response:', {
+      status: listResponse.status,
+      error: listData.error || null,
+      messageCount: listData.messages?.length || 0,
+      resultSizeEstimate: listData.resultSizeEstimate
+    });
+    
     if (listData.error) {
       throw new Error(`Gmail API error: ${listData.error.message}`);
     }
     
     if (!listData.messages || listData.messages.length === 0) {
       results.message = 'No new dispatch emails found';
-      console.log('No new emails to import');
+      console.log('No new emails to import - query returned 0 results');
       return Response.json(results);
     }
 

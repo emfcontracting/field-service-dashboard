@@ -293,6 +293,9 @@ export async function GET(request) {
     const includeRead = searchParams.get('includeRead') === 'true';
     const days = parseInt(searchParams.get('days')) || 3;
     
+    console.log('=== Manual Email Import Fetch ===');
+    console.log('Parameters:', { includeRead, days });
+    
     // Check if Gmail is configured
     const clientId = process.env.GMAIL_CLIENT_ID;
     const clientSecret = process.env.GMAIL_CLIENT_SECRET;
@@ -325,6 +328,8 @@ export async function GET(request) {
       query = encodeURIComponent('is:unread label:dispatch');
     }
     
+    console.log('Gmail query:', decodeURIComponent(query));
+    
     const listResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
       {
@@ -334,15 +339,27 @@ export async function GET(request) {
 
     const listData = await listResponse.json();
     
+    console.log('Gmail API response:', {
+      error: listData.error || null,
+      messageCount: listData.messages?.length || 0,
+      resultSizeEstimate: listData.resultSizeEstimate
+    });
+    
     if (listData.error) {
       throw new Error(`Gmail API error: ${listData.error.message}`);
     }
     
     if (!listData.messages || listData.messages.length === 0) {
+      console.log('No messages found with query:', decodeURIComponent(query));
       return Response.json({
         success: true,
         message: 'No new work order emails found',
-        emails: []
+        emails: [],
+        debug: {
+          query: decodeURIComponent(query),
+          includeRead,
+          timestamp: new Date().toISOString()
+        }
       });
     }
 

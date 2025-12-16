@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
-import Script from 'next/script';
 
 const supabase = getSupabase();
 
@@ -16,7 +15,6 @@ export default function CreateInvoice() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState(null);
-  const [html2pdfLoaded, setHtml2pdfLoaded] = useState(false);
 
   const [clientType, setClientType] = useState('emf');
   const [otherClient, setOtherClient] = useState({
@@ -189,7 +187,6 @@ export default function CreateInvoice() {
   async function generateOtherClientPDF() {
     if (!otherClient.name) { setMessage({ type: 'error', text: 'Please enter client name' }); return; }
     if (lineItems.length === 0) { setMessage({ type: 'error', text: 'Please add at least one line item' }); return; }
-    if (!html2pdfLoaded || !window.html2pdf) { setMessage({ type: 'error', text: 'PDF generator not ready. Please wait.' }); return; }
 
     setGenerating(true);
     setMessage(null);
@@ -197,54 +194,47 @@ export default function CreateInvoice() {
     try {
       const invNum = generateInvoiceNumber();
       const bName = user.profile?.business_name || (user.first_name + ' ' + user.last_name);
-      const clientAddr = [otherClient.city, otherClient.state, otherClient.zip].filter(Boolean).join(', ');
       
-      let rowsHtml = '';
-      lineItems.forEach(item => {
-        const qty = parseFloat(item.quantity || 0).toFixed(1);
-        const rt = '$' + parseFloat(item.rate || 0).toFixed(2);
-        const amt = '$' + parseFloat(item.amount || 0).toFixed(2);
-        rowsHtml += '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 12px 8px;">' + (item.description || '') + '</td><td style="padding: 12px 8px; text-align: right;">' + qty + '</td><td style="padding: 12px 8px; text-align: right;">' + rt + '</td><td style="padding: 12px 8px; text-align: right; font-weight: 500;">' + amt + '</td></tr>';
+      // Call API to generate PDF
+      const response = await fetch('/api/contractor/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceNumber: invNum,
+          fromName: bName,
+          fromAddress: user.profile?.business_address || '',
+          fromEmail: user.email,
+          toName: otherClient.name,
+          toAddress: otherClient.address || '',
+          toCity: otherClient.city || '',
+          toState: otherClient.state || '',
+          toZip: otherClient.zip || '',
+          toEmail: otherClient.email || '',
+          lineItems: lineItems.map(item => ({
+            description: item.description,
+            quantity: parseFloat(item.quantity || 0),
+            rate: parseFloat(item.rate || 0),
+            amount: parseFloat(item.amount || 0)
+          })),
+          total: lineItemsAmount
+        })
       });
 
-      const totalStr = '$' + lineItemsAmount.toFixed(2);
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+
+      // Download the PDF
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = invNum + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
       
-      const html = '<div style="width: 8in; background-color: #ffffff; color: #111827; font-family: Arial, sans-serif; padding: 0.5in;">' +
-        '<div style="background-color: #1f2937; color: white; padding: 24px; margin-bottom: 24px;">' +
-          '<div style="display: flex; justify-content: space-between;">' +
-            '<div><h2 style="font-size: 28px; font-weight: bold; margin: 0;">INVOICE</h2><p style="color: #9ca3af; margin-top: 4px;">' + invNum + '</p></div>' +
-            '<div style="text-align: right;"><p style="font-size: 12px; color: #9ca3af; margin: 0;">Date</p><p style="font-weight: 500; margin: 4px 0 0 0;">' + new Date().toLocaleDateString() + '</p></div>' +
-          '</div>' +
-        '</div>' +
-        '<div style="display: flex; justify-content: space-between; margin-bottom: 32px;">' +
-          '<div><p style="font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">From</p><p style="font-weight: bold; font-size: 16px; margin: 0;">' + bName + '</p>' + (user.profile?.business_address ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + user.profile.business_address + '</p>' : '') + '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + user.email + '</p></div>' +
-          '<div style="text-align: right;"><p style="font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">To</p><p style="font-weight: bold; font-size: 16px; margin: 0;">' + otherClient.name + '</p>' + (otherClient.address ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + otherClient.address + '</p>' : '') + (clientAddr ? '<p style="color: #4b5563; font-size: 13px; margin: 2px 0 0 0;">' + clientAddr + '</p>' : '') + (otherClient.email ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + otherClient.email + '</p>' : '') + '</div>' +
-        '</div>' +
-        '<table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-bottom: 24px;">' +
-          '<thead><tr style="background-color: #f3f4f6;"><th style="padding: 12px 8px; text-align: left; font-weight: bold;">Description</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Qty</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Rate</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Amount</th></tr></thead>' +
-          '<tbody>' + rowsHtml + '</tbody>' +
-        '</table>' +
-        '<div style="background-color: #f9fafb; border-radius: 8px; padding: 16px;">' +
-          '<div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: bold;"><span>TOTAL DUE</span><span style="color: #059669;">' + totalStr + '</span></div>' +
-        '</div>' +
-        '<div style="margin-top: 40px; text-align: center; font-size: 11px; color: #9ca3af;"><p>Thank you for your business!</p></div>' +
-      '</div>';
-
-      const container = document.createElement('div');
-      container.innerHTML = html;
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
-      document.body.appendChild(container);
-
-      await window.html2pdf().set({
-        margin: 0.3,
-        filename: invNum + '.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      }).from(container.firstChild).save();
-
-      document.body.removeChild(container);
       setMessage({ type: 'success', text: 'PDF downloaded!' });
     } catch (error) {
       console.error('PDF error:', error);
@@ -259,7 +249,6 @@ export default function CreateInvoice() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" onLoad={() => setHtml2pdfLoaded(true)} />
 
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex justify-between items-center">

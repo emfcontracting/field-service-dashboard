@@ -17,6 +17,7 @@
     "intuit-oauth": "^4.2.1",
     "next": "^15.5.7",
     "nodemailer": "^7.0.11",
+    "pdfkit": "^0.15.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "xlsx": "^0.18.5"

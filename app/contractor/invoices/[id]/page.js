@@ -147,8 +147,11 @@ export default function ViewInvoice() {
         })
       });
 
-      if (!emailResult.ok) {
-        throw new Error('Email send failed');
+      const emailData = await emailResult.json();
+      console.log('Email API response:', emailData);
+
+      if (!emailResult.ok || !emailData.success) {
+        throw new Error(emailData.error || 'Email send failed');
       }
 
       // Update invoice status
@@ -168,7 +171,7 @@ export default function ViewInvoice() {
 
     } catch (error) {
       console.error('Error sending invoice:', error);
-      setMessage({ type: 'error', text: 'Failed to send invoice' });
+      setMessage({ type: 'error', text: `Failed to send invoice: ${error.message}` });
     } finally {
       setSending(false);
     }

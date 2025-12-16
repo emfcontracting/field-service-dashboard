@@ -2,17 +2,60 @@
 // Sends subcontractor invoice via email
 import nodemailer from 'nodemailer';
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'emfcbre@gmail.com',
-    pass: process.env.EMAIL_PASS
-  }
-});
-
 export async function POST(request) {
+  console.log('=== Subcontractor Invoice Email Request ===');
+  
   try {
+    // Check email configuration
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+    
+    console.log('Email config check:', {
+      hasEmailUser: !!emailUser,
+      emailUserValue: emailUser || 'NOT SET',
+      hasEmailPass: !!emailPass,
+      emailPassLength: emailPass?.length || 0
+    });
+    
+    if (!emailUser || !emailPass) {
+      console.error('Email credentials not configured');
+      return Response.json({ 
+        success: false, 
+        error: 'Email service not configured. Please contact administrator.' 
+      }, { status: 500 });
+    }
+
+    // Create transporter with explicit config
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: emailUser,
+        pass: emailPass
+      }
+    });
+
+    // Verify transporter connection
+    try {
+      await transporter.verify();
+      console.log('SMTP connection verified successfully');
+    } catch (verifyError) {
+      console.error('SMTP verification failed:', verifyError);
+      return Response.json({ 
+        success: false, 
+        error: `Email server connection failed: ${verifyError.message}` 
+      }, { status: 500 });
+    }
+
     const { invoice, user, hoursData, lineItems, rates, totals, sendToEmail } = await request.json();
+    
+    console.log('Invoice details:', {
+      invoiceNumber: invoice?.invoice_number,
+      userName: user?.first_name + ' ' + user?.last_name,
+      userEmail: user?.email,
+      sendToEmail: sendToEmail,
+      totalAmount: totals?.grandTotal,
+      hoursDataCount: hoursData?.length
+    });
 
     const toEmail = sendToEmail || 'emfcontractingsc2@gmail.com';
     const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
@@ -168,18 +211,39 @@ export async function POST(request) {
     `;
 
     // Send email
-    await transporter.sendMail({
-      from: `"${businessName}" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
+    console.log('Attempting to send email...');
+    console.log('Email params:', {
+      from: `"${businessName}" <${emailUser}>`,
       to: toEmail,
       replyTo: user.email,
-      subject: `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${totals.grandTotal.toFixed(2)}`,
+      subject: `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - ${totals.grandTotal.toFixed(2)}`
+    });
+    
+    const info = await transporter.sendMail({
+      from: `"${businessName}" <${emailUser}>`,
+      to: toEmail,
+      replyTo: user.email,
+      subject: `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - ${totals.grandTotal.toFixed(2)}`,
       html: emailHtml
     });
+    
+    console.log('Email sent successfully!');
+    console.log('Message ID:', info.messageId);
+    console.log('Response:', info.response);
 
-    return Response.json({ success: true });
+    return Response.json({ 
+      success: true, 
+      messageId: info.messageId,
+      response: info.response 
+    });
 
   } catch (error) {
     console.error('Send invoice error:', error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    console.error('Error stack:', error.stack);
+    return Response.json({ 
+      success: false, 
+      error: error.message,
+      details: error.code || error.responseCode || 'Unknown error'
+    }, { status: 500 });
   }
 }

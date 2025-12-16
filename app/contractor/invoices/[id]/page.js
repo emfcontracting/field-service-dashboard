@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import Script from 'next/script';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -14,12 +15,15 @@ export default function ViewInvoice() {
   const router = useRouter();
   const params = useParams();
   const invoiceId = params.id;
+  const invoiceRef = useRef(null);
 
   const [user, setUser] = useState(null);
   const [invoice, setInvoice] = useState(null);
   const [lineItems, setLineItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState(null);
+  const [html2pdfLoaded, setHtml2pdfLoaded] = useState(false);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
@@ -40,7 +44,6 @@ export default function ViewInvoice() {
 
   async function loadInvoice(id) {
     try {
-      // Get invoice
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('subcontractor_invoices')
         .select('*')
@@ -50,7 +53,6 @@ export default function ViewInvoice() {
       if (invoiceError) throw invoiceError;
       setInvoice(invoiceData);
 
-      // Get line items
       const { data: itemsData, error: itemsError } = await supabase
         .from('subcontractor_invoice_items')
         .select(`
@@ -73,117 +75,84 @@ export default function ViewInvoice() {
     }
   }
 
-  function buildEmailBody() {
-    const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
-    const periodStart = new Date(invoice.period_start).toLocaleDateString();
-    const periodEnd = new Date(invoice.period_end).toLocaleDateString();
-    
-    // Group items by type
-    const hoursItems = lineItems.filter(i => i.item_type === 'hours');
-    const mileageItems = lineItems.filter(i => i.item_type === 'mileage');
-    const customItems = lineItems.filter(i => i.item_type === 'custom');
-    
-    let body = `INVOICE: ${invoice.invoice_number}\n`;
-    body += `From: ${businessName}\n`;
-    body += `Period: ${periodStart} - ${periodEnd}\n`;
-    body += `\n========================================\n`;
-    body += `RATES:\n`;
-    body += `  Regular: $${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr\n`;
-    body += `  Overtime: $${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr\n`;
-    body += `  Mileage: $${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile\n`;
-    body += `\n========================================\n`;
-    
-    // Labor section
-    if (hoursItems.length > 0) {
-      body += `LABOR:\n`;
-      hoursItems.forEach(item => {
-        const date = item.work_date ? new Date(item.work_date).toLocaleDateString() : '-';
-        body += `  ${date} | ${item.description} | ${parseFloat(item.quantity || 0).toFixed(1)} hrs | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
-      });
-      body += `\n`;
-    }
-    
-    // Mileage section
-    if (mileageItems.length > 0) {
-      body += `MILEAGE:\n`;
-      mileageItems.forEach(item => {
-        const date = item.work_date ? new Date(item.work_date).toLocaleDateString() : '-';
-        body += `  ${date} | ${parseFloat(item.quantity || 0).toFixed(0)} miles | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
-      });
-      body += `\n`;
-    }
-    
-    // Custom items section
-    if (customItems.length > 0) {
-      body += `ADDITIONAL ITEMS:\n`;
-      customItems.forEach(item => {
-        body += `  ${item.description} | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
-      });
-      body += `\n`;
-    }
-    
-    body += `========================================\n`;
-    body += `SUMMARY:\n`;
-    body += `  Labor (${parseFloat(invoice.total_regular_hours || 0).toFixed(1)}h reg + ${parseFloat(invoice.total_ot_hours || 0).toFixed(1)}h OT): $${parseFloat(invoice.total_hours_amount || 0).toFixed(2)}\n`;
-    body += `  Mileage (${parseFloat(invoice.total_miles || 0).toFixed(0)} miles): $${parseFloat(invoice.total_mileage_amount || 0).toFixed(2)}\n`;
-    if (parseFloat(invoice.total_line_items_amount || 0) > 0) {
-      body += `  Additional Items: $${parseFloat(invoice.total_line_items_amount || 0).toFixed(2)}\n`;
-    }
-    body += `\n========================================\n`;
-    body += `TOTAL DUE: $${parseFloat(invoice.grand_total || 0).toFixed(2)}\n`;
-    body += `========================================\n`;
-    body += `\nThank you for your business!\n`;
-    body += `\n--\n${businessName}\n`;
-    if (user.profile?.business_address) {
-      body += `${user.profile.business_address}\n`;
-    }
-    body += `${user.email}\n`;
-    
-    return body;
-  }
-
-  async function sendInvoice() {
-    if (!invoice || invoice.status === 'sent' || invoice.status === 'paid') {
+  async function downloadPDF() {
+    if (!html2pdfLoaded || !invoiceRef.current) {
+      setMessage({ type: 'error', text: 'PDF generator not ready. Please wait and try again.' });
       return;
     }
 
+    setGenerating(true);
+    setMessage(null);
+
+    try {
+      const element = invoiceRef.current;
+      const filename = `${invoice.invoice_number}.pdf`;
+      
+      const opt = {
+        margin: 0.5,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      await window.html2pdf().set(opt).from(element).save();
+      
+      setMessage({ type: 'success', text: 'PDF downloaded! You can now email it to emfcontractingsc2@gmail.com' });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      setMessage({ type: 'error', text: 'Failed to generate PDF' });
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function sendViaEmail() {
+    // First download the PDF
+    await downloadPDF();
+    
+    // Then open email client
     const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
     const toEmail = 'emfcontractingsc2@gmail.com';
     const subject = `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${parseFloat(invoice.grand_total || 0).toFixed(2)}`;
-    const body = buildEmailBody();
+    const body = `Hi,\n\nPlease find attached my invoice ${invoice.invoice_number} for the period ${new Date(invoice.period_start).toLocaleDateString()} - ${new Date(invoice.period_end).toLocaleDateString()}.\n\nTotal Due: $${parseFloat(invoice.grand_total || 0).toFixed(2)}\n\nThank you,\n${businessName}`;
     
-    // Create mailto link
     const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
-    // Open email client
-    window.location.href = mailtoLink;
-    
-    // Show confirmation dialog after a short delay
-    setTimeout(async () => {
-      const confirmed = confirm('Did you send the email?\n\nClick OK to mark the invoice as sent, or Cancel if you haven\'t sent it yet.');
+    // Small delay to ensure PDF download starts first
+    setTimeout(() => {
+      window.location.href = mailtoLink;
       
-      if (confirmed) {
-        try {
-          // Update invoice status
-          const { error: updateError } = await supabase
-            .from('subcontractor_invoices')
-            .update({
-              status: 'sent',
-              sent_to_email: toEmail,
-              sent_at: new Date().toISOString()
-            })
-            .eq('invoice_id', invoice.invoice_id);
-
-          if (updateError) throw updateError;
-
-          setInvoice({ ...invoice, status: 'sent', sent_at: new Date().toISOString() });
-          setMessage({ type: 'success', text: 'Invoice marked as sent!' });
-        } catch (error) {
-          console.error('Error updating invoice status:', error);
-          setMessage({ type: 'error', text: 'Failed to update invoice status' });
+      // Ask to mark as sent after another delay
+      setTimeout(() => {
+        const confirmed = confirm('Did you send the email with the PDF attached?\n\nClick OK to mark the invoice as sent.');
+        
+        if (confirmed) {
+          markAsSent();
         }
-      }
+      }, 2000);
     }, 1000);
+  }
+
+  async function markAsSent() {
+    try {
+      const { error: updateError } = await supabase
+        .from('subcontractor_invoices')
+        .update({
+          status: 'sent',
+          sent_to_email: 'emfcontractingsc2@gmail.com',
+          sent_at: new Date().toISOString()
+        })
+        .eq('invoice_id', invoice.invoice_id);
+
+      if (updateError) throw updateError;
+
+      setInvoice({ ...invoice, status: 'sent', sent_at: new Date().toISOString() });
+      setMessage({ type: 'success', text: 'Invoice marked as sent!' });
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+      setMessage({ type: 'error', text: 'Failed to update invoice status' });
+    }
   }
 
   async function deleteInvoice() {
@@ -222,13 +191,19 @@ export default function ViewInvoice() {
     );
   }
 
-  // Group items by type
   const hoursItems = lineItems.filter(i => i.item_type === 'hours');
   const mileageItems = lineItems.filter(i => i.item_type === 'mileage');
   const customItems = lineItems.filter(i => i.item_type === 'custom');
+  const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Load html2pdf library */}
+      <Script 
+        src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+        onLoad={() => setHtml2pdfLoaded(true)}
+      />
+
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
@@ -253,6 +228,15 @@ export default function ViewInvoice() {
             </div>
           </div>
           <div className="flex gap-2">
+            {/* Always show Download PDF button */}
+            <button
+              onClick={downloadPDF}
+              disabled={generating || !html2pdfLoaded}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50"
+            >
+              {generating ? '⏳ Generating...' : '📄 Download PDF'}
+            </button>
+            
             {invoice.status === 'draft' && (
               <>
                 <button
@@ -262,12 +246,23 @@ export default function ViewInvoice() {
                   🗑️ Delete
                 </button>
                 <button
-                  onClick={sendInvoice}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium"
+                  onClick={sendViaEmail}
+                  disabled={generating || !html2pdfLoaded}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium disabled:opacity-50"
                 >
-                  📧 Send via Email
+                  📧 Download & Email
                 </button>
               </>
+            )}
+            
+            {invoice.status === 'sent' && (
+              <button
+                onClick={downloadPDF}
+                disabled={generating || !html2pdfLoaded}
+                className="px-3 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm disabled:opacity-50"
+              >
+                📄 Re-download PDF
+              </button>
             )}
           </div>
         </div>
@@ -275,7 +270,7 @@ export default function ViewInvoice() {
 
       {/* Message */}
       {message && (
-        <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 ${
+        <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 max-w-md text-center ${
           message.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {message.text}
@@ -284,8 +279,22 @@ export default function ViewInvoice() {
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
         
-        {/* Invoice Preview */}
-        <div className="bg-white text-gray-900 rounded-xl overflow-hidden shadow-xl">
+        {/* Instructions for draft invoices */}
+        {invoice.status === 'draft' && (
+          <div className="bg-blue-900/30 border border-blue-500/50 rounded-xl p-4">
+            <h3 className="font-bold text-blue-400 mb-2">📋 How to Send Your Invoice</h3>
+            <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+              <li>Click <strong>"Download & Email"</strong> button above</li>
+              <li>The PDF will download to your device</li>
+              <li>Your email app will open with a pre-filled message</li>
+              <li><strong>Attach the PDF</strong> to the email and send</li>
+              <li>Confirm when done to mark invoice as sent</li>
+            </ol>
+          </div>
+        )}
+        
+        {/* Invoice Preview - This is what gets converted to PDF */}
+        <div ref={invoiceRef} className="bg-white text-gray-900 rounded-xl overflow-hidden shadow-xl">
           
           {/* Invoice Header */}
           <div className="bg-gray-800 text-white p-6">
@@ -308,9 +317,7 @@ export default function ViewInvoice() {
             <div className="grid grid-cols-2 gap-8 mb-8">
               <div>
                 <p className="text-xs text-gray-500 uppercase font-bold mb-2">From</p>
-                <p className="font-bold text-lg">
-                  {user.profile?.business_name || `${user.first_name} ${user.last_name}`}
-                </p>
+                <p className="font-bold text-lg">{businessName}</p>
                 {user.profile?.business_address && (
                   <p className="text-gray-600 text-sm whitespace-pre-line">{user.profile.business_address}</p>
                 )}

@@ -95,7 +95,7 @@ export default function ViewInvoice() {
 
       await window.html2pdf().set(opt).from(element).save();
       
-      setMessage({ type: 'success', text: 'PDF downloaded! You can now email it to emfcontractingsc2@gmail.com' });
+      setMessage({ type: 'success', text: 'PDF downloaded!' });
     } catch (error) {
       console.error('PDF generation error:', error);
       setMessage({ type: 'error', text: 'Failed to generate PDF: ' + error.message });
@@ -104,30 +104,11 @@ export default function ViewInvoice() {
     }
   }
 
-  async function sendViaEmail() {
-    await downloadPDF();
-    
-    const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
-    const toEmail = 'emfcontractingsc2@gmail.com';
-    const subject = `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${parseFloat(invoice.grand_total || 0).toFixed(2)}`;
-    const body = `Hi,\n\nPlease find attached my invoice ${invoice.invoice_number} for the period ${new Date(invoice.period_start).toLocaleDateString()} - ${new Date(invoice.period_end).toLocaleDateString()}.\n\nTotal Due: $${parseFloat(invoice.grand_total || 0).toFixed(2)}\n\nThank you,\n${businessName}`;
-    
-    const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    
-    setTimeout(() => {
-      window.location.href = mailtoLink;
-      
-      setTimeout(() => {
-        const confirmed = confirm('Did you send the email with the PDF attached?\n\nClick OK to mark the invoice as sent.');
-        
-        if (confirmed) {
-          markAsSent();
-        }
-      }, 2000);
-    }, 1000);
-  }
-
   async function markAsSent() {
+    if (!confirm('Mark this invoice as sent to EMF Contracting?')) {
+      return;
+    }
+    
     try {
       const { error: updateError } = await supabase
         .from('subcontractor_invoices')
@@ -189,69 +170,66 @@ export default function ViewInvoice() {
   const customItems = lineItems.filter(i => i.item_type === 'custom');
   const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
 
-  // Inline styles for PDF compatibility (no oklch colors)
-  const styles = {
-    page: { minHeight: '100vh', backgroundColor: '#111827', color: 'white' },
-    header: { backgroundColor: '#1f2937', borderBottom: '1px solid #374151', padding: '16px' },
-    headerInner: { maxWidth: '896px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    backBtn: { padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none', border: 'none', cursor: 'pointer' },
-    statusBadge: (status) => ({
-      fontSize: '12px',
-      padding: '4px 8px',
-      borderRadius: '9999px',
-      backgroundColor: status === 'paid' ? 'rgba(34, 197, 94, 0.2)' : status === 'sent' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(107, 114, 128, 0.2)',
-      color: status === 'paid' ? '#4ade80' : status === 'sent' ? '#facc15' : '#9ca3af'
-    }),
-    blueBtn: { padding: '8px 12px', backgroundColor: '#2563eb', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
-    redBtn: { padding: '8px 12px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
-    greenBtn: { padding: '16px', backgroundColor: '#16a34a', borderRadius: '8px', fontWeight: '500', color: 'white', border: 'none', cursor: 'pointer' },
-    grayBtn: { padding: '8px 12px', backgroundColor: '#4b5563', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
-    messageSuccess: { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 10px 15px rgba(0,0,0,0.1)', zIndex: 50, maxWidth: '400px', textAlign: 'center', backgroundColor: '#16a34a', color: 'white' },
-    messageError: { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 10px 15px rgba(0,0,0,0.1)', zIndex: 50, maxWidth: '400px', textAlign: 'center', backgroundColor: '#dc2626', color: 'white' },
-    instructionBox: { backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' },
-  };
-
   return (
-    <div style={styles.page}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white' }}>
       <Script 
         src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
         onLoad={() => setHtml2pdfLoaded(true)}
       />
 
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerInner}>
+      <header style={{ backgroundColor: '#1f2937', borderBottom: '1px solid #374151', padding: '16px' }}>
+        <div style={{ maxWidth: '896px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Link href="/contractor/invoices" style={styles.backBtn}>
+            <Link href="/contractor/invoices" style={{ padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
               ← Back
             </Link>
             <div>
               <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{invoice.invoice_number}</h1>
-              <span style={styles.statusBadge(invoice.status)}>
+              <span style={{
+                fontSize: '12px',
+                padding: '4px 8px',
+                borderRadius: '9999px',
+                backgroundColor: invoice.status === 'paid' ? 'rgba(34, 197, 94, 0.2)' : invoice.status === 'sent' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(107, 114, 128, 0.2)',
+                color: invoice.status === 'paid' ? '#4ade80' : invoice.status === 'sent' ? '#facc15' : '#9ca3af'
+              }}>
                 {invoice.status.toUpperCase()}
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Download PDF - always available */}
             <button
               onClick={downloadPDF}
               disabled={generating || !html2pdfLoaded}
-              style={{ ...styles.blueBtn, opacity: (generating || !html2pdfLoaded) ? 0.5 : 1 }}
+              style={{ 
+                padding: '8px 12px', 
+                backgroundColor: '#2563eb', 
+                borderRadius: '8px', 
+                fontSize: '14px', 
+                color: 'white', 
+                border: 'none', 
+                cursor: 'pointer',
+                opacity: (generating || !html2pdfLoaded) ? 0.5 : 1 
+              }}
             >
               {generating ? '⏳ Generating...' : '📄 Download PDF'}
             </button>
             
+            {/* Draft actions */}
             {invoice.status === 'draft' && (
               <>
-                <button onClick={deleteInvoice} style={styles.redBtn}>
-                  🗑️ Delete
-                </button>
-                <button
-                  onClick={sendViaEmail}
-                  disabled={generating || !html2pdfLoaded}
-                  style={{ ...styles.greenBtn, opacity: (generating || !html2pdfLoaded) ? 0.5 : 1 }}
+                <button 
+                  onClick={markAsSent}
+                  style={{ padding: '8px 12px', backgroundColor: '#16a34a', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' }}
                 >
-                  📧 Download & Email
+                  ✓ Mark as Sent
+                </button>
+                <button 
+                  onClick={deleteInvoice} 
+                  style={{ padding: '8px 12px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' }}
+                >
+                  🗑️ Delete
                 </button>
               </>
             )}
@@ -261,7 +239,20 @@ export default function ViewInvoice() {
 
       {/* Message */}
       {message && (
-        <div style={message.type === 'success' ? styles.messageSuccess : styles.messageError}>
+        <div style={{ 
+          position: 'fixed', 
+          top: '80px', 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          padding: '12px 24px', 
+          borderRadius: '8px', 
+          boxShadow: '0 10px 15px rgba(0,0,0,0.1)', 
+          zIndex: 50, 
+          maxWidth: '400px', 
+          textAlign: 'center', 
+          backgroundColor: message.type === 'success' ? '#16a34a' : '#dc2626', 
+          color: 'white' 
+        }}>
           {message.text}
         </div>
       )}
@@ -270,14 +261,12 @@ export default function ViewInvoice() {
         
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (
-          <div style={styles.instructionBox}>
+          <div style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
             <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>📋 How to Send Your Invoice</h3>
             <ol style={{ color: '#d1d5db', fontSize: '14px', margin: 0, paddingLeft: '20px' }}>
-              <li>Click <strong>"Download & Email"</strong> button above</li>
-              <li>The PDF will download to your device</li>
-              <li>Your email app will open with a pre-filled message</li>
-              <li><strong>Attach the PDF</strong> to the email and send</li>
-              <li>Confirm when done to mark invoice as sent</li>
+              <li>Click <strong>"Download PDF"</strong> to save the invoice</li>
+              <li>Email the PDF to <strong>emfcontractingsc2@gmail.com</strong></li>
+              <li>Click <strong>"Mark as Sent"</strong> when done</li>
             </ol>
           </div>
         )}

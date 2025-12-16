@@ -1,7 +1,7 @@
 // app/dashboard/components/DashboardHeader.js
 'use client';
 
-export default function DashboardHeader({ activeView, setActiveView, missingHoursCount = 0 }) {
+export default function DashboardHeader({ activeView, setActiveView, missingHoursCount = 0, onGlobalSearch }) {
   // View navigation tabs
   const viewTabs = [
     { id: 'workorders', label: 'Work Orders', icon: '📋' },
@@ -29,6 +29,14 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
         
         {/* Quick action buttons */}
         <div className="flex gap-2">
+          {onGlobalSearch && (
+            <button
+              onClick={onGlobalSearch}
+              className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
+            >
+              🔍 Search All
+            </button>
+          )}
           <button
             onClick={() => window.location.href = '/'}
             className="bg-gray-600 hover:bg-gray-700 px-3 py-2 rounded-lg font-semibold transition text-sm"

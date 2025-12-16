@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import GlobalWOSearch from '../components/GlobalWOSearch';
 
 export default function InvoicingPage() {
   const [acknowledgedWOs, setAcknowledgedWOs] = useState([]);
+  const [filteredAcknowledgedWOs, setFilteredAcknowledgedWOs] = useState([]);
   const [woTotals, setWoTotals] = useState({}); // Store calculated totals for each WO
   const [invoices, setInvoices] = useState([]);
+  const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [lineItems, setLineItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,11 @@ export default function InvoicingPage() {
     quantity: 1,
     unit_price: 0
   });
+  
+  // Search states
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [readySearchTerm, setReadySearchTerm] = useState('');
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -30,6 +38,38 @@ export default function InvoicingPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Filter Ready for Invoice WOs based on search
+  useEffect(() => {
+    if (!readySearchTerm.trim()) {
+      setFilteredAcknowledgedWOs(acknowledgedWOs);
+    } else {
+      const search = readySearchTerm.toLowerCase();
+      setFilteredAcknowledgedWOs(
+        acknowledgedWOs.filter(wo =>
+          wo.wo_number?.toLowerCase().includes(search) ||
+          wo.building?.toLowerCase().includes(search) ||
+          (wo.lead_tech && `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`.toLowerCase().includes(search))
+        )
+      );
+    }
+  }, [readySearchTerm, acknowledgedWOs]);
+
+  // Filter Invoices based on search
+  useEffect(() => {
+    if (!invoiceSearchTerm.trim()) {
+      setFilteredInvoices(invoices);
+    } else {
+      const search = invoiceSearchTerm.toLowerCase();
+      setFilteredInvoices(
+        invoices.filter(inv =>
+          inv.invoice_number?.toLowerCase().includes(search) ||
+          inv.work_order?.wo_number?.toLowerCase().includes(search) ||
+          inv.work_order?.building?.toLowerCase().includes(search)
+        )
+      );
+    }
+  }, [invoiceSearchTerm, invoices]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -658,6 +698,12 @@ export default function InvoicingPage() {
             <p className="text-gray-400 mt-1">Generate and manage invoices for completed work orders</p>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={() => setShowGlobalSearch(true)}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold"
+            >
+              🔍 Search All WOs
+            </button>
             <a
               href="/invoices/cbre"
               className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold"
@@ -700,13 +746,47 @@ export default function InvoicingPage() {
         {/* Content */}
         {activeTab === 'ready' && (
           <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Acknowledged Work Orders - Ready for Invoice</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Acknowledged Work Orders - Ready for Invoice</h2>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={readySearchTerm}
+                  onChange={(e) => setReadySearchTerm(e.target.value)}
+                  placeholder="🔍 Search WO#, Building, Tech..."
+                  className="bg-gray-700 text-white px-4 py-2 rounded-lg w-64"
+                />
+                {readySearchTerm && (
+                  <button
+                    onClick={() => setReadySearchTerm('')}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            </div>
             
-            {acknowledgedWOs.length === 0 ? (
+            {filteredAcknowledgedWOs.length === 0 ? (
               <div className="text-gray-400 text-center py-8">
-                No work orders ready for invoicing.
-                <br />
-                <span className="text-sm">Work orders must be completed and acknowledged first.</span>
+                {readySearchTerm ? (
+                  <>
+                    No work orders found matching "{readySearchTerm}"
+                    <br />
+                    <button
+                      onClick={() => setReadySearchTerm('')}
+                      className="text-blue-400 hover:underline mt-2"
+                    >
+                      Clear search
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    No work orders ready for invoicing.
+                    <br />
+                    <span className="text-sm">Work orders must be completed and acknowledged first.</span>
+                  </>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -722,7 +802,7 @@ export default function InvoicingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {acknowledgedWOs.map(wo => (
+                    {filteredAcknowledgedWOs.map(wo => (
                       <tr
                         key={wo.wo_id}
                         className="border-t border-gray-700 hover:bg-gray-700 transition"
@@ -760,11 +840,43 @@ export default function InvoicingPage() {
 
         {activeTab === 'invoiced' && (
           <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Generated Invoices</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Generated Invoices</h2>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={invoiceSearchTerm}
+                  onChange={(e) => setInvoiceSearchTerm(e.target.value)}
+                  placeholder="🔍 Search Invoice#, WO#, Building..."
+                  className="bg-gray-700 text-white px-4 py-2 rounded-lg w-64"
+                />
+                {invoiceSearchTerm && (
+                  <button
+                    onClick={() => setInvoiceSearchTerm('')}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+              </div>
+            </div>
             
-            {invoices.length === 0 ? (
+            {filteredInvoices.length === 0 ? (
               <div className="text-gray-400 text-center py-8">
-                No invoices generated yet.
+                {invoiceSearchTerm ? (
+                  <>
+                    No invoices found matching "{invoiceSearchTerm}"
+                    <br />
+                    <button
+                      onClick={() => setInvoiceSearchTerm('')}
+                      className="text-blue-400 hover:underline mt-2"
+                    >
+                      Clear search
+                    </button>
+                  </>
+                ) : (
+                  'No invoices generated yet.'
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -781,7 +893,7 @@ export default function InvoicingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.map(invoice => (
+                    {filteredInvoices.map(invoice => (
                       <tr
                         key={invoice.invoice_id}
                         onClick={() => selectInvoice(invoice)}
@@ -1308,6 +1420,11 @@ export default function InvoicingPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Global WO Search Modal */}
+      {showGlobalSearch && (
+        <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />
       )}
     </div>
   );

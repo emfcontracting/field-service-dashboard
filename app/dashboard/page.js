@@ -10,6 +10,7 @@ import MissingHoursView from './components/MissingHoursView';
 import WorkOrderDetailModal from './components/WorkOrderDetailModal';
 import NewWorkOrderModal from './components/NewWorkOrderModal';
 import ImportModal from '../components/ImportModal';
+import GlobalWOSearch from '../components/GlobalWOSearch';
 import { CalendarView } from './components/calendar';
 import { AgingView } from './components/aging';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [selectedWO, setSelectedWO] = useState(null);
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'aging' | 'missing-hours' | 'availability'
   const [missingHoursCount, setMissingHoursCount] = useState(0);
@@ -240,6 +242,7 @@ export default function Dashboard() {
           activeView={activeView}
           setActiveView={setActiveView}
           missingHoursCount={missingHoursCount}
+          onGlobalSearch={() => setShowGlobalSearch(true)}
         />
 
         {renderActiveView()}
@@ -270,6 +273,10 @@ export default function Dashboard() {
             onClose={() => setShowImportModal(false)}
             onImportComplete={refreshWorkOrders}
           />
+        )}
+
+        {showGlobalSearch && (
+          <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />
         )}
       </div>
     </div>

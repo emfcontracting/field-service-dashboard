@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -10,7 +10,6 @@ const supabase = getSupabase();
 
 export default function CreateInvoice() {
   const router = useRouter();
-  const invoiceRef = useRef(null);
   
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,8 +18,7 @@ export default function CreateInvoice() {
   const [message, setMessage] = useState(null);
   const [html2pdfLoaded, setHtml2pdfLoaded] = useState(false);
 
-  // Client selection
-  const [clientType, setClientType] = useState('emf'); // 'emf' or 'other'
+  const [clientType, setClientType] = useState('emf');
   const [otherClient, setOtherClient] = useState({
     name: '',
     address: '',
@@ -30,44 +28,25 @@ export default function CreateInvoice() {
     email: ''
   });
 
-  // Date range
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
-
-  // Pulled data
   const [hoursData, setHoursData] = useState([]);
   const [loadingHours, setLoadingHours] = useState(false);
-
-  // Custom line items
   const [lineItems, setLineItems] = useState([]);
-
-  // Rates
-  const [rates, setRates] = useState({
-    hourly: 35,
-    ot: 52.50,
-    mileage: 0.67
-  });
-
-  // Show preview for PDF generation
-  const [showPreview, setShowPreview] = useState(false);
+  const [rates, setRates] = useState({ hourly: 35, ot: 52.50, mileage: 0.67 });
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
-    if (!userData) {
-      router.push('/contractor');
-      return;
-    }
+    if (!userData) { router.push('/contractor'); return; }
     
     try {
       const parsed = JSON.parse(userData);
       setUser(parsed);
-
       const end = new Date();
       const start = new Date();
       start.setDate(start.getDate() - 14);
       setPeriodEnd(end.toISOString().split('T')[0]);
       setPeriodStart(start.toISOString().split('T')[0]);
-
       if (parsed.profile) {
         setRates({
           hourly: parseFloat(parsed.profile.hourly_rate || 35),
@@ -75,39 +54,26 @@ export default function CreateInvoice() {
           mileage: parseFloat(parsed.profile.mileage_rate || 0.67)
         });
       }
-
       setLoading(false);
     } catch (e) {
-      console.error('Error parsing user data:', e);
       router.push('/contractor');
     }
   }, [router]);
 
   async function pullHours() {
-    if (!periodStart || !periodEnd) {
-      setMessage({ type: 'error', text: 'Please select date range' });
-      return;
-    }
-
+    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: 'Please select date range' }); return; }
     setLoadingHours(true);
     setMessage(null);
-
     try {
       const { data, error } = await supabase
         .from('daily_hours_log')
-        .select(`
-          *,
-          work_order:work_orders(wo_number, building, work_order_description)
-        `)
+        .select('*, work_order:work_orders(wo_number, building, work_order_description)')
         .eq('user_id', user.user_id)
         .gte('work_date', periodStart)
         .lte('work_date', periodEnd)
         .order('work_date', { ascending: true });
-
       if (error) throw error;
-
       setHoursData(data || []);
-
       if (!data || data.length === 0) {
         setMessage({ type: 'warning', text: 'No hours found for this period' });
       } else {
@@ -115,7 +81,6 @@ export default function CreateInvoice() {
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error) {
-      console.error('Error pulling hours:', error);
       setMessage({ type: 'error', text: 'Failed to pull hours data' });
     } finally {
       setLoadingHours(false);
@@ -123,10 +88,7 @@ export default function CreateInvoice() {
   }
 
   function addLineItem() {
-    setLineItems([
-      ...lineItems,
-      { id: Date.now(), description: '', quantity: 1, rate: 0, amount: 0 }
-    ]);
+    setLineItems([...lineItems, { id: Date.now(), description: '', quantity: 1, rate: 0, amount: 0 }]);
   }
 
   function updateLineItem(id, field, value) {
@@ -144,412 +106,268 @@ export default function CreateInvoice() {
     setLineItems(lineItems.filter(item => item.id !== id));
   }
 
-  // Calculate totals
   const totalRegularHours = hoursData.reduce((sum, h) => sum + parseFloat(h.hours_regular || 0), 0);
   const totalOTHours = hoursData.reduce((sum, h) => sum + parseFloat(h.hours_overtime || 0), 0);
   const totalMiles = hoursData.reduce((sum, h) => sum + parseFloat(h.miles || 0), 0);
-
   const hoursAmount = (totalRegularHours * rates.hourly) + (totalOTHours * rates.ot);
   const mileageAmount = totalMiles * rates.mileage;
   const lineItemsAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
   const grandTotal = clientType === 'emf' ? (hoursAmount + mileageAmount + lineItemsAmount) : lineItemsAmount;
 
-  // Generate invoice number
   function generateInvoiceNumber() {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     const day = String(new Date().getDate()).padStart(2, '0');
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
-    return `INV-${year}${month}${day}-${initials.toUpperCase()}${random}`;
+    return 'INV-' + year + month + day + '-' + initials.toUpperCase() + random;
   }
 
-  // Save EMF Invoice to database (hidden from user)
   async function saveEMFInvoice() {
     if (hoursData.length === 0 && lineItems.length === 0) {
       setMessage({ type: 'error', text: 'No data to invoice' });
       return;
     }
-
     setSaving(true);
     setMessage(null);
-
     try {
       const year = new Date().getFullYear();
       const initials = (user.first_name?.[0] || '') + (user.last_name?.[0] || '');
-      
-      const { count } = await supabase
-        .from('subcontractor_invoices')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.user_id);
+      const { count } = await supabase.from('subcontractor_invoices').select('*', { count: 'exact', head: true }).eq('user_id', user.user_id);
+      const invoiceNumber = 'SUB-' + year + '-' + initials.toUpperCase() + '-' + String((count || 0) + 1).padStart(3, '0');
 
-      const invoiceNumber = `SUB-${year}-${initials.toUpperCase()}-${String((count || 0) + 1).padStart(3, '0')}`;
-
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('subcontractor_invoices')
-        .insert({
-          user_id: user.user_id,
-          invoice_number: invoiceNumber,
-          period_start: periodStart,
-          period_end: periodEnd,
-          total_regular_hours: totalRegularHours,
-          total_ot_hours: totalOTHours,
-          total_hours_amount: hoursAmount,
-          total_miles: totalMiles,
-          total_mileage_amount: mileageAmount,
-          total_line_items_amount: lineItemsAmount,
-          grand_total: grandTotal,
-          hourly_rate_used: rates.hourly,
-          ot_rate_used: rates.ot,
-          mileage_rate_used: rates.mileage,
-          status: 'draft',
-          sent_to_email: 'emfcontractingsc2@gmail.com'
-        })
-        .select()
-        .single();
+      const { data: invoice, error: invoiceError } = await supabase.from('subcontractor_invoices').insert({
+        user_id: user.user_id,
+        invoice_number: invoiceNumber,
+        period_start: periodStart,
+        period_end: periodEnd,
+        total_regular_hours: totalRegularHours,
+        total_ot_hours: totalOTHours,
+        total_hours_amount: hoursAmount,
+        total_miles: totalMiles,
+        total_mileage_amount: mileageAmount,
+        total_line_items_amount: lineItemsAmount,
+        grand_total: grandTotal,
+        hourly_rate_used: rates.hourly,
+        ot_rate_used: rates.ot,
+        mileage_rate_used: rates.mileage,
+        status: 'draft',
+        sent_to_email: 'emfcontractingsc2@gmail.com'
+      }).select().single();
 
       if (invoiceError) throw invoiceError;
 
-      // Save line items
       const itemsToInsert = [];
-
       for (const entry of hoursData) {
         if (parseFloat(entry.hours_regular || 0) > 0) {
-          itemsToInsert.push({
-            invoice_id: invoice.invoice_id,
-            wo_id: entry.wo_id,
-            item_type: 'hours',
-            description: `Regular Hours - ${entry.work_order?.wo_number || 'N/A'} - ${entry.work_order?.building || ''}`,
-            quantity: parseFloat(entry.hours_regular),
-            rate: rates.hourly,
-            amount: parseFloat(entry.hours_regular) * rates.hourly,
-            work_date: entry.work_date
-          });
+          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'hours', description: 'Regular Hours - ' + (entry.work_order?.wo_number || 'N/A') + ' - ' + (entry.work_order?.building || ''), quantity: parseFloat(entry.hours_regular), rate: rates.hourly, amount: parseFloat(entry.hours_regular) * rates.hourly, work_date: entry.work_date });
         }
         if (parseFloat(entry.hours_overtime || 0) > 0) {
-          itemsToInsert.push({
-            invoice_id: invoice.invoice_id,
-            wo_id: entry.wo_id,
-            item_type: 'hours',
-            description: `OT Hours - ${entry.work_order?.wo_number || 'N/A'} - ${entry.work_order?.building || ''}`,
-            quantity: parseFloat(entry.hours_overtime),
-            rate: rates.ot,
-            amount: parseFloat(entry.hours_overtime) * rates.ot,
-            work_date: entry.work_date
-          });
+          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'hours', description: 'OT Hours - ' + (entry.work_order?.wo_number || 'N/A') + ' - ' + (entry.work_order?.building || ''), quantity: parseFloat(entry.hours_overtime), rate: rates.ot, amount: parseFloat(entry.hours_overtime) * rates.ot, work_date: entry.work_date });
         }
         if (parseFloat(entry.miles || 0) > 0) {
-          itemsToInsert.push({
-            invoice_id: invoice.invoice_id,
-            wo_id: entry.wo_id,
-            item_type: 'mileage',
-            description: `Mileage - ${entry.work_order?.wo_number || 'N/A'}`,
-            quantity: parseFloat(entry.miles),
-            rate: rates.mileage,
-            amount: parseFloat(entry.miles) * rates.mileage,
-            work_date: entry.work_date
-          });
+          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'mileage', description: 'Mileage - ' + (entry.work_order?.wo_number || 'N/A'), quantity: parseFloat(entry.miles), rate: rates.mileage, amount: parseFloat(entry.miles) * rates.mileage, work_date: entry.work_date });
         }
       }
-
       for (const item of lineItems) {
         if (item.description && item.amount > 0) {
-          itemsToInsert.push({
-            invoice_id: invoice.invoice_id,
-            item_type: 'custom',
-            description: item.description,
-            quantity: parseFloat(item.quantity) || 1,
-            rate: parseFloat(item.rate) || 0,
-            amount: parseFloat(item.amount) || 0
-          });
+          itemsToInsert.push({ invoice_id: invoice.invoice_id, item_type: 'custom', description: item.description, quantity: parseFloat(item.quantity) || 1, rate: parseFloat(item.rate) || 0, amount: parseFloat(item.amount) || 0 });
         }
       }
-
       if (itemsToInsert.length > 0) {
         await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
       }
-
-      setMessage({ type: 'success', text: `Invoice ${invoiceNumber} created!` });
+      setMessage({ type: 'success', text: 'Invoice ' + invoiceNumber + ' created!' });
       setTimeout(() => router.push('/contractor/invoices'), 1500);
-
     } catch (error) {
-      console.error('Error saving invoice:', error);
       setMessage({ type: 'error', text: 'Failed to create invoice' });
     } finally {
       setSaving(false);
     }
   }
 
-  // Generate PDF for other client
   async function generateOtherClientPDF() {
-    if (!otherClient.name) {
-      setMessage({ type: 'error', text: 'Please enter client name' });
-      return;
-    }
-    if (lineItems.length === 0) {
-      setMessage({ type: 'error', text: 'Please add at least one line item' });
-      return;
-    }
-    
-    setShowPreview(true);
-    
-    setTimeout(async () => {
-      await downloadPDF();
-    }, 500);
-  }
-
-  async function downloadPDF() {
-    if (!html2pdfLoaded || !invoiceRef.current) {
-      setMessage({ type: 'error', text: 'PDF generator not ready. Please wait and try again.' });
-      return;
-    }
+    if (!otherClient.name) { setMessage({ type: 'error', text: 'Please enter client name' }); return; }
+    if (lineItems.length === 0) { setMessage({ type: 'error', text: 'Please add at least one line item' }); return; }
+    if (!html2pdfLoaded || !window.html2pdf) { setMessage({ type: 'error', text: 'PDF generator not ready. Please wait.' }); return; }
 
     setGenerating(true);
+    setMessage(null);
 
     try {
-      const invoiceNumber = generateInvoiceNumber();
-      const filename = `${invoiceNumber}.pdf`;
+      const invNum = generateInvoiceNumber();
+      const bName = user.profile?.business_name || (user.first_name + ' ' + user.last_name);
+      const clientAddr = [otherClient.city, otherClient.state, otherClient.zip].filter(Boolean).join(', ');
       
-      const opt = {
+      let rowsHtml = '';
+      lineItems.forEach(item => {
+        const qty = parseFloat(item.quantity || 0).toFixed(1);
+        const rt = '$' + parseFloat(item.rate || 0).toFixed(2);
+        const amt = '$' + parseFloat(item.amount || 0).toFixed(2);
+        rowsHtml += '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 12px 8px;">' + (item.description || '') + '</td><td style="padding: 12px 8px; text-align: right;">' + qty + '</td><td style="padding: 12px 8px; text-align: right;">' + rt + '</td><td style="padding: 12px 8px; text-align: right; font-weight: 500;">' + amt + '</td></tr>';
+      });
+
+      const totalStr = '$' + lineItemsAmount.toFixed(2);
+      
+      const html = '<div style="width: 8in; background-color: #ffffff; color: #111827; font-family: Arial, sans-serif; padding: 0.5in;">' +
+        '<div style="background-color: #1f2937; color: white; padding: 24px; margin-bottom: 24px;">' +
+          '<div style="display: flex; justify-content: space-between;">' +
+            '<div><h2 style="font-size: 28px; font-weight: bold; margin: 0;">INVOICE</h2><p style="color: #9ca3af; margin-top: 4px;">' + invNum + '</p></div>' +
+            '<div style="text-align: right;"><p style="font-size: 12px; color: #9ca3af; margin: 0;">Date</p><p style="font-weight: 500; margin: 4px 0 0 0;">' + new Date().toLocaleDateString() + '</p></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display: flex; justify-content: space-between; margin-bottom: 32px;">' +
+          '<div><p style="font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">From</p><p style="font-weight: bold; font-size: 16px; margin: 0;">' + bName + '</p>' + (user.profile?.business_address ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + user.profile.business_address + '</p>' : '') + '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + user.email + '</p></div>' +
+          '<div style="text-align: right;"><p style="font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: bold; margin-bottom: 8px;">To</p><p style="font-weight: bold; font-size: 16px; margin: 0;">' + otherClient.name + '</p>' + (otherClient.address ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + otherClient.address + '</p>' : '') + (clientAddr ? '<p style="color: #4b5563; font-size: 13px; margin: 2px 0 0 0;">' + clientAddr + '</p>' : '') + (otherClient.email ? '<p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">' + otherClient.email + '</p>' : '') + '</div>' +
+        '</div>' +
+        '<table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-bottom: 24px;">' +
+          '<thead><tr style="background-color: #f3f4f6;"><th style="padding: 12px 8px; text-align: left; font-weight: bold;">Description</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Qty</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Rate</th><th style="padding: 12px 8px; text-align: right; font-weight: bold;">Amount</th></tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+        '</table>' +
+        '<div style="background-color: #f9fafb; border-radius: 8px; padding: 16px;">' +
+          '<div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: bold;"><span>TOTAL DUE</span><span style="color: #059669;">' + totalStr + '</span></div>' +
+        '</div>' +
+        '<div style="margin-top: 40px; text-align: center; font-size: 11px; color: #9ca3af;"><p>Thank you for your business!</p></div>' +
+      '</div>';
+
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      document.body.appendChild(container);
+
+      await window.html2pdf().set({
         margin: 0.3,
-        filename: filename,
+        filename: invNum + '.pdf',
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
+      }).from(container.firstChild).save();
 
-      await window.html2pdf().set(opt).from(invoiceRef.current).save();
-      
+      document.body.removeChild(container);
       setMessage({ type: 'success', text: 'PDF downloaded!' });
     } catch (error) {
-      console.error('PDF generation error:', error);
+      console.error('PDF error:', error);
       setMessage({ type: 'error', text: 'Failed to generate PDF' });
     } finally {
       setGenerating(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
-  }
-
+  if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-white">Loading...</div></div>;
   if (!user) return null;
-
-  const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
-  const invoiceNumber = generateInvoiceNumber();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      <Script 
-        src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
-        onLoad={() => setHtml2pdfLoaded(true)}
-      />
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" onLoad={() => setHtml2pdfLoaded(true)} />
 
-      {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/contractor/invoices" className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">
-              ← Cancel
-            </Link>
+            <Link href="/contractor/invoices" className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">← Cancel</Link>
             <h1 className="text-xl font-bold">📝 Create Invoice</h1>
           </div>
         </div>
       </header>
 
-      {/* Message Toast */}
       {message && (
-        <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 ${
-          message.type === 'success' ? 'bg-green-600' : message.type === 'warning' ? 'bg-yellow-600' : 'bg-red-600'
-        }`}>
+        <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 ${message.type === 'success' ? 'bg-green-600' : message.type === 'warning' ? 'bg-yellow-600' : 'bg-red-600'}`}>
           {message.text}
         </div>
       )}
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
         
-        {/* Client Selection */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <h2 className="font-bold mb-4">👤 Select Client</h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <button
-              onClick={() => { setClientType('emf'); setHoursData([]); }}
-              className={`p-4 rounded-lg border-2 text-left ${
-                clientType === 'emf' 
-                  ? 'border-blue-500 bg-blue-500/20' 
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
+            <button onClick={() => { setClientType('emf'); setHoursData([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'emf' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
               <div className="font-bold">EMF Contracting LLC</div>
               <div className="text-sm text-gray-400">Pull hours from work orders</div>
             </button>
-            <button
-              onClick={() => { setClientType('other'); setHoursData([]); }}
-              className={`p-4 rounded-lg border-2 text-left ${
-                clientType === 'other' 
-                  ? 'border-blue-500 bg-blue-500/20' 
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
+            <button onClick={() => { setClientType('other'); setHoursData([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'other' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
               <div className="font-bold">Other Client</div>
               <div className="text-sm text-gray-400">Create custom invoice</div>
             </button>
           </div>
 
-          {/* Other Client Details */}
           {clientType === 'other' && (
             <div className="space-y-3 pt-4 border-t border-gray-700">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Client/Company Name *</label>
-                <input
-                  type="text"
-                  value={otherClient.name}
-                  onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                  placeholder="ABC Company"
-                />
+                <input type="text" value={otherClient.name} onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="ABC Company" />
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Street Address</label>
-                <input
-                  type="text"
-                  value={otherClient.address}
-                  onChange={(e) => setOtherClient({ ...otherClient, address: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                  placeholder="123 Main St"
-                />
+                <input type="text" value={otherClient.address} onChange={(e) => setOtherClient({ ...otherClient, address: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="123 Main St" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">City</label>
-                  <input
-                    type="text"
-                    value={otherClient.city}
-                    onChange={(e) => setOtherClient({ ...otherClient, city: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                  />
+                  <input type="text" value={otherClient.city} onChange={(e) => setOtherClient({ ...otherClient, city: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
                 </div>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">State</label>
-                  <input
-                    type="text"
-                    value={otherClient.state}
-                    onChange={(e) => setOtherClient({ ...otherClient, state: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                    placeholder="SC"
-                  />
+                  <input type="text" value={otherClient.state} onChange={(e) => setOtherClient({ ...otherClient, state: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="SC" />
                 </div>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">ZIP</label>
-                  <input
-                    type="text"
-                    value={otherClient.zip}
-                    onChange={(e) => setOtherClient({ ...otherClient, zip: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                  />
+                  <input type="text" value={otherClient.zip} onChange={(e) => setOtherClient({ ...otherClient, zip: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={otherClient.email}
-                  onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                  placeholder="client@example.com"
-                />
+                <input type="email" value={otherClient.email} onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="client@example.com" />
               </div>
             </div>
           )}
         </div>
 
-        {/* EMF: Date Range & Pull Hours */}
         {clientType === 'emf' && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
             <h2 className="font-bold mb-4">📅 Select Date Range</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={periodStart}
-                  onChange={(e) => setPeriodStart(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                />
+                <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={periodEnd}
-                  onChange={(e) => setPeriodEnd(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                />
+                <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
             </div>
-            <button
-              onClick={pullHours}
-              disabled={loadingHours}
-              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50"
-            >
+            <button onClick={pullHours} disabled={loadingHours} className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50">
               {loadingHours ? '⏳ Pulling Data...' : '📥 Pull My Hours & Mileage'}
             </button>
           </div>
         )}
 
-        {/* EMF: Review Hours */}
         {clientType === 'emf' && hoursData.length > 0 && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
             <h2 className="font-bold mb-4">📋 Review Hours & Mileage</h2>
-            
-            {/* Rates */}
             <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-700/50 rounded-lg">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={rates.hourly}
-                    onChange={(e) => setRates({ ...rates, hourly: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm"
-                  />
+                  <input type="number" step="0.01" value={rates.hourly} onChange={(e) => setRates({ ...rates, hourly: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">OT Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={rates.ot}
-                    onChange={(e) => setRates({ ...rates, ot: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm"
-                  />
+                  <input type="number" step="0.01" value={rates.ot} onChange={(e) => setRates({ ...rates, ot: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Mileage Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={rates.mileage}
-                    onChange={(e) => setRates({ ...rates, mileage: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm"
-                  />
+                  <input type="number" step="0.01" value={rates.mileage} onChange={(e) => setRates({ ...rates, mileage: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
             </div>
-
-            {/* Hours Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -568,7 +386,6 @@ export default function CreateInvoice() {
                     const otAmount = parseFloat(entry.hours_overtime || 0) * rates.ot;
                     const mileAmount = parseFloat(entry.miles || 0) * rates.mileage;
                     const rowTotal = regAmount + otAmount + mileAmount;
-
                     return (
                       <tr key={idx} className="border-b border-gray-700/50">
                         <td className="py-2">{new Date(entry.work_date).toLocaleDateString()}</td>
@@ -599,51 +416,22 @@ export default function CreateInvoice() {
           </div>
         )}
 
-        {/* Line Items */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold">
-              {clientType === 'emf' ? '➕ Additional Line Items (Optional)' : '📋 Invoice Line Items *'}
-            </h2>
-            <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">
-              + Add Item
-            </button>
+            <h2 className="font-bold">{clientType === 'emf' ? '➕ Additional Line Items (Optional)' : '📋 Invoice Line Items *'}</h2>
+            <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">+ Add Item</button>
           </div>
-
           {lineItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">
-              {clientType === 'emf' 
-                ? 'No additional items. Click "Add Item" to add materials, supplies, etc.'
-                : 'Click "Add Item" to add services, materials, etc.'}
-            </p>
+            <p className="text-gray-500 text-sm">{clientType === 'emf' ? 'No additional items. Click "Add Item" to add materials, supplies, etc.' : 'Click "Add Item" to add services, materials, etc.'}</p>
           ) : (
             <div className="space-y-3">
               {lineItems.map(item => (
                 <div key={item.id} className="flex gap-2 items-start">
-                  <input
-                    type="text"
-                    value={item.description}
-                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Description"
-                  />
-                  <input
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateLineItem(item.id, 'quantity', e.target.value)}
-                    className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-center"
-                    placeholder="Qty"
-                  />
+                  <input type="text" value={item.description} onChange={(e) => updateLineItem(item.id, 'description', e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" placeholder="Description" />
+                  <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', e.target.value)} className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-center" placeholder="Qty" />
                   <div className="relative">
                     <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={item.rate}
-                      onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
-                      className="w-24 bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-2 text-sm"
-                      placeholder="Rate"
-                    />
+                    <input type="number" step="0.01" value={item.rate} onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)} className="w-24 bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-2 text-sm" placeholder="Rate" />
                   </div>
                   <div className="w-24 py-2 text-right font-medium">${(parseFloat(item.amount) || 0).toFixed(2)}</div>
                   <button onClick={() => removeLineItem(item.id)} className="p-2 text-red-400 hover:text-red-300">✕</button>
@@ -653,148 +441,35 @@ export default function CreateInvoice() {
           )}
         </div>
 
-        {/* Invoice Summary */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <h2 className="font-bold mb-4">📊 Invoice Summary</h2>
           <div className="space-y-2">
             {clientType === 'emf' && (
               <>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
-                  <span>${(totalRegularHours * rates.hourly).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
-                  <span>${(totalOTHours * rates.ot).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
-                  <span>${mileageAmount.toFixed(2)}</span>
-                </div>
+                <div className="flex justify-between"><span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span><span>${(totalRegularHours * rates.hourly).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span><span>${(totalOTHours * rates.ot).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span><span>${mileageAmount.toFixed(2)}</span></div>
               </>
             )}
             {lineItemsAmount > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span>
-                <span>${lineItemsAmount.toFixed(2)}</span>
-              </div>
+              <div className="flex justify-between"><span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span><span>${lineItemsAmount.toFixed(2)}</span></div>
             )}
             <div className="border-t border-gray-600 pt-2 mt-2">
-              <div className="flex justify-between text-xl font-bold">
-                <span>TOTAL</span>
-                <span className="text-green-400">${grandTotal.toFixed(2)}</span>
-              </div>
+              <div className="flex justify-between text-xl font-bold"><span>TOTAL</span><span className="text-green-400">${grandTotal.toFixed(2)}</span></div>
             </div>
           </div>
         </div>
 
-        {/* Actions */}
         {clientType === 'emf' ? (
-          <button
-            onClick={saveEMFInvoice}
-            disabled={saving || (hoursData.length === 0 && lineItems.length === 0)}
-            className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50"
-          >
+          <button onClick={saveEMFInvoice} disabled={saving || (hoursData.length === 0 && lineItems.length === 0)} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
             {saving ? '⏳ Creating...' : '✓ Create Invoice'}
           </button>
         ) : (
-          <button
-            onClick={generateOtherClientPDF}
-            disabled={generating || !otherClient.name || lineItems.length === 0}
-            className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-lg font-medium disabled:opacity-50"
-          >
+          <button onClick={generateOtherClientPDF} disabled={generating || !otherClient.name || lineItems.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-lg font-medium disabled:opacity-50">
             {generating ? '⏳ Generating...' : '📄 Download Invoice PDF'}
           </button>
         )}
       </div>
-
-      {/* Hidden PDF Preview for Other Client */}
-      {showPreview && clientType === 'other' && (
-        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <div 
-            ref={invoiceRef}
-            style={{
-              width: '8.5in',
-              backgroundColor: '#ffffff',
-              color: '#111827',
-              fontFamily: 'Arial, Helvetica, sans-serif',
-              padding: '0.5in'
-            }}
-          >
-            {/* Invoice Header */}
-            <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h2 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0 }}>INVOICE</h2>
-                  <p style={{ color: '#9ca3af', marginTop: '4px' }}>{invoiceNumber}</p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>Date</p>
-                  <p style={{ fontWeight: '500', margin: '4px 0 0 0' }}>{new Date().toLocaleDateString()}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* From / To */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
-              <div>
-                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>From</p>
-                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{businessName}</p>
-                {user.profile?.business_address && (
-                  <p style={{ color: '#4b5563', fontSize: '13px', whiteSpace: 'pre-line', margin: '4px 0 0 0' }}>{user.profile.business_address}</p>
-                )}
-                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{user.email}</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>To</p>
-                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{otherClient.name}</p>
-                {otherClient.address && <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{otherClient.address}</p>}
-                {(otherClient.city || otherClient.state || otherClient.zip) && (
-                  <p style={{ color: '#4b5563', fontSize: '13px', margin: '2px 0 0 0' }}>
-                    {[otherClient.city, otherClient.state, otherClient.zip].filter(Boolean).join(', ')}
-                  </p>
-                )}
-                {otherClient.email && <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{otherClient.email}</p>}
-              </div>
-            </div>
-
-            {/* Line Items */}
-            <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '24px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f3f4f6' }}>
-                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: 'bold' }}>Description</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Qty</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Rate</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineItems.map((item, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px 8px' }}>{item.description}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>{parseFloat(item.quantity || 0).toFixed(1)}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>${parseFloat(item.rate || 0).toFixed(2)}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '500' }}>${parseFloat(item.amount || 0).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Total */}
-            <div style={{ backgroundColor: '#f9fafb', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 'bold' }}>
-                <span>TOTAL DUE</span>
-                <span style={{ color: '#059669' }}>${lineItemsAmount.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '11px', color: '#9ca3af' }}>
-              <p>Thank you for your business!</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

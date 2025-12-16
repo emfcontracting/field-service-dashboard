@@ -313,6 +313,8 @@ export default function ViewInvoice() {
               <div style={{ textAlign: 'right' }}>
                 <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>To</p>
                 <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>EMF Contracting LLC</p>
+                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>565 Pine Plain Rd</p>
+                <p style={{ color: '#4b5563', fontSize: '13px', margin: '2px 0 0 0' }}>Gaston, SC 29075</p>
                 <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>emfcontractingsc2@gmail.com</p>
               </div>
             </div>

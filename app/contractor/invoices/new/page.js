@@ -1,19 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Script from 'next/script';
 
 const supabase = getSupabase();
 
 export default function CreateInvoice() {
   const router = useRouter();
+  const invoiceRef = useRef(null);
+  
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState(null);
+  const [html2pdfLoaded, setHtml2pdfLoaded] = useState(false);
+
+  // Client selection
+  const [clientType, setClientType] = useState('emf'); // 'emf' or 'other'
+  const [otherClient, setOtherClient] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    email: ''
+  });
 
   // Date range
   const [periodStart, setPeriodStart] = useState('');
@@ -26,15 +41,15 @@ export default function CreateInvoice() {
   // Custom line items
   const [lineItems, setLineItems] = useState([]);
 
-  // Rates (can be adjusted per invoice)
+  // Rates
   const [rates, setRates] = useState({
     hourly: 35,
     ot: 52.50,
     mileage: 0.67
   });
 
-  // Email to send invoice to
-  const [sendToEmail, setSendToEmail] = useState('emfcontractingsc2@gmail.com');
+  // Show preview for PDF generation
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
@@ -47,14 +62,12 @@ export default function CreateInvoice() {
       const parsed = JSON.parse(userData);
       setUser(parsed);
 
-      // Set default date range (last 2 weeks)
       const end = new Date();
       const start = new Date();
       start.setDate(start.getDate() - 14);
       setPeriodEnd(end.toISOString().split('T')[0]);
       setPeriodStart(start.toISOString().split('T')[0]);
 
-      // Set rates from profile
       if (parsed.profile) {
         setRates({
           hourly: parseFloat(parsed.profile.hourly_rate || 35),
@@ -80,7 +93,6 @@ export default function CreateInvoice() {
     setMessage(null);
 
     try {
-      // Pull hours from daily_hours_log
       const { data, error } = await supabase
         .from('daily_hours_log')
         .select(`
@@ -92,10 +104,7 @@ export default function CreateInvoice() {
         .lte('work_date', periodEnd)
         .order('work_date', { ascending: true });
 
-      if (error) {
-        console.error('Error pulling hours:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       setHoursData(data || []);
 
@@ -143,29 +152,32 @@ export default function CreateInvoice() {
   const hoursAmount = (totalRegularHours * rates.hourly) + (totalOTHours * rates.ot);
   const mileageAmount = totalMiles * rates.mileage;
   const lineItemsAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-  const grandTotal = hoursAmount + mileageAmount + lineItemsAmount;
+  const grandTotal = clientType === 'emf' ? (hoursAmount + mileageAmount + lineItemsAmount) : lineItemsAmount;
 
-  async function saveInvoice(sendEmail = false) {
+  // Generate invoice number
+  function generateInvoiceNumber() {
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const day = String(new Date().getDate()).padStart(2, '0');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
+    return `INV-${year}${month}${day}-${initials.toUpperCase()}${random}`;
+  }
+
+  // Save EMF Invoice to database (hidden from user)
+  async function saveEMFInvoice() {
     if (hoursData.length === 0 && lineItems.length === 0) {
       setMessage({ type: 'error', text: 'No data to invoice' });
       return;
     }
 
-    if (sendEmail && !sendToEmail) {
-      setMessage({ type: 'error', text: 'Please enter an email address' });
-      return;
-    }
-
     setSaving(true);
-    if (sendEmail) setSending(true);
     setMessage(null);
 
     try {
-      // Generate invoice number
       const year = new Date().getFullYear();
       const initials = (user.first_name?.[0] || '') + (user.last_name?.[0] || '');
       
-      // Get count of existing invoices
       const { count } = await supabase
         .from('subcontractor_invoices')
         .select('*', { count: 'exact', head: true })
@@ -173,7 +185,6 @@ export default function CreateInvoice() {
 
       const invoiceNumber = `SUB-${year}-${initials.toUpperCase()}-${String((count || 0) + 1).padStart(3, '0')}`;
 
-      // Create invoice
       const { data: invoice, error: invoiceError } = await supabase
         .from('subcontractor_invoices')
         .insert({
@@ -191,22 +202,17 @@ export default function CreateInvoice() {
           hourly_rate_used: rates.hourly,
           ot_rate_used: rates.ot,
           mileage_rate_used: rates.mileage,
-          status: sendEmail ? 'sent' : 'draft',
-          sent_to_email: sendEmail ? sendToEmail : null,
-          sent_at: sendEmail ? new Date().toISOString() : null
+          status: 'draft',
+          sent_to_email: 'emfcontractingsc2@gmail.com'
         })
         .select()
         .single();
 
-      if (invoiceError) {
-        console.error('Invoice create error:', invoiceError);
-        throw invoiceError;
-      }
+      if (invoiceError) throw invoiceError;
 
-      // Save line items (hours entries)
+      // Save line items
       const itemsToInsert = [];
 
-      // Add hours entries as line items
       for (const entry of hoursData) {
         if (parseFloat(entry.hours_regular || 0) > 0) {
           itemsToInsert.push({
@@ -246,7 +252,6 @@ export default function CreateInvoice() {
         }
       }
 
-      // Add custom line items
       for (const item of lineItems) {
         if (item.description && item.amount > 0) {
           itemsToInsert.push({
@@ -261,62 +266,66 @@ export default function CreateInvoice() {
       }
 
       if (itemsToInsert.length > 0) {
-        const { error: itemsError } = await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
-        if (itemsError) {
-          console.error('Error saving line items:', itemsError);
-        }
+        await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
       }
 
-      // Send email if requested
-      if (sendEmail) {
-        try {
-          const emailResult = await fetch('/api/contractor/send-invoice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              invoice,
-              user,
-              hoursData,
-              lineItems,
-              rates,
-              sendToEmail,
-              totals: {
-                totalRegularHours,
-                totalOTHours,
-                totalMiles,
-                hoursAmount,
-                mileageAmount,
-                lineItemsAmount,
-                grandTotal
-              }
-            })
-          });
-
-          if (!emailResult.ok) {
-            console.error('Email send failed');
-          }
-        } catch (emailError) {
-          console.error('Email error:', emailError);
-        }
-      }
-
-      setMessage({ 
-        type: 'success', 
-        text: sendEmail 
-          ? `Invoice ${invoiceNumber} sent to ${sendToEmail}!` 
-          : `Invoice ${invoiceNumber} saved as draft`
-      });
-
-      setTimeout(() => {
-        router.push('/contractor/invoices');
-      }, 2000);
+      setMessage({ type: 'success', text: `Invoice ${invoiceNumber} created!` });
+      setTimeout(() => router.push('/contractor/invoices'), 1500);
 
     } catch (error) {
       console.error('Error saving invoice:', error);
-      setMessage({ type: 'error', text: 'Failed to save invoice: ' + (error.message || 'Unknown error') });
+      setMessage({ type: 'error', text: 'Failed to create invoice' });
     } finally {
       setSaving(false);
-      setSending(false);
+    }
+  }
+
+  // Generate PDF for other client
+  async function generateOtherClientPDF() {
+    if (!otherClient.name) {
+      setMessage({ type: 'error', text: 'Please enter client name' });
+      return;
+    }
+    if (lineItems.length === 0) {
+      setMessage({ type: 'error', text: 'Please add at least one line item' });
+      return;
+    }
+    
+    setShowPreview(true);
+    
+    setTimeout(async () => {
+      await downloadPDF();
+    }, 500);
+  }
+
+  async function downloadPDF() {
+    if (!html2pdfLoaded || !invoiceRef.current) {
+      setMessage({ type: 'error', text: 'PDF generator not ready. Please wait and try again.' });
+      return;
+    }
+
+    setGenerating(true);
+
+    try {
+      const invoiceNumber = generateInvoiceNumber();
+      const filename = `${invoiceNumber}.pdf`;
+      
+      const opt = {
+        margin: 0.3,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      await window.html2pdf().set(opt).from(invoiceRef.current).save();
+      
+      setMessage({ type: 'success', text: 'PDF downloaded!' });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      setMessage({ type: 'error', text: 'Failed to generate PDF' });
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -328,20 +337,23 @@ export default function CreateInvoice() {
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
+
+  const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
+  const invoiceNumber = generateInvoiceNumber();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <Script 
+        src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+        onLoad={() => setHtml2pdfLoaded(true)}
+      />
+
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link
-              href="/contractor/invoices"
-              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
-            >
+            <Link href="/contractor/invoices" className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">
               ← Cancel
             </Link>
             <h1 className="text-xl font-bold">📝 Create Invoice</h1>
@@ -352,9 +364,7 @@ export default function CreateInvoice() {
       {/* Message Toast */}
       {message && (
         <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 ${
-          message.type === 'success' ? 'bg-green-600' 
-            : message.type === 'warning' ? 'bg-yellow-600'
-            : 'bg-red-600'
+          message.type === 'success' ? 'bg-green-600' : message.type === 'warning' ? 'bg-yellow-600' : 'bg-red-600'
         }`}>
           {message.text}
         </div>
@@ -362,44 +372,141 @@ export default function CreateInvoice() {
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
         
-        {/* Step 1: Date Range */}
+        {/* Client Selection */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-4">1️⃣ Select Date Range</h2>
+          <h2 className="font-bold mb-4">👤 Select Client</h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">End Date</label>
-              <input
-                type="date"
-                value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-              />
-            </div>
+            <button
+              onClick={() => { setClientType('emf'); setHoursData([]); }}
+              className={`p-4 rounded-lg border-2 text-left ${
+                clientType === 'emf' 
+                  ? 'border-blue-500 bg-blue-500/20' 
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="font-bold">EMF Contracting LLC</div>
+              <div className="text-sm text-gray-400">Pull hours from work orders</div>
+            </button>
+            <button
+              onClick={() => { setClientType('other'); setHoursData([]); }}
+              className={`p-4 rounded-lg border-2 text-left ${
+                clientType === 'other' 
+                  ? 'border-blue-500 bg-blue-500/20' 
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+            >
+              <div className="font-bold">Other Client</div>
+              <div className="text-sm text-gray-400">Create custom invoice</div>
+            </button>
           </div>
-          <button
-            onClick={pullHours}
-            disabled={loadingHours}
-            className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50"
-          >
-            {loadingHours ? '⏳ Pulling Data...' : '📥 Pull Hours & Mileage from EMF'}
-          </button>
+
+          {/* Other Client Details */}
+          {clientType === 'other' && (
+            <div className="space-y-3 pt-4 border-t border-gray-700">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Client/Company Name *</label>
+                <input
+                  type="text"
+                  value={otherClient.name}
+                  onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                  placeholder="ABC Company"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Street Address</label>
+                <input
+                  type="text"
+                  value={otherClient.address}
+                  onChange={(e) => setOtherClient({ ...otherClient, address: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                  placeholder="123 Main St"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={otherClient.city}
+                    onChange={(e) => setOtherClient({ ...otherClient, city: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={otherClient.state}
+                    onChange={(e) => setOtherClient({ ...otherClient, state: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                    placeholder="SC"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">ZIP</label>
+                  <input
+                    type="text"
+                    value={otherClient.zip}
+                    onChange={(e) => setOtherClient({ ...otherClient, zip: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={otherClient.email}
+                  onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                  placeholder="client@example.com"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Step 2: Review Data */}
-        {hoursData.length > 0 && (
+        {/* EMF: Date Range & Pull Hours */}
+        {clientType === 'emf' && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h2 className="font-bold mb-4">2️⃣ Review Hours & Mileage</h2>
+            <h2 className="font-bold mb-4">📅 Select Date Range</h2>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={periodStart}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={periodEnd}
+                  onChange={(e) => setPeriodEnd(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                />
+              </div>
+            </div>
+            <button
+              onClick={pullHours}
+              disabled={loadingHours}
+              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50"
+            >
+              {loadingHours ? '⏳ Pulling Data...' : '📥 Pull My Hours & Mileage'}
+            </button>
+          </div>
+        )}
+
+        {/* EMF: Review Hours */}
+        {clientType === 'emf' && hoursData.length > 0 && (
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+            <h2 className="font-bold mb-4">📋 Review Hours & Mileage</h2>
             
-            {/* Adjust Rates */}
+            {/* Rates */}
             <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-700/50 rounded-lg">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
@@ -467,9 +574,7 @@ export default function CreateInvoice() {
                         <td className="py-2">{new Date(entry.work_date).toLocaleDateString()}</td>
                         <td className="py-2">
                           <div className="font-medium">{entry.work_order?.wo_number || 'N/A'}</div>
-                          <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                            {entry.work_order?.building}
-                          </div>
+                          <div className="text-xs text-gray-500 truncate max-w-[200px]">{entry.work_order?.building}</div>
                         </td>
                         <td className="py-2 text-right">{parseFloat(entry.hours_regular || 0).toFixed(1)}</td>
                         <td className="py-2 text-right">{parseFloat(entry.hours_overtime || 0).toFixed(1)}</td>
@@ -494,20 +599,23 @@ export default function CreateInvoice() {
           </div>
         )}
 
-        {/* Step 3: Add Line Items */}
+        {/* Line Items */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold">3️⃣ Additional Line Items (Optional)</h2>
-            <button
-              onClick={addLineItem}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-            >
+            <h2 className="font-bold">
+              {clientType === 'emf' ? '➕ Additional Line Items (Optional)' : '📋 Invoice Line Items *'}
+            </h2>
+            <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">
               + Add Item
             </button>
           </div>
 
           {lineItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">No additional items. Click &quot;Add Item&quot; to add materials, supplies, etc.</p>
+            <p className="text-gray-500 text-sm">
+              {clientType === 'emf' 
+                ? 'No additional items. Click "Add Item" to add materials, supplies, etc.'
+                : 'Click "Add Item" to add services, materials, etc.'}
+            </p>
           ) : (
             <div className="space-y-3">
               {lineItems.map(item => (
@@ -517,7 +625,7 @@ export default function CreateInvoice() {
                     value={item.description}
                     onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
                     className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Description (e.g., Electrical supplies)"
+                    placeholder="Description"
                   />
                   <input
                     type="number"
@@ -537,15 +645,8 @@ export default function CreateInvoice() {
                       placeholder="Rate"
                     />
                   </div>
-                  <div className="w-24 py-2 text-right font-medium">
-                    ${(parseFloat(item.amount) || 0).toFixed(2)}
-                  </div>
-                  <button
-                    onClick={() => removeLineItem(item.id)}
-                    className="p-2 text-red-400 hover:text-red-300"
-                  >
-                    ✕
-                  </button>
+                  <div className="w-24 py-2 text-right font-medium">${(parseFloat(item.amount) || 0).toFixed(2)}</div>
+                  <button onClick={() => removeLineItem(item.id)} className="p-2 text-red-400 hover:text-red-300">✕</button>
                 </div>
               ))}
             </div>
@@ -556,21 +657,25 @@ export default function CreateInvoice() {
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <h2 className="font-bold mb-4">📊 Invoice Summary</h2>
           <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
-              <span>${(totalRegularHours * rates.hourly).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
-              <span>${(totalOTHours * rates.ot).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
-              <span>${mileageAmount.toFixed(2)}</span>
-            </div>
+            {clientType === 'emf' && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
+                  <span>${(totalRegularHours * rates.hourly).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
+                  <span>${(totalOTHours * rates.ot).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
+                  <span>${mileageAmount.toFixed(2)}</span>
+                </div>
+              </>
+            )}
             {lineItemsAmount > 0 && (
               <div className="flex justify-between">
-                <span className="text-gray-400">Additional Items</span>
+                <span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span>
                 <span>${lineItemsAmount.toFixed(2)}</span>
               </div>
             )}
@@ -583,36 +688,113 @@ export default function CreateInvoice() {
           </div>
         </div>
 
-        {/* Send To Email */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-3">📧 Send Invoice To</h2>
-          <input
-            type="email"
-            value={sendToEmail}
-            onChange={(e) => setSendToEmail(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white"
-            placeholder="Enter email address"
-          />
-        </div>
-
         {/* Actions */}
-        <div className="flex gap-4">
+        {clientType === 'emf' ? (
           <button
-            onClick={() => saveInvoice(false)}
+            onClick={saveEMFInvoice}
             disabled={saving || (hoursData.length === 0 && lineItems.length === 0)}
-            className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-medium disabled:opacity-50"
+            className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50"
           >
-            {saving && !sending ? '💾 Saving...' : '💾 Save Draft'}
+            {saving ? '⏳ Creating...' : '✓ Create Invoice'}
           </button>
+        ) : (
           <button
-            onClick={() => saveInvoice(true)}
-            disabled={saving || !sendToEmail || (hoursData.length === 0 && lineItems.length === 0)}
-            className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg font-medium disabled:opacity-50"
+            onClick={generateOtherClientPDF}
+            disabled={generating || !otherClient.name || lineItems.length === 0}
+            className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-lg font-medium disabled:opacity-50"
           >
-            {sending ? '📧 Sending...' : '📧 Send Invoice'}
+            {generating ? '⏳ Generating...' : '📄 Download Invoice PDF'}
           </button>
-        </div>
+        )}
       </div>
+
+      {/* Hidden PDF Preview for Other Client */}
+      {showPreview && clientType === 'other' && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+          <div 
+            ref={invoiceRef}
+            style={{
+              width: '8.5in',
+              backgroundColor: '#ffffff',
+              color: '#111827',
+              fontFamily: 'Arial, Helvetica, sans-serif',
+              padding: '0.5in'
+            }}
+          >
+            {/* Invoice Header */}
+            <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h2 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0 }}>INVOICE</h2>
+                  <p style={{ color: '#9ca3af', marginTop: '4px' }}>{invoiceNumber}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>Date</p>
+                  <p style={{ fontWeight: '500', margin: '4px 0 0 0' }}>{new Date().toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* From / To */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
+              <div>
+                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>From</p>
+                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{businessName}</p>
+                {user.profile?.business_address && (
+                  <p style={{ color: '#4b5563', fontSize: '13px', whiteSpace: 'pre-line', margin: '4px 0 0 0' }}>{user.profile.business_address}</p>
+                )}
+                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{user.email}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>To</p>
+                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{otherClient.name}</p>
+                {otherClient.address && <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{otherClient.address}</p>}
+                {(otherClient.city || otherClient.state || otherClient.zip) && (
+                  <p style={{ color: '#4b5563', fontSize: '13px', margin: '2px 0 0 0' }}>
+                    {[otherClient.city, otherClient.state, otherClient.zip].filter(Boolean).join(', ')}
+                  </p>
+                )}
+                {otherClient.email && <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{otherClient.email}</p>}
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '24px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: 'bold' }}>Description</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Qty</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Rate</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 'bold' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineItems.map((item, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px 8px' }}>{item.description}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>{parseFloat(item.quantity || 0).toFixed(1)}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>${parseFloat(item.rate || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '500' }}>${parseFloat(item.amount || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Total */}
+            <div style={{ backgroundColor: '#f9fafb', borderRadius: '8px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 'bold' }}>
+                <span>TOTAL DUE</span>
+                <span style={{ color: '#059669' }}>${lineItemsAmount.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '11px', color: '#9ca3af' }}>
+              <p>Thank you for your business!</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

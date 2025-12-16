@@ -19,7 +19,6 @@ export default function ViewInvoice() {
   const [invoice, setInvoice] = useState(null);
   const [lineItems, setLineItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
@@ -74,107 +73,117 @@ export default function ViewInvoice() {
     }
   }
 
+  function buildEmailBody() {
+    const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
+    const periodStart = new Date(invoice.period_start).toLocaleDateString();
+    const periodEnd = new Date(invoice.period_end).toLocaleDateString();
+    
+    // Group items by type
+    const hoursItems = lineItems.filter(i => i.item_type === 'hours');
+    const mileageItems = lineItems.filter(i => i.item_type === 'mileage');
+    const customItems = lineItems.filter(i => i.item_type === 'custom');
+    
+    let body = `INVOICE: ${invoice.invoice_number}\n`;
+    body += `From: ${businessName}\n`;
+    body += `Period: ${periodStart} - ${periodEnd}\n`;
+    body += `\n========================================\n`;
+    body += `RATES:\n`;
+    body += `  Regular: $${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr\n`;
+    body += `  Overtime: $${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr\n`;
+    body += `  Mileage: $${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile\n`;
+    body += `\n========================================\n`;
+    
+    // Labor section
+    if (hoursItems.length > 0) {
+      body += `LABOR:\n`;
+      hoursItems.forEach(item => {
+        const date = item.work_date ? new Date(item.work_date).toLocaleDateString() : '-';
+        body += `  ${date} | ${item.description} | ${parseFloat(item.quantity || 0).toFixed(1)} hrs | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
+      });
+      body += `\n`;
+    }
+    
+    // Mileage section
+    if (mileageItems.length > 0) {
+      body += `MILEAGE:\n`;
+      mileageItems.forEach(item => {
+        const date = item.work_date ? new Date(item.work_date).toLocaleDateString() : '-';
+        body += `  ${date} | ${parseFloat(item.quantity || 0).toFixed(0)} miles | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
+      });
+      body += `\n`;
+    }
+    
+    // Custom items section
+    if (customItems.length > 0) {
+      body += `ADDITIONAL ITEMS:\n`;
+      customItems.forEach(item => {
+        body += `  ${item.description} | $${parseFloat(item.amount || 0).toFixed(2)}\n`;
+      });
+      body += `\n`;
+    }
+    
+    body += `========================================\n`;
+    body += `SUMMARY:\n`;
+    body += `  Labor (${parseFloat(invoice.total_regular_hours || 0).toFixed(1)}h reg + ${parseFloat(invoice.total_ot_hours || 0).toFixed(1)}h OT): $${parseFloat(invoice.total_hours_amount || 0).toFixed(2)}\n`;
+    body += `  Mileage (${parseFloat(invoice.total_miles || 0).toFixed(0)} miles): $${parseFloat(invoice.total_mileage_amount || 0).toFixed(2)}\n`;
+    if (parseFloat(invoice.total_line_items_amount || 0) > 0) {
+      body += `  Additional Items: $${parseFloat(invoice.total_line_items_amount || 0).toFixed(2)}\n`;
+    }
+    body += `\n========================================\n`;
+    body += `TOTAL DUE: $${parseFloat(invoice.grand_total || 0).toFixed(2)}\n`;
+    body += `========================================\n`;
+    body += `\nThank you for your business!\n`;
+    body += `\n--\n${businessName}\n`;
+    if (user.profile?.business_address) {
+      body += `${user.profile.business_address}\n`;
+    }
+    body += `${user.email}\n`;
+    
+    return body;
+  }
+
   async function sendInvoice() {
     if (!invoice || invoice.status === 'sent' || invoice.status === 'paid') {
       return;
     }
 
-    setSending(true);
-    setMessage(null);
-
-    try {
-      // Group line items by type for the email
-      const hoursItems = lineItems.filter(i => i.item_type === 'hours');
-      const mileageItems = lineItems.filter(i => i.item_type === 'mileage');
-      const customItems = lineItems.filter(i => i.item_type === 'custom');
-
-      // Build hoursData format for email
-      const hoursData = [];
-      const dateGroups = {};
+    const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
+    const toEmail = 'emfcontractingsc2@gmail.com';
+    const subject = `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${parseFloat(invoice.grand_total || 0).toFixed(2)}`;
+    const body = buildEmailBody();
+    
+    // Create mailto link
+    const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    
+    // Open email client
+    window.location.href = mailtoLink;
+    
+    // Show confirmation dialog after a short delay
+    setTimeout(async () => {
+      const confirmed = confirm('Did you send the email?\n\nClick OK to mark the invoice as sent, or Cancel if you haven\'t sent it yet.');
       
-      lineItems.forEach(item => {
-        if (item.work_date) {
-          const dateKey = item.work_date;
-          if (!dateGroups[dateKey]) {
-            dateGroups[dateKey] = {
-              work_date: dateKey,
-              wo_id: item.wo_id,
-              work_order: item.work_order,
-              hours_regular: 0,
-              hours_overtime: 0,
-              miles: 0
-            };
-          }
-          if (item.item_type === 'hours' && item.description?.includes('Regular')) {
-            dateGroups[dateKey].hours_regular += parseFloat(item.quantity || 0);
-          } else if (item.item_type === 'hours' && item.description?.includes('OT')) {
-            dateGroups[dateKey].hours_overtime += parseFloat(item.quantity || 0);
-          } else if (item.item_type === 'mileage') {
-            dateGroups[dateKey].miles += parseFloat(item.quantity || 0);
-          }
+      if (confirmed) {
+        try {
+          // Update invoice status
+          const { error: updateError } = await supabase
+            .from('subcontractor_invoices')
+            .update({
+              status: 'sent',
+              sent_to_email: toEmail,
+              sent_at: new Date().toISOString()
+            })
+            .eq('invoice_id', invoice.invoice_id);
+
+          if (updateError) throw updateError;
+
+          setInvoice({ ...invoice, status: 'sent', sent_at: new Date().toISOString() });
+          setMessage({ type: 'success', text: 'Invoice marked as sent!' });
+        } catch (error) {
+          console.error('Error updating invoice status:', error);
+          setMessage({ type: 'error', text: 'Failed to update invoice status' });
         }
-      });
-
-      Object.values(dateGroups).forEach(group => hoursData.push(group));
-
-      const rates = {
-        hourly: parseFloat(invoice.hourly_rate_used || 35),
-        ot: parseFloat(invoice.ot_rate_used || 52.50),
-        mileage: parseFloat(invoice.mileage_rate_used || 0.67)
-      };
-
-      const totals = {
-        totalRegularHours: parseFloat(invoice.total_regular_hours || 0),
-        totalOTHours: parseFloat(invoice.total_ot_hours || 0),
-        totalMiles: parseFloat(invoice.total_miles || 0),
-        hoursAmount: parseFloat(invoice.total_hours_amount || 0),
-        mileageAmount: parseFloat(invoice.total_mileage_amount || 0),
-        lineItemsAmount: parseFloat(invoice.total_line_items_amount || 0),
-        grandTotal: parseFloat(invoice.grand_total || 0)
-      };
-
-      // Send email
-      const emailResult = await fetch('/api/contractor/send-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoice,
-          user,
-          hoursData,
-          lineItems: customItems,
-          rates,
-          totals
-        })
-      });
-
-      const emailData = await emailResult.json();
-      console.log('Email API response:', emailData);
-
-      if (!emailResult.ok || !emailData.success) {
-        throw new Error(emailData.error || 'Email send failed');
       }
-
-      // Update invoice status
-      const { error: updateError } = await supabase
-        .from('subcontractor_invoices')
-        .update({
-          status: 'sent',
-          sent_to_email: 'emfcontractingsc2@gmail.com',
-          sent_at: new Date().toISOString()
-        })
-        .eq('invoice_id', invoice.invoice_id);
-
-      if (updateError) throw updateError;
-
-      setInvoice({ ...invoice, status: 'sent', sent_at: new Date().toISOString() });
-      setMessage({ type: 'success', text: 'Invoice sent to emfcontractingsc2@gmail.com!' });
-
-    } catch (error) {
-      console.error('Error sending invoice:', error);
-      setMessage({ type: 'error', text: `Failed to send invoice: ${error.message}` });
-    } finally {
-      setSending(false);
-    }
+    }, 1000);
   }
 
   async function deleteInvoice() {
@@ -254,10 +263,9 @@ export default function ViewInvoice() {
                 </button>
                 <button
                   onClick={sendInvoice}
-                  disabled={sending}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium disabled:opacity-50"
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium"
                 >
-                  {sending ? '📧 Sending...' : '📧 Send Invoice'}
+                  📧 Send via Email
                 </button>
               </>
             )}

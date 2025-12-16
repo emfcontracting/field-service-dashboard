@@ -438,28 +438,22 @@ export function useWorkOrders(currentUser) {
       const isoTime = now.toISOString();
       
       const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
-      
-      // Use selectedWO data if available (works offline)
-      const existingComments = selectedWO?.comments || '';
-      const updatedComments = existingComments 
-        ? `${existingComments}\n\n${checkInNote}`
-        : checkInNote;
 
       if (navigator.onLine) {
-        // Online - save to server
+        // Online - fetch LATEST comments from server first
         const { data: wo } = await supabase
           .from('work_orders')
-          .select('*')
+          .select('comments, time_in')
           .eq('wo_id', woId)
           .single();
         
-        const serverComments = wo?.comments || '';
-        const serverUpdatedComments = serverComments 
-          ? `${serverComments}\n\n${checkInNote}`
+        const existingComments = wo?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkInNote}`
           : checkInNote;
         
         const updateData = {
-          comments: serverUpdatedComments,
+          comments: updatedComments,
           status: 'in_progress'
         };
         
@@ -485,6 +479,11 @@ export function useWorkOrders(currentUser) {
         }
       } else {
         // Offline - update local state and cache
+        const existingComments = selectedWO?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkInNote}`
+          : checkInNote;
+          
         const updatedWO = {
           ...selectedWO,
           comments: updatedComments,
@@ -496,45 +495,23 @@ export function useWorkOrders(currentUser) {
           setSelectedWO(updatedWO);
         }
         
-        // Update in workOrders list too
         setWorkOrders(prev => prev.map(wo => 
           wo.wo_id === woId ? updatedWO : wo
         ));
         
-        // Update cache
         await updateCachedWorkOrder(woId, {
           comments: updatedComments,
           status: 'in_progress',
           time_in: selectedWO?.time_in || isoTime
         });
         
-        // Queue for sync
         await addToSyncQueue('check_in', { woId, timestamp, isoTime });
         
         alert('Check-in saved locally. Will sync when back online.');
       }
     } catch (err) {
-      if (!navigator.onLine) {
-        // Save locally on error if offline
-        const now = new Date();
-        const timestamp = now.toLocaleString();
-        const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN [PENDING SYNC]`;
-        const existingComments = selectedWO?.comments || '';
-        const updatedComments = existingComments 
-          ? `${existingComments}\n\n${checkInNote}`
-          : checkInNote;
-        
-        if (selectedWO && selectedWO.wo_id === woId) {
-          setSelectedWO({
-            ...selectedWO,
-            comments: updatedComments,
-            status: 'in_progress'
-          });
-        }
-        alert('Check-in saved locally. Will sync when back online.');
-      } else {
-        alert('Error checking in: ' + err.message);
-      }
+      console.error('Check-in error:', err);
+      alert('Error checking in: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -548,28 +525,22 @@ export function useWorkOrders(currentUser) {
       const isoTime = now.toISOString();
       
       const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
-      
-      // Use selectedWO data if available (works offline)
-      const existingComments = selectedWO?.comments || '';
-      const updatedComments = existingComments 
-        ? `${existingComments}\n\n${checkOutNote}`
-        : checkOutNote;
 
       if (navigator.onLine) {
-        // Online - save to server
+        // Online - fetch LATEST comments from server first
         const { data: wo } = await supabase
           .from('work_orders')
-          .select('*')
+          .select('comments, time_out')
           .eq('wo_id', woId)
           .single();
         
-        const serverComments = wo?.comments || '';
-        const serverUpdatedComments = serverComments 
-          ? `${serverComments}\n\n${checkOutNote}`
+        const existingComments = wo?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkOutNote}`
           : checkOutNote;
         
         const updateData = {
-          comments: serverUpdatedComments
+          comments: updatedComments
         };
         
         if (!wo?.time_out) {
@@ -594,6 +565,11 @@ export function useWorkOrders(currentUser) {
         }
       } else {
         // Offline - update local state and cache
+        const existingComments = selectedWO?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${checkOutNote}`
+          : checkOutNote;
+          
         const updatedWO = {
           ...selectedWO,
           comments: updatedComments,
@@ -604,42 +580,22 @@ export function useWorkOrders(currentUser) {
           setSelectedWO(updatedWO);
         }
         
-        // Update in workOrders list too
         setWorkOrders(prev => prev.map(wo => 
           wo.wo_id === woId ? updatedWO : wo
         ));
         
-        // Update cache
         await updateCachedWorkOrder(woId, {
           comments: updatedComments,
           time_out: selectedWO?.time_out || isoTime
         });
         
-        // Queue for sync
         await addToSyncQueue('check_out', { woId, timestamp, isoTime });
         
         alert('Check-out saved locally. Will sync when back online.');
       }
     } catch (err) {
-      if (!navigator.onLine) {
-        const now = new Date();
-        const timestamp = now.toLocaleString();
-        const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT [PENDING SYNC]`;
-        const existingComments = selectedWO?.comments || '';
-        const updatedComments = existingComments 
-          ? `${existingComments}\n\n${checkOutNote}`
-          : checkOutNote;
-        
-        if (selectedWO && selectedWO.wo_id === woId) {
-          setSelectedWO({
-            ...selectedWO,
-            comments: updatedComments
-          });
-        }
-        alert('Check-out saved locally. Will sync when back online.');
-      } else {
-        alert('Error checking out: ' + err.message);
-      }
+      console.error('Check-out error:', err);
+      alert('Error checking out: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -661,12 +617,20 @@ export function useWorkOrders(currentUser) {
       const isoTime = now.toISOString();
       
       const completionNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✅ WORK ORDER COMPLETED${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
-      const existingComments = selectedWO.comments || '';
-      const updatedComments = existingComments 
-        ? `${existingComments}\n\n${completionNote}`
-        : completionNote;
 
       if (navigator.onLine) {
+        // Fetch LATEST comments from server first
+        const { data: wo } = await supabase
+          .from('work_orders')
+          .select('comments')
+          .eq('wo_id', selectedWO.wo_id)
+          .single();
+        
+        const existingComments = wo?.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${completionNote}`
+          : completionNote;
+
         const { error } = await supabase
           .from('work_orders')
           .update({
@@ -685,6 +649,11 @@ export function useWorkOrders(currentUser) {
         setSelectedWO(null);
       } else {
         // Offline - update local state and cache
+        const existingComments = selectedWO.comments || '';
+        const updatedComments = existingComments 
+          ? `${existingComments}\n\n${completionNote}`
+          : completionNote;
+          
         const updatedWO = {
           ...selectedWO,
           status: 'completed',
@@ -692,21 +661,18 @@ export function useWorkOrders(currentUser) {
           comments: updatedComments
         };
         
-        // Update cache
         await updateCachedWorkOrder(selectedWO.wo_id, {
           status: 'completed',
           date_completed: isoTime,
           comments: updatedComments
         });
         
-        // Queue for sync
         await addToSyncQueue('complete_work_order', { 
           woId: selectedWO.wo_id, 
           timestamp, 
           isoTime 
         });
         
-        // Remove from active list, add to completed
         setWorkOrders(prev => prev.filter(wo => wo.wo_id !== selectedWO.wo_id));
         setCompletedWorkOrders(prev => [updatedWO, ...prev]);
         
@@ -714,11 +680,8 @@ export function useWorkOrders(currentUser) {
         alert('Work order marked as completed locally. Will sync when back online.');
       }
     } catch (err) {
-      if (!navigator.onLine) {
-        alert('Completion saved locally. Will sync when back online.');
-      } else {
-        alert('Error completing work order: ' + err.message);
-      }
+      console.error('Complete WO error:', err);
+      alert('Error completing work order: ' + err.message);
     } finally {
       setSaving(false);
     }

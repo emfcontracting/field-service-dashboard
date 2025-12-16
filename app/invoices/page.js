@@ -35,6 +35,44 @@ export default function InvoicingPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
   );
 
+  // Filter out check-in/check-out entries from comments for invoice "Work Performed"
+  const filterWorkComments = (comments) => {
+    if (!comments) return '';
+    
+    // Split into lines and filter out check-in/out patterns
+    const lines = comments.split('\n');
+    const filteredLines = lines.filter(line => {
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines that would be left after filtering
+      if (!trimmedLine) return true;
+      
+      // Filter out check-in patterns (English and Spanish)
+      // Format: [date, time] Name - ✓ CHECKED IN or ✓ ENTRADA
+      if (/- ✓ CHECKED IN$/i.test(trimmedLine)) return false;
+      if (/- ✓ ENTRADA$/i.test(trimmedLine)) return false;
+      
+      // Filter out check-out patterns (English and Spanish)
+      // Format: [date, time] Name - ⏸ CHECKED OUT or ⏸ SALIDA
+      if (/- ⏸ CHECKED OUT$/i.test(trimmedLine)) return false;
+      if (/- ⏸ SALIDA$/i.test(trimmedLine)) return false;
+      
+      // Filter out completion patterns (English and Spanish)
+      // Format: [date, time] Name - ✅ MARKED COMPLETE or ✅ MARCADO COMPLETO
+      if (/- ✅ MARKED COMPLETE$/i.test(trimmedLine)) return false;
+      if (/- ✅ MARCADO COMPLETO$/i.test(trimmedLine)) return false;
+      
+      return true;
+    });
+    
+    // Clean up multiple consecutive blank lines
+    let result = filteredLines.join('\n');
+    result = result.replace(/\n{3,}/g, '\n\n'); // Replace 3+ newlines with 2
+    result = result.trim();
+    
+    return result;
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -392,13 +430,16 @@ export default function InvoicingPage() {
       console.log('=== PREVIEW TOTAL ===', previewTotal);
       console.log('Number of line items:', items.length);
 
-      // Work Performed - Use tech's comments field
+      // Work Performed - Use tech's comments field, but filter out check-in/out entries
       let workPerformed = '';
       if (wo.comments && wo.comments.trim()) {
-        workPerformed = wo.comments;
+        workPerformed = filterWorkComments(wo.comments);
       } else if (wo.comments_english && wo.comments_english.trim()) {
-        workPerformed = wo.comments_english;
-      } else {
+        workPerformed = filterWorkComments(wo.comments_english);
+      }
+      
+      // If nothing left after filtering, use description
+      if (!workPerformed.trim()) {
         workPerformed = wo.work_order_description || 'Work completed as requested.';
       }
 

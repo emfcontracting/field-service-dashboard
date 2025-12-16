@@ -2,14 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Script from 'next/script';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const supabase = getSupabase();
 
 export default function ViewInvoice() {
   const router = useRouter();
@@ -89,10 +86,10 @@ export default function ViewInvoice() {
       const filename = `${invoice.invoice_number}.pdf`;
       
       const opt = {
-        margin: 0.5,
+        margin: 0.3,
         filename: filename,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
 
@@ -101,17 +98,15 @@ export default function ViewInvoice() {
       setMessage({ type: 'success', text: 'PDF downloaded! You can now email it to emfcontractingsc2@gmail.com' });
     } catch (error) {
       console.error('PDF generation error:', error);
-      setMessage({ type: 'error', text: 'Failed to generate PDF' });
+      setMessage({ type: 'error', text: 'Failed to generate PDF: ' + error.message });
     } finally {
       setGenerating(false);
     }
   }
 
   async function sendViaEmail() {
-    // First download the PDF
     await downloadPDF();
     
-    // Then open email client
     const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
     const toEmail = 'emfcontractingsc2@gmail.com';
     const subject = `Subcontractor Invoice ${invoice.invoice_number} - ${businessName} - $${parseFloat(invoice.grand_total || 0).toFixed(2)}`;
@@ -119,11 +114,9 @@ export default function ViewInvoice() {
     
     const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
-    // Small delay to ensure PDF download starts first
     setTimeout(() => {
       window.location.href = mailtoLink;
       
-      // Ask to mark as sent after another delay
       setTimeout(() => {
         const confirmed = confirm('Did you send the email with the PDF attached?\n\nClick OK to mark the invoice as sent.');
         
@@ -177,16 +170,16 @@ export default function ViewInvoice() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+      <div style={{ minHeight: '100vh', backgroundColor: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'white' }}>Loading...</div>
       </div>
     );
   }
 
   if (!user || !invoice) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Invoice not found</div>
+      <div style={{ minHeight: '100vh', backgroundColor: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'white' }}>Invoice not found</div>
       </div>
     );
   }
@@ -196,73 +189,71 @@ export default function ViewInvoice() {
   const customItems = lineItems.filter(i => i.item_type === 'custom');
   const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
 
+  // Inline styles for PDF compatibility (no oklch colors)
+  const styles = {
+    page: { minHeight: '100vh', backgroundColor: '#111827', color: 'white' },
+    header: { backgroundColor: '#1f2937', borderBottom: '1px solid #374151', padding: '16px' },
+    headerInner: { maxWidth: '896px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    backBtn: { padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none', border: 'none', cursor: 'pointer' },
+    statusBadge: (status) => ({
+      fontSize: '12px',
+      padding: '4px 8px',
+      borderRadius: '9999px',
+      backgroundColor: status === 'paid' ? 'rgba(34, 197, 94, 0.2)' : status === 'sent' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(107, 114, 128, 0.2)',
+      color: status === 'paid' ? '#4ade80' : status === 'sent' ? '#facc15' : '#9ca3af'
+    }),
+    blueBtn: { padding: '8px 12px', backgroundColor: '#2563eb', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
+    redBtn: { padding: '8px 12px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
+    greenBtn: { padding: '16px', backgroundColor: '#16a34a', borderRadius: '8px', fontWeight: '500', color: 'white', border: 'none', cursor: 'pointer' },
+    grayBtn: { padding: '8px 12px', backgroundColor: '#4b5563', borderRadius: '8px', fontSize: '14px', color: 'white', border: 'none', cursor: 'pointer' },
+    messageSuccess: { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 10px 15px rgba(0,0,0,0.1)', zIndex: 50, maxWidth: '400px', textAlign: 'center', backgroundColor: '#16a34a', color: 'white' },
+    messageError: { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 10px 15px rgba(0,0,0,0.1)', zIndex: 50, maxWidth: '400px', textAlign: 'center', backgroundColor: '#dc2626', color: 'white' },
+    instructionBox: { backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' },
+  };
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Load html2pdf library */}
+    <div style={styles.page}>
       <Script 
         src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
         onLoad={() => setHtml2pdfLoaded(true)}
       />
 
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-4">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/contractor/invoices"
-              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
-            >
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Link href="/contractor/invoices" style={styles.backBtn}>
               ← Back
             </Link>
             <div>
-              <h1 className="text-xl font-bold">{invoice.invoice_number}</h1>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                invoice.status === 'paid'
-                  ? 'bg-green-500/20 text-green-400'
-                  : invoice.status === 'sent'
-                    ? 'bg-yellow-500/20 text-yellow-400'
-                    : 'bg-gray-500/20 text-gray-400'
-              }`}>
+              <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{invoice.invoice_number}</h1>
+              <span style={styles.statusBadge(invoice.status)}>
                 {invoice.status.toUpperCase()}
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
-            {/* Always show Download PDF button */}
+          <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={downloadPDF}
               disabled={generating || !html2pdfLoaded}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50"
+              style={{ ...styles.blueBtn, opacity: (generating || !html2pdfLoaded) ? 0.5 : 1 }}
             >
               {generating ? '⏳ Generating...' : '📄 Download PDF'}
             </button>
             
             {invoice.status === 'draft' && (
               <>
-                <button
-                  onClick={deleteInvoice}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"
-                >
+                <button onClick={deleteInvoice} style={styles.redBtn}>
                   🗑️ Delete
                 </button>
                 <button
                   onClick={sendViaEmail}
                   disabled={generating || !html2pdfLoaded}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium disabled:opacity-50"
+                  style={{ ...styles.greenBtn, opacity: (generating || !html2pdfLoaded) ? 0.5 : 1 }}
                 >
                   📧 Download & Email
                 </button>
               </>
-            )}
-            
-            {invoice.status === 'sent' && (
-              <button
-                onClick={downloadPDF}
-                disabled={generating || !html2pdfLoaded}
-                className="px-3 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm disabled:opacity-50"
-              >
-                📄 Re-download PDF
-              </button>
             )}
           </div>
         </div>
@@ -270,20 +261,18 @@ export default function ViewInvoice() {
 
       {/* Message */}
       {message && (
-        <div className={`fixed top-20 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 max-w-md text-center ${
-          message.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        }`}>
+        <div style={message.type === 'success' ? styles.messageSuccess : styles.messageError}>
           {message.text}
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto p-4 space-y-6">
+      <div style={{ maxWidth: '896px', margin: '0 auto', padding: '16px' }}>
         
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (
-          <div className="bg-blue-900/30 border border-blue-500/50 rounded-xl p-4">
-            <h3 className="font-bold text-blue-400 mb-2">📋 How to Send Your Invoice</h3>
-            <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+          <div style={styles.instructionBox}>
+            <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>📋 How to Send Your Invoice</h3>
+            <ol style={{ color: '#d1d5db', fontSize: '14px', margin: 0, paddingLeft: '20px' }}>
               <li>Click <strong>"Download & Email"</strong> button above</li>
               <li>The PDF will download to your device</li>
               <li>Your email app will open with a pre-filled message</li>
@@ -293,74 +282,81 @@ export default function ViewInvoice() {
           </div>
         )}
         
-        {/* Invoice Preview - This is what gets converted to PDF */}
-        <div ref={invoiceRef} className="bg-white text-gray-900 rounded-xl overflow-hidden shadow-xl">
-          
+        {/* Invoice Preview - PDF Content with inline styles only */}
+        <div 
+          ref={invoiceRef} 
+          style={{
+            backgroundColor: '#ffffff',
+            color: '#111827',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            fontFamily: 'Arial, Helvetica, sans-serif'
+          }}
+        >
           {/* Invoice Header */}
-          <div className="bg-gray-800 text-white p-6">
-            <div className="flex justify-between items-start">
+          <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h2 className="text-3xl font-bold">INVOICE</h2>
-                <p className="text-gray-300">{invoice.invoice_number}</p>
+                <h2 style={{ fontSize: '28px', fontWeight: 'bold', margin: 0 }}>INVOICE</h2>
+                <p style={{ color: '#9ca3af', marginTop: '4px' }}>{invoice.invoice_number}</p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-400">Period</p>
-                <p className="font-medium">
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>Period</p>
+                <p style={{ fontWeight: '500', margin: '4px 0 0 0' }}>
                   {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="p-6">
+          <div style={{ padding: '24px' }}>
             {/* From / To */}
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
               <div>
-                <p className="text-xs text-gray-500 uppercase font-bold mb-2">From</p>
-                <p className="font-bold text-lg">{businessName}</p>
+                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>From</p>
+                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{businessName}</p>
                 {user.profile?.business_address && (
-                  <p className="text-gray-600 text-sm whitespace-pre-line">{user.profile.business_address}</p>
+                  <p style={{ color: '#4b5563', fontSize: '13px', whiteSpace: 'pre-line', margin: '4px 0 0 0' }}>{user.profile.business_address}</p>
                 )}
-                <p className="text-gray-600 text-sm">{user.email}</p>
+                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{user.email}</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500 uppercase font-bold mb-2">To</p>
-                <p className="font-bold text-lg">EMF Contracting LLC</p>
-                <p className="text-gray-600 text-sm">emfcontractingsc2@gmail.com</p>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>To</p>
+                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>EMF Contracting LLC</p>
+                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>emfcontractingsc2@gmail.com</p>
               </div>
             </div>
 
             {/* Rates Used */}
-            <div className="bg-gray-100 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-600">
-                <strong>Rates:</strong> ${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr regular | 
-                ${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr OT | 
-                ${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile
+            <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+              <p style={{ fontSize: '13px', color: '#4b5563', margin: 0 }}>
+                <strong>Rates:</strong> ${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr regular | ${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr OT | ${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile
               </p>
             </div>
 
             {/* Labor Section */}
             {hoursItems.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">Labor</h3>
-                <table className="w-full text-sm">
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontWeight: 'bold', color: '#374151', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Labor</h3>
+                <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="text-gray-500 text-left">
-                      <th className="pb-2">Date</th>
-                      <th className="pb-2">Description</th>
-                      <th className="pb-2 text-right">Hours</th>
-                      <th className="pb-2 text-right">Rate</th>
-                      <th className="pb-2 text-right">Amount</th>
+                    <tr style={{ color: '#6b7280', textAlign: 'left' }}>
+                      <th style={{ paddingBottom: '8px' }}>Date</th>
+                      <th style={{ paddingBottom: '8px' }}>Description</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Hours</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {hoursItems.map((item, idx) => (
-                      <tr key={idx} className="border-b border-gray-100">
-                        <td className="py-2">{item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
-                        <td className="py-2">{item.description}</td>
-                        <td className="py-2 text-right">{parseFloat(item.quantity || 0).toFixed(1)}</td>
-                        <td className="py-2 text-right">${parseFloat(item.rate || 0).toFixed(2)}</td>
-                        <td className="py-2 text-right font-medium">${parseFloat(item.amount || 0).toFixed(2)}</td>
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '8px 0' }}>{item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
+                        <td style={{ padding: '8px 0' }}>{item.description}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>{parseFloat(item.quantity || 0).toFixed(1)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>${parseFloat(item.rate || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: '500' }}>${parseFloat(item.amount || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -370,26 +366,26 @@ export default function ViewInvoice() {
 
             {/* Mileage Section */}
             {mileageItems.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">Mileage</h3>
-                <table className="w-full text-sm">
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontWeight: 'bold', color: '#374151', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Mileage</h3>
+                <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="text-gray-500 text-left">
-                      <th className="pb-2">Date</th>
-                      <th className="pb-2">Description</th>
-                      <th className="pb-2 text-right">Miles</th>
-                      <th className="pb-2 text-right">Rate</th>
-                      <th className="pb-2 text-right">Amount</th>
+                    <tr style={{ color: '#6b7280', textAlign: 'left' }}>
+                      <th style={{ paddingBottom: '8px' }}>Date</th>
+                      <th style={{ paddingBottom: '8px' }}>Description</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Miles</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {mileageItems.map((item, idx) => (
-                      <tr key={idx} className="border-b border-gray-100">
-                        <td className="py-2">{item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
-                        <td className="py-2">{item.description}</td>
-                        <td className="py-2 text-right">{parseFloat(item.quantity || 0).toFixed(0)}</td>
-                        <td className="py-2 text-right">${parseFloat(item.rate || 0).toFixed(4)}</td>
-                        <td className="py-2 text-right font-medium">${parseFloat(item.amount || 0).toFixed(2)}</td>
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '8px 0' }}>{item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
+                        <td style={{ padding: '8px 0' }}>{item.description || 'Mileage'}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>{parseFloat(item.quantity || 0).toFixed(0)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>${parseFloat(item.rate || 0).toFixed(4)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: '500' }}>${parseFloat(item.amount || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -399,24 +395,24 @@ export default function ViewInvoice() {
 
             {/* Custom Items Section */}
             {customItems.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-700 mb-3 border-b pb-2">Additional Items</h3>
-                <table className="w-full text-sm">
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontWeight: 'bold', color: '#374151', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Additional Items</h3>
+                <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="text-gray-500 text-left">
-                      <th className="pb-2">Description</th>
-                      <th className="pb-2 text-right">Qty</th>
-                      <th className="pb-2 text-right">Rate</th>
-                      <th className="pb-2 text-right">Amount</th>
+                    <tr style={{ color: '#6b7280', textAlign: 'left' }}>
+                      <th style={{ paddingBottom: '8px' }}>Description</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Qty</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ paddingBottom: '8px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {customItems.map((item, idx) => (
-                      <tr key={idx} className="border-b border-gray-100">
-                        <td className="py-2">{item.description}</td>
-                        <td className="py-2 text-right">{parseFloat(item.quantity || 0).toFixed(1)}</td>
-                        <td className="py-2 text-right">${parseFloat(item.rate || 0).toFixed(2)}</td>
-                        <td className="py-2 text-right font-medium">${parseFloat(item.amount || 0).toFixed(2)}</td>
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '8px 0' }}>{item.description}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>{parseFloat(item.quantity || 0).toFixed(1)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right' }}>${parseFloat(item.rate || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: '500' }}>${parseFloat(item.amount || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -425,34 +421,32 @@ export default function ViewInvoice() {
             )}
 
             {/* Totals */}
-            <div className="bg-gray-50 rounded-lg p-4 mt-6">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Labor ({parseFloat(invoice.total_regular_hours || 0).toFixed(1)}h reg + {parseFloat(invoice.total_ot_hours || 0).toFixed(1)}h OT)</span>
-                  <span>${parseFloat(invoice.total_hours_amount || 0).toFixed(2)}</span>
+            <div style={{ backgroundColor: '#f9fafb', borderRadius: '8px', padding: '16px', marginTop: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                <span style={{ color: '#4b5563' }}>Labor ({parseFloat(invoice.total_regular_hours || 0).toFixed(1)}h reg + {parseFloat(invoice.total_ot_hours || 0).toFixed(1)}h OT)</span>
+                <span>${parseFloat(invoice.total_hours_amount || 0).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                <span style={{ color: '#4b5563' }}>Mileage ({parseFloat(invoice.total_miles || 0).toFixed(0)} miles)</span>
+                <span>${parseFloat(invoice.total_mileage_amount || 0).toFixed(2)}</span>
+              </div>
+              {parseFloat(invoice.total_line_items_amount || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                  <span style={{ color: '#4b5563' }}>Additional Items</span>
+                  <span>${parseFloat(invoice.total_line_items_amount || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Mileage ({parseFloat(invoice.total_miles || 0).toFixed(0)} miles)</span>
-                  <span>${parseFloat(invoice.total_mileage_amount || 0).toFixed(2)}</span>
-                </div>
-                {parseFloat(invoice.total_line_items_amount || 0) > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Additional Items</span>
-                    <span>${parseFloat(invoice.total_line_items_amount || 0).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="border-t border-gray-300 pt-3 mt-3">
-                  <div className="flex justify-between text-xl font-bold">
-                    <span>TOTAL DUE</span>
-                    <span className="text-green-600">${parseFloat(invoice.grand_total || 0).toFixed(2)}</span>
-                  </div>
+              )}
+              <div style={{ borderTop: '2px solid #d1d5db', paddingTop: '12px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 'bold' }}>
+                  <span>TOTAL DUE</span>
+                  <span style={{ color: '#059669' }}>${parseFloat(invoice.grand_total || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
             {/* Sent info */}
             {invoice.sent_at && (
-              <div className="mt-6 text-center text-sm text-gray-500">
+              <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>
                 Sent to {invoice.sent_to_email} on {new Date(invoice.sent_at).toLocaleString()}
               </div>
             )}

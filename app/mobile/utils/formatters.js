@@ -104,8 +104,7 @@ export function getStatusBadge(status) {
     'assigned': '📋 Assigned',
     'in-progress': '🔧 In Progress',
     'in_progress': '🔧 In Progress',
-    'needs-return': '🔄 Needs Return',
-    'needs_return': '🔄 Needs Return',
+    'tech_review': '🔍 Tech Review',
     'completed': '✅ Completed',
     'acknowledged': '👀 Acknowledged'
   };
@@ -118,8 +117,7 @@ export function getStatusColor(status) {
     'assigned': 'bg-blue-600',
     'in-progress': 'bg-orange-600',
     'in_progress': 'bg-orange-600',
-    'needs-return': 'bg-purple-600',
-    'needs_return': 'bg-purple-600',
+    'tech_review': 'bg-purple-600',
     'completed': 'bg-green-600',
     'acknowledged': 'bg-cyan-600'
   };

@@ -564,7 +564,7 @@ export default function InvoicingPage() {
   const returnToTech = async (woId, invoiceId) => {
     const reason = prompt('Enter reason for returning to tech (optional):');
     
-    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "needs_return"\n\nThe tech can make changes and mark as completed again.')) {
+    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "Tech Review"\n\nThe tech can make changes and mark as completed again.')) {
       return;
     }
 
@@ -608,7 +608,7 @@ export default function InvoicingPage() {
           locked_by: null,
           acknowledged: false,
           acknowledged_at: null,
-          status: 'needs_return'
+          status: 'tech_review'
         })
         .eq('wo_id', woId);
 

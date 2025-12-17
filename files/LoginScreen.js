@@ -1,0 +1,71 @@
+// components/LoginScreen.js
+
+export default function LoginScreen({
+  email,
+  setEmail,
+  pin,
+  setPin,
+  error,
+  handleLogin
+}) {
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="bg-white w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+            <img 
+              src="/emf-logo.png" 
+              alt="EMF Contracting LLC" 
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.parentElement.innerHTML = '<div class="text-2xl font-bold text-gray-800">EMF</div>';
+              }}
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">EMF Contracting LLC</h1>
+          <p className="text-gray-300">Field Service Mobile</p>
+        </div>
+
+        <div className="bg-white rounded-2xl p-8 shadow-2xl">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900">Login</h2>
+          <form onSubmit={handleLogin}>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                autoFocus
+                required
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength="4"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="4-digit PIN"
+                className="w-full px-4 py-4 text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400"
+                required
+              />
+            </div>
+            {error && <p className="text-red-500 mb-4">{error}</p>}
+            <button
+              type="submit"
+              className="w-full bg-blue-600 text-white py-4 rounded-xl text-lg font-bold hover:bg-blue-700 transition active:scale-95"
+            >
+              Login
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}

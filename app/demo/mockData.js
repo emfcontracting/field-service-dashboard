@@ -86,10 +86,10 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
                   status === 'completed' ? randomBetween(5, 30) :
                   randomBetween(0, 20);
 
-  const hoursRegular = ['in_progress', 'completed', 'needs_return'].includes(status) ? randomBetween(2, 8) : 0;
+  const hoursRegular = ['in_progress', 'completed', 'tech_review'].includes(status) ? randomBetween(2, 8) : 0;
   const hoursOvertime = ['in_progress', 'completed'].includes(status) && Math.random() > 0.7 ? randomBetween(1, 4) : 0;
   const materialCost = ['in_progress', 'completed'].includes(status) && Math.random() > 0.5 ? randomBetween(50, 500) : 0;
-  const miles = ['in_progress', 'completed', 'needs_return'].includes(status) ? randomBetween(15, 60) : 0;
+  const miles = ['in_progress', 'completed', 'tech_review'].includes(status) ? randomBetween(15, 60) : 0;
 
   return {
     wo_id: `demo-wo-${String(index).padStart(3, '0')}`,
@@ -116,8 +116,8 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
     requestor: randomFrom(['John Smith', 'Maria Garcia', 'Robert Johnson', 'Linda Williams', 'CBRE Portal']),
     requestor_phone: '803-555-' + String(randomBetween(1000, 9999)),
     client: 'CBRE',
-    assigned_to_field: ['assigned', 'in_progress', 'completed', 'needs_return'].includes(status),
-    assigned_to_field_at: ['assigned', 'in_progress', 'completed', 'needs_return'].includes(status) ? daysAgo(daysOld - 1) : null,
+    assigned_to_field: ['assigned', 'in_progress', 'completed', 'tech_review'].includes(status),
+    assigned_to_field_at: ['assigned', 'in_progress', 'completed', 'tech_review'].includes(status) ? daysAgo(daysOld - 1) : null,
     acknowledged: false,
     is_locked: false,
     created_at: daysAgo(daysOld),
@@ -158,9 +158,9 @@ export const generateDemoWorkOrders = () => {
     workOrders.push(generateWorkOrder(index++, 'completed'));
   }
 
-  // Needs Return - 2 work orders
+  // Tech Review - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'needs_return'));
+    workOrders.push(generateWorkOrder(index++, 'tech_review'));
   }
 
   // With billing statuses
@@ -272,7 +272,7 @@ export const generateDailyAvailability = (dateStr) => {
 
 // Generate daily hours log entries for a work order
 export const generateDailyHoursLog = (woId, status, leadTechId) => {
-  if (!['in_progress', 'completed', 'needs_return'].includes(status)) return [];
+  if (!['in_progress', 'completed', 'tech_review'].includes(status)) return [];
   
   const logs = [];
   const numDays = randomBetween(1, 3);

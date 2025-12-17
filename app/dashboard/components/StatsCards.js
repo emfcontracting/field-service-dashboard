@@ -23,8 +23,8 @@ export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHours
           <div className="text-3xl font-bold">{stats.in_progress}</div>
         </div>
         <div className="bg-purple-900 rounded-lg p-4">
-          <div className="text-purple-300 text-sm">Needs Return</div>
-          <div className="text-3xl font-bold">{stats.needs_return}</div>
+          <div className="text-purple-300 text-sm">Tech Review</div>
+          <div className="text-3xl font-bold">{stats.tech_review}</div>
         </div>
         <div className="bg-green-900 rounded-lg p-4">
           <div className="text-green-300 text-sm">Completed</div>

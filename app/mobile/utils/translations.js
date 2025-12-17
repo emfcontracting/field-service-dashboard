@@ -54,7 +54,7 @@ export const translations = {
     assigned: 'Assigned',
     inProgress: 'In Progress',
     pending: 'Pending',
-    needsReturn: 'Needs Return',
+    techReview: 'Tech Review',
     returnTrip: 'Return Trip',
     completedStatus: 'Completed',
 
@@ -264,7 +264,7 @@ export const translations = {
     assigned: 'Asignado',
     inProgress: 'En Progreso',
     pending: 'Pendiente',
-    needsReturn: 'Necesita Retorno',
+    techReview: 'Revisión Técnica',
     returnTrip: 'Viaje de Retorno',
     completedStatus: 'Completado',
 

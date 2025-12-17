@@ -404,6 +404,15 @@ export default function WorkOrderDetail({
                   📄 {language === 'en' ? 'Certificate' : 'Certificado'}
                 </button>
               )}
+              {/* Download My Hours CSV - only shows if current user has logged hours */}
+              {dailyLogs.filter(log => String(log.user_id) === String(currentUser?.user_id)).length > 0 && (
+                <button
+                  onClick={() => onDownloadLogs(currentUser?.user_id)}
+                  className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold"
+                >
+                  📥 {language === 'en' ? 'My Hours CSV' : 'Mis Horas CSV'}
+                </button>
+              )}
             </div>
           </div>
 

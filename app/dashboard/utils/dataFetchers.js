@@ -23,6 +23,58 @@ export async function fetchWorkOrders(supabase) {
     return true;
   });
 
+  // Fetch daily hours totals for all work orders
+  if (filteredData.length > 0) {
+    const woIds = filteredData.map(wo => wo.wo_id);
+    
+    const { data: dailyHoursData, error: dailyError } = await supabase
+      .from('daily_hours_log')
+      .select('wo_id, hours_regular, hours_overtime, miles')
+      .in('wo_id', woIds);
+
+    if (!dailyError && dailyHoursData) {
+      // Aggregate daily hours by work order
+      const dailyTotals = {};
+      dailyHoursData.forEach(log => {
+        if (!dailyTotals[log.wo_id]) {
+          dailyTotals[log.wo_id] = { hours_regular: 0, hours_overtime: 0, miles: 0 };
+        }
+        dailyTotals[log.wo_id].hours_regular += parseFloat(log.hours_regular) || 0;
+        dailyTotals[log.wo_id].hours_overtime += parseFloat(log.hours_overtime) || 0;
+        dailyTotals[log.wo_id].miles += parseFloat(log.miles) || 0;
+      });
+
+      // Also fetch team member legacy hours from work_order_assignments
+      const { data: assignmentsData } = await supabase
+        .from('work_order_assignments')
+        .select('wo_id, hours_regular, hours_overtime, miles')
+        .in('wo_id', woIds);
+
+      const assignmentTotals = {};
+      if (assignmentsData) {
+        assignmentsData.forEach(assign => {
+          if (!assignmentTotals[assign.wo_id]) {
+            assignmentTotals[assign.wo_id] = { hours_regular: 0, hours_overtime: 0, miles: 0 };
+          }
+          assignmentTotals[assign.wo_id].hours_regular += parseFloat(assign.hours_regular) || 0;
+          assignmentTotals[assign.wo_id].hours_overtime += parseFloat(assign.hours_overtime) || 0;
+          assignmentTotals[assign.wo_id].miles += parseFloat(assign.miles) || 0;
+        });
+      }
+
+      // Merge daily hours and assignment totals into work orders
+      filteredData.forEach(wo => {
+        const daily = dailyTotals[wo.wo_id] || { hours_regular: 0, hours_overtime: 0, miles: 0 };
+        const assignments = assignmentTotals[wo.wo_id] || { hours_regular: 0, hours_overtime: 0, miles: 0 };
+        
+        // Combined totals: WO legacy + daily hours log + team assignments
+        wo.total_hours_regular = (parseFloat(wo.hours_regular) || 0) + daily.hours_regular + assignments.hours_regular;
+        wo.total_hours_overtime = (parseFloat(wo.hours_overtime) || 0) + daily.hours_overtime + assignments.hours_overtime;
+        wo.total_miles = (parseFloat(wo.miles) || 0) + daily.miles + assignments.miles;
+      });
+    }
+  }
+
   return filteredData;
 }
 

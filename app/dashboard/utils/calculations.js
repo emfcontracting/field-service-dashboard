@@ -20,14 +20,28 @@ export function calculateStats(orders) {
 }
 
 export function calculateTotalCost(wo) {
-  const labor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
-  const materials = wo.material_cost || 0;
-  const equipment = wo.emf_equipment_cost || 0;
-  const trailer = wo.trailer_cost || 0;
-  const rental = wo.rental_cost || 0;
-  const mileage = (wo.miles || 0) * 1.00;
+  // Use combined totals if available (from fetchWorkOrders), otherwise fall back to legacy fields
+  const hoursRT = wo.total_hours_regular !== undefined ? wo.total_hours_regular : (parseFloat(wo.hours_regular) || 0);
+  const hoursOT = wo.total_hours_overtime !== undefined ? wo.total_hours_overtime : (parseFloat(wo.hours_overtime) || 0);
+  const miles = wo.total_miles !== undefined ? wo.total_miles : (parseFloat(wo.miles) || 0);
   
-  return labor + materials + equipment + trailer + rental + mileage;
+  const labor = (hoursRT * 64) + (hoursOT * 96);
+  const materials = parseFloat(wo.material_cost) || 0;
+  const equipment = parseFloat(wo.emf_equipment_cost) || 0;
+  const trailer = parseFloat(wo.trailer_cost) || 0;
+  const rental = parseFloat(wo.rental_cost) || 0;
+  const mileage = miles * 1.00;
+  
+  // Add admin hours (2 hrs @ $64) for a more accurate estimate
+  const adminHours = 128;
+  
+  // Apply markups to materials/equipment/trailer/rental (25%)
+  const materialsWithMarkup = materials * 1.25;
+  const equipmentWithMarkup = equipment * 1.25;
+  const trailerWithMarkup = trailer * 1.25;
+  const rentalWithMarkup = rental * 1.25;
+  
+  return labor + adminHours + mileage + materialsWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
 }
 
 export function calculateInvoiceTotal(wo, teamMembers = []) {

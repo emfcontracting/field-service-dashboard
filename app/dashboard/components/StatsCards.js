@@ -5,7 +5,7 @@ export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHours
   return (
     <div className="space-y-4 mb-6">
       {/* Work Status Row */}
-      <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="text-gray-400 text-sm">Total</div>
           <div className="text-3xl font-bold">{stats.total}</div>
@@ -25,6 +25,10 @@ export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHours
         <div className="bg-purple-900 rounded-lg p-4">
           <div className="text-purple-300 text-sm">Tech Review</div>
           <div className="text-3xl font-bold">{stats.tech_review}</div>
+        </div>
+        <div className="bg-orange-900 rounded-lg p-4">
+          <div className="text-orange-300 text-sm">Return Trip</div>
+          <div className="text-3xl font-bold">{stats.return_trip}</div>
         </div>
         <div className="bg-green-900 rounded-lg p-4">
           <div className="text-green-300 text-sm">Completed</div>

@@ -107,6 +107,8 @@ export default function GlobalWOSearch({ onClose }) {
         return { stage: 'Assigned', color: 'bg-blue-500', icon: '👷' };
       case 'tech_review':
         return { stage: 'Tech Review', color: 'bg-purple-500', icon: '🔍' };
+      case 'return_trip':
+        return { stage: 'Return Trip', color: 'bg-orange-500', icon: '🔄' };
       case 'pending':
       default:
         return { stage: 'Pending', color: 'bg-gray-500', icon: '⏳' };

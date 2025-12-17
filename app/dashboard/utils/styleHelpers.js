@@ -6,6 +6,7 @@ export function getStatusColor(status) {
     assigned: 'bg-blue-600',
     in_progress: 'bg-yellow-600',
     tech_review: 'bg-purple-600',
+    return_trip: 'bg-orange-600',
     completed: 'bg-green-600'
   };
   return colors[status] || 'bg-gray-600';

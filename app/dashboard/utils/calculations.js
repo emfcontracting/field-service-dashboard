@@ -8,6 +8,7 @@ export function calculateStats(orders) {
     in_progress: orders.filter(wo => wo.status === 'in_progress').length,
     completed: orders.filter(wo => wo.status === 'completed').length,
     tech_review: orders.filter(wo => wo.status === 'tech_review').length,
+    return_trip: orders.filter(wo => wo.status === 'return_trip').length,
     // CBRE status counts (from Gmail labels)
     escalation: orders.filter(wo => wo.cbre_status === 'escalation').length,
     quote_approved: orders.filter(wo => wo.cbre_status === 'quote_approved').length,

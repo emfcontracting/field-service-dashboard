@@ -105,6 +105,7 @@ export function getStatusBadge(status) {
     'in-progress': '🔧 In Progress',
     'in_progress': '🔧 In Progress',
     'tech_review': '🔍 Tech Review',
+    'return_trip': '🔄 Return Trip',
     'completed': '✅ Completed',
     'acknowledged': '👀 Acknowledged'
   };
@@ -118,6 +119,7 @@ export function getStatusColor(status) {
     'in-progress': 'bg-orange-600',
     'in_progress': 'bg-orange-600',
     'tech_review': 'bg-purple-600',
+    'return_trip': 'bg-orange-600',
     'completed': 'bg-green-600',
     'acknowledged': 'bg-cyan-600'
   };

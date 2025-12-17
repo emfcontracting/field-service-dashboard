@@ -53,6 +53,7 @@ export default function WorkOrdersFilters({
     { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
     { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },
     { value: 'tech_review', label: 'Tech Review', color: 'bg-purple-600' },
+    { value: 'return_trip', label: 'Return Trip', color: 'bg-orange-600' },
     { value: 'completed', label: 'Completed', color: 'bg-green-600' }
   ];
 

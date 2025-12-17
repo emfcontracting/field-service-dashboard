@@ -43,6 +43,7 @@ export default function Dashboard() {
     in_progress: 0,
     completed: 0,
     tech_review: 0,
+    return_trip: 0,
     pending_cbre_quote: 0,
     quoted: 0,
     quote_approved: 0

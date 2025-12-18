@@ -4,31 +4,29 @@
 import { useState, useEffect } from 'react';
 
 export function useMobileDetect() {
+  // Start with false to avoid hydration mismatch
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
-  const [screenWidth, setScreenWidth] = useState(0);
+  const [screenWidth, setScreenWidth] = useState(1024); // Default to desktop
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    // Mark that we're on the client
+    setIsClient(true);
+    
     const checkDevice = () => {
+      if (typeof window === 'undefined') return;
+      
       const width = window.innerWidth;
       setScreenWidth(width);
       
-      // Check user agent for mobile devices
-      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-      const isMobileUserAgent = mobileRegex.test(userAgent);
+      // Simple width-based detection (most reliable)
+      // Mobile: under 768px
+      // Tablet: 768px to 1023px
+      // Desktop: 1024px and above
       
-      // Also check touch capability
-      const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      
-      // Mobile: less than 768px OR mobile user agent with touch
-      const mobile = width < 768 || (isMobileUserAgent && hasTouchScreen && width < 1024);
-      
-      // Tablet: between 768px and 1024px
-      const tablet = width >= 768 && width < 1024;
-      
-      setIsMobile(mobile);
-      setIsTablet(tablet);
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
     };
 
     // Initial check
@@ -39,7 +37,7 @@ export function useMobileDetect() {
     
     // Also listen for orientation change on mobile
     window.addEventListener('orientationchange', () => {
-      setTimeout(checkDevice, 100); // Small delay for orientation to settle
+      setTimeout(checkDevice, 150);
     });
 
     return () => {
@@ -48,7 +46,7 @@ export function useMobileDetect() {
     };
   }, []);
 
-  return { isMobile, isTablet, screenWidth };
+  return { isMobile, isTablet, screenWidth, isClient };
 }
 
 export default useMobileDetect;

@@ -707,14 +707,17 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Send EMAIL notifications when work order is assigned to field
+  // Send PUSH + EMAIL notifications when work order is assigned to field
   const sendAssignmentNotifications = async () => {
     try {
-      // Gather recipients: lead tech + team members
-      const recipients = [];
+      // Gather recipient user IDs: lead tech + team members
+      const userIds = [];
+      const emailRecipients = [];
       
       // Add lead tech if exists
       if (selectedWO.lead_tech_id) {
+        userIds.push(selectedWO.lead_tech_id);
+        
         const { data: leadTech } = await supabase
           .from('users')
           .select('user_id, first_name, last_name, email')
@@ -722,13 +725,17 @@ export default function WorkOrderDetailModal({
           .single();
         
         if (leadTech && leadTech.email) {
-          recipients.push(leadTech);
+          emailRecipients.push(leadTech);
         }
       }
       
       // Add team members
       if (selectedWO.teamMembers && selectedWO.teamMembers.length > 0) {
         for (const member of selectedWO.teamMembers) {
+          if (!userIds.includes(member.user_id)) {
+            userIds.push(member.user_id);
+          }
+          
           const { data: teamMember } = await supabase
             .from('users')
             .select('user_id, first_name, last_name, email')
@@ -736,43 +743,76 @@ export default function WorkOrderDetailModal({
             .single();
           
           if (teamMember && teamMember.email) {
-            // Avoid duplicates
-            if (!recipients.find(r => r.user_id === teamMember.user_id)) {
-              recipients.push(teamMember);
+            if (!emailRecipients.find(r => r.user_id === teamMember.user_id)) {
+              emailRecipients.push(teamMember);
             }
           }
         }
       }
       
-      if (recipients.length === 0) {
-        console.log('No recipients with email configured');
+      if (userIds.length === 0) {
+        console.log('No recipients configured');
         return;
       }
       
-      // Send email notifications
-      const notificationType = selectedWO.priority === 'emergency' ? 'emergency_work_order' : 'work_order_assigned';
+      const isEmergency = selectedWO.priority === 'emergency';
       
-      const response = await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: notificationType,
-          recipients,
-          notificationMethod: 'email',
-          workOrder: {
-            wo_number: selectedWO.wo_number,
-            building: selectedWO.building,
-            priority: selectedWO.priority,
-            work_order_description: selectedWO.work_order_description
-          }
-        })
-      });
+      // 1. Send PUSH notifications (primary method - instant)
+      try {
+        const pushResponse = await fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_ids: userIds,
+            title: isEmergency ? '🚨 EMERGENCY Work Order' : '📋 New Work Order Assigned',
+            body: `WO ${selectedWO.wo_number} - ${selectedWO.building || 'No location'}`,
+            priority: isEmergency ? 'emergency' : 'normal',
+            data: {
+              type: isEmergency ? 'emergency_work_order' : 'work_order_assigned',
+              wo_id: selectedWO.wo_id,
+              wo_number: selectedWO.wo_number,
+              url: '/mobile'
+            }
+          })
+        });
+        
+        const pushResult = await pushResponse.json();
+        console.log('Push notification result:', pushResult);
+      } catch (pushError) {
+        console.error('Push notification error:', pushError);
+        // Continue to email as fallback
+      }
       
-      const result = await response.json();
-      console.log('Email notification result:', result);
+      // 2. Send EMAIL notifications (backup method)
+      if (emailRecipients.length > 0) {
+        try {
+          const notificationType = isEmergency ? 'emergency_work_order' : 'work_order_assigned';
+          
+          const emailResponse = await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: notificationType,
+              recipients: emailRecipients,
+              notificationMethod: 'email',
+              workOrder: {
+                wo_number: selectedWO.wo_number,
+                building: selectedWO.building,
+                priority: selectedWO.priority,
+                work_order_description: selectedWO.work_order_description
+              }
+            })
+          });
+          
+          const emailResult = await emailResponse.json();
+          console.log('Email notification result:', emailResult);
+        } catch (emailError) {
+          console.error('Email notification error:', emailError);
+        }
+      }
       
     } catch (error) {
-      console.error('Error sending email notifications:', error);
+      console.error('Error sending notifications:', error);
       // Don't throw - notification failure shouldn't block assignment
     }
   };

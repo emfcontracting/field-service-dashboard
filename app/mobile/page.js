@@ -29,6 +29,9 @@ import CarrierSetupModal from './components/modals/CarrierSetupModal';
 // Offline Components
 import { SyncNotification } from './components/ConnectionStatus';
 
+// Push Notifications
+import PushNotificationPrompt from './components/PushNotificationPrompt';
+
 export default function MobilePage() {
   // Authentication
   const { currentUser, loading, error, setError, login, logout, changePin } = useAuth();
@@ -580,6 +583,9 @@ function MobileAppContent({
   // Main Work Orders List
   return (
     <>
+      {/* Push Notification Permission Prompt */}
+      <PushNotificationPrompt userId={currentUser?.user_id} />
+      
       <WorkOrdersList
         currentUser={currentUser}
         workOrders={workOrders}

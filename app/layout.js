@@ -3,6 +3,7 @@ import './globals.css'
 export const metadata = {
   title: 'FSM - Field Service Management',
   description: 'Field Service Management System',
+  manifest: '/manifest.json',
 }
 
 export default function RootLayout({ children }) {

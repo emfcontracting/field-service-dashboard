@@ -1,47 +1,66 @@
 // app/mobile/components/PushNotificationPrompt.js
 'use client';
 import { useState, useEffect } from 'react';
-import usePushNotifications from '../hooks/usePushNotifications';
 
 export default function PushNotificationPrompt({ userId, onComplete }) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
-  
-  const {
-    isSupported,
-    permission,
-    isSubscribed,
-    isSubscribing,
-    error,
-    subscribe
-  } = usePushNotifications(userId);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [error, setError] = useState(null);
+  const [isSupported, setIsSupported] = useState(false);
+  const [permission, setPermission] = useState('default');
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
-  // Check if we should show the prompt
+  // Check status on mount
   useEffect(() => {
-    // Don't show if already subscribed or permission denied
-    if (isSubscribed || permission === 'denied') {
-      return;
-    }
+    checkStatus();
+  }, []);
 
-    // Check if user has dismissed the prompt before (stored in localStorage)
-    const dismissed = localStorage.getItem('push_prompt_dismissed');
-    const dismissedAt = dismissed ? new Date(dismissed) : null;
-    
-    // Show again after 7 days if dismissed
-    if (dismissedAt) {
-      const daysSinceDismissed = (Date.now() - dismissedAt.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceDismissed < 7) {
-        return;
+  const checkStatus = async () => {
+    // Check if supported
+    const supported = 'serviceWorker' in navigator && 
+                      'PushManager' in window && 
+                      'Notification' in window;
+    setIsSupported(supported);
+
+    if (!supported) return;
+
+    // Check permission
+    const perm = Notification.permission;
+    setPermission(perm);
+
+    // If denied, don't show prompt
+    if (perm === 'denied') return;
+
+    // Check existing subscription
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        setIsSubscribed(true);
+        return; // Already subscribed, don't show prompt
       }
+    } catch (e) {
+      console.error('Error checking subscription:', e);
     }
 
-    // Delay showing the prompt to not interrupt initial load
-    const timer = setTimeout(() => {
-      setShowPrompt(true);
-    }, 3000);
+    // Check if user clicked "Don't ask again"
+    const neverAsk = localStorage.getItem('push_prompt_never');
+    if (neverAsk === 'true') return;
 
-    return () => clearTimeout(timer);
-  }, [isSubscribed, permission]);
+    // Check if dismissed recently (within 24 hours instead of 7 days for better conversion)
+    const dismissed = localStorage.getItem('push_prompt_dismissed');
+    if (dismissed) {
+      const dismissedAt = new Date(dismissed);
+      const hoursSinceDismissed = (Date.now() - dismissedAt.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceDismissed < 24) return; // Show again after 24 hours
+    }
+
+    // Show prompt after short delay
+    setTimeout(() => {
+      setShowPrompt(true);
+    }, 2000);
+  };
 
   // Detect iOS
   const isIOS = () => {
@@ -57,6 +76,17 @@ export default function PushNotificationPrompt({ userId, onComplete }) {
            window.navigator.standalone === true;
   };
 
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
   const handleEnable = async () => {
     // On iOS, check if installed as PWA first
     if (isIOS() && !isInstalledPWA()) {
@@ -64,10 +94,61 @@ export default function PushNotificationPrompt({ userId, onComplete }) {
       return;
     }
 
-    const success = await subscribe();
-    if (success) {
+    setIsSubscribing(true);
+    setError(null);
+
+    try {
+      // Request permission
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      
+      if (perm !== 'granted') {
+        setError('Please allow notifications to receive work order alerts');
+        setIsSubscribing(false);
+        return;
+      }
+
+      // Get VAPID key
+      const res = await fetch('/api/push/send');
+      const { publicKey, configured } = await res.json();
+      
+      if (!configured || !publicKey) {
+        throw new Error('Push not configured');
+      }
+
+      // Get service worker
+      const registration = await navigator.serviceWorker.ready;
+
+      // Subscribe to push
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+
+      // Save to server
+      const saveRes = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subscription.toJSON(),
+          user_id: userId
+        })
+      });
+
+      if (!saveRes.ok) {
+        const err = await saveRes.json();
+        throw new Error(err.error || 'Failed to save');
+      }
+
+      setIsSubscribed(true);
       setShowPrompt(false);
       onComplete?.();
+
+    } catch (err) {
+      console.error('Subscription error:', err);
+      setError(err.message || 'Failed to enable notifications');
+    } finally {
+      setIsSubscribing(false);
     }
   };
 
@@ -128,7 +209,7 @@ export default function PushNotificationPrompt({ userId, onComplete }) {
     );
   }
 
-  if (!showPrompt || !isSupported) return null;
+  if (!showPrompt || !isSupported || isSubscribed) return null;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50">

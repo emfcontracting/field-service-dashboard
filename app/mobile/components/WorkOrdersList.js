@@ -5,6 +5,7 @@ import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import ConnectionStatus from './ConnectionStatus';
 import WeatherWidget from './WeatherWidget';
+import NotificationBell from './NotificationBell';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 
 export default function WorkOrdersList({
@@ -146,6 +147,7 @@ export default function WorkOrdersList({
 
         {/* Bottom Row: Action Buttons - Scrollable on very small screens */}
         <div className="flex gap-2 overflow-x-auto pb-1">
+          <NotificationBell userId={currentUser?.user_id} />
           <LanguageToggle />
           
           {/* Only show Dashboard button for admin and office roles */}

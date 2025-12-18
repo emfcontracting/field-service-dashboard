@@ -12,8 +12,21 @@ export default function DashboardLayout({ children }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
+    // Check for mobile on mount
+    const checkMobile = () => {
+      const width = window.innerWidth;
+      const userAgent = navigator.userAgent || '';
+      const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+      setIsMobile(width < 768 || mobileRegex.test(userAgent));
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
     checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -26,6 +39,7 @@ export default function DashboardLayout({ children }) {
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('resize', checkMobile);
     };
   }, []);
 
@@ -88,6 +102,65 @@ export default function DashboardLayout({ children }) {
     return null;
   }
 
+  // Mobile User Bar
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Mobile User info bar */}
+        <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                <span className="text-gray-900 font-semibold">
+                  {userInfo?.first_name}
+                </span>
+              </span>
+              <span className="px-2 py-0.5 bg-blue-600 rounded text-xs text-white">
+                {userInfo?.role?.replace('_', ' ').toUpperCase()}
+              </span>
+            </div>
+            
+            {/* Mobile menu toggle */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="text-gray-600 hover:text-gray-900 text-sm font-medium p-2"
+              >
+                ⚙️
+              </button>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[140px]">
+                  <button
+                    onClick={() => {
+                      router.push('/settings');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    ⚙️ Settings
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                  >
+                    🚪 Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Dashboard content */}
+        <main className="flex-1">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
+  // Desktop/Tablet Layout
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* User info bar */}

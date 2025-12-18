@@ -15,6 +15,7 @@ import { CalendarView } from './components/calendar';
 import { AgingView } from './components/aging';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
+import { useMobileDetect } from './hooks/useMobileDetect';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -25,6 +26,9 @@ const supabase = createClient(
 const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
 
 export default function Dashboard() {
+  // Mobile detection
+  const { isMobile, isTablet, screenWidth } = useMobileDetect();
+  
   // State Management
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
@@ -36,6 +40,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState('workorders'); // 'workorders' | 'calendar' | 'aging' | 'missing-hours' | 'availability'
   const [missingHoursCount, setMissingHoursCount] = useState(0);
+  const [showMobileWarning, setShowMobileWarning] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -66,6 +71,14 @@ export default function Dashboard() {
     loadInitialData();
     fetchCurrentUser();
   }, []);
+
+  // Show mobile warning on first visit (only once per session)
+  useEffect(() => {
+    if (isMobile && !sessionStorage.getItem('mobileDashboardWarningShown')) {
+      setShowMobileWarning(true);
+      sessionStorage.setItem('mobileDashboardWarningShown', 'true');
+    }
+  }, [isMobile]);
 
   // Calculate missing hours count when work orders change
   useEffect(() => {
@@ -182,6 +195,8 @@ export default function Dashboard() {
             supabase={supabase}
             refreshWorkOrders={refreshWorkOrders}
             onSelectWorkOrder={setSelectedWO}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         );
       
@@ -193,6 +208,8 @@ export default function Dashboard() {
             supabase={supabase}
             refreshWorkOrders={refreshWorkOrders}
             onSelectWorkOrder={setSelectedWO}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         );
       
@@ -204,6 +221,8 @@ export default function Dashboard() {
             supabase={supabase}
             onSelectWorkOrder={setSelectedWO}
             refreshWorkOrders={refreshWorkOrders}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         );
       
@@ -212,6 +231,8 @@ export default function Dashboard() {
           <AvailabilityView 
             supabase={supabase}
             users={users}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         );
       
@@ -231,14 +252,44 @@ export default function Dashboard() {
             isSuperuser={isSuperuser}
             missingHoursCount={missingHoursCount}
             onMissingHoursClick={handleMissingHoursClick}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         );
     }
   };
 
+  // Mobile Warning Modal
+  const MobileWarningModal = () => (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full text-center">
+        <div className="text-5xl mb-4">📱</div>
+        <h2 className="text-xl font-bold mb-3">Mobile Device Detected</h2>
+        <p className="text-gray-300 mb-4 text-sm">
+          The dashboard is optimized for desktop use. For the best mobile experience, 
+          consider using the <strong>Mobile App</strong> instead.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => window.location.href = '/mobile'}
+            className="bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-semibold transition"
+          >
+            📱 Go to Mobile App
+          </button>
+          <button
+            onClick={() => setShowMobileWarning(false)}
+            className="bg-gray-600 hover:bg-gray-700 px-4 py-3 rounded-lg font-semibold transition"
+          >
+            Continue to Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className={`min-h-screen bg-gray-900 text-white ${isMobile ? 'p-3' : isTablet ? 'p-4' : 'p-6'}`}>
+      <div className={`${isMobile ? '' : 'max-w-7xl'} mx-auto`}>
         <DashboardHeader 
           activeView={activeView}
           setActiveView={setActiveView}
@@ -248,6 +299,9 @@ export default function Dashboard() {
 
         {renderActiveView()}
 
+        {/* Mobile Warning Modal */}
+        {showMobileWarning && <MobileWarningModal />}
+
         {/* Modals - Available in all views */}
         {selectedWO && (
           <WorkOrderDetailModal
@@ -256,6 +310,8 @@ export default function Dashboard() {
             supabase={supabase}
             onClose={() => setSelectedWO(null)}
             refreshWorkOrders={refreshWorkOrders}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         )}
 
@@ -265,6 +321,8 @@ export default function Dashboard() {
             supabase={supabase}
             onClose={() => setShowNewWOModal(false)}
             refreshWorkOrders={refreshWorkOrders}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         )}
 
@@ -277,7 +335,10 @@ export default function Dashboard() {
         )}
 
         {showGlobalSearch && (
-          <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />
+          <GlobalWOSearch 
+            onClose={() => setShowGlobalSearch(false)} 
+            isMobile={isMobile}
+          />
         )}
       </div>
     </div>

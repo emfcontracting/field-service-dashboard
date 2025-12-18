@@ -72,6 +72,12 @@ export default function ViewInvoice() {
     }
   }
 
+  // Detect if user is on mobile
+  function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+      || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+  }
+
   async function downloadPDF() {
     if (!html2pdfLoaded || !invoiceRef.current) {
       setMessage({ type: 'error', text: 'PDF generator not ready. Please wait and try again.' });
@@ -93,9 +99,30 @@ export default function ViewInvoice() {
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
 
-      await window.html2pdf().set(opt).from(element).save();
-      
-      setMessage({ type: 'success', text: 'PDF downloaded!' });
+      const isMobile = isMobileDevice();
+
+      if (isMobile) {
+        // Mobile: Generate blob and open in new tab for viewing/sharing
+        const pdfBlob = await window.html2pdf().set(opt).from(element).outputPdf('blob');
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        
+        // Open in new tab - user can then share/download from there
+        const newTab = window.open(blobUrl, '_blank');
+        
+        if (!newTab || newTab.closed) {
+          // If popup blocked, try direct navigation
+          window.location.href = blobUrl;
+        }
+        
+        setMessage({ type: 'success', text: 'PDF opened! Use your browser\'s share or download option to save.' });
+        
+        // Clean up blob URL after a delay
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      } else {
+        // Desktop: Use normal download
+        await window.html2pdf().set(opt).from(element).save();
+        setMessage({ type: 'success', text: 'PDF downloaded!' });
+      }
     } catch (error) {
       console.error('PDF generation error:', error);
       setMessage({ type: 'error', text: 'Failed to generate PDF: ' + error.message });

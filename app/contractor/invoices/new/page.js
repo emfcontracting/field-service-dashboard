@@ -227,15 +227,30 @@ export default function CreateInvoice() {
       // Download the PDF
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = invNum + '.pdf';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
       
-      setMessage({ type: 'success', text: 'PDF downloaded!' });
+      // Check if mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+      
+      if (isMobile) {
+        // Mobile: Open in new tab for viewing/sharing
+        const newTab = window.open(url, '_blank');
+        if (!newTab || newTab.closed) {
+          window.location.href = url;
+        }
+        setMessage({ type: 'success', text: 'PDF opened! Use your browser\'s share or download option to save.' });
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      } else {
+        // Desktop: Use normal download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = invNum + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setMessage({ type: 'success', text: 'PDF downloaded!' });
+      }
     } catch (error) {
       console.error('PDF error:', error);
       setMessage({ type: 'error', text: 'Failed to generate PDF' });

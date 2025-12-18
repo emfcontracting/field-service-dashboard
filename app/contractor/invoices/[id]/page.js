@@ -102,22 +102,45 @@ export default function ViewInvoice() {
       const isMobile = isMobileDevice();
 
       if (isMobile) {
-        // Mobile: Generate blob and open in new tab for viewing/sharing
-        const pdfBlob = await window.html2pdf().set(opt).from(element).outputPdf('blob');
-        const blobUrl = URL.createObjectURL(pdfBlob);
+        // Mobile: Generate as base64 data URL and open in new tab
+        const pdfBase64 = await window.html2pdf().set(opt).from(element).outputPdf('datauristring');
         
-        // Open in new tab - user can then share/download from there
-        const newTab = window.open(blobUrl, '_blank');
-        
-        if (!newTab || newTab.closed) {
-          // If popup blocked, try direct navigation
-          window.location.href = blobUrl;
+        // Open in new tab with the data URI
+        const newTab = window.open();
+        if (newTab) {
+          newTab.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>${invoice.invoice_number}</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { margin: 0; padding: 0; background: #333; display: flex; flex-direction: column; min-height: 100vh; }
+                .toolbar { background: #1f2937; padding: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+                .toolbar a, .toolbar button { background: #3b82f6; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; border: none; font-size: 16px; cursor: pointer; }
+                .toolbar a:hover, .toolbar button:hover { background: #2563eb; }
+                iframe { flex: 1; width: 100%; border: none; }
+              </style>
+            </head>
+            <body>
+              <div class="toolbar">
+                <a href="${pdfBase64}" download="${filename}">📥 Download PDF</a>
+                <button onclick="window.print()">🖨️ Print</button>
+              </div>
+              <iframe src="${pdfBase64}"></iframe>
+            </body>
+            </html>
+          `);
+          newTab.document.close();
+          setMessage({ type: 'success', text: 'PDF opened! Tap Download to save.' });
+        } else {
+          // Fallback: direct download link
+          const link = document.createElement('a');
+          link.href = pdfBase64;
+          link.download = filename;
+          link.click();
+          setMessage({ type: 'success', text: 'PDF downloading...' });
         }
-        
-        setMessage({ type: 'success', text: 'PDF opened! Use your browser\'s share or download option to save.' });
-        
-        // Clean up blob URL after a delay
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
       } else {
         // Desktop: Use normal download
         await window.html2pdf().set(opt).from(element).save();

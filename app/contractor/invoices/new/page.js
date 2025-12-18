@@ -226,22 +226,55 @@ export default function CreateInvoice() {
 
       // Download the PDF
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
       
       // Check if mobile device
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
         || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
       
       if (isMobile) {
-        // Mobile: Open in new tab for viewing/sharing
-        const newTab = window.open(url, '_blank');
-        if (!newTab || newTab.closed) {
-          window.location.href = url;
-        }
-        setMessage({ type: 'success', text: 'PDF opened! Use your browser\'s share or download option to save.' });
-        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        // Mobile: Convert blob to base64 and open viewer page
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result;
+          const newTab = window.open();
+          if (newTab) {
+            newTab.document.write(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>${invNum}</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                  body { margin: 0; padding: 0; background: #333; display: flex; flex-direction: column; min-height: 100vh; }
+                  .toolbar { background: #1f2937; padding: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+                  .toolbar a, .toolbar button { background: #3b82f6; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; border: none; font-size: 16px; cursor: pointer; }
+                  .toolbar a:hover, .toolbar button:hover { background: #2563eb; }
+                  iframe { flex: 1; width: 100%; border: none; }
+                </style>
+              </head>
+              <body>
+                <div class="toolbar">
+                  <a href="${base64data}" download="${invNum}.pdf">📥 Download PDF</a>
+                  <button onclick="window.print()">🖨️ Print</button>
+                </div>
+                <iframe src="${base64data}"></iframe>
+              </body>
+              </html>
+            `);
+            newTab.document.close();
+          } else {
+            // Fallback
+            const link = document.createElement('a');
+            link.href = base64data;
+            link.download = invNum + '.pdf';
+            link.click();
+          }
+        };
+        reader.readAsDataURL(blob);
+        setMessage({ type: 'success', text: 'PDF opened! Tap Download to save.' });
       } else {
         // Desktop: Use normal download
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = invNum + '.pdf';

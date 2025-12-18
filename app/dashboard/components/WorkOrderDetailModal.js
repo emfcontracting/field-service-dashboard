@@ -689,17 +689,17 @@ export default function WorkOrderDetailModal({
   };
 
   const handleAssignToField = async () => {
-    if (!confirm('Assign this work order to field workers?\n\nThis will make it visible in the mobile app and send SMS notifications to the lead tech and team members.')) {
+    if (!confirm('Assign this work order to field workers?\n\nThis will make it visible in the mobile app and send email notifications to the lead tech and team members.')) {
       return;
     }
 
     try {
       await assignToField(supabase, selectedWO.wo_id);
       
-      // Send SMS notifications to lead tech and team members
+      // Send email notifications to lead tech and team members
       await sendAssignmentNotifications();
       
-      alert('✅ Work order assigned to field workers!\nSMS notifications sent.');
+      alert('✅ Work order assigned to field workers!\nEmail notifications sent.');
       onClose();
       refreshWorkOrders();
     } catch (error) {
@@ -707,7 +707,7 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Send SMS notifications when work order is assigned to field
+  // Send EMAIL notifications when work order is assigned to field
   const sendAssignmentNotifications = async () => {
     try {
       // Gather recipients: lead tech + team members
@@ -717,11 +717,11 @@ export default function WorkOrderDetailModal({
       if (selectedWO.lead_tech_id) {
         const { data: leadTech } = await supabase
           .from('users')
-          .select('user_id, first_name, last_name, phone, sms_carrier')
+          .select('user_id, first_name, last_name, email')
           .eq('user_id', selectedWO.lead_tech_id)
           .single();
         
-        if (leadTech && leadTech.phone && leadTech.sms_carrier) {
+        if (leadTech && leadTech.email) {
           recipients.push(leadTech);
         }
       }
@@ -731,11 +731,11 @@ export default function WorkOrderDetailModal({
         for (const member of selectedWO.teamMembers) {
           const { data: teamMember } = await supabase
             .from('users')
-            .select('user_id, first_name, last_name, phone, sms_carrier')
+            .select('user_id, first_name, last_name, email')
             .eq('user_id', member.user_id)
             .single();
           
-          if (teamMember && teamMember.phone && teamMember.sms_carrier) {
+          if (teamMember && teamMember.email) {
             // Avoid duplicates
             if (!recipients.find(r => r.user_id === teamMember.user_id)) {
               recipients.push(teamMember);
@@ -745,11 +745,11 @@ export default function WorkOrderDetailModal({
       }
       
       if (recipients.length === 0) {
-        console.log('No recipients with phone/carrier configured for SMS');
+        console.log('No recipients with email configured');
         return;
       }
       
-      // Send notifications
+      // Send email notifications
       const notificationType = selectedWO.priority === 'emergency' ? 'emergency_work_order' : 'work_order_assigned';
       
       const response = await fetch('/api/notifications', {
@@ -758,6 +758,7 @@ export default function WorkOrderDetailModal({
         body: JSON.stringify({
           type: notificationType,
           recipients,
+          notificationMethod: 'email',
           workOrder: {
             wo_number: selectedWO.wo_number,
             building: selectedWO.building,
@@ -768,10 +769,10 @@ export default function WorkOrderDetailModal({
       });
       
       const result = await response.json();
-      console.log('Notification result:', result);
+      console.log('Email notification result:', result);
       
     } catch (error) {
-      console.error('Error sending notifications:', error);
+      console.error('Error sending email notifications:', error);
       // Don't throw - notification failure shouldn't block assignment
     }
   };

@@ -1,24 +1,23 @@
 // app/api/notifications/route.js
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import webpush from 'web-push';
+import { createClient } from '@supabase/supabase-js';
 
-// SMS Gateway addresses for major carriers (kept for future use)
-const SMS_GATEWAYS = {
-  verizon: 'vtext.com',
-  att: 'txt.att.net',
-  tmobile: 'tmomail.net',
-  sprint: 'messaging.sprintpcs.com',
-  boost: 'sms.myboostmobile.com',
-  cricket: 'sms.cricketwireless.net',
-  metro: 'mymetropcs.com',
-  uscellular: 'email.uscc.net',
-  virgin: 'vmobl.com',
-  republic: 'text.republicwireless.com',
-  googlefi: 'msg.fi.google.com',
-  straight_talk: 'vtext.com',
-  bellsouth: 'sms.bellsouth.com',
-  aerial: 'voicestream.net',
-};
+// Initialize Supabase for fetching push subscriptions
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+// Configure web-push with VAPID keys
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:emfcbre@gmail.com',
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 // Create email transporter using Gmail
 const createTransporter = () => {
@@ -29,31 +28,6 @@ const createTransporter = () => {
       pass: process.env.EMAIL_PASS
     }
   });
-};
-
-// Format phone number to 10 digits (for SMS - not currently used)
-const formatPhone = (phone) => {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return digits.slice(1);
-  }
-  if (digits.length === 10) {
-    return digits;
-  }
-  return null;
-};
-
-// Build SMS email address from phone and carrier (for SMS - not currently used)
-const buildSmsEmail = (phone, carrier) => {
-  const formattedPhone = formatPhone(phone);
-  const gateway = SMS_GATEWAYS[carrier];
-  
-  if (!formattedPhone || !gateway) {
-    return null;
-  }
-  
-  return `${formattedPhone}@${gateway}`;
 };
 
 // Build HTML email template for work order assignments
@@ -75,73 +49,64 @@ const buildAssignmentEmailHTML = (workOrder, recipientName, isEmergency = false)
       <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background-color: #1f2937; border-radius: 8px; overflow: hidden;">
           <!-- Header -->
-          <div style="background-color: ${isEmergency ? '#dc2626' : '#1e40af'}; padding: 20px; text-align: center;">
+          <div style="background-color: ${isEmergency ? '#dc2626' : '#1d4ed8'}; padding: 20px; text-align: center;">
             <h1 style="color: white; margin: 0; font-size: 24px;">
               ${isEmergency ? '🚨 EMERGENCY WORK ORDER' : '📋 New Work Order Assigned'}
             </h1>
           </div>
           
           <!-- Content -->
-          <div style="padding: 24px; color: #e5e7eb;">
-            <p style="margin: 0 0 16px 0; font-size: 16px;">
+          <div style="padding: 20px; color: white;">
+            <p style="margin: 0 0 15px 0; font-size: 16px;">
               Hi ${recipientName},
             </p>
-            
-            <p style="margin: 0 0 24px 0; font-size: 16px;">
+            <p style="margin: 0 0 20px 0; color: #9ca3af;">
               ${isEmergency 
-                ? 'You have been assigned an <strong style="color: #fca5a5;">EMERGENCY</strong> work order that requires immediate attention!'
-                : 'You have been assigned a new work order. Please check the mobile app for details.'}
+                ? 'You have been assigned an EMERGENCY work order that requires immediate attention!'
+                : 'You have been assigned a new work order.'}
             </p>
             
-            <!-- Work Order Details Box -->
-            <div style="background-color: #374151; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+            <!-- Work Order Details -->
+            <div style="background-color: #374151; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
               <table style="width: 100%; border-collapse: collapse;">
                 <tr>
-                  <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Work Order #</td>
-                  <td style="padding: 8px 0; color: white; font-size: 16px; font-weight: bold; text-align: right;">
-                    ${workOrder.wo_number}
-                  </td>
+                  <td style="padding: 8px 0; color: #9ca3af; width: 100px;">WO #:</td>
+                  <td style="padding: 8px 0; color: white; font-weight: bold;">${workOrder.wo_number}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Building</td>
-                  <td style="padding: 8px 0; color: white; font-size: 14px; text-align: right;">
-                    ${workOrder.building || 'Not specified'}
-                  </td>
+                  <td style="padding: 8px 0; color: #9ca3af;">Building:</td>
+                  <td style="padding: 8px 0; color: white;">${workOrder.building || 'Not specified'}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #9ca3af; font-size: 14px;">Priority</td>
-                  <td style="padding: 8px 0; text-align: right;">
-                    <span style="background-color: ${priorityColor}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                  <td style="padding: 8px 0; color: #9ca3af;">Priority:</td>
+                  <td style="padding: 8px 0;">
+                    <span style="background-color: ${priorityColor}; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold;">
                       ${priorityLabel}
                     </span>
                   </td>
                 </tr>
+                ${workOrder.work_order_description ? `
+                <tr>
+                  <td style="padding: 8px 0; color: #9ca3af; vertical-align: top;">Description:</td>
+                  <td style="padding: 8px 0; color: #d1d5db;">${workOrder.work_order_description.substring(0, 200)}${workOrder.work_order_description.length > 200 ? '...' : ''}</td>
+                </tr>
+                ` : ''}
               </table>
             </div>
             
-            ${workOrder.work_order_description ? `
-            <div style="background-color: #374151; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-              <p style="margin: 0 0 8px 0; color: #9ca3af; font-size: 14px;">Description:</p>
-              <p style="margin: 0; color: white; font-size: 14px; line-height: 1.5;">
-                ${workOrder.work_order_description.substring(0, 300)}${workOrder.work_order_description.length > 300 ? '...' : ''}
-              </p>
-            </div>
-            ` : ''}
-            
-            <!-- Action Button -->
-            <div style="text-align: center; margin-top: 24px;">
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 25px 0;">
               <a href="https://field-service-dashboard.vercel.app/mobile" 
-                 style="display: inline-block; background-color: ${isEmergency ? '#dc2626' : '#22c55e'}; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                ${isEmergency ? '🚨 View Emergency WO Now' : '📱 Open Mobile App'}
+                 style="background-color: ${isEmergency ? '#dc2626' : '#2563eb'}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                ${isEmergency ? '🚨 VIEW EMERGENCY NOW' : '📱 Open Mobile App'}
               </a>
             </div>
           </div>
           
           <!-- Footer -->
-          <div style="background-color: #111827; padding: 16px; text-align: center;">
+          <div style="background-color: #111827; padding: 15px; text-align: center; border-top: 1px solid #374151;">
             <p style="margin: 0; color: #6b7280; font-size: 12px;">
-              EMF Contracting LLC<br>
-              This is an automated notification. Please do not reply to this email.
+              EMF Contracting LLC | Field Service Management
             </p>
           </div>
         </div>
@@ -151,7 +116,7 @@ const buildAssignmentEmailHTML = (workOrder, recipientName, isEmergency = false)
   `;
 };
 
-// Build plain text email for work order assignments
+// Build plain text email
 const buildAssignmentEmailText = (workOrder, recipientName, isEmergency = false) => {
   return `
 ${isEmergency ? '🚨 EMERGENCY WORK ORDER ASSIGNED' : 'New Work Order Assigned'}
@@ -176,122 +141,137 @@ EMF Contracting LLC
   `.trim();
 };
 
+// Send push notification to a user
+const sendPushNotification = async (userId, payload) => {
+  try {
+    // Get user's push subscription from database
+    const { data: subscription, error } = await supabase
+      .from('push_subscriptions')
+      .select('subscription')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !subscription) {
+      console.log(`No push subscription for user ${userId}`);
+      return { success: false, reason: 'no_subscription' };
+    }
+
+    const pushSubscription = subscription.subscription;
+    
+    await webpush.sendNotification(
+      pushSubscription,
+      JSON.stringify(payload)
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error(`Push notification failed for user ${userId}:`, error.message);
+    
+    // If subscription is invalid, remove it
+    if (error.statusCode === 410 || error.statusCode === 404) {
+      await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('user_id', userId);
+    }
+    
+    return { success: false, reason: error.message };
+  }
+};
+
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder, customMessage, notificationMethod = 'email' } = await request.json();
+    const { type, recipients, workOrder, customMessage } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const transporter = createTransporter();
-    const results = [];
-    const errors = [];
+    const results = {
+      email: { sent: [], failed: [] },
+      push: { sent: [], failed: [] }
+    };
 
     for (const recipient of recipients) {
-      const { email, phone, sms_carrier, first_name, last_name } = recipient;
-      
-      // Determine recipient address based on notification method
-      let toAddress = null;
-      
-      if (notificationMethod === 'sms') {
-        // SMS via email-to-SMS gateway
-        toAddress = buildSmsEmail(phone, sms_carrier);
-        if (!toAddress) {
-          errors.push({
-            name: `${first_name} ${last_name}`,
-            error: 'Missing phone number or carrier for SMS'
-          });
-          continue;
-        }
-      } else {
-        // Email notification (default)
-        if (!email) {
-          errors.push({
-            name: `${first_name} ${last_name}`,
-            error: 'Missing email address'
-          });
-          continue;
-        }
-        toAddress = email;
-      }
-
-      // Build message based on notification type
-      let subject = '';
-      let textMessage = '';
-      let htmlMessage = '';
+      const { user_id, email, first_name, last_name } = recipient;
       const recipientName = first_name || 'Team Member';
       const isEmergency = type === 'emergency_work_order' || workOrder?.priority === 'emergency';
-      
-      switch (type) {
-        case 'work_order_assigned':
-        case 'emergency_work_order':
-          subject = isEmergency 
+
+      // === SEND EMAIL ===
+      if (email) {
+        try {
+          const subject = isEmergency 
             ? `🚨 EMERGENCY: WO ${workOrder.wo_number} Assigned` 
             : `📋 New Work Order Assigned: ${workOrder.wo_number}`;
           
-          if (notificationMethod === 'sms') {
-            // Short SMS message
-            textMessage = isEmergency
-              ? `EMF EMERGENCY!\nWO: ${workOrder.wo_number}\n${workOrder.building || 'No location'}\nCheck app NOW!`
-              : `EMF: New WO ${workOrder.wo_number} assigned.\n${workOrder.building || 'No location'}\nPriority: ${workOrder.priority?.toUpperCase() || 'NORMAL'}`;
-          } else {
-            // Full email with HTML
-            textMessage = buildAssignmentEmailText(workOrder, recipientName, isEmergency);
-            htmlMessage = buildAssignmentEmailHTML(workOrder, recipientName, isEmergency);
-          }
-          break;
-          
-        case 'status_update':
-          subject = `WO ${workOrder.wo_number} Status Update`;
-          textMessage = `EMF: WO ${workOrder.wo_number} status changed to ${workOrder.status?.toUpperCase()}`;
-          break;
+          const textMessage = buildAssignmentEmailText(workOrder, recipientName, isEmergency);
+          const htmlMessage = buildAssignmentEmailHTML(workOrder, recipientName, isEmergency);
 
-        case 'custom':
-          subject = 'EMF Contracting Notification';
-          textMessage = customMessage || 'You have a new message from EMF Contracting.';
-          break;
-          
-        default:
-          subject = 'EMF Contracting Notification';
-          textMessage = customMessage || 'You have a new notification from EMF Contracting.';
+          await transporter.sendMail({
+            from: `"EMF Contracting" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
+            to: email,
+            subject: subject,
+            text: textMessage,
+            html: htmlMessage
+          });
+
+          results.email.sent.push({ name: `${first_name} ${last_name}`, email });
+          console.log(`✅ Email sent to ${first_name} ${last_name} (${email})`);
+        } catch (emailError) {
+          console.error(`❌ Email failed for ${first_name} ${last_name}:`, emailError.message);
+          results.email.failed.push({ 
+            name: `${first_name} ${last_name}`, 
+            email,
+            error: emailError.message 
+          });
+        }
+      } else {
+        results.email.failed.push({ 
+          name: `${first_name} ${last_name}`, 
+          error: 'No email address' 
+        });
       }
 
-      try {
-        const mailOptions = {
-          from: `"EMF Contracting" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
-          to: toAddress,
-          subject: subject,
-          text: textMessage
+      // === SEND PUSH NOTIFICATION ===
+      if (user_id) {
+        const pushPayload = {
+          title: isEmergency 
+            ? `🚨 EMERGENCY: ${workOrder.wo_number}` 
+            : `📋 New WO: ${workOrder.wo_number}`,
+          body: `${workOrder.building || 'No location'} - ${workOrder.priority?.toUpperCase() || 'NORMAL'} priority`,
+          icon: '/emf-logo.png',
+          badge: '/emf-logo.png',
+          tag: `wo-${workOrder.wo_number}`,
+          data: {
+            url: '/mobile',
+            wo_id: workOrder.wo_id,
+            wo_number: workOrder.wo_number
+          }
         };
-        
-        // Add HTML for email notifications (not SMS)
-        if (notificationMethod !== 'sms' && htmlMessage) {
-          mailOptions.html = htmlMessage;
-        }
-        
-        await transporter.sendMail(mailOptions);
 
-        results.push({
-          name: `${first_name} ${last_name}`,
-          method: notificationMethod,
-          status: 'sent'
-        });
-      } catch (emailError) {
-        console.error(`Failed to send to ${first_name} ${last_name}:`, emailError);
-        errors.push({
-          name: `${first_name} ${last_name}`,
-          error: emailError.message
-        });
+        const pushResult = await sendPushNotification(user_id, pushPayload);
+        
+        if (pushResult.success) {
+          results.push.sent.push({ name: `${first_name} ${last_name}`, user_id });
+          console.log(`✅ Push sent to ${first_name} ${last_name}`);
+        } else {
+          results.push.failed.push({ 
+            name: `${first_name} ${last_name}`, 
+            user_id,
+            reason: pushResult.reason 
+          });
+        }
       }
     }
 
     return NextResponse.json({
       success: true,
-      sent: results.length,
-      failed: errors.length,
-      results,
-      errors
+      summary: {
+        email: { sent: results.email.sent.length, failed: results.email.failed.length },
+        push: { sent: results.push.sent.length, failed: results.push.failed.length }
+      },
+      details: results
     });
 
   } catch (error) {
@@ -300,14 +280,11 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint to return available carriers (for SMS)
+// GET endpoint to check notification status
 export async function GET() {
-  const carriers = Object.keys(SMS_GATEWAYS).map(key => ({
-    value: key,
-    label: key.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ')
-  }));
-  
-  return NextResponse.json({ carriers });
+  return NextResponse.json({ 
+    status: 'ok',
+    email_configured: !!process.env.EMAIL_PASS,
+    push_configured: !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+  });
 }

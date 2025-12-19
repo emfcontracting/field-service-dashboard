@@ -1458,30 +1458,19 @@ export default function WorkOrderDetailModal({
             </div>
           )}
 
-          {/* Daily Hours Log Section - EDITABLE */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg">📅 Daily Hours Log (Admin Editable)</h3>
+          {/* Daily Hours Log Section - EDITABLE - Compact */}
+          <div className="bg-gray-700 rounded-lg p-2 md:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="font-bold text-sm md:text-base">📅 Daily Hours Log <span className="text-xs text-gray-400 font-normal hidden md:inline">(Admin Editable)</span></h3>
               <div className="flex items-center gap-2">
-                <div className="text-sm mr-4">
-                  <span className="text-gray-400">Total: </span>
-                  <span className="text-green-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
-                  <span className="text-gray-500 mx-1">|</span>
-                  <span className="text-orange-400 font-bold">{dailyTotals.totalOT.toFixed(1)} OT</span>
-                  <span className="text-gray-500 mx-1">|</span>
-                  <span className="text-blue-400 font-bold">{dailyTotals.totalMiles.toFixed(1)} mi</span>
-                </div>
+                <span className="text-xs text-green-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
+                <span className="text-gray-500">|</span>
+                <span className="text-xs text-orange-400 font-bold">{dailyTotals.totalOT.toFixed(1)} OT</span>
                 <button
                   onClick={() => setShowAddHoursForm(!showAddHoursForm)}
-                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm font-semibold"
+                  className="bg-green-600 hover:bg-green-700 px-2 py-0.5 rounded text-xs font-semibold"
                 >
-                  + Add Hours
-                </button>
-                <button
-                  onClick={loadDailyHoursLog}
-                  className="text-blue-400 hover:text-blue-300 text-sm"
-                >
-                  🔄
+                  + Add
                 </button>
               </div>
             </div>
@@ -1580,10 +1569,10 @@ export default function WorkOrderDetailModal({
             )}
 
             {loadingHours ? (
-              <div className="text-center py-4 text-gray-400">Loading hours...</div>
+              <div className="text-center py-2 text-gray-400 text-xs">Loading...</div>
             ) : dailyHoursLog.length === 0 ? (
-              <div className="text-center py-4 text-gray-400">
-                No daily hours logged yet. Use "Add Hours" button above or field workers can log from mobile app.
+              <div className="text-center py-2 text-gray-500 text-xs">
+                No hours logged yet
               </div>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -1678,23 +1667,23 @@ export default function WorkOrderDetailModal({
             )}
           </div>
 
-          {/* NTE INCREASES SECTION - NEW */}
-          <div className="bg-yellow-900 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg text-yellow-300">💰 NTE Increase Requests</h3>
+          {/* NTE INCREASES SECTION - Compact */}
+          <div className="bg-yellow-900 rounded-lg p-2 md:p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-sm md:text-base text-yellow-300">💰 NTE Increase Requests</h3>
               <button
                 onClick={loadNteIncreases}
-                className="text-yellow-400 hover:text-yellow-300 text-sm"
+                className="text-yellow-400 hover:text-yellow-300 text-xs"
               >
-                🔄 Refresh
+                🔄
               </button>
             </div>
 
             {loadingNteIncreases ? (
-              <div className="text-center py-4 text-gray-400">Loading NTE increases...</div>
+              <div className="text-center py-2 text-gray-400 text-xs">Loading...</div>
             ) : nteIncreases.length === 0 ? (
-              <div className="text-center py-4 text-gray-400">
-                No NTE increase requests for this work order.
+              <div className="text-center py-2 text-gray-400 text-xs">
+                No NTE increase requests
               </div>
             ) : (
               <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -1994,22 +1983,22 @@ export default function WorkOrderDetailModal({
             )}
           </div>
 
-          {/* Team Members */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg">👥 Team Members</h3>
+          {/* Team Members - Compact */}
+          <div className="bg-gray-700 rounded-lg p-2 md:p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-sm md:text-base">👥 Team Members</h3>
               <button
                 onClick={() => setShowTeamModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
+                className="bg-blue-600 hover:bg-blue-700 px-2 py-0.5 rounded text-xs font-semibold"
               >
-                + Add Team Member
+                + Add Team
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {(!selectedWO.teamMembers || selectedWO.teamMembers.length === 0) ? (
-                <div className="text-center text-gray-400 py-4 text-sm">
-                  No additional team members assigned
+                <div className="text-center text-gray-500 py-2 text-xs">
+                  No team members assigned
                 </div>
               ) : (
                 selectedWO.teamMembers.map(member => (

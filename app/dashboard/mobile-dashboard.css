@@ -1,0 +1,241 @@
+/* app/dashboard/mobile-dashboard.css */
+/* Mobile responsive styles for dashboard views */
+
+/* ========================================
+   GENERAL MOBILE ADJUSTMENTS
+   ======================================== */
+
+/* On mobile, reduce base font sizes */
+@media (max-width: 768px) {
+  /* Reduce overall text sizes */
+  .dashboard-mobile h1 { font-size: 1.25rem !important; }
+  .dashboard-mobile h2 { font-size: 1.1rem !important; }
+  .dashboard-mobile h3 { font-size: 1rem !important; }
+  .dashboard-mobile p, 
+  .dashboard-mobile span,
+  .dashboard-mobile div { font-size: 0.8rem; }
+  
+  /* Reduce padding on cards */
+  .dashboard-mobile .bg-gray-800 { padding: 0.75rem !important; }
+  
+  /* Make selects and buttons smaller */
+  .dashboard-mobile select,
+  .dashboard-mobile button {
+    font-size: 0.75rem !important;
+    padding: 0.4rem 0.6rem !important;
+  }
+  
+  /* Stats cards - make numbers smaller */
+  .dashboard-mobile .text-3xl { font-size: 1.5rem !important; }
+  .dashboard-mobile .text-2xl { font-size: 1.25rem !important; }
+  .dashboard-mobile .text-xl { font-size: 1rem !important; }
+  
+  /* Horizontal scroll for filter rows */
+  .dashboard-mobile .flex-wrap {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .dashboard-mobile .flex-wrap::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  .dashboard-mobile h2 { font-size: 0.95rem !important; }
+  .dashboard-mobile p,
+  .dashboard-mobile span { font-size: 0.7rem; }
+  
+  .dashboard-mobile .text-3xl { font-size: 1.25rem !important; }
+  .dashboard-mobile .text-2xl { font-size: 1rem !important; }
+}
+
+/* ========================================
+   AGING VIEW MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+  /* Stats cards - 2x2 grid on mobile */
+  .aging-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+  
+  .aging-stats-grid button {
+    padding: 0.5rem !important;
+  }
+  
+  .aging-stats-grid .text-2xl {
+    font-size: 1.1rem !important;
+  }
+  
+  /* Oldest WO card - stack layout */
+  .aging-oldest-card {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+  
+  .aging-oldest-card .text-3xl {
+    font-size: 1.5rem !important;
+  }
+  
+  /* Work order list items */
+  .aging-wo-item {
+    padding: 0.75rem !important;
+  }
+  
+  /* Hide send button text, show icon only */
+  .send-alert-btn span.btn-text {
+    display: none;
+  }
+}
+
+/* ========================================
+   AVAILABILITY VIEW MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+  /* Stats bar - horizontal scroll */
+  .avail-stats-bar {
+    display: flex !important;
+    overflow-x: auto !important;
+    gap: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .avail-stats-bar > div {
+    flex-shrink: 0 !important;
+    min-width: 60px !important;
+    padding: 0.5rem !important;
+  }
+  
+  .avail-stats-bar .text-2xl,
+  .avail-stats-bar .text-3xl {
+    font-size: 1.25rem !important;
+  }
+  
+  .avail-stats-bar .text-xs {
+    font-size: 0.6rem !important;
+    white-space: nowrap;
+  }
+  
+  /* Tech list - compact */
+  .avail-tech-item {
+    padding: 0.5rem !important;
+  }
+  
+  .avail-tech-item .text-lg {
+    font-size: 0.9rem !important;
+  }
+}
+
+/* ========================================
+   CALENDAR VIEW MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+  /* Calendar header controls */
+  .calendar-controls {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+  
+  .calendar-controls h2 {
+    font-size: 1.1rem !important;
+    min-width: auto !important;
+  }
+  
+  /* Calendar grid - full width */
+  .calendar-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .calendar-grid {
+    min-width: 100% !important;
+  }
+  
+  /* Day cells - smaller */
+  .calendar-day-cell {
+    min-height: 60px !important;
+    padding: 0.25rem !important;
+  }
+  
+  .calendar-day-cell .day-number {
+    font-size: 0.75rem !important;
+  }
+  
+  /* Work order cards in calendar */
+  .calendar-wo-card {
+    font-size: 0.6rem !important;
+    padding: 0.15rem 0.25rem !important;
+  }
+  
+  /* Hide capacity panel on mobile */
+  .capacity-panel {
+    display: none !important;
+  }
+  
+  /* Day names header */
+  .calendar-day-names {
+    font-size: 0.7rem !important;
+  }
+  .calendar-day-names > div {
+    padding: 0.5rem 0 !important;
+  }
+}
+
+/* Extra small - show abbreviated day names */
+@media (max-width: 480px) {
+  .calendar-day-names .day-full {
+    display: none;
+  }
+  .calendar-day-names .day-short {
+    display: block;
+  }
+  
+  .calendar-day-cell {
+    min-height: 50px !important;
+  }
+}
+
+/* ========================================
+   GENERAL UTILITY CLASSES
+   ======================================== */
+
+/* Hide on mobile */
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* Show only on mobile */
+@media (min-width: 769px) {
+  .show-mobile-only { display: none !important; }
+}
+
+/* Mobile-friendly scrollable container */
+.mobile-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.mobile-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* Compact card for mobile */
+.mobile-compact {
+  padding: 0.5rem !important;
+}
+
+/* Smaller text utility */
+.mobile-text-sm {
+  font-size: 0.75rem !important;
+}
+
+.mobile-text-xs {
+  font-size: 0.65rem !important;
+}

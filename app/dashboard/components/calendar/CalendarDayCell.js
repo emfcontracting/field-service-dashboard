@@ -32,34 +32,34 @@ export default function CalendarDayCell({
     return 'bg-red-600';
   };
 
-  // Handle drag enter
   const handleDragEnter = (e) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  // Handle drag leave
   const handleDragLeave = (e) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  // Handle drop
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     onDrop(e, date);
   };
 
-  // Maximum visible work orders before "show more"
-  const maxVisible = 2;
+  // Maximum visible work orders - fewer on mobile
+  const maxVisible = 1;
   const visibleWorkOrders = isExpanded ? workOrders : workOrders.slice(0, maxVisible);
   const hiddenCount = workOrders.length - maxVisible;
 
   return (
     <div
       className={`
-        min-h-[120px] border-t border-l border-gray-700 p-1 transition-all
+        min-h-[50px] md:min-h-[100px] lg:min-h-[120px] 
+        border-t border-l border-gray-700 
+        p-0.5 md:p-1 
+        transition-all
         ${!isCurrentMonth ? 'bg-gray-900/50 text-gray-600' : 'bg-gray-800'}
         ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}
         ${isSelected ? 'bg-blue-900/30' : ''}
@@ -73,9 +73,9 @@ export default function CalendarDayCell({
       onClick={() => onSelectDate(date)}
     >
       {/* Day header */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-0.5 md:mb-1">
         <span className={`
-          text-sm font-semibold px-1.5 py-0.5 rounded
+          text-[10px] md:text-sm font-semibold px-1 md:px-1.5 py-0.5 rounded
           ${isToday ? 'bg-blue-600 text-white' : ''}
           ${!isCurrentMonth ? 'text-gray-600' : ''}
         `}>
@@ -84,18 +84,18 @@ export default function CalendarDayCell({
         
         {/* Capacity indicator */}
         {workOrders.length > 0 && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 md:gap-1">
             <div 
-              className={`w-2 h-2 rounded-full ${getCapacityColor()}`}
-              title={`${capacity.count} work orders (${Math.round(capacity.percentage)}% capacity)`}
+              className={`w-1.5 md:w-2 h-1.5 md:h-2 rounded-full ${getCapacityColor()}`}
+              title={`${capacity.count} work orders`}
             />
-            <span className="text-xs text-gray-400">{workOrders.length}</span>
+            <span className="text-[9px] md:text-xs text-gray-400">{workOrders.length}</span>
           </div>
         )}
       </div>
 
       {/* Work orders */}
-      <div className="space-y-1">
+      <div className="space-y-0.5 md:space-y-1">
         {visibleWorkOrders.map(wo => (
           <CalendarWorkOrderCard
             key={wo.wo_id}
@@ -117,21 +117,10 @@ export default function CalendarDayCell({
             e.stopPropagation();
             setIsExpanded(!isExpanded);
           }}
-          className="w-full mt-1 text-xs text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1"
+          className="w-full mt-0.5 md:mt-1 text-[9px] md:text-xs text-blue-400 hover:text-blue-300 flex items-center justify-center"
         >
-          {isExpanded ? (
-            <>▲ Show less</>
-          ) : (
-            <>▼ +{hiddenCount} more</>
-          )}
+          {isExpanded ? '▲' : `+${hiddenCount}`}
         </button>
-      )}
-
-      {/* Drop zone indicator when empty */}
-      {workOrders.length === 0 && isCurrentMonth && (
-        <div className="h-full flex items-center justify-center text-gray-600 text-xs">
-          {isDragOver ? 'Drop here' : ''}
-        </div>
       )}
     </div>
   );

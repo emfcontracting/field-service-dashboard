@@ -14,9 +14,9 @@ export default function AgingView({
   refreshWorkOrders,
   onSelectWorkOrder 
 }) {
-  const [filterSeverity, setFilterSeverity] = useState('all'); // 'all' | 'critical' | 'warning' | 'stale'
+  const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterTech, setFilterTech] = useState('all');
-  const [sortBy, setSortBy] = useState('age'); // 'age' | 'priority' | 'tech'
+  const [sortBy, setSortBy] = useState('age');
   const [lastAlertSent, setLastAlertSent] = useState(null);
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
@@ -26,13 +26,9 @@ export default function AgingView({
 
   // Calculate aging for each work order
   const calculateAging = (wo) => {
-    // Only calculate for work orders that have a lead tech assigned
-    // and are not completed or needs_return
     if (!wo.lead_tech_id) return null;
     if (wo.status === 'completed' || wo.status === 'needs_return') return null;
 
-    // Get the date when lead tech was assigned
-    // Use lead_tech_assigned_at if available, otherwise fall back to date_entered
     const assignedDate = wo.lead_tech_assigned_at 
       ? new Date(wo.lead_tech_assigned_at)
       : wo.date_entered 
@@ -46,7 +42,6 @@ export default function AgingView({
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
-    // Determine severity
     let severity = 'ok';
     if (diffDays >= 5) {
       severity = 'critical';
@@ -72,7 +67,7 @@ export default function AgingView({
         const aging = calculateAging(wo);
         return { ...wo, aging };
       })
-      .filter(wo => wo.aging !== null && wo.aging.days >= 2) // Only show 2+ days old
+      .filter(wo => wo.aging !== null && wo.aging.days >= 2)
       .sort((a, b) => {
         if (sortBy === 'age') {
           return b.aging.totalHours - a.aging.totalHours;
@@ -91,11 +86,9 @@ export default function AgingView({
   // Apply filters
   const filteredWorkOrders = useMemo(() => {
     return agingWorkOrders.filter(wo => {
-      // Severity filter
       if (filterSeverity !== 'all' && wo.aging.severity !== filterSeverity) {
         return false;
       }
-      // Tech filter
       if (filterTech !== 'all' && wo.lead_tech_id !== filterTech) {
         return false;
       }
@@ -110,7 +103,6 @@ export default function AgingView({
     const stale = agingWorkOrders.filter(wo => wo.aging.severity === 'stale').length;
     const total = agingWorkOrders.length;
 
-    // Calculate by tech
     const byTech = {};
     agingWorkOrders.forEach(wo => {
       const techId = wo.lead_tech_id || 'unassigned';
@@ -135,49 +127,49 @@ export default function AgingView({
       byTech[techId].workOrders.push(wo);
     });
 
-    // Find oldest
     const oldest = agingWorkOrders.length > 0 ? agingWorkOrders[0] : null;
 
     return { critical, warning, stale, total, byTech, oldest };
   }, [agingWorkOrders]);
 
-  // Handle alert sent callback
   const handleAlertSent = () => {
     setLastAlertSent(new Date());
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="bg-gray-800 rounded-lg p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-gray-800 rounded-lg p-3 md:p-4">
+        <div className="flex flex-col gap-3">
+          {/* Title Row */}
           <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
+            <h2 className="text-base md:text-xl font-bold flex items-center gap-2">
               ⚠️ Aging Report & Priority Alerts
             </h2>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-xs md:text-sm text-gray-400 mt-1">
               Work orders open 2+ days since tech assignment
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Filters Row - Scrollable on mobile */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">
             {/* Severity Filter */}
             <select
               value={filterSeverity}
               onChange={(e) => setFilterSeverity(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm"
+              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
             >
               <option value="all">All Severities</option>
-              <option value="critical">🔴 Critical (5+ days)</option>
-              <option value="warning">🟠 Warning (3-4 days)</option>
-              <option value="stale">🟡 Stale (2-3 days)</option>
+              <option value="critical">🔴 Critical (5+)</option>
+              <option value="warning">🟠 Warning (3-4)</option>
+              <option value="stale">🟡 Stale (2-3)</option>
             </select>
 
             {/* Tech Filter */}
             <select
               value={filterTech}
               onChange={(e) => setFilterTech(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm"
+              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
             >
               <option value="all">All Techs</option>
               {leadTechs.map(tech => (
@@ -191,20 +183,22 @@ export default function AgingView({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm"
+              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
             >
               <option value="age">Sort by Age</option>
               <option value="priority">Sort by Priority</option>
               <option value="tech">Sort by Tech</option>
             </select>
 
-            {/* Send Alerts Button - Opens Modal */}
+            {/* Send Alerts Button */}
             <button
               onClick={() => setShowSendModal(true)}
               disabled={stats.total === 0}
-              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2"
+              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-semibold transition flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
             >
-              📧 Send Alert Emails
+              <span>📧</span>
+              <span className="hidden sm:inline">Send Alert Emails</span>
+              <span className="sm:hidden">Send</span>
             </button>
           </div>
         </div>
@@ -222,8 +216,8 @@ export default function AgingView({
         onFilterClick={setFilterSeverity}
       />
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Content - Stack on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Work Orders List */}
         <div className="lg:col-span-2">
           <AgingWorkOrdersList
@@ -233,8 +227,8 @@ export default function AgingView({
           />
         </div>
 
-        {/* Sidebar - By Tech Breakdown */}
-        <div>
+        {/* Sidebar - By Tech Breakdown (Hidden on small mobile, shown on tablet+) */}
+        <div className="hidden md:block">
           <AgingByTechChart
             stats={stats}
             onTechClick={setFilterTech}

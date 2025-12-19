@@ -23,16 +23,12 @@ export default function CalendarGrid({
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     
-    // First day of month
     const firstDay = new Date(year, month, 1);
-    // Last day of month
     const lastDay = new Date(year, month + 1, 0);
     
-    // Start from the Sunday before the first day
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - startDate.getDay());
     
-    // End on the Saturday after the last day
     const endDate = new Date(lastDay);
     if (endDate.getDay() !== 6) {
       endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
@@ -49,41 +45,48 @@ export default function CalendarGrid({
     return days;
   }, [currentDate]);
 
-  // Day names header
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Day names - full and abbreviated
+  const dayNames = [
+    { full: 'Sunday', short: 'Sun', abbr: 'S' },
+    { full: 'Monday', short: 'Mon', abbr: 'M' },
+    { full: 'Tuesday', short: 'Tue', abbr: 'T' },
+    { full: 'Wednesday', short: 'Wed', abbr: 'W' },
+    { full: 'Thursday', short: 'Thu', abbr: 'T' },
+    { full: 'Friday', short: 'Fri', abbr: 'F' },
+    { full: 'Saturday', short: 'Sat', abbr: 'S' }
+  ];
 
-  // Check if date is today
   const isToday = (date) => {
     const today = new Date();
     return date.toDateString() === today.toDateString();
   };
 
-  // Check if date is in current month
   const isCurrentMonth = (date) => {
     return date.getMonth() === currentDate.getMonth();
   };
 
-  // Check if date is selected
   const isSelected = (date) => {
     return selectedDate && date.toDateString() === selectedDate.toDateString();
   };
 
-  // Check if date is a weekend
   const isWeekend = (date) => {
     const day = date.getDay();
     return day === 0 || day === 6;
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg overflow-hidden">
+    <div className="bg-gray-800 rounded-lg overflow-hidden min-w-[280px]">
       {/* Day names header */}
       <div className="grid grid-cols-7 bg-gray-700">
-        {dayNames.map(day => (
+        {dayNames.map((day, index) => (
           <div 
-            key={day} 
-            className="py-3 text-center text-sm font-semibold text-gray-300"
+            key={index} 
+            className="py-1.5 md:py-3 text-center text-[10px] md:text-sm font-semibold text-gray-300"
           >
-            {day}
+            {/* Show abbreviated on mobile, short on tablet, full on desktop */}
+            <span className="sm:hidden">{day.abbr}</span>
+            <span className="hidden sm:inline lg:hidden">{day.short}</span>
+            <span className="hidden lg:inline">{day.short}</span>
           </div>
         ))}
       </div>

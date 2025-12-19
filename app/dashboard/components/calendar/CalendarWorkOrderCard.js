@@ -14,7 +14,6 @@ export default function CalendarWorkOrderCard({
 }) {
   const [showActions, setShowActions] = useState(false);
 
-  // Get status color
   const getStatusColor = () => {
     const colors = {
       pending: 'border-l-gray-500 bg-gray-700/50',
@@ -26,7 +25,6 @@ export default function CalendarWorkOrderCard({
     return colors[workOrder.status] || 'border-l-gray-500 bg-gray-700/50';
   };
 
-  // Get priority indicator
   const getPriorityIndicator = () => {
     const indicators = {
       emergency: '🔴',
@@ -37,22 +35,17 @@ export default function CalendarWorkOrderCard({
     return indicators[workOrder.priority] || '⚪';
   };
 
-  // Get lead tech name
   const getLeadTechName = () => {
     if (!workOrder.lead_tech_id) return null;
     const tech = leadTechs?.find(t => t.user_id === workOrder.lead_tech_id);
-    if (tech) {
-      return `${tech.first_name} ${tech.last_name.charAt(0)}.`;
-    }
-    if (workOrder.lead_tech) {
-      return `${workOrder.lead_tech.first_name} ${workOrder.lead_tech.last_name.charAt(0)}.`;
-    }
+    if (tech) return `${tech.first_name} ${tech.last_name.charAt(0)}.`;
+    if (workOrder.lead_tech) return `${workOrder.lead_tech.first_name} ${workOrder.lead_tech.last_name.charAt(0)}.`;
     return null;
   };
 
   const techName = getLeadTechName();
 
-  // Compact card for month view
+  // Compact card for month view & mobile
   if (compact) {
     return (
       <div
@@ -61,54 +54,43 @@ export default function CalendarWorkOrderCard({
         onDragEnd={onDragEnd}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
+        onTouchStart={() => setShowActions(true)}
         onClick={(e) => {
           e.stopPropagation();
           onClick(workOrder);
         }}
         className={`
           relative group cursor-grab active:cursor-grabbing
-          text-xs p-1.5 rounded border-l-4 transition-all
-          hover:ring-1 hover:ring-blue-400
+          text-[9px] md:text-xs p-1 md:p-1.5 rounded border-l-2 md:border-l-4 transition-all
+          hover:ring-1 hover:ring-blue-400 active:ring-1 active:ring-blue-400
           ${getStatusColor()}
         `}
       >
-        <div className="flex items-start gap-1">
-          {/* Drag handle */}
-          <span className="text-gray-500 flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition">
-            ⋮⋮
-          </span>
-          
+        <div className="flex items-start gap-0.5 md:gap-1">
           <div className="flex-1 min-w-0">
             {/* WO Number with priority */}
-            <div className="flex items-center gap-1">
-              <span className="text-[10px]">{getPriorityIndicator()}</span>
-              <span className="font-semibold text-white truncate">
+            <div className="flex items-center gap-0.5">
+              <span className="text-[8px] md:text-[10px]">{getPriorityIndicator()}</span>
+              <span className="font-semibold text-white truncate text-[9px] md:text-xs">
                 {workOrder.wo_number}
               </span>
             </div>
             
-            {/* Building */}
-            <div className="text-gray-400 truncate text-[10px]">
+            {/* Building - hidden on very small screens */}
+            <div className="text-gray-400 truncate text-[8px] md:text-[10px] hidden sm:block">
               {workOrder.building}
             </div>
-
-            {/* Tech name if assigned */}
-            {techName && (
-              <div className="flex items-center gap-0.5 text-[10px] text-blue-400 mt-0.5">
-                👤 {techName}
-              </div>
-            )}
           </div>
 
-          {/* Unschedule button */}
+          {/* Unschedule button - touch friendly */}
           {showActions && onUnschedule && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onUnschedule(workOrder);
               }}
-              className="absolute top-1 right-1 p-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px]"
-              title="Remove from schedule"
+              className="absolute top-0.5 right-0.5 p-0.5 bg-red-600 active:bg-red-500 rounded text-white text-[8px] md:text-[10px]"
+              title="Remove"
             >
               ✕
             </button>
@@ -126,70 +108,64 @@ export default function CalendarWorkOrderCard({
       onDragEnd={onDragEnd}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
+      onTouchStart={() => setShowActions(true)}
       onClick={(e) => {
         e.stopPropagation();
         onClick(workOrder);
       }}
       className={`
         relative group cursor-grab active:cursor-grabbing
-        p-2 rounded-lg border-l-4 transition-all
-        hover:ring-2 hover:ring-blue-400
+        p-1.5 md:p-2 rounded-lg border-l-2 md:border-l-4 transition-all
+        hover:ring-2 hover:ring-blue-400 active:ring-2 active:ring-blue-400
         ${getStatusColor()}
       `}
     >
-      <div className="flex items-start gap-2">
-        {/* Drag handle */}
-        <span className="text-gray-500 flex-shrink-0 mt-1 opacity-50 group-hover:opacity-100 transition">
-          ⋮⋮
-        </span>
-        
+      <div className="flex items-start gap-1 md:gap-2">
         <div className="flex-1 min-w-0">
           {/* Header row */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <span className="text-sm">{getPriorityIndicator()}</span>
-              <span className="font-bold text-white">
+          <div className="flex items-center justify-between gap-1 md:gap-2">
+            <div className="flex items-center gap-0.5 md:gap-1">
+              <span className="text-xs md:text-sm">{getPriorityIndicator()}</span>
+              <span className="font-bold text-white text-xs md:text-sm">
                 {workOrder.wo_number}
               </span>
             </div>
             
             {/* Status badge */}
             <span className={`
-              text-[10px] px-1.5 py-0.5 rounded font-semibold
+              text-[8px] md:text-[10px] px-1 md:px-1.5 py-0.5 rounded font-semibold
               ${workOrder.status === 'pending' ? 'bg-gray-600' : ''}
               ${workOrder.status === 'assigned' ? 'bg-blue-600' : ''}
               ${workOrder.status === 'in_progress' ? 'bg-yellow-600' : ''}
               ${workOrder.status === 'needs_return' ? 'bg-purple-600' : ''}
               ${workOrder.status === 'completed' ? 'bg-green-600' : ''}
             `}>
-              {workOrder.status.replace('_', ' ').toUpperCase()}
+              {workOrder.status.replace('_', ' ').toUpperCase().slice(0, 6)}
             </span>
           </div>
 
           {/* Building */}
-          <div className="flex items-center gap-1 text-sm text-gray-300 mt-1">
-            📍 {workOrder.building}
+          <div className="flex items-center gap-1 text-xs md:text-sm text-gray-300 mt-0.5 md:mt-1">
+            📍 <span className="truncate">{workOrder.building}</span>
           </div>
 
-          {/* Description */}
-          <div className="text-xs text-gray-400 mt-1 line-clamp-2">
+          {/* Description - hidden on mobile */}
+          <div className="text-[10px] md:text-xs text-gray-400 mt-1 line-clamp-2 hidden md:block">
             {workOrder.work_order_description}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-600">
-            {/* Lead tech */}
+          <div className="flex items-center justify-between mt-1 md:mt-2 pt-1 md:pt-2 border-t border-gray-600">
             {techName ? (
-              <div className="flex items-center gap-1 text-xs text-blue-400">
+              <div className="flex items-center gap-0.5 text-[10px] md:text-xs text-blue-400 truncate">
                 👤 {techName}
               </div>
             ) : (
-              <span className="text-xs text-gray-500">Unassigned</span>
+              <span className="text-[10px] md:text-xs text-gray-500">—</span>
             )}
 
-            {/* NTE */}
             {workOrder.nte > 0 && (
-              <span className="text-xs font-semibold text-green-400">
+              <span className="text-[10px] md:text-xs font-semibold text-green-400">
                 ${workOrder.nte.toLocaleString()}
               </span>
             )}
@@ -203,8 +179,8 @@ export default function CalendarWorkOrderCard({
               e.stopPropagation();
               onUnschedule(workOrder);
             }}
-            className="absolute top-2 right-2 p-1 bg-red-600 hover:bg-red-500 rounded text-white text-xs"
-            title="Remove from schedule"
+            className="absolute top-1 right-1 p-0.5 md:p-1 bg-red-600 active:bg-red-500 rounded text-white text-[10px] md:text-xs"
+            title="Remove"
           >
             ✕
           </button>

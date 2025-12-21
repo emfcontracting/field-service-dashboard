@@ -21,12 +21,23 @@ if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 // Create email transporter using Gmail
 const createTransporter = () => {
+  const emailUser = process.env.EMAIL_USER || 'emfcbre@gmail.com';
+  const emailPass = process.env.EMAIL_PASS;
+  
+  if (!emailPass) {
+    console.warn('EMAIL_PASS not configured - email notifications will fail');
+  }
+  
+  console.log(`Creating email transporter for ${emailUser}`);
+  
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER || 'emfcbre@gmail.com',
-      pass: process.env.EMAIL_PASS
-    }
+      user: emailUser,
+      pass: emailPass
+    },
+    debug: true, // Enable debug logging
+    logger: true  // Log to console
   });
 };
 
@@ -144,35 +155,59 @@ EMF Contracting LLC
 // Send push notification to a user
 const sendPushNotification = async (userId, payload) => {
   try {
+    // Check if VAPID keys are configured
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+      console.log('VAPID keys not configured - skipping push notification');
+      return { success: false, reason: 'vapid_not_configured' };
+    }
+
     // Get user's push subscription from database
-    const { data: subscription, error } = await supabase
+    // FIXED: Use subscription_json column (not 'subscription')
+    const { data: subscriptionData, error } = await supabase
       .from('push_subscriptions')
-      .select('subscription')
+      .select('subscription_json, is_active')
       .eq('user_id', userId)
+      .eq('is_active', true)
       .single();
 
-    if (error || !subscription) {
-      console.log(`No push subscription for user ${userId}`);
+    if (error || !subscriptionData) {
+      console.log(`No active push subscription for user ${userId}`);
       return { success: false, reason: 'no_subscription' };
     }
 
-    const pushSubscription = subscription.subscription;
+    // Parse the subscription JSON
+    let pushSubscription;
+    try {
+      pushSubscription = typeof subscriptionData.subscription_json === 'string' 
+        ? JSON.parse(subscriptionData.subscription_json) 
+        : subscriptionData.subscription_json;
+    } catch (parseError) {
+      console.error(`Error parsing subscription for user ${userId}:`, parseError);
+      return { success: false, reason: 'invalid_subscription_format' };
+    }
+
+    if (!pushSubscription || !pushSubscription.endpoint) {
+      console.log(`Invalid subscription data for user ${userId}`);
+      return { success: false, reason: 'invalid_subscription' };
+    }
     
     await webpush.sendNotification(
       pushSubscription,
       JSON.stringify(payload)
     );
 
+    console.log(`✅ Push notification sent to user ${userId}`);
     return { success: true };
   } catch (error) {
     console.error(`Push notification failed for user ${userId}:`, error.message);
     
-    // If subscription is invalid, remove it
+    // If subscription is invalid/expired, mark it inactive
     if (error.statusCode === 410 || error.statusCode === 404) {
       await supabase
         .from('push_subscriptions')
-        .delete()
+        .update({ is_active: false })
         .eq('user_id', userId);
+      console.log(`Marked expired subscription as inactive for user ${userId}`);
     }
     
     return { success: false, reason: error.message };
@@ -280,11 +315,31 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint to check notification status
+// GET endpoint to check notification status and configuration
 export async function GET() {
+  // Check push subscriptions count
+  let subscriptionCount = 0;
+  try {
+    const { count } = await supabase
+      .from('push_subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+    subscriptionCount = count || 0;
+  } catch (e) {
+    console.error('Error counting subscriptions:', e);
+  }
+
   return NextResponse.json({ 
     status: 'ok',
-    email_configured: !!process.env.EMAIL_PASS,
-    push_configured: !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+    email: {
+      configured: !!process.env.EMAIL_PASS,
+      user: process.env.EMAIL_USER || 'emfcbre@gmail.com'
+    },
+    push: {
+      configured: !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+      public_key_set: !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      private_key_set: !!process.env.VAPID_PRIVATE_KEY,
+      active_subscriptions: subscriptionCount
+    }
   });
 }

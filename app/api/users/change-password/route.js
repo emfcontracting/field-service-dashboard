@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Create admin client for password updates
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy initialization to avoid build-time errors
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
 
-// Regular client for auth verification
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
 
 export async function POST(request) {
   try {
@@ -31,6 +34,8 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const supabase = getSupabase();
 
     // If userEmail provided, use it (from client-side auth)
     let email = userEmail;
@@ -78,7 +83,7 @@ export async function POST(request) {
     }
 
     // Update password using admin client
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: updateError } = await getSupabaseAdmin().auth.admin.updateUserById(
       userId,
       { password: newPassword }
     );

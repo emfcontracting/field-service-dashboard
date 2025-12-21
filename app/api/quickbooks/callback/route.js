@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy initialization to avoid build-time errors
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
 
 export async function GET(request) {
   try {
@@ -28,7 +31,7 @@ export async function GET(request) {
     const token = authResponse.getJson();
 
     // Save to database
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('quickbooks_settings')
       .upsert({
         access_token: token.access_token,

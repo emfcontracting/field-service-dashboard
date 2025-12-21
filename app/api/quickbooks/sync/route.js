@@ -2,16 +2,19 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy initialization to avoid build-time errors
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
 
 async function refreshToken(oauthClient, refreshToken) {
   const authResponse = await oauthClient.refreshUsingToken(refreshToken);
   const token = authResponse.getJson();
 
-  await supabase
+  await getSupabase()
     .from('quickbooks_settings')
     .update({
       access_token: token.access_token,
@@ -26,6 +29,7 @@ async function refreshToken(oauthClient, refreshToken) {
 export async function POST(request) {
   try {
     const { invoice_id } = await request.json();
+    const supabase = getSupabase();
 
     // Get QuickBooks settings
     const { data: qbSettings, error: qbError } = await supabase
@@ -144,7 +148,7 @@ export async function POST(request) {
 
     // Save error to invoice
     if (request.invoice_id) {
-      await supabase
+      await getSupabase()
         .from('invoices')
         .update({ quickbooks_sync_error: error.message })
         .eq('invoice_id', request.invoice_id);

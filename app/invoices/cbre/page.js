@@ -148,7 +148,7 @@ export default function CBREInvoicingPage() {
         vwas_submitted: true,
         vwas_submitted_at: new Date().toISOString(),
         cbre_status: 'submitted_to_vwas',
-        status: 'synced'
+        status: 'accepted'
       })
       .eq('invoice_id', invoiceId);
 
@@ -176,9 +176,24 @@ export default function CBREInvoicingPage() {
     switch (status) {
       case 'draft': return 'bg-yellow-600';
       case 'approved': return 'bg-blue-600';
-      case 'synced': return 'bg-green-600';
+      case 'accepted': return 'bg-green-600';
+      case 'synced': return 'bg-green-600'; // Legacy support
       case 'paid': return 'bg-green-600';
+      case 'rejected': return 'bg-red-600';
       default: return 'bg-gray-600';
+    }
+  };
+
+  // Get display name for status
+  const getStatusDisplayName = (status) => {
+    switch (status) {
+      case 'draft': return 'DRAFT';
+      case 'approved': return 'UPLOADED TO CBRE';
+      case 'accepted': return 'ACCEPTED CBRE - SUBMITTED TO AP';
+      case 'synced': return 'ACCEPTED CBRE - SUBMITTED TO AP'; // Legacy support
+      case 'paid': return 'PAID';
+      case 'rejected': return 'REJECTED';
+      default: return status?.toUpperCase() || 'UNKNOWN';
     }
   };
 
@@ -683,7 +698,7 @@ export default function CBREInvoicingPage() {
         ) : (
           <>
             {/* Tabs */}
-            <div className="flex gap-4 mb-6 border-b border-gray-700">
+            <div className="flex gap-4 mb-6 border-b border-gray-700 flex-wrap">
               <button
                 onClick={() => setActiveTab('ready')}
                 className={`px-6 py-3 font-semibold transition ${
@@ -703,6 +718,16 @@ export default function CBREInvoicingPage() {
                 }`}
               >
                 In Progress ({invoices.filter(i => i.status === 'draft' || i.status === 'approved').length})
+              </button>
+              <button
+                onClick={() => setActiveTab('rejected')}
+                className={`px-6 py-3 font-semibold transition ${
+                  activeTab === 'rejected'
+                    ? 'text-red-400 border-b-2 border-red-400'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Rejected ({invoices.filter(i => i.status === 'rejected').length})
               </button>
               <button
                 onClick={() => setActiveTab('completed')}
@@ -803,7 +828,7 @@ export default function CBREInvoicingPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                                  {invoice.status?.toUpperCase()}
+                                  {getStatusDisplayName(invoice.status)}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-center">
@@ -819,6 +844,69 @@ export default function CBREInvoicingPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'rejected' && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-bold mb-4 text-red-400">❌ Rejected Invoices</h2>
+                
+                {invoices.filter(i => i.status === 'rejected').length === 0 ? (
+                  <div className="text-gray-400 text-center py-8">
+                    No rejected invoices. 🎉
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-red-900 text-red-200 p-4 rounded-lg mb-4">
+                      <div className="font-bold mb-1">These invoices were rejected by CBRE</div>
+                      <p className="text-sm">Click "Return to Draft" to make corrections and resubmit.</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-700">
+                          <tr>
+                            <th className="px-4 py-3 text-left">Invoice #</th>
+                            <th className="px-4 py-3 text-left">WO #</th>
+                            <th className="px-4 py-3 text-left">Building</th>
+                            <th className="px-4 py-3 text-right">Total</th>
+                            <th className="px-4 py-3 text-left">Status</th>
+                            <th className="px-4 py-3 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoices
+                            .filter(i => i.status === 'rejected')
+                            .map(invoice => (
+                              <tr
+                                key={invoice.invoice_id}
+                                className="border-t border-gray-700 hover:bg-gray-700 transition"
+                              >
+                                <td className="px-4 py-3 font-semibold">{invoice.invoice_number}</td>
+                                <td className="px-4 py-3">{invoice.work_order?.wo_number}</td>
+                                <td className="px-4 py-3">{invoice.work_order?.building}</td>
+                                <td className="px-4 py-3 text-right font-bold text-green-400">
+                                  ${invoice.total?.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-600">
+                                    REJECTED
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <button
+                                    onClick={() => updateInvoiceStatus(invoice.invoice_id, 'draft')}
+                                    className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg text-sm font-semibold"
+                                  >
+                                    ↩️ Return to Draft
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -865,7 +953,7 @@ export default function CBREInvoicingPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                                  {invoice.status?.toUpperCase()}
+                                  {getStatusDisplayName(invoice.status)}
                                 </span>
                               </td>
                             </tr>

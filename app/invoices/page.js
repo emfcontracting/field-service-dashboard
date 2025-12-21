@@ -715,9 +715,24 @@ export default function InvoicingPage() {
     switch (status) {
       case 'draft': return 'bg-yellow-600';
       case 'approved': return 'bg-blue-600';
-      case 'synced': return 'bg-green-600';
+      case 'accepted': return 'bg-green-600';
+      case 'synced': return 'bg-green-600'; // Legacy support
       case 'paid': return 'bg-green-600';
+      case 'rejected': return 'bg-red-600';
       default: return 'bg-gray-600';
+    }
+  };
+
+  // Get display name for status
+  const getStatusDisplayName = (status) => {
+    switch (status) {
+      case 'draft': return 'DRAFT';
+      case 'approved': return 'UPLOADED TO CBRE';
+      case 'accepted': return 'ACCEPTED CBRE - SUBMITTED TO AP';
+      case 'synced': return 'ACCEPTED CBRE - SUBMITTED TO AP'; // Legacy support
+      case 'paid': return 'PAID';
+      case 'rejected': return 'REJECTED';
+      default: return status?.toUpperCase() || 'UNKNOWN';
     }
   };
 
@@ -951,7 +966,7 @@ export default function InvoicingPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                            {invoice.status.toUpperCase()}
+                            {getStatusDisplayName(invoice.status)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center text-gray-400">
@@ -1315,7 +1330,7 @@ export default function InvoicingPage() {
                   <div>
                     <span className="text-gray-400">Status:</span>
                     <span className={`ml-2 px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(selectedItem.data.status)}`}>
-                      {selectedItem.data.status.toUpperCase()}
+                      {getStatusDisplayName(selectedItem.data.status)}
                     </span>
                   </div>
                   <div>
@@ -1412,6 +1427,7 @@ export default function InvoicingPage() {
                   </button>
                 </div>
                 
+                {/* Status-specific action buttons */}
                 {selectedItem.data.status === 'draft' && (
                   <>
                     <button
@@ -1425,18 +1441,67 @@ export default function InvoicingPage() {
                       onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'approved')}
                       className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
                     >
-                      ✅ Mark as Approved
+                      📤 Uploaded to CBRE
                     </button>
                   </>
                 )}
 
                 {selectedItem.data.status === 'approved' && (
+                  <>
+                    <button
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
+                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    >
+                      ↩️ Return to Draft
+                    </button>
+                    <button
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'accepted')}
+                      className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    >
+                      ✅ Accepted CBRE - Submitted to AP
+                    </button>
+                  </>
+                )}
+
+                {(selectedItem.data.status === 'accepted' || selectedItem.data.status === 'synced') && (
+                  <>
+                    <button
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
+                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    >
+                      ↩️ Return to Draft
+                    </button>
+                    <button
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'paid')}
+                      className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    >
+                      💰 Mark as Paid
+                    </button>
+                  </>
+                )}
+
+                {selectedItem.data.status === 'paid' && (
                   <button
-                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'synced')}
-                    className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
+                    className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
                   >
-                    💰 Mark as Synced/Paid
+                    ↩️ Return to Draft
                   </button>
+                )}
+
+                {selectedItem.data.status === 'rejected' && (
+                  <>
+                    <div className="bg-red-900 text-red-200 p-4 rounded-lg text-center">
+                      <div className="font-bold">❌ Invoice Rejected by CBRE</div>
+                      <p className="text-sm mt-1">Return to draft to make changes and resubmit.</p>
+                    </div>
+                    <button
+                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
+                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
+                    >
+                      ↩️ Return to Draft (Edit & Resubmit)
+                    </button>
+                  </>
                 )}
 
                 <div className="border-t border-gray-600 pt-3 mt-2">

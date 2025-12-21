@@ -15,6 +15,8 @@ const LABEL_STATUS_MAP = {
   'quote-rejected': { cbre_status: 'quote_rejected', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false, extractQuoteAmount: true },
   'reassignment-of': { cbre_status: 'reassigned', notify: true, notifyRoles: ['admin', 'office'] },
+  'invoice-rejected': { cbre_status: 'invoice_rejected', invoice_status: 'rejected', notify: true, notifyRoles: ['admin', 'office'] },
+  'cancellation': { cbre_status: 'cancelled', notify: true, notifyRoles: ['admin', 'office'] },
 };
 
 // Get a fresh access token using refresh token
@@ -262,6 +264,12 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
       case 'quote_approved':
         message = `✅ QUOTE APPROVED: WO ${workOrder.wo_number} - ${workOrder.building}${newNTE ? `. New NTE: $${newNTE.toFixed(2)}` : ''}`;
         break;
+      case 'invoice_rejected':
+        message = `❌ INVOICE REJECTED: WO ${workOrder.wo_number} - ${workOrder.building}. Review and resubmit needed.`;
+        break;
+      case 'cancelled':
+        message = `🚫 CANCELLED: WO ${workOrder.wo_number} - ${workOrder.building} has been cancelled by CBRE.`;
+        break;
       default:
         message = `📋 CBRE Update: WO ${workOrder.wo_number} - Status: ${type}`;
     }
@@ -453,6 +461,38 @@ export async function GET(request) {
                 .in('nte_status', ['pending', 'submitted']);
             }
 
+            // Update invoice status if specified (for invoice-rejected emails)
+            let invoiceUpdated = false;
+            if (labelConfig.invoice_status) {
+              const { data: invoice, error: invoiceError } = await supabase
+                .from('invoices')
+                .select('invoice_id, invoice_number, status')
+                .eq('wo_id', workOrder.wo_id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (invoice && !invoiceError) {
+                const { error: invoiceUpdateError } = await supabase
+                  .from('invoices')
+                  .update({ 
+                    status: labelConfig.invoice_status,
+                    rejection_reason: subject,
+                    rejected_at: new Date().toISOString()
+                  })
+                  .eq('invoice_id', invoice.invoice_id);
+
+                if (!invoiceUpdateError) {
+                  invoiceUpdated = true;
+                  console.log(`Updated invoice ${invoice.invoice_number} to status: ${labelConfig.invoice_status}`);
+                } else {
+                  console.error(`Failed to update invoice: ${invoiceUpdateError.message}`);
+                }
+              } else {
+                console.log(`No invoice found for WO ${woNumber}`);
+              }
+            }
+
             // Mark email as read
             await markAsRead(accessToken, msg.id);
 
@@ -471,6 +511,8 @@ export async function GET(request) {
             new_nte: newNTE,
             old_nte: workOrder.nte,
             submitted_quote: submittedQuoteAmount,
+            invoice_updated: invoiceUpdated,
+            invoice_status: labelConfig.invoice_status || null,
             subject: subject.substring(0, 80),
             notified: labelConfig.notify || !!newNTE
           });

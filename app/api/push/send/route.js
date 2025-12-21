@@ -9,19 +9,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Configure web-push with VAPID keys
-// You need to generate these once and store them in environment variables
-// Run: npx web-push generate-vapid-keys
-webpush.setVapidDetails(
-  'mailto:emfcbre@gmail.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+// Configure web-push with VAPID keys lazily (not at build time)
+let vapidConfigured = false;
+
+function ensureVapidConfigured() {
+  if (vapidConfigured) return true;
+  
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  
+  if (!publicKey || !privateKey) {
+    console.warn('VAPID keys not configured. Push notifications will not work.');
+    return false;
+  }
+  
+  webpush.setVapidDetails(
+    'mailto:emfcbre@gmail.com',
+    publicKey,
+    privateKey
+  );
+  vapidConfigured = true;
+  return true;
+}
 
 export async function POST(request) {
   try {
+    // Configure VAPID at runtime, not build time
+    if (!ensureVapidConfigured()) {
+      return NextResponse.json(
+        { error: 'Push notifications not configured. VAPID keys missing.' },
+        { status: 503 }
+      );
+    }
+
     const { user_ids, title, body, data, priority } = await request.json();
-    
+
     if (!user_ids || user_ids.length === 0) {
       return NextResponse.json(
         { error: 'No user_ids provided' },
@@ -43,10 +65,10 @@ export async function POST(request) {
 
     if (!subscriptions || subscriptions.length === 0) {
       console.log('No active push subscriptions found for users:', user_ids);
-      return NextResponse.json({ 
-        success: true, 
-        sent: 0, 
-        message: 'No active subscriptions found' 
+      return NextResponse.json({
+        success: true,
+        sent: 0,
+        message: 'No active subscriptions found'
       });
     }
 
@@ -68,19 +90,19 @@ export async function POST(request) {
     for (const sub of subscriptions) {
       try {
         const pushSubscription = JSON.parse(sub.subscription_json);
-        
+
         await webpush.sendNotification(pushSubscription, payload);
-        
+
         results.push({
           user_id: sub.user_id,
           status: 'sent'
         });
-        
+
         console.log(`✅ Push sent to user ${sub.user_id}`);
-        
+
       } catch (pushError) {
         console.error(`Push error for user ${sub.user_id}:`, pushError.statusCode, pushError.body);
-        
+
         // Handle expired or invalid subscriptions
         if (pushError.statusCode === 410 || pushError.statusCode === 404) {
           expiredSubscriptions.push(sub.id);
@@ -105,8 +127,8 @@ export async function POST(request) {
         .from('push_subscriptions')
         .update({ is_active: false })
         .in('id', expiredSubscriptions);
-      
-      console.log(`🗑️ Marked ${expiredSubscriptions.length} expired subscriptions as inactive`);
+
+      console.log(`🧹 Marked ${expiredSubscriptions.length} expired subscriptions as inactive`);
     }
 
     return NextResponse.json({
@@ -127,16 +149,16 @@ export async function POST(request) {
 // GET endpoint to check VAPID public key availability
 export async function GET() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  
+
   if (!publicKey) {
-    return NextResponse.json({ 
-      configured: false, 
-      message: 'VAPID keys not configured. Run: npx web-push generate-vapid-keys' 
+    return NextResponse.json({
+      configured: false,
+      message: 'VAPID keys not configured. Run: npx web-push generate-vapid-keys'
     });
   }
-  
-  return NextResponse.json({ 
-    configured: true, 
-    publicKey 
+
+  return NextResponse.json({
+    configured: true,
+    publicKey
   });
 }

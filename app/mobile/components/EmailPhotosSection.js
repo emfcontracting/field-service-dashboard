@@ -53,7 +53,8 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
       `${language === 'en' ? 'Date' : 'Fecha'}: ${new Date().toLocaleString()}\n\n` +
       `--- ${language === 'en' ? 'Attach photos below' : 'Adjuntar fotos abajo'} ---`
     );
-    const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
+    // CC the OAuth-enabled account so we can verify photos were sent
+    const mailtoLink = `mailto:emfcbre@gmail.com?cc=wo.emfcontractingsc@gmail.com&subject=${subject}&body=${body}`;
     window.location.href = mailtoLink;
   }
 

@@ -129,6 +129,20 @@ export default function AvailabilityView({ supabase, users }) {
   // Mobile-friendly user row
   const renderUserRow = (user) => {
     const status = getAvailabilityStatus(user);
+    
+    // Format submitted time
+    const getSubmittedTime = () => {
+      if (!user.submitted_at) return null;
+      const date = new Date(user.submitted_at);
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    };
+    
+    const submittedTime = getSubmittedTime();
+    
     return (
       <div key={user.user_id} className="px-3 md:px-4 py-2 md:py-3 hover:bg-gray-750 border-t border-gray-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
@@ -145,14 +159,23 @@ export default function AvailabilityView({ supabase, users }) {
             </div>
           </div>
           
-          {/* Availability details - hidden on small mobile */}
-          <div className="hidden md:flex items-center gap-4 text-xs md:text-sm">
-            <span className={user.scheduled_work ? 'text-blue-400' : 'text-gray-600'}>
-              {user.scheduled_work ? '✓' : '○'} Scheduled
-            </span>
-            <span className={user.emergency_work ? 'text-orange-400' : 'text-gray-600'}>
-              {user.emergency_work ? '✓' : '○'} Emergency
-            </span>
+          {/* Availability details */}
+          <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm">
+            {/* Submitted time - always show if submitted */}
+            {user.submitted && submittedTime && (
+              <span className="text-gray-400 text-[10px] md:text-xs">
+                🕒 {submittedTime}
+              </span>
+            )}
+            {/* Scheduled/Emergency indicators - hidden on small mobile */}
+            <div className="hidden md:flex items-center gap-4">
+              <span className={user.scheduled_work ? 'text-blue-400' : 'text-gray-600'}>
+                {user.scheduled_work ? '✓' : '○'} Scheduled
+              </span>
+              <span className={user.emergency_work ? 'text-orange-400' : 'text-gray-600'}>
+                {user.emergency_work ? '✓' : '○'} Emergency
+              </span>
+            </div>
           </div>
         </div>
       </div>

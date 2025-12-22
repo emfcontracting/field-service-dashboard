@@ -472,7 +472,6 @@ export default function WorkOrderDetail({
               <option value="pending">{t('pending')}</option>
               <option value="tech_review">{t('techReview')}</option>
               <option value="return_trip">{t('returnTrip')}</option>
-              <option value="completed">{t('completedStatus')}</option>
             </select>
           </div>
 
@@ -568,8 +567,8 @@ export default function WorkOrderDetail({
             )}
           </div>
 
-          {/* Complete Work Order Button */}
-          {wo.time_out && status !== 'completed' && (
+          {/* Complete Work Order Button - Always visible at bottom */}
+          {status !== 'completed' && (
             <button
               onClick={onCompleteWorkOrder}
               disabled={saving}

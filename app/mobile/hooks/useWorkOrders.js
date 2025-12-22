@@ -604,10 +604,15 @@ export function useWorkOrders(currentUser) {
   async function completeWorkOrder() {
     if (!selectedWO) return;
     
+    // Check if this is a PM work order (starts with P followed by numbers)
+    const isPMWorkOrder = selectedWO.wo_number && /^P\d+$/i.test(selectedWO.wo_number);
+    
     // Check if photos have been received (only if online)
     if (navigator.onLine) {
       try {
         setSaving(true);
+        
+        // Check photos first
         const response = await fetch(`/api/verify-photos/${selectedWO.wo_number}`);
         const result = await response.json();
         
@@ -661,13 +666,71 @@ export function useWorkOrders(currentUser) {
             return;
           }
         }
+        
+        // For PM work orders, also check for write-ups
+        if (isPMWorkOrder) {
+          setSaving(true);
+          const writeupResponse = await fetch(`/api/verify-writeups/${selectedWO.wo_number}`);
+          const writeupResult = await writeupResponse.json();
+          
+          if (!writeupResult.writeups_received && !writeupResult.not_required) {
+            setSaving(false);
+            const proceed = window.confirm(
+              '📋 No PMI write-ups found for this PM work order!\n\n' +
+              'PM work orders require inspection write-ups before completing.\n\n' +
+              'Please send write-ups using the "📋 PMI Write-ups to Office" button.\n\n' +
+              'If you already sent write-ups, they may take a few minutes to be detected. Try again in a moment.\n\n' +
+              'Click OK to go back, or Cancel if you need to override (admin only).'
+            );
+            
+            if (proceed) {
+              return; // Go back, let them send write-ups
+            }
+            
+            // Admin override for write-ups
+            const adminOverride = window.prompt(
+              'Admin Override: Enter admin PIN to complete without write-ups:'
+            );
+            
+            if (!adminOverride) return;
+            
+            try {
+              const pinCheck = await fetch('/api/verify-admin-pin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: adminOverride })
+              });
+              const pinResult = await pinCheck.json();
+              
+              if (!pinResult.valid) {
+                alert('Invalid admin PIN. Cannot override write-up requirement.');
+                return;
+              }
+              
+              // Mark write-ups as manually overridden
+              await fetch(`/api/verify-writeups/${selectedWO.wo_number}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  received: true, 
+                  override_reason: 'Admin override - write-ups verified manually' 
+                })
+              });
+            } catch (pinErr) {
+              console.error('Admin PIN verification failed:', pinErr);
+              alert('Could not verify admin PIN. Please try again.');
+              return;
+            }
+          }
+        }
+        
       } catch (err) {
-        console.error('Error checking photos:', err);
-        // If photo check fails, show warning but allow to continue
+        console.error('Error checking photos/writeups:', err);
+        // If check fails, show warning but allow to continue
         const continueAnyway = window.confirm(
-          '⚠️ Could not verify photos (network issue).\n\n' +
+          '⚠️ Could not verify photos' + (isPMWorkOrder ? '/write-ups' : '') + ' (network issue).\n\n' +
           'Do you want to continue completing this work order?\n\n' +
-          'Make sure you have sent before/after photos!'
+          'Make sure you have sent before/after photos' + (isPMWorkOrder ? ' and PMI write-ups' : '') + '!'
         );
         if (!continueAnyway) {
           setSaving(false);

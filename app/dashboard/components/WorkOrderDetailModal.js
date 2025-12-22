@@ -1337,6 +1337,8 @@ const sendAssignmentNotifications = async () => {
                 className={`px-4 py-2 rounded-lg font-semibold ${
                   selectedWO.cbre_status === 'escalation' ? 'bg-red-600 text-white' :
                   selectedWO.cbre_status === 'quote_rejected' ? 'bg-red-700 text-white' :
+                  selectedWO.cbre_status === 'invoice_rejected' ? 'bg-red-800 text-white' :
+                  selectedWO.cbre_status === 'cancelled' ? 'bg-gray-600 text-white' :
                   selectedWO.cbre_status === 'pending_quote' ? 'bg-orange-600 text-white' :
                   selectedWO.cbre_status === 'quote_submitted' ? 'bg-blue-600 text-white' :
                   selectedWO.cbre_status === 'quote_approved' ? 'bg-green-600 text-white' :
@@ -1351,6 +1353,8 @@ const sendAssignmentNotifications = async () => {
                 <option value="quote_approved">✅ Quote Approved</option>
                 <option value="quote_rejected">❌ Quote Rejected</option>
                 <option value="reassigned">🔄 Reassigned</option>
+                <option value="invoice_rejected">❌ Invoice Rejected</option>
+                <option value="cancelled">🚫 Cancelled</option>
               </select>
             </div>
             {selectedWO.cbre_status === 'escalation' && (
@@ -1366,6 +1370,16 @@ const sendAssignmentNotifications = async () => {
             {selectedWO.cbre_status === 'pending_quote' && (
               <div className="mt-3 bg-orange-800/50 rounded p-2 text-sm text-orange-200">
                 📋 This ticket requires a CBRE quote submission.
+              </div>
+            )}
+            {selectedWO.cbre_status === 'invoice_rejected' && (
+              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200">
+                ❌ Invoice was rejected by CBRE. Review the invoice and resubmit.
+              </div>
+            )}
+            {selectedWO.cbre_status === 'cancelled' && (
+              <div className="mt-3 bg-gray-700/50 rounded p-2 text-sm text-gray-200">
+                🚫 This work order has been cancelled by CBRE.
               </div>
             )}
             {selectedWO.cbre_status_updated_at && (

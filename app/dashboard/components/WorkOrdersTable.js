@@ -44,6 +44,18 @@ const getCBREStatusBadge = (cbreStatus) => {
         color: 'bg-orange-600 text-orange-100',
         shortText: '📋 Pending'
       };
+    case 'invoice_rejected':
+      return {
+        text: '❌ INVOICE REJECTED',
+        color: 'bg-red-800 text-red-100',
+        shortText: '❌ Inv Rej'
+      };
+    case 'cancelled':
+      return {
+        text: '🚫 CANCELLED',
+        color: 'bg-gray-600 text-gray-100',
+        shortText: '🚫 Cancel'
+      };
     default:
       return null;
   }
@@ -183,6 +195,8 @@ export default function WorkOrdersTable({
                     isSelected ? 'bg-red-900/40' :
                     wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
                     wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
+                    wo.cbre_status === 'invoice_rejected' ? 'bg-red-900/20' :
+                    wo.cbre_status === 'cancelled' ? 'bg-gray-900/40' :
                     wo.cbre_status === 'pending_quote' ? 'bg-orange-900/20' : ''
                   }`}
                 >

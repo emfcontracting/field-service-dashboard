@@ -14,6 +14,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.74.0",
     "googleapis": "^161.0.0",
+    "imap": "^0.8.19",
     "intuit-oauth": "^4.2.1",
     "next": "^15.1.11",
     "nodemailer": "^7.0.11",

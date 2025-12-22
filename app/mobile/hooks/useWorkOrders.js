@@ -604,14 +604,89 @@ export function useWorkOrders(currentUser) {
   async function completeWorkOrder() {
     if (!selectedWO) return;
     
+    // Check if photos have been received (only if online)
+    if (navigator.onLine) {
+      try {
+        setSaving(true);
+        const response = await fetch(`/api/verify-photos/${selectedWO.wo_number}`);
+        const result = await response.json();
+        
+        if (!result.photos_received) {
+          setSaving(false);
+          const proceed = window.confirm(
+            '⚠️ No photos found for this work order!\n\n' +
+            'Before/after photos are required before completing.\n\n' +
+            'Please send photos using the "📸 Email Photos" button.\n\n' +
+            'If you already sent photos, they may take a few minutes to be detected. Try again in a moment.\n\n' +
+            'Click OK to go back, or Cancel if you need to override (admin only).'
+          );
+          
+          if (proceed) {
+            return; // Go back, let them send photos
+          }
+          
+          // Admin override - require confirmation
+          const adminOverride = window.prompt(
+            'Admin Override: Enter admin PIN to complete without photos:'
+          );
+          
+          if (!adminOverride) return;
+          
+          // Verify admin PIN by checking against server
+          try {
+            const pinCheck = await fetch('/api/verify-admin-pin', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pin: adminOverride })
+            });
+            const pinResult = await pinCheck.json();
+            
+            if (!pinResult.valid) {
+              alert('Invalid admin PIN. Cannot override photo requirement.');
+              return;
+            }
+            
+            // Mark as manually overridden
+            await fetch(`/api/verify-photos/${selectedWO.wo_number}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                received: true, 
+                override_reason: 'Admin override - photos verified manually' 
+              })
+            });
+          } catch (pinErr) {
+            console.error('Admin PIN verification failed:', pinErr);
+            alert('Could not verify admin PIN. Please try again.');
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking photos:', err);
+        // If photo check fails, show warning but allow to continue
+        const continueAnyway = window.confirm(
+          '⚠️ Could not verify photos (network issue).\n\n' +
+          'Do you want to continue completing this work order?\n\n' +
+          'Make sure you have sent before/after photos!'
+        );
+        if (!continueAnyway) {
+          setSaving(false);
+          return;
+        }
+      }
+    }
+    
     const confirmed = window.confirm(
       'Are you sure you want to mark this work order as completed? This action cannot be undone from the mobile app.'
     );
     
-    if (!confirmed) return;
+    if (!confirmed) {
+      setSaving(false);
+      return;
+    }
 
     try {
-      setSaving(true);
+      if (!saving) setSaving(true);
       const now = new Date();
       const timestamp = now.toLocaleString();
       const isoTime = now.toISOString();

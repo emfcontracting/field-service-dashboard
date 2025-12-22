@@ -13,9 +13,8 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30');
-    const userId = searchParams.get('user_id'); // Optional: filter by specific tech
+    const userId = searchParams.get('user_id');
     
-    // Calculate date range
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     const startDateStr = startDate.toISOString().split('T')[0];
@@ -47,8 +46,7 @@ export async function GET(request) {
           work_order_description,
           photos_received,
           photos_verified_at,
-          created_at,
-          completed_date
+          created_at
         )
       `)
       .gte('created_at', startDateStr)
@@ -63,13 +61,11 @@ export async function GET(request) {
     
     console.log('Total invoice line items found:', allItems?.length || 0);
     
-    // Filter by user if specified
     let items = allItems;
     if (userId) {
       items = allItems.filter(item => item.invoice?.user_id === userId);
     }
     
-    // Analyze each line item
     const analysis = [];
     const summaryByTech = {};
     
@@ -81,7 +77,6 @@ export async function GET(request) {
         : 'Unknown';
       const techId = invoice?.user_id || 'unknown';
       
-      // Initialize tech summary if needed
       if (!summaryByTech[techId]) {
         summaryByTech[techId] = {
           tech_name: techName,
@@ -96,9 +91,7 @@ export async function GET(request) {
         };
       }
       
-      // Skip items without a work order link (custom line items)
       if (!item.wo_id || !workOrder) {
-        // Still count the amount, mark as approved (no WO to verify)
         summaryByTech[techId].total_items++;
         summaryByTech[techId].total_amount += parseFloat(item.amount) || 0;
         summaryByTech[techId].approved_items++;
@@ -106,18 +99,15 @@ export async function GET(request) {
         continue;
       }
       
-      // Determine if this would be approved or held
       const issues = [];
       const woNumber = workOrder.wo_number || '';
       const isPM = woNumber.toUpperCase().startsWith('P');
       
-      // Check 1: Work order status
       const completedStatuses = ['Completed', 'Invoiced', 'Closed'];
       if (!completedStatuses.includes(workOrder.status)) {
         issues.push(`Status: ${workOrder.status || 'Unknown'}`);
       }
       
-      // Check 2: Photos received
       if (!workOrder.photos_received) {
         issues.push('Missing photos');
       }
@@ -125,7 +115,6 @@ export async function GET(request) {
       const wouldBeApproved = issues.length === 0;
       const amount = parseFloat(item.amount) || 0;
       
-      // Update tech summary
       summaryByTech[techId].total_items++;
       summaryByTech[techId].total_amount += amount;
       
@@ -136,14 +125,12 @@ export async function GET(request) {
         summaryByTech[techId].held_items++;
         summaryByTech[techId].held_amount += amount;
         
-        // Track hold reasons
         for (const issue of issues) {
           summaryByTech[techId].hold_reasons[issue] = 
             (summaryByTech[techId].hold_reasons[issue] || 0) + 1;
         }
       }
       
-      // Add to detailed analysis
       analysis.push({
         invoice_number: invoice?.invoice_number || 'N/A',
         invoice_date: invoice?.created_at?.split('T')[0] || 'N/A',
@@ -162,7 +149,6 @@ export async function GET(request) {
       });
     }
     
-    // Calculate overall totals
     const overallTotals = {
       total_items: 0,
       total_amount: 0,
@@ -181,7 +167,6 @@ export async function GET(request) {
       overallTotals.held_amount += tech.held_amount;
     });
     
-    // Calculate percentages
     overallTotals.approval_rate = overallTotals.total_items > 0 
       ? ((overallTotals.approved_items / overallTotals.total_items) * 100).toFixed(1)
       : 0;
@@ -199,7 +184,6 @@ export async function GET(request) {
       overall_totals: overallTotals,
       by_tech: Object.values(summaryByTech).sort((a, b) => b.held_amount - a.held_amount),
       detailed_items: analysis,
-      // Just the held items for easy review
       held_items: analysis.filter(a => !a.would_be_approved)
     });
     
@@ -208,5 +192,3 @@ export async function GET(request) {
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
- 
-// force deploy 

@@ -1,6 +1,6 @@
 // app/api/verify-photos/[woNumber]/route.js
 // Verifies that before/after photos have been sent to emfcbre@gmail.com for a work order
-// Uses IMAP to search Gmail
+// Uses IMAP to search Gmail - just needs "photos" + WO number in subject
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 
@@ -9,30 +9,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Search Gmail via IMAP for photo emails with timeout handling
+// Search Gmail via IMAP for photo emails
 function searchForPhotos(woNumber) {
   return new Promise((resolve) => {
-    // Set overall timeout for serverless environment (8 seconds)
     const timeoutId = setTimeout(() => {
       console.log('IMAP search timed out');
       resolve({ found: false, emails: [], error: 'Search timed out' });
-    }, 8000);
+    }, 12000);
 
     const imapConfig = {
-      user: process.env.SMTP_USER || 'emfcbre@gmail.com',
+      user: process.env.SMTP_USER,
       password: process.env.SMTP_PASSWORD,
       host: 'imap.gmail.com',
       port: 993,
       tls: true,
-      tlsOptions: { 
-        rejectUnauthorized: false,
-        servername: 'imap.gmail.com'
-      },
-      authTimeout: 5000,
-      connTimeout: 5000
+      tlsOptions: { rejectUnauthorized: false },
+      authTimeout: 8000,
+      connTimeout: 8000
     };
 
-    console.log('Connecting to IMAP with user:', imapConfig.user);
+    console.log('IMAP connecting as:', imapConfig.user);
+    console.log('Looking for: "photos" + "' + woNumber + '" in subject');
 
     const imap = new Imap(imapConfig);
 
@@ -44,141 +41,96 @@ function searchForPhotos(woNumber) {
 
     function cleanup() {
       clearTimeout(timeoutId);
-      try {
-        imap.end();
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+      try { imap.end(); } catch (e) {}
     }
 
     imap.once('ready', () => {
-      console.log('IMAP connected, opening mailbox...');
+      console.log('IMAP connected');
       
-      // Try to open INBOX (simpler than All Mail)
       imap.openBox('INBOX', true, (err, box) => {
         if (err) {
-          console.error('Error opening mailbox:', err.message);
-          results.error = 'Could not open mailbox';
+          console.error('Mailbox error:', err.message);
+          results.error = err.message;
           cleanup();
           resolve(results);
           return;
         }
 
-        console.log('Mailbox opened, searching for:', woNumber);
+        console.log('INBOX opened, messages:', box.messages?.total);
 
-        // Search for emails with "Photos" and WO number in subject
-        // Subject format: "Photos - C2900347 - SCMYR - MYRTLE BEACH CENTER"
-        const searchCriteria = [
-          ['OR',
-            ['SUBJECT', `Photos - ${woNumber}`],
-            ['SUBJECT', `Fotos - ${woNumber}`]
-          ]
-        ];
+        // Search for emails with "Photos" in subject
+        imap.search([['SUBJECT', 'Photos']], (err1, photoUids) => {
+          // Also search for "Fotos" (Spanish)
+          imap.search([['SUBJECT', 'Fotos']], (err2, fotoUids) => {
+            // Combine results
+            const allUids = [...new Set([...(photoUids || []), ...(fotoUids || [])])];
+            
+            console.log('Found', allUids.length, 'emails with Photos/Fotos in subject');
 
-        imap.search(searchCriteria, (searchErr, uids) => {
-          if (searchErr) {
-            console.error('Search error:', searchErr.message);
-            // Try simpler search
-            imap.search([['SUBJECT', woNumber]], (searchErr2, uids2) => {
-              if (searchErr2 || !uids2 || uids2.length === 0) {
-                console.log('No emails found for WO:', woNumber);
-                cleanup();
-                resolve(results);
-                return;
-              }
-              processResults(uids2);
+            if (allUids.length === 0) {
+              console.log('No photo emails found at all');
+              cleanup();
+              resolve(results);
+              return;
+            }
+
+            // Fetch these emails and check if WO number is in subject
+            const fetch = imap.fetch(allUids, {
+              bodies: 'HEADER.FIELDS (FROM SUBJECT DATE)',
+              struct: false
             });
-            return;
-          }
 
-          if (!uids || uids.length === 0) {
-            console.log('No emails found matching criteria');
-            // Try broader search - just WO number
-            imap.search([['SUBJECT', woNumber]], (searchErr2, uids2) => {
-              if (searchErr2 || !uids2 || uids2.length === 0) {
-                cleanup();
-                resolve(results);
-                return;
-              }
-              // Filter to only those with "Photos" or "Fotos"
-              processResults(uids2);
-            });
-            return;
-          }
-
-          processResults(uids);
-        });
-
-        function processResults(uids) {
-          if (!uids || uids.length === 0) {
-            cleanup();
-            resolve(results);
-            return;
-          }
-
-          console.log(`Found ${uids.length} potential emails`);
-
-          const fetch = imap.fetch(uids.slice(-5), {
-            bodies: 'HEADER.FIELDS (FROM SUBJECT DATE)',
-            struct: false
-          });
-
-          fetch.on('message', (msg) => {
-            msg.on('body', (stream) => {
-              let buffer = '';
-              stream.on('data', (chunk) => {
-                buffer += chunk.toString('utf8');
-              });
-              stream.on('end', () => {
-                const subjectMatch = buffer.match(/Subject:\s*(.+?)(?:\r\n|\n)/i);
-                const subject = subjectMatch ? subjectMatch[1].trim() : '';
-                
-                // Check if this is actually a photo email
-                if (subject.toLowerCase().includes('photo') || subject.toLowerCase().includes('foto')) {
-                  const fromMatch = buffer.match(/From:\s*(.+?)(?:\r\n|\n)/i);
-                  const dateMatch = buffer.match(/Date:\s*(.+?)(?:\r\n|\n)/i);
+            fetch.on('message', (msg) => {
+              msg.on('body', (stream) => {
+                let buffer = '';
+                stream.on('data', (chunk) => buffer += chunk.toString('utf8'));
+                stream.on('end', () => {
+                  const subjectMatch = buffer.match(/Subject:\s*(.+?)(?:\r\n|\n)/i);
+                  const subject = subjectMatch ? subjectMatch[1].trim() : '';
                   
-                  results.emails.push({
-                    subject: subject,
-                    from: fromMatch ? fromMatch[1].trim() : '',
-                    date: dateMatch ? dateMatch[1].trim() : ''
-                  });
-                  results.found = true;
-                }
+                  // Check if WO number is in subject
+                  if (subject.toUpperCase().includes(woNumber.toUpperCase())) {
+                    const fromMatch = buffer.match(/From:\s*(.+?)(?:\r\n|\n)/i);
+                    const dateMatch = buffer.match(/Date:\s*(.+?)(?:\r\n|\n)/i);
+                    
+                    console.log('✓ MATCH:', subject);
+                    results.emails.push({
+                      subject: subject,
+                      from: fromMatch ? fromMatch[1].trim() : '',
+                      date: dateMatch ? dateMatch[1].trim() : ''
+                    });
+                    results.found = true;
+                  }
+                });
               });
             });
-          });
 
-          fetch.once('error', (fetchErr) => {
-            console.error('Fetch error:', fetchErr.message);
-            results.error = fetchErr.message;
-          });
+            fetch.once('error', (fetchErr) => {
+              console.error('Fetch error:', fetchErr.message);
+              results.error = fetchErr.message;
+            });
 
-          fetch.once('end', () => {
-            console.log('Fetch complete, found:', results.emails.length, 'photo emails');
-            cleanup();
-            resolve(results);
+            fetch.once('end', () => {
+              console.log('Search complete. Matches:', results.emails.length);
+              cleanup();
+              resolve(results);
+            });
           });
-        }
+        });
       });
     });
 
     imap.once('error', (err) => {
-      console.error('IMAP connection error:', err.message);
+      console.error('IMAP error:', err.message);
       results.error = err.message;
       cleanup();
       resolve(results);
     });
 
-    imap.once('end', () => {
-      console.log('IMAP connection ended');
-    });
-
     try {
       imap.connect();
-    } catch (connectErr) {
-      console.error('IMAP connect error:', connectErr.message);
-      results.error = connectErr.message;
+    } catch (e) {
+      results.error = e.message;
       cleanup();
       resolve(results);
     }
@@ -194,9 +146,9 @@ export async function GET(request, { params }) {
       return Response.json({ success: false, error: 'WO number required' }, { status: 400 });
     }
 
-    console.log('Checking photos for WO:', woNumber);
+    console.log('=== Photo check for:', woNumber, '===');
 
-    // First check if already verified in database
+    // Check database first
     const { data: workOrder, error: woError } = await supabase
       .from('work_orders')
       .select('wo_id, wo_number, photos_received, photos_verified_at, photos_email_subject')
@@ -204,13 +156,10 @@ export async function GET(request, { params }) {
       .single();
 
     if (woError || !workOrder) {
-      return Response.json({ 
-        success: false, 
-        error: 'Work order not found' 
-      }, { status: 404 });
+      return Response.json({ success: false, error: 'Work order not found' }, { status: 404 });
     }
 
-    // If already marked as received, return immediately
+    // If already marked as received, return cached result
     if (workOrder.photos_received) {
       return Response.json({
         success: true,
@@ -221,33 +170,28 @@ export async function GET(request, { params }) {
       });
     }
 
-    // Check SMTP/IMAP credentials
+    // Check credentials
     if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-      console.error('Missing SMTP credentials');
       return Response.json({ 
         success: false, 
         error: 'Email not configured',
-        photos_received: workOrder.photos_received || false
+        photos_received: false
       }, { status: 500 });
     }
 
-    // Search for photos in email via IMAP
-    console.log('Starting IMAP search...');
+    // Search email
     const searchResult = await searchForPhotos(woNumber);
-    console.log('IMAP search result:', searchResult);
 
     if (searchResult.error && !searchResult.found) {
-      console.error('IMAP search error:', searchResult.error);
-      // Return current database status if search fails
       return Response.json({
         success: true,
-        photos_received: workOrder.photos_received || false,
+        photos_received: false,
         search_error: searchResult.error,
-        message: 'Could not search email, showing last known status'
+        message: 'Could not search email'
       });
     }
 
-    // Update database with result
+    // Update database
     if (searchResult.found && searchResult.emails.length > 0) {
       const latestEmail = searchResult.emails[searchResult.emails.length - 1];
       
@@ -268,12 +212,9 @@ export async function GET(request, { params }) {
         latest_email: latestEmail
       });
     } else {
-      // No photos found
       await supabase
         .from('work_orders')
-        .update({
-          photos_verified_at: new Date().toISOString()
-        })
+        .update({ photos_verified_at: new Date().toISOString() })
         .eq('wo_id', workOrder.wo_id);
 
       return Response.json({
@@ -285,15 +226,12 @@ export async function GET(request, { params }) {
     }
 
   } catch (error) {
-    console.error('Verify photos error:', error);
-    return Response.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
+    console.error('Error:', error);
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// POST: Manually mark photos as received (for office override)
+// POST: Manual override
 export async function POST(request, { params }) {
   try {
     const { woNumber } = await params;
@@ -314,13 +252,11 @@ export async function POST(request, { params }) {
       return Response.json({ success: false, error: 'Work order not found' }, { status: 404 });
     }
 
-    // Update photos status
     const updates = {
       photos_received: received !== false,
       photos_verified_at: new Date().toISOString()
     };
 
-    // Add note to comments about manual override
     if (override_reason) {
       const timestamp = new Date().toLocaleString();
       const newComment = `[PHOTOS OVERRIDE] ${timestamp}\nManually marked as ${received ? 'received' : 'not received'}: ${override_reason}`;
@@ -329,14 +265,10 @@ export async function POST(request, { params }) {
         : newComment;
     }
 
-    const { error: updateError } = await supabase
+    await supabase
       .from('work_orders')
       .update(updates)
       .eq('wo_id', workOrder.wo_id);
-
-    if (updateError) {
-      return Response.json({ success: false, error: updateError.message }, { status: 500 });
-    }
 
     return Response.json({
       success: true,
@@ -345,7 +277,6 @@ export async function POST(request, { params }) {
     });
 
   } catch (error) {
-    console.error('Manual photo override error:', error);
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }

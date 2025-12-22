@@ -1,4 +1,4 @@
-// components/AdditionalCostsSection.js - Bilingual Additional Costs (Materials, Equipment, Trailer, Rental)
+// components/AdditionalCostsSection.js - Bilingual Additional Costs (EMF Materials, Equipment, Trailer, Rental)
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 
@@ -24,9 +24,11 @@ export default function AdditionalCostsSection({
           : '25% de margen aplicado automáticamente'}
       </p>
       <div className="grid grid-cols-2 gap-3">
-        {/* Material Cost */}
+        {/* EMF Material Cost - Company Paid */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">{t('materialCost')}</label>
+          <label className="block text-xs text-gray-400 mb-1">
+            {language === 'en' ? 'EMF Material' : 'Material EMF'}
+          </label>
           <input
             type="number"
             step="0.01"
@@ -38,6 +40,9 @@ export default function AdditionalCostsSection({
             disabled={saving || status === 'completed'}
             placeholder="$0.00"
           />
+          <p className="text-xs text-gray-500 mt-0.5">
+            {language === 'en' ? '(Company paid)' : '(Pagado por empresa)'}
+          </p>
         </div>
         {/* EMF Equipment */}
         <div>
@@ -84,6 +89,15 @@ export default function AdditionalCostsSection({
             placeholder="$0.00"
           />
         </div>
+      </div>
+      
+      {/* Info about Tech Materials */}
+      <div className="mt-3 pt-3 border-t border-gray-700">
+        <p className="text-xs text-orange-400">
+          💡 {language === 'en' 
+            ? 'Tech-purchased materials are logged in Daily Hours. They will appear in Cost Summary below.' 
+            : 'Los materiales comprados por técnicos se registran en Horas Diarias. Aparecerán en el Resumen de Costos abajo.'}
+        </p>
       </div>
     </div>
   );

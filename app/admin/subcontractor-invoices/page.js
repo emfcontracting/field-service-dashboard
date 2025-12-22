@@ -9,6 +9,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Helper function to format date without timezone shift
+function formatDateLocal(dateString) {
+  if (!dateString) return '-';
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function SubcontractorInvoiceReview() {
   const [invoices, setInvoices] = useState([]);
   const [users, setUsers] = useState({});
@@ -17,7 +25,7 @@ export default function SubcontractorInvoiceReview() {
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [emfData, setEmfData] = useState([]);
   const [loadingComparison, setLoadingComparison] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, sent, paid, flagged
+  const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -26,7 +34,6 @@ export default function SubcontractorInvoiceReview() {
 
   async function loadData() {
     try {
-      // Get all invoices
       const { data: invoicesData, error: invoicesError } = await supabase
         .from('subcontractor_invoices')
         .select('*')
@@ -34,7 +41,6 @@ export default function SubcontractorInvoiceReview() {
 
       if (invoicesError) throw invoicesError;
 
-      // Get users
       const { data: usersData } = await supabase
         .from('users')
         .select('user_id, first_name, last_name, email');
@@ -60,7 +66,6 @@ export default function SubcontractorInvoiceReview() {
     setEmfData([]);
 
     try {
-      // Get invoice line items
       const { data: itemsData } = await supabase
         .from('subcontractor_invoice_items')
         .select('*')
@@ -69,7 +74,7 @@ export default function SubcontractorInvoiceReview() {
 
       setInvoiceItems(itemsData || []);
 
-      // Get actual EMF data for this user and period
+      // Get actual EMF data for this user and period (including tech_material_cost)
       const { data: emfHours } = await supabase
         .from('daily_hours_log')
         .select(`
@@ -110,30 +115,32 @@ export default function SubcontractorInvoiceReview() {
     }
   }
 
-  // Calculate EMF totals
+  // Calculate EMF totals including tech material
   const emfTotals = {
     regularHours: emfData.reduce((sum, e) => sum + parseFloat(e.hours_regular || 0), 0),
     otHours: emfData.reduce((sum, e) => sum + parseFloat(e.hours_overtime || 0), 0),
-    miles: emfData.reduce((sum, e) => sum + parseFloat(e.miles || 0), 0)
+    miles: emfData.reduce((sum, e) => sum + parseFloat(e.miles || 0), 0),
+    techMaterial: emfData.reduce((sum, e) => sum + parseFloat(e.tech_material_cost || 0), 0)
   };
 
   // Calculate invoice totals
   const invoiceTotals = selectedInvoice ? {
     regularHours: parseFloat(selectedInvoice.total_regular_hours || 0),
     otHours: parseFloat(selectedInvoice.total_ot_hours || 0),
-    miles: parseFloat(selectedInvoice.total_miles || 0)
-  } : { regularHours: 0, otHours: 0, miles: 0 };
+    miles: parseFloat(selectedInvoice.total_miles || 0),
+    techMaterial: parseFloat(selectedInvoice.total_tech_material || 0)
+  } : { regularHours: 0, otHours: 0, miles: 0, techMaterial: 0 };
 
   // Check for discrepancies
   const discrepancies = {
     regularHours: Math.abs(invoiceTotals.regularHours - emfTotals.regularHours) > 0.1,
     otHours: Math.abs(invoiceTotals.otHours - emfTotals.otHours) > 0.1,
-    miles: Math.abs(invoiceTotals.miles - emfTotals.miles) > 0.5
+    miles: Math.abs(invoiceTotals.miles - emfTotals.miles) > 0.5,
+    techMaterial: Math.abs(invoiceTotals.techMaterial - emfTotals.techMaterial) > 0.01
   };
 
-  const hasDiscrepancy = discrepancies.regularHours || discrepancies.otHours || discrepancies.miles;
+  const hasDiscrepancy = discrepancies.regularHours || discrepancies.otHours || discrepancies.miles || discrepancies.techMaterial;
 
-  // Filter invoices
   const filteredInvoices = invoices.filter(inv => {
     const user = users[inv.user_id];
     const matchesSearch = searchTerm === '' || 
@@ -156,7 +163,6 @@ export default function SubcontractorInvoiceReview() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -168,7 +174,7 @@ export default function SubcontractorInvoiceReview() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold">🔍 Subcontractor Invoice Review</h1>
-              <p className="text-sm text-gray-400">Verify hours and mileage against EMF records</p>
+              <p className="text-sm text-gray-400">Verify hours, mileage & materials against EMF records</p>
             </div>
           </div>
         </div>
@@ -179,7 +185,6 @@ export default function SubcontractorInvoiceReview() {
           
           {/* Invoice List */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Search & Filter */}
             <div className="space-y-3">
               <input
                 type="text"
@@ -205,7 +210,6 @@ export default function SubcontractorInvoiceReview() {
               </div>
             </div>
 
-            {/* Invoice Cards */}
             <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto">
               {filteredInvoices.length === 0 ? (
                 <div className="bg-gray-800 rounded-lg p-4 text-center text-gray-500">
@@ -240,7 +244,7 @@ export default function SubcontractorInvoiceReview() {
                         {user ? `${user.first_name} ${user.last_name}` : 'Unknown'}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
+                        {formatDateLocal(invoice.period_start)} - {formatDateLocal(invoice.period_end)}
                       </p>
                       <p className="text-lg font-bold text-green-400 mt-1">
                         ${parseFloat(invoice.grand_total || 0).toFixed(2)}
@@ -273,19 +277,17 @@ export default function SubcontractorInvoiceReview() {
                         {users[selectedInvoice.user_id]?.first_name} {users[selectedInvoice.user_id]?.last_name}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {new Date(selectedInvoice.period_start).toLocaleDateString()} - {new Date(selectedInvoice.period_end).toLocaleDateString()}
+                        {formatDateLocal(selectedInvoice.period_start)} - {formatDateLocal(selectedInvoice.period_end)}
                       </p>
                     </div>
                     <div className="flex gap-2">
                       {selectedInvoice.status === 'sent' && (
-                        <>
-                          <button
-                            onClick={() => updateInvoiceStatus(selectedInvoice.invoice_id, 'paid')}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium"
-                          >
-                            ✓ Mark Paid
-                          </button>
-                        </>
+                        <button
+                          onClick={() => updateInvoiceStatus(selectedInvoice.invoice_id, 'paid')}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium"
+                        >
+                          ✓ Mark Paid
+                        </button>
                       )}
                       {selectedInvoice.status === 'paid' && (
                         <span className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium">
@@ -360,6 +362,19 @@ export default function SubcontractorInvoiceReview() {
                             {discrepancies.miles ? '❌' : '✅'}
                           </td>
                         </tr>
+                        <tr className={discrepancies.techMaterial ? 'bg-red-900/20' : ''}>
+                          <td className="py-3 text-orange-400">Tech Material</td>
+                          <td className="text-right font-mono">${invoiceTotals.techMaterial.toFixed(2)}</td>
+                          <td className="text-right font-mono">${emfTotals.techMaterial.toFixed(2)}</td>
+                          <td className={`text-right font-mono ${
+                            discrepancies.techMaterial ? 'text-red-400 font-bold' : 'text-green-400'
+                          }`}>
+                            ${(invoiceTotals.techMaterial - emfTotals.techMaterial).toFixed(2)}
+                          </td>
+                          <td className="text-center">
+                            {discrepancies.techMaterial ? '❌' : '✅'}
+                          </td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>
@@ -371,16 +386,18 @@ export default function SubcontractorInvoiceReview() {
                   <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
                     <h3 className="font-bold mb-3 text-blue-400">📄 Invoice Claims</h3>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {invoiceItems.filter(i => i.item_type === 'hours' || i.item_type === 'mileage').map((item, idx) => (
-                        <div key={idx} className="text-sm p-2 bg-gray-700/50 rounded">
+                      {invoiceItems.filter(i => ['hours', 'mileage', 'material'].includes(i.item_type)).map((item, idx) => (
+                        <div key={idx} className={`text-sm p-2 rounded ${item.item_type === 'material' ? 'bg-orange-900/30' : 'bg-gray-700/50'}`}>
                           <div className="flex justify-between">
                             <span className="text-gray-400">
-                              {item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}
+                              {item.work_date ? formatDateLocal(item.work_date) : '-'}
                             </span>
-                            <span className="font-mono">
+                            <span className={`font-mono ${item.item_type === 'material' ? 'text-orange-400' : ''}`}>
                               {item.item_type === 'mileage' 
                                 ? `${parseFloat(item.quantity).toFixed(0)} mi`
-                                : `${parseFloat(item.quantity).toFixed(1)}h`
+                                : item.item_type === 'material'
+                                  ? `$${parseFloat(item.amount).toFixed(2)}`
+                                  : `${parseFloat(item.quantity).toFixed(1)}h`
                               }
                             </span>
                           </div>
@@ -398,7 +415,7 @@ export default function SubcontractorInvoiceReview() {
                         <div key={idx} className="text-sm p-2 bg-gray-700/50 rounded">
                           <div className="flex justify-between">
                             <span className="text-gray-400">
-                              {new Date(entry.work_date).toLocaleDateString()}
+                              {formatDateLocal(entry.work_date)}
                             </span>
                             <span className="font-mono">
                               {parseFloat(entry.hours_regular || 0).toFixed(1)}h + {parseFloat(entry.hours_overtime || 0).toFixed(1)}h OT
@@ -412,6 +429,11 @@ export default function SubcontractorInvoiceReview() {
                               {parseFloat(entry.miles || 0).toFixed(0)} mi
                             </span>
                           </div>
+                          {parseFloat(entry.tech_material_cost || 0) > 0 && (
+                            <div className="text-xs text-orange-400 mt-1">
+                              💰 Material: ${parseFloat(entry.tech_material_cost).toFixed(2)}
+                            </div>
+                          )}
                         </div>
                       ))}
                       {emfData.length === 0 && (
@@ -424,7 +446,7 @@ export default function SubcontractorInvoiceReview() {
                 {/* Invoice Amounts */}
                 <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
                   <h3 className="font-bold mb-3">💰 Invoice Amount</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                     <div>
                       <p className="text-gray-400 text-sm">Labor</p>
                       <p className="text-xl font-bold">${parseFloat(selectedInvoice.total_hours_amount || 0).toFixed(2)}</p>
@@ -432,6 +454,10 @@ export default function SubcontractorInvoiceReview() {
                     <div>
                       <p className="text-gray-400 text-sm">Mileage</p>
                       <p className="text-xl font-bold">${parseFloat(selectedInvoice.total_mileage_amount || 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-orange-400 text-sm">Material</p>
+                      <p className="text-xl font-bold text-orange-400">${parseFloat(selectedInvoice.total_tech_material || 0).toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">Other</p>

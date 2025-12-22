@@ -20,6 +20,7 @@ export default function AddDailyHoursModal({
   const [hoursRegular, setHoursRegular] = useState('');
   const [hoursOvertime, setHoursOvertime] = useState('');
   const [miles, setMiles] = useState('');
+  const [techMaterialCost, setTechMaterialCost] = useState('');
   const [notes, setNotes] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -96,6 +97,7 @@ export default function AddDailyHoursModal({
       hoursRegular: rtValue,
       hoursOvertime: otValue,
       miles: parseFloat(miles) || 0,
+      techMaterialCost: parseFloat(techMaterialCost) || 0,
       notes: notes.trim() || null
     };
 
@@ -110,6 +112,7 @@ export default function AddDailyHoursModal({
     setHoursRegular('');
     setHoursOvertime('');
     setMiles('');
+    setTechMaterialCost('');
     setNotes('');
     setIsInitialized(false);
     onClose();
@@ -224,6 +227,30 @@ export default function AddDailyHoursModal({
             />
             <p className="text-xs text-gray-400 mt-1">
               @ $1.00/mi
+            </p>
+          </div>
+
+          {/* Tech Material Cost */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-2">
+              {language === 'en' ? 'Tech Material Cost' : 'Costo de Material (Técnico)'}
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-3 text-gray-400 text-lg">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={techMaterialCost}
+                onChange={(e) => setTechMaterialCost(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-8 pr-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              {language === 'en' 
+                ? '💰 For materials YOU purchased (for reimbursement)' 
+                : '💰 Para materiales que USTED compró (para reembolso)'}
             </p>
           </div>
 

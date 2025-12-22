@@ -1,4 +1,4 @@
-// components/CostSummarySection.js - Bilingual Cost Summary (Fixed Calculations)
+// components/CostSummarySection.js - Bilingual Cost Summary with Tech Material Support
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -12,7 +12,8 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const [dailyTotals, setDailyTotals] = useState({
     totalRT: 0,
     totalOT: 0,
-    totalMiles: 0
+    totalMiles: 0,
+    totalTechMaterial: 0
   });
   const [legacyTotals, setLegacyTotals] = useState({
     totalRT: 0,
@@ -61,16 +62,15 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
       };
       setLegacyTotals(legacyTotal);
 
-      // 2. Load daily hours totals from daily_hours_log table
+      // 2. Load daily hours totals from daily_hours_log table (including tech_material_cost)
       const { data, error } = await supabase
         .from('daily_hours_log')
-        .select('hours_regular, hours_overtime, miles')
+        .select('hours_regular, hours_overtime, miles, tech_material_cost')
         .eq('wo_id', wo.wo_id);
 
       if (error) {
         console.error('Error loading daily totals:', error);
-        // If table doesn't exist or error, just use legacy totals
-        setDailyTotals({ totalRT: 0, totalOT: 0, totalMiles: 0 });
+        setDailyTotals({ totalRT: 0, totalOT: 0, totalMiles: 0, totalTechMaterial: 0 });
         return;
       }
 
@@ -78,8 +78,9 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
       const dailyTotal = (data || []).reduce((acc, log) => ({
         totalRT: acc.totalRT + (parseFloat(log.hours_regular) || 0),
         totalOT: acc.totalOT + (parseFloat(log.hours_overtime) || 0),
-        totalMiles: acc.totalMiles + (parseFloat(log.miles) || 0)
-      }), { totalRT: 0, totalOT: 0, totalMiles: 0 });
+        totalMiles: acc.totalMiles + (parseFloat(log.miles) || 0),
+        totalTechMaterial: acc.totalTechMaterial + (parseFloat(log.tech_material_cost) || 0)
+      }), { totalRT: 0, totalOT: 0, totalMiles: 0, totalTechMaterial: 0 });
 
       setDailyTotals(dailyTotal);
 
@@ -98,8 +99,19 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const adminHours = 2;
 
   const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-  const materialBase = parseFloat(wo.material_cost) || 0;
-  const materialWithMarkup = materialBase * 1.25;
+  
+  // EMF Material (company paid)
+  const emfMaterialBase = parseFloat(wo.material_cost) || 0;
+  const emfMaterialWithMarkup = emfMaterialBase * 1.25;
+  
+  // Tech Material (tech purchased, for reimbursement)
+  const techMaterialBase = dailyTotals.totalTechMaterial;
+  const techMaterialWithMarkup = techMaterialBase * 1.25;
+  
+  // Total Material = EMF + Tech
+  const totalMaterialBase = emfMaterialBase + techMaterialBase;
+  const totalMaterialWithMarkup = emfMaterialWithMarkup + techMaterialWithMarkup;
+  
   const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
   const equipmentWithMarkup = equipmentBase * 1.25;
   const trailerBase = parseFloat(wo.trailer_cost) || 0;
@@ -107,12 +119,13 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const rentalBase = parseFloat(wo.rental_cost) || 0;
   const rentalWithMarkup = rentalBase * 1.25;
   const mileageCost = totalMiles * 1.00;
-  const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+  const grandTotal = laborCost + totalMaterialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
   const remaining = nte - grandTotal;
 
   // Check if there's legacy data to show
   const hasLegacyData = legacyTotals.totalRT > 0 || legacyTotals.totalOT > 0 || legacyTotals.totalMiles > 0;
   const hasDailyData = dailyTotals.totalRT > 0 || dailyTotals.totalOT > 0 || dailyTotals.totalMiles > 0;
+  const hasTechMaterial = techMaterialBase > 0;
 
   return (
     <div className="bg-gray-800 rounded-lg p-4">
@@ -151,17 +164,50 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
 
           <div className="border-t border-gray-600 my-4"></div>
 
-          {/* Materials */}
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-400">{t('materials')}</span>
-            <span>${materialBase.toFixed(2)}</span>
-          </div>
-          {materialBase > 0 && (
-            <div className="flex justify-between text-sm text-yellow-400 mb-3">
-              <span className="ml-4">{t('markup')}</span>
-              <span>+ ${(materialBase * 0.25).toFixed(2)}</span>
+          {/* Materials Section - Split EMF and Tech */}
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-gray-300 mb-2">
+              {language === 'en' ? '📦 Materials' : '📦 Materiales'}
             </div>
-          )}
+            
+            {/* EMF Material */}
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-400 ml-2">
+                {language === 'en' ? 'EMF Material (company)' : 'Material EMF (empresa)'}
+              </span>
+              <span>${emfMaterialBase.toFixed(2)}</span>
+            </div>
+            {emfMaterialBase > 0 && (
+              <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                <span className="ml-4">{t('markup')}</span>
+                <span>+ ${(emfMaterialBase * 0.25).toFixed(2)}</span>
+              </div>
+            )}
+            
+            {/* Tech Material */}
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-orange-400 ml-2">
+                {language === 'en' ? 'Tech Material (reimbursable)' : 'Material Técnico (reembolsable)'}
+              </span>
+              <span className="text-orange-400">${techMaterialBase.toFixed(2)}</span>
+            </div>
+            {techMaterialBase > 0 && (
+              <div className="flex justify-between text-sm text-yellow-400 mb-2">
+                <span className="ml-4">{t('markup')}</span>
+                <span>+ ${(techMaterialBase * 0.25).toFixed(2)}</span>
+              </div>
+            )}
+            
+            {/* Total Material */}
+            {(emfMaterialBase > 0 || techMaterialBase > 0) && (
+              <div className="flex justify-between text-sm font-semibold border-t border-gray-700 pt-1 mt-1">
+                <span className="text-gray-300 ml-2">
+                  {language === 'en' ? 'Total Material (w/ markup)' : 'Material Total (con margen)'}
+                </span>
+                <span>${totalMaterialWithMarkup.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
 
           {/* Equipment */}
           <div className="flex justify-between text-sm mb-2">

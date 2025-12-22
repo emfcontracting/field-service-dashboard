@@ -329,6 +329,7 @@ export function useWorkOrders(currentUser) {
             hours_regular: hoursData.hoursRegular || 0,
             hours_overtime: hoursData.hoursOvertime || 0,
             miles: hoursData.miles || 0,
+            tech_material_cost: hoursData.techMaterialCost || 0,
             notes: hoursData.notes || null,
             created_at: new Date().toISOString()
           });
@@ -364,6 +365,7 @@ export function useWorkOrders(currentUser) {
           hours_regular: hoursData.hoursRegular || 0,
           hours_overtime: hoursData.hoursOvertime || 0,
           miles: hoursData.miles || 0,
+          tech_material_cost: hoursData.techMaterialCost || 0,
           notes: hoursData.notes || null
         });
         

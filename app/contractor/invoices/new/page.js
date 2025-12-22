@@ -7,6 +7,17 @@ import Link from 'next/link';
 
 const supabase = getSupabase();
 
+// Helper function to format date without timezone shift
+// Parses YYYY-MM-DD and displays in local format without UTC conversion
+function formatDateLocal(dateString) {
+  if (!dateString) return '-';
+  // Split the date string to avoid timezone conversion
+  const [year, month, day] = dateString.split('-').map(Number);
+  // Create date with local timezone (months are 0-indexed)
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function CreateInvoice() {
   const router = useRouter();
   
@@ -40,11 +51,22 @@ export default function CreateInvoice() {
     try {
       const parsed = JSON.parse(userData);
       setUser(parsed);
+      // Set default date range (last 14 days) using local dates
       const end = new Date();
       const start = new Date();
       start.setDate(start.getDate() - 14);
-      setPeriodEnd(end.toISOString().split('T')[0]);
-      setPeriodStart(start.toISOString().split('T')[0]);
+      
+      // Format as YYYY-MM-DD without timezone issues
+      const formatLocalDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
+      setPeriodEnd(formatLocalDate(end));
+      setPeriodStart(formatLocalDate(start));
+      
       if (parsed.profile) {
         setRates({
           hourly: parseFloat(parsed.profile.hourly_rate || 35),
@@ -63,6 +85,7 @@ export default function CreateInvoice() {
     setLoadingHours(true);
     setMessage(null);
     try {
+      // Include tech_material_cost in the query
       const { data, error } = await supabase
         .from('daily_hours_log')
         .select('*, work_order:work_orders(wo_number, building, work_order_description)')
@@ -79,6 +102,7 @@ export default function CreateInvoice() {
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error) {
+      console.error('Pull hours error:', error);
       setMessage({ type: 'error', text: 'Failed to pull hours data' });
     } finally {
       setLoadingHours(false);
@@ -104,18 +128,26 @@ export default function CreateInvoice() {
     setLineItems(lineItems.filter(item => item.id !== id));
   }
 
+  // Calculate totals including tech materials
   const totalRegularHours = hoursData.reduce((sum, h) => sum + parseFloat(h.hours_regular || 0), 0);
   const totalOTHours = hoursData.reduce((sum, h) => sum + parseFloat(h.hours_overtime || 0), 0);
   const totalMiles = hoursData.reduce((sum, h) => sum + parseFloat(h.miles || 0), 0);
+  const totalTechMaterial = hoursData.reduce((sum, h) => sum + parseFloat(h.tech_material_cost || 0), 0);
+  
   const hoursAmount = (totalRegularHours * rates.hourly) + (totalOTHours * rates.ot);
   const mileageAmount = totalMiles * rates.mileage;
   const lineItemsAmount = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-  const grandTotal = clientType === 'emf' ? (hoursAmount + mileageAmount + lineItemsAmount) : lineItemsAmount;
+  
+  // Grand total now includes tech materials (reimbursable)
+  const grandTotal = clientType === 'emf' 
+    ? (hoursAmount + mileageAmount + totalTechMaterial + lineItemsAmount) 
+    : lineItemsAmount;
 
   function generateInvoiceNumber() {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const day = String(new Date().getDate()).padStart(2, '0');
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
     return 'INV-' + year + month + day + '-' + initials.toUpperCase() + random;
@@ -144,6 +176,7 @@ export default function CreateInvoice() {
         total_hours_amount: hoursAmount,
         total_miles: totalMiles,
         total_mileage_amount: mileageAmount,
+        total_tech_material: totalTechMaterial,
         total_line_items_amount: lineItemsAmount,
         grand_total: grandTotal,
         hourly_rate_used: rates.hourly,
@@ -157,19 +190,69 @@ export default function CreateInvoice() {
 
       const itemsToInsert = [];
       for (const entry of hoursData) {
+        const woNum = entry.work_order?.wo_number || 'N/A';
+        const building = entry.work_order?.building || '';
+        
         if (parseFloat(entry.hours_regular || 0) > 0) {
-          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'hours', description: 'Regular Hours - ' + (entry.work_order?.wo_number || 'N/A') + ' - ' + (entry.work_order?.building || ''), quantity: parseFloat(entry.hours_regular), rate: rates.hourly, amount: parseFloat(entry.hours_regular) * rates.hourly, work_date: entry.work_date });
+          itemsToInsert.push({ 
+            invoice_id: invoice.invoice_id, 
+            wo_id: entry.wo_id, 
+            item_type: 'hours', 
+            description: 'Regular Hours - ' + woNum + ' - ' + building, 
+            quantity: parseFloat(entry.hours_regular), 
+            rate: rates.hourly, 
+            amount: parseFloat(entry.hours_regular) * rates.hourly, 
+            work_date: entry.work_date 
+          });
         }
         if (parseFloat(entry.hours_overtime || 0) > 0) {
-          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'hours', description: 'OT Hours - ' + (entry.work_order?.wo_number || 'N/A') + ' - ' + (entry.work_order?.building || ''), quantity: parseFloat(entry.hours_overtime), rate: rates.ot, amount: parseFloat(entry.hours_overtime) * rates.ot, work_date: entry.work_date });
+          itemsToInsert.push({ 
+            invoice_id: invoice.invoice_id, 
+            wo_id: entry.wo_id, 
+            item_type: 'hours', 
+            description: 'OT Hours - ' + woNum + ' - ' + building, 
+            quantity: parseFloat(entry.hours_overtime), 
+            rate: rates.ot, 
+            amount: parseFloat(entry.hours_overtime) * rates.ot, 
+            work_date: entry.work_date 
+          });
         }
         if (parseFloat(entry.miles || 0) > 0) {
-          itemsToInsert.push({ invoice_id: invoice.invoice_id, wo_id: entry.wo_id, item_type: 'mileage', description: 'Mileage - ' + (entry.work_order?.wo_number || 'N/A'), quantity: parseFloat(entry.miles), rate: rates.mileage, amount: parseFloat(entry.miles) * rates.mileage, work_date: entry.work_date });
+          itemsToInsert.push({ 
+            invoice_id: invoice.invoice_id, 
+            wo_id: entry.wo_id, 
+            item_type: 'mileage', 
+            description: 'Mileage - ' + woNum, 
+            quantity: parseFloat(entry.miles), 
+            rate: rates.mileage, 
+            amount: parseFloat(entry.miles) * rates.mileage, 
+            work_date: entry.work_date 
+          });
+        }
+        // Add tech material as separate line item (reimbursable)
+        if (parseFloat(entry.tech_material_cost || 0) > 0) {
+          itemsToInsert.push({ 
+            invoice_id: invoice.invoice_id, 
+            wo_id: entry.wo_id, 
+            item_type: 'material', 
+            description: 'Material Reimbursement - ' + woNum + ' - ' + building, 
+            quantity: 1, 
+            rate: parseFloat(entry.tech_material_cost), 
+            amount: parseFloat(entry.tech_material_cost), 
+            work_date: entry.work_date 
+          });
         }
       }
       for (const item of lineItems) {
         if (item.description && item.amount > 0) {
-          itemsToInsert.push({ invoice_id: invoice.invoice_id, item_type: 'custom', description: item.description, quantity: parseFloat(item.quantity) || 1, rate: parseFloat(item.rate) || 0, amount: parseFloat(item.amount) || 0 });
+          itemsToInsert.push({ 
+            invoice_id: invoice.invoice_id, 
+            item_type: 'custom', 
+            description: item.description, 
+            quantity: parseFloat(item.quantity) || 1, 
+            rate: parseFloat(item.rate) || 0, 
+            amount: parseFloat(item.amount) || 0 
+          });
         }
       }
       if (itemsToInsert.length > 0) {
@@ -178,6 +261,7 @@ export default function CreateInvoice() {
       setMessage({ type: 'success', text: 'Invoice ' + invoiceNumber + ' created!' });
       setTimeout(() => router.push('/contractor/invoices'), 1500);
     } catch (error) {
+      console.error('Save invoice error:', error);
       setMessage({ type: 'error', text: 'Failed to create invoice' });
     } finally {
       setSaving(false);
@@ -195,7 +279,6 @@ export default function CreateInvoice() {
       const invNum = generateInvoiceNumber();
       const bName = user.profile?.business_name || (user.first_name + ' ' + user.last_name);
       
-      // Call API to generate PDF
       const response = await fetch('/api/contractor/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -224,15 +307,12 @@ export default function CreateInvoice() {
         throw new Error('Failed to generate PDF');
       }
 
-      // Download the PDF
       const blob = await response.blob();
       
-      // Check if mobile device
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
         || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
       
       if (isMobile) {
-        // Mobile: Convert blob to base64 and open viewer page
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64data = reader.result;
@@ -263,7 +343,6 @@ export default function CreateInvoice() {
             `);
             newTab.document.close();
           } else {
-            // Fallback
             const link = document.createElement('a');
             link.href = base64data;
             link.download = invNum + '.pdf';
@@ -273,7 +352,6 @@ export default function CreateInvoice() {
         reader.readAsDataURL(blob);
         setMessage({ type: 'success', text: 'PDF opened! Tap Download to save.' });
       } else {
-        // Desktop: Use normal download
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -374,14 +452,14 @@ export default function CreateInvoice() {
               </div>
             </div>
             <button onClick={pullHours} disabled={loadingHours} className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50">
-              {loadingHours ? '⏳ Pulling Data...' : '📥 Pull My Hours & Mileage'}
+              {loadingHours ? '⏳ Pulling Data...' : '📥 Pull My Hours, Mileage & Materials'}
             </button>
           </div>
         )}
 
         {clientType === 'emf' && hoursData.length > 0 && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h2 className="font-bold mb-4">📋 Review Hours & Mileage</h2>
+            <h2 className="font-bold mb-4">📋 Review Hours, Mileage & Materials</h2>
             <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-700/50 rounded-lg">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
@@ -414,6 +492,7 @@ export default function CreateInvoice() {
                     <th className="pb-2 text-right">Reg Hrs</th>
                     <th className="pb-2 text-right">OT Hrs</th>
                     <th className="pb-2 text-right">Miles</th>
+                    <th className="pb-2 text-right">Material</th>
                     <th className="pb-2 text-right">Amount</th>
                   </tr>
                 </thead>
@@ -422,17 +501,25 @@ export default function CreateInvoice() {
                     const regAmount = parseFloat(entry.hours_regular || 0) * rates.hourly;
                     const otAmount = parseFloat(entry.hours_overtime || 0) * rates.ot;
                     const mileAmount = parseFloat(entry.miles || 0) * rates.mileage;
-                    const rowTotal = regAmount + otAmount + mileAmount;
+                    const techMaterial = parseFloat(entry.tech_material_cost || 0);
+                    const rowTotal = regAmount + otAmount + mileAmount + techMaterial;
                     return (
                       <tr key={idx} className="border-b border-gray-700/50">
-                        <td className="py-2">{new Date(entry.work_date).toLocaleDateString()}</td>
+                        <td className="py-2 font-medium">{formatDateLocal(entry.work_date)}</td>
                         <td className="py-2">
                           <div className="font-medium">{entry.work_order?.wo_number || 'N/A'}</div>
-                          <div className="text-xs text-gray-500 truncate max-w-[200px]">{entry.work_order?.building}</div>
+                          <div className="text-xs text-gray-500 truncate max-w-[150px]">{entry.work_order?.building}</div>
                         </td>
                         <td className="py-2 text-right">{parseFloat(entry.hours_regular || 0).toFixed(1)}</td>
                         <td className="py-2 text-right">{parseFloat(entry.hours_overtime || 0).toFixed(1)}</td>
                         <td className="py-2 text-right">{parseFloat(entry.miles || 0).toFixed(0)}</td>
+                        <td className="py-2 text-right">
+                          {techMaterial > 0 ? (
+                            <span className="text-orange-400">${techMaterial.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-gray-600">-</span>
+                          )}
+                        </td>
                         <td className="py-2 text-right font-medium">${rowTotal.toFixed(2)}</td>
                       </tr>
                     );
@@ -445,11 +532,23 @@ export default function CreateInvoice() {
                     <td className="pt-3 text-right">{totalRegularHours.toFixed(1)}</td>
                     <td className="pt-3 text-right">{totalOTHours.toFixed(1)}</td>
                     <td className="pt-3 text-right">{totalMiles.toFixed(0)}</td>
-                    <td className="pt-3 text-right text-green-400">${(hoursAmount + mileageAmount).toFixed(2)}</td>
+                    <td className="pt-3 text-right text-orange-400">
+                      {totalTechMaterial > 0 ? `$${totalTechMaterial.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="pt-3 text-right text-green-400">${(hoursAmount + mileageAmount + totalTechMaterial).toFixed(2)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+            
+            {/* Material reimbursement note */}
+            {totalTechMaterial > 0 && (
+              <div className="mt-3 p-3 bg-orange-900/30 border border-orange-500/30 rounded-lg">
+                <p className="text-sm text-orange-300">
+                  💰 <strong>Material Reimbursement:</strong> ${totalTechMaterial.toFixed(2)} for materials you purchased will be included in this invoice.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -459,7 +558,7 @@ export default function CreateInvoice() {
             <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">+ Add Item</button>
           </div>
           {lineItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">{clientType === 'emf' ? 'No additional items. Click "Add Item" to add materials, supplies, etc.' : 'Click "Add Item" to add services, materials, etc.'}</p>
+            <p className="text-gray-500 text-sm">{clientType === 'emf' ? 'No additional items. Click "Add Item" to add extra materials, supplies, etc.' : 'Click "Add Item" to add services, materials, etc.'}</p>
           ) : (
             <div className="space-y-3">
               {lineItems.map(item => (
@@ -483,16 +582,37 @@ export default function CreateInvoice() {
           <div className="space-y-2">
             {clientType === 'emf' && (
               <>
-                <div className="flex justify-between"><span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span><span>${(totalRegularHours * rates.hourly).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span><span>${(totalOTHours * rates.ot).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span><span>${mileageAmount.toFixed(2)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
+                  <span>${(totalRegularHours * rates.hourly).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
+                  <span>${(totalOTHours * rates.ot).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
+                  <span>${mileageAmount.toFixed(2)}</span>
+                </div>
+                {totalTechMaterial > 0 && (
+                  <div className="flex justify-between text-orange-400">
+                    <span>Material Reimbursement</span>
+                    <span>${totalTechMaterial.toFixed(2)}</span>
+                  </div>
+                )}
               </>
             )}
             {lineItemsAmount > 0 && (
-              <div className="flex justify-between"><span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span><span>${lineItemsAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span>
+                <span>${lineItemsAmount.toFixed(2)}</span>
+              </div>
             )}
             <div className="border-t border-gray-600 pt-2 mt-2">
-              <div className="flex justify-between text-xl font-bold"><span>TOTAL</span><span className="text-green-400">${grandTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xl font-bold">
+                <span>TOTAL</span>
+                <span className="text-green-400">${grandTotal.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </div>

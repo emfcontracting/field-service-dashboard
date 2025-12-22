@@ -1847,11 +1847,13 @@ const sendAssignmentNotifications = async () => {
                       </div>
                     </div>
 
-                    {/* NTE Summary - Shows Current + Additional = New NTE Needed */}
-                    {/* Uses same calculation as print function for consistency */}
+                    {/* NTE Summary - Shows STORED SNAPSHOT values (read-only) */}
+                    {/* If snapshot exists, use it. Otherwise fall back to calculation for legacy quotes */}
                     {(() => {
-                      // Calculate additional work total (from this quote)
-                      // MUST include ALL components: labor + materials + equipment + rental + trailer + mileage
+                      // Check if this quote has stored snapshot values (new system)
+                      const hasSnapshot = quote.current_costs_snapshot !== null && quote.current_costs_snapshot !== undefined;
+                      
+                      // Additional work total from quote
                       const additionalTotal = 
                         (parseFloat(quote.labor_total) || 0) +
                         (parseFloat(quote.materials_with_markup) || 0) +
@@ -1860,50 +1862,63 @@ const sendAssignmentNotifications = async () => {
                         (parseFloat(quote.trailer_with_markup) || 0) +
                         (parseFloat(quote.mileage_total) || 0);
                       
-                      // Calculate current costs SAME WAY AS PRINT FUNCTION
-                      // Use dailyHoursLog if available, otherwise legacy fields
-                      let laborRT = 0;
-                      let laborOT = 0;
-                      let totalMileageFromLogs = 0;
+                      let currentCosts;
+                      let newNTENeeded;
                       
-                      if (dailyHoursLog && dailyHoursLog.length > 0) {
-                        // Use daily logs only (not combined with legacy)
-                        dailyHoursLog.forEach(log => {
-                          laborRT += parseFloat(log.hours_regular) || 0;
-                          laborOT += parseFloat(log.hours_overtime) || 0;
-                          totalMileageFromLogs += parseFloat(log.miles) || 0;
-                        });
+                      if (hasSnapshot) {
+                        // USE STORED SNAPSHOT VALUES (new system - read-only)
+                        currentCosts = parseFloat(quote.current_costs_snapshot) || 0;
+                        newNTENeeded = parseFloat(quote.new_nte_amount) || (currentCosts + additionalTotal);
                       } else {
-                        // Legacy fields from work order + team members
-                        laborRT = parseFloat(selectedWO.hours_regular) || 0;
-                        laborOT = parseFloat(selectedWO.hours_overtime) || 0;
-                        totalMileageFromLogs = parseFloat(selectedWO.miles) || 0;
+                        // LEGACY: Calculate for old quotes that don't have snapshot
+                        let laborRT = 0;
+                        let laborOT = 0;
+                        let totalMileageFromLogs = 0;
                         
-                        (selectedWO.teamMembers || []).forEach(tm => {
-                          laborRT += parseFloat(tm.hours_regular) || 0;
-                          laborOT += parseFloat(tm.hours_overtime) || 0;
-                          totalMileageFromLogs += parseFloat(tm.miles) || 0;
-                        });
+                        if (dailyHoursLog && dailyHoursLog.length > 0) {
+                          dailyHoursLog.forEach(log => {
+                            laborRT += parseFloat(log.hours_regular) || 0;
+                            laborOT += parseFloat(log.hours_overtime) || 0;
+                            totalMileageFromLogs += parseFloat(log.miles) || 0;
+                          });
+                        } else {
+                          laborRT = parseFloat(selectedWO.hours_regular) || 0;
+                          laborOT = parseFloat(selectedWO.hours_overtime) || 0;
+                          totalMileageFromLogs = parseFloat(selectedWO.miles) || 0;
+                          
+                          (selectedWO.teamMembers || []).forEach(tm => {
+                            laborRT += parseFloat(tm.hours_regular) || 0;
+                            laborOT += parseFloat(tm.hours_overtime) || 0;
+                            totalMileageFromLogs += parseFloat(tm.miles) || 0;
+                          });
+                        }
+                        
+                        const laborCost = (laborRT * 64) + (laborOT * 96);
+                        const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
+                        const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+                        const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+                        const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+                        const mileageCost = totalMileageFromLogs * 1.00;
+                        const adminFee = 128;
+                        
+                        currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
+                        newNTENeeded = currentCosts + additionalTotal;
                       }
-                      
-                      const laborCost = (laborRT * 64) + (laborOT * 96);
-                      const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
-                      const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-                      const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-                      const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-                      const mileageCost = totalMileageFromLogs * 1.00;
-                      const adminFee = 128;
-                      
-                      const currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
-                      
-                      // New NTE needed = current costs + additional work
-                      const newNTENeeded = currentCosts + additionalTotal;
                       
                       return (
                         <div className="border-t border-gray-600 pt-3 mt-3 space-y-2">
+                          {/* Snapshot indicator */}
+                          {hasSnapshot && (
+                            <div className="text-xs text-gray-500 text-center mb-2">
+                              📸 Snapshot from {new Date(quote.created_at).toLocaleDateString()}
+                            </div>
+                          )}
+                          
                           {/* Current Costs */}
                           <div className="flex justify-between items-center text-sm">
-                            <span className="text-blue-400">Current Costs Accrued:</span>
+                            <span className="text-blue-400">
+                              Current Costs {hasSnapshot ? '(at submission)' : 'Accrued'}:
+                            </span>
                             <span className="text-blue-400 font-semibold">${currentCosts.toFixed(2)}</span>
                           </div>
                           
@@ -1918,13 +1933,13 @@ const sendAssignmentNotifications = async () => {
                           
                           {/* New NTE Needed */}
                           <div className="flex justify-between items-center text-lg">
-                            <span className="text-green-400 font-bold">NEW NTE NEEDED:</span>
+                            <span className="text-green-400 font-bold">NEW NTE:</span>
                             <span className="text-green-400 font-bold">${newNTENeeded.toFixed(2)}</span>
                           </div>
                           
-                          {/* Original NTE for reference */}
+                          {/* Work Order's Current NTE for reference */}
                           <div className="flex justify-between items-center text-xs text-gray-500">
-                            <span>Original NTE Budget:</span>
+                            <span>Work Order NTE:</span>
                             <span>${(selectedWO.nte || 0).toFixed(2)}</span>
                           </div>
                         </div>

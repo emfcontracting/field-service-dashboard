@@ -1,5 +1,5 @@
 // services/quoteService.js - NTE Increase/Quote Management
-// FIXED: Admin fee is only counted once (in current costs), NOT in additional work
+// FIXED: Saves snapshot of current costs and immediately updates work order NTE
 
 // Rate constants
 export const RATES = {
@@ -100,10 +100,14 @@ export async function loadQuoteWithMaterials(supabase, quoteId) {
   };
 }
 
-// Create a new quote
+// Create a new quote - NOW SAVES SNAPSHOT AND UPDATES WORK ORDER NTE
 export async function createQuote(supabase, quoteData, userId) {
   // Calculate totals for the additional costs (no admin fee)
   const totals = calculateQuoteTotals(quoteData);
+
+  // Get the snapshot values passed from NTEIncreasePage
+  const currentCostsSnapshot = parseFloat(quoteData.existing_costs_total) || 0;
+  const newNteAmount = parseFloat(quoteData.projected_total) || (currentCostsSnapshot + totals.grand_total);
 
   const { data, error } = await supabase
     .from('work_order_quotes')
@@ -122,19 +126,39 @@ export async function createQuote(supabase, quoteData, userId) {
       estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
-      // Calculated totals (no admin_fee - it's in current costs)
+      // Calculated totals for additional work
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
       equipment_with_markup: totals.equipment_with_markup,
       rental_with_markup: totals.rental_with_markup,
       trailer_with_markup: totals.trailer_with_markup,
       mileage_total: totals.mileage_total,
-      grand_total: totals.grand_total
+      grand_total: totals.grand_total,
+      // NEW: Snapshot values
+      current_costs_snapshot: currentCostsSnapshot,
+      new_nte_amount: newNteAmount
     })
     .select()
     .single();
 
   if (error) throw error;
+
+  // IMMEDIATELY UPDATE WORK ORDER NTE to the new amount
+  const { error: updateError } = await supabase
+    .from('work_orders')
+    .update({ 
+      nte: newNteAmount,
+      // Also set CBRE status to pending_quote if not already set
+      cbre_status: 'pending_quote',
+      cbre_status_updated_at: new Date().toISOString()
+    })
+    .eq('wo_id', quoteData.wo_id);
+
+  if (updateError) {
+    console.error('Error updating work order NTE:', updateError);
+    // Don't throw - quote was created, NTE update is secondary
+  }
+
   return data;
 }
 
@@ -143,36 +167,63 @@ export async function updateQuote(supabase, quoteId, quoteData) {
   // Calculate totals for the additional costs (no admin fee)
   const totals = calculateQuoteTotals(quoteData);
 
+  // Get updated snapshot values if provided
+  const currentCostsSnapshot = quoteData.existing_costs_total !== undefined 
+    ? parseFloat(quoteData.existing_costs_total) 
+    : undefined;
+  const newNteAmount = quoteData.projected_total !== undefined 
+    ? parseFloat(quoteData.projected_total) 
+    : undefined;
+
+  const updateData = {
+    is_verbal_nte: quoteData.is_verbal_nte || false,
+    verbal_approved_by: quoteData.verbal_approved_by || null,
+    estimated_techs: parseInt(quoteData.estimated_techs) || 1,
+    estimated_rt_hours: parseFloat(quoteData.estimated_rt_hours) || 0,
+    estimated_ot_hours: parseFloat(quoteData.estimated_ot_hours) || 0,
+    material_cost: parseFloat(quoteData.material_cost) || 0,
+    equipment_cost: parseFloat(quoteData.equipment_cost) || 0,
+    rental_cost: parseFloat(quoteData.rental_cost) || 0,
+    trailer_cost: parseFloat(quoteData.trailer_cost) || 0,
+    estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
+    description: quoteData.description || null,
+    notes: quoteData.notes || null,
+    updated_at: new Date().toISOString(),
+    // Calculated totals
+    labor_total: totals.labor_total,
+    materials_with_markup: totals.materials_with_markup,
+    equipment_with_markup: totals.equipment_with_markup,
+    rental_with_markup: totals.rental_with_markup,
+    trailer_with_markup: totals.trailer_with_markup,
+    mileage_total: totals.mileage_total,
+    grand_total: totals.grand_total
+  };
+
+  // Add snapshot values if provided
+  if (currentCostsSnapshot !== undefined) {
+    updateData.current_costs_snapshot = currentCostsSnapshot;
+  }
+  if (newNteAmount !== undefined) {
+    updateData.new_nte_amount = newNteAmount;
+  }
+
   const { data, error } = await supabase
     .from('work_order_quotes')
-    .update({
-      is_verbal_nte: quoteData.is_verbal_nte || false,
-      verbal_approved_by: quoteData.verbal_approved_by || null,
-      estimated_techs: parseInt(quoteData.estimated_techs) || 1,
-      estimated_rt_hours: parseFloat(quoteData.estimated_rt_hours) || 0,
-      estimated_ot_hours: parseFloat(quoteData.estimated_ot_hours) || 0,
-      material_cost: parseFloat(quoteData.material_cost) || 0,
-      equipment_cost: parseFloat(quoteData.equipment_cost) || 0,
-      rental_cost: parseFloat(quoteData.rental_cost) || 0,
-      trailer_cost: parseFloat(quoteData.trailer_cost) || 0,
-      estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
-      description: quoteData.description || null,
-      notes: quoteData.notes || null,
-      updated_at: new Date().toISOString(),
-      // Calculated totals (no admin_fee - it's in current costs)
-      labor_total: totals.labor_total,
-      materials_with_markup: totals.materials_with_markup,
-      equipment_with_markup: totals.equipment_with_markup,
-      rental_with_markup: totals.rental_with_markup,
-      trailer_with_markup: totals.trailer_with_markup,
-      mileage_total: totals.mileage_total,
-      grand_total: totals.grand_total
-    })
+    .update(updateData)
     .eq('quote_id', quoteId)
     .select()
     .single();
 
   if (error) throw error;
+
+  // If new NTE amount provided, update work order
+  if (newNteAmount !== undefined && quoteData.wo_id) {
+    await supabase
+      .from('work_orders')
+      .update({ nte: newNteAmount })
+      .eq('wo_id', quoteData.wo_id);
+  }
+
   return data;
 }
 
@@ -271,7 +322,7 @@ export async function recalculateMaterialTotal(supabase, quoteId) {
 
   const totals = calculateQuoteTotals(updatedQuote);
 
-  // Update quote (no admin_fee)
+  // Update quote
   const { error: updateError } = await supabase
     .from('work_order_quotes')
     .update({

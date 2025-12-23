@@ -82,7 +82,7 @@ function Notifications() {
 // WORK ORDER LIST VIEW
 // ============================================================
 function WorkOrderList({ onSelectWorkOrder }) {
-  const { workOrders, getWorkOrdersForTech, currentDemoUser, getTeamForWorkOrder } = useDemo();
+  const { workOrders, getWorkOrdersForTech, currentDemoUser, getTeamForWorkOrder, isPMWorkOrder } = useDemo();
   const [filter, setFilter] = useState('my');
   
   const myWorkOrders = useMemo(() => {
@@ -152,6 +152,7 @@ function WorkOrderList({ onSelectWorkOrder }) {
           <div className="divide-y divide-gray-100">
             {displayOrders.map(wo => {
               const team = getTeamForWorkOrder(wo.id);
+              const isPM = isPMWorkOrder(wo.wo_number);
               return (
                 <button
                   key={wo.id}
@@ -162,7 +163,10 @@ function WorkOrderList({ onSelectWorkOrder }) {
                     <div className={`w-2 h-2 mt-2 rounded-full ${getPriorityColor(wo.priority)}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold text-gray-900">{wo.wo_number}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">{wo.wo_number}</span>
+                          {isPM && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">PM</span>}
+                        </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(wo.status)}`}>
                           {wo.status.replace('_', ' ')}
                         </span>
@@ -173,6 +177,9 @@ function WorkOrderList({ onSelectWorkOrder }) {
                         {wo.scheduled_date && <span>📅 {wo.scheduled_date}</span>}
                         <span>💰 ${wo.nte_amount}</span>
                         {team.length > 0 && <span>👥 {team.length}</span>}
+                        {/* Photo status indicators */}
+                        <span className={wo.has_before_photos ? 'text-green-600' : 'text-gray-300'}>📷B</span>
+                        <span className={wo.has_after_photos ? 'text-green-600' : 'text-gray-300'}>📷A</span>
                       </div>
                     </div>
                     <span className="text-gray-400">›</span>
@@ -202,20 +209,32 @@ function WorkOrderDetail({ workOrder, onBack }) {
     completeWorkOrder,
     addComment,
     logHours,
+    updateStatus,
+    markPhotosReceived,
+    markPMIWriteupSent,
+    isPMWorkOrder,
     addNotification
   } = useDemo();
   
   const [activeTab, setActiveTab] = useState('details');
   const [newComment, setNewComment] = useState('');
   const [showHoursModal, setShowHoursModal] = useState(false);
-  const [hours, setHours] = useState({ regular: '', overtime: '', mileage: '', notes: '' });
+  const [hours, setHours] = useState({ regular: '', overtime: '', mileage: '', techMaterial: '', notes: '' });
+  const [status, setStatus] = useState(workOrder.status);
   
   const comments = getCommentsForWorkOrder(workOrder.id);
   const team = getTeamForWorkOrder(workOrder.id);
   const dailyHours = getDailyHoursForWorkOrder(workOrder.id);
+  const isPM = isPMWorkOrder(workOrder.wo_number);
   
   const isCheckedIn = workOrder.check_in_time && !workOrder.check_out_time;
   const canCheckIn = workOrder.status === 'assigned' || (workOrder.status === 'in_progress' && !isCheckedIn);
+  
+  // Completion requirements
+  const hasBeforePhotos = workOrder.has_before_photos;
+  const hasAfterPhotos = workOrder.has_after_photos;
+  const hasPMIWriteup = workOrder.pmi_writeup_sent;
+  const canComplete = hasBeforePhotos && hasAfterPhotos && (!isPM || hasPMIWriteup);
   
   const handleCheckIn = () => {
     checkIn(workOrder.id);
@@ -227,8 +246,10 @@ function WorkOrderDetail({ workOrder, onBack }) {
   };
   
   const handleComplete = () => {
-    completeWorkOrder(workOrder.id);
-    onBack();
+    const result = completeWorkOrder(workOrder.id);
+    if (result.success) {
+      onBack();
+    }
   };
   
   const handleAddComment = () => {
@@ -249,10 +270,33 @@ function WorkOrderDetail({ workOrder, onBack }) {
       parseFloat(hours.regular) || 0,
       parseFloat(hours.overtime) || 0,
       parseFloat(hours.mileage) || 0,
-      hours.notes
+      hours.notes,
+      parseFloat(hours.techMaterial) || 0
     );
     setShowHoursModal(false);
-    setHours({ regular: '', overtime: '', mileage: '', notes: '' });
+    setHours({ regular: '', overtime: '', mileage: '', techMaterial: '', notes: '' });
+  };
+  
+  const handleStatusChange = (newStatus) => {
+    setStatus(newStatus);
+    updateStatus(workOrder.id, newStatus);
+  };
+
+  // Simulate email photo action
+  const handleEmailPhotos = (type) => {
+    addNotification(`📧 Opening email to send ${type} photos...`, 'info');
+    // Simulate receiving photos after a delay
+    setTimeout(() => {
+      markPhotosReceived(workOrder.id, type);
+    }, 1500);
+  };
+
+  // Simulate PMI writeup email
+  const handleEmailPMIWriteup = () => {
+    addNotification('📧 Opening email for PMI write-up...', 'info');
+    setTimeout(() => {
+      markPMIWriteupSent(workOrder.id);
+    }, 1500);
   };
   
   return (
@@ -262,12 +306,34 @@ function WorkOrderDetail({ workOrder, onBack }) {
         <button onClick={onBack} className="flex items-center gap-2 text-blue-100 mb-2">
           <span>←</span> Back
         </button>
-        <h1 className="text-xl font-bold">{workOrder.wo_number}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">{workOrder.wo_number}</h1>
+          {isPM && <span className="px-2 py-0.5 bg-purple-500 text-white text-xs rounded">PM</span>}
+        </div>
         <p className="text-blue-100 text-sm">{workOrder.building_name}</p>
       </div>
       
+      {/* Status Selector */}
+      <div className="p-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Status:</span>
+          <select
+            value={status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="pending">Pending</option>
+            <option value="tech_review">Tech Review</option>
+            <option value="return_trip">Return Trip</option>
+            {/* Note: "completed" removed - must use Complete button */}
+          </select>
+        </div>
+      </div>
+      
       {/* Action Buttons */}
-      <div className="p-4 bg-gray-50 border-b border-gray-200 flex gap-2">
+      <div className="p-3 bg-gray-50 border-b border-gray-200 flex gap-2">
         {canCheckIn && !isCheckedIn && (
           <button onClick={handleCheckIn} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium transition">
             ✓ Check In
@@ -278,29 +344,24 @@ function WorkOrderDetail({ workOrder, onBack }) {
             Check Out
           </button>
         )}
-        {workOrder.status === 'in_progress' && (
-          <button onClick={handleComplete} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition">
-            Complete
-          </button>
-        )}
-        {!canCheckIn && !isCheckedIn && workOrder.status !== 'in_progress' && (
-          <div className="flex-1 text-center py-3 text-gray-500">
-            Status: {workOrder.status}
+        {!canCheckIn && !isCheckedIn && workOrder.status !== 'completed' && (
+          <div className="flex-1 text-center py-3 text-gray-500 text-sm">
+            {workOrder.status === 'in_progress' ? 'Checked out' : `Status: ${workOrder.status}`}
           </div>
         )}
       </div>
       
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        {['details', 'team', 'comments', 'hours'].map(tab => (
+      <div className="flex border-b border-gray-200 text-xs sm:text-sm">
+        {['details', 'photos', 'team', 'comments', 'hours'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-medium capitalize transition ${
+            className={`flex-1 py-3 font-medium capitalize transition ${
               activeTab === tab ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
             }`}
           >
-            {tab}
+            {tab === 'photos' ? '📷' : ''}{tab}
           </button>
         ))}
       </div>
@@ -337,6 +398,83 @@ function WorkOrderDetail({ workOrder, onBack }) {
               <div className="p-4 bg-green-50 rounded-lg">
                 <div className="text-xs text-green-600 mb-1">Checked In</div>
                 <div className="text-sm font-medium">{new Date(workOrder.check_in_time).toLocaleString()}</div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {activeTab === 'photos' && (
+          <div className="space-y-4">
+            {/* Photo Requirements Info */}
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-sm text-blue-800">
+                <strong>📷 Photo Requirements</strong>
+                <p className="mt-1 text-xs">Before and after photos must be emailed to complete the work order.</p>
+              </div>
+            </div>
+
+            {/* Before Photos */}
+            <div className={`p-4 rounded-lg border-2 ${hasBeforePhotos ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium">📷 Before Photos</span>
+                {hasBeforePhotos ? (
+                  <span className="text-green-600 text-sm">✓ Received</span>
+                ) : (
+                  <span className="text-gray-400 text-sm">Not received</span>
+                )}
+              </div>
+              {!hasBeforePhotos && (
+                <button
+                  onClick={() => handleEmailPhotos('before')}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm font-medium"
+                >
+                  📧 Email Before Photos
+                </button>
+              )}
+            </div>
+
+            {/* After Photos */}
+            <div className={`p-4 rounded-lg border-2 ${hasAfterPhotos ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium">📷 After Photos</span>
+                {hasAfterPhotos ? (
+                  <span className="text-green-600 text-sm">✓ Received</span>
+                ) : (
+                  <span className="text-gray-400 text-sm">Not received</span>
+                )}
+              </div>
+              {!hasAfterPhotos && (
+                <button
+                  onClick={() => handleEmailPhotos('after')}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm font-medium"
+                >
+                  📧 Email After Photos
+                </button>
+              )}
+            </div>
+
+            {/* PMI Write-up (only for PM orders) */}
+            {isPM && (
+              <div className={`p-4 rounded-lg border-2 ${hasPMIWriteup ? 'bg-green-50 border-green-300' : 'bg-purple-50 border-purple-300'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">📋 PMI Write-up</span>
+                  {hasPMIWriteup ? (
+                    <span className="text-green-600 text-sm">✓ Sent</span>
+                  ) : (
+                    <span className="text-purple-600 text-sm">Required for PM</span>
+                  )}
+                </div>
+                {!hasPMIWriteup && (
+                  <>
+                    <p className="text-xs text-purple-700 mb-2">PM work orders require an inspection write-up documenting findings.</p>
+                    <button
+                      onClick={handleEmailPMIWriteup}
+                      className="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg text-sm font-medium"
+                    >
+                      📋 Email PMI Write-up to Office
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -411,6 +549,7 @@ function WorkOrderDetail({ workOrder, onBack }) {
                     <span className="text-blue-600">{entry.regular_hours}h reg</span>
                     {entry.overtime_hours > 0 && <span className="text-amber-600 ml-2">{entry.overtime_hours}h OT</span>}
                     {entry.mileage > 0 && <span className="text-gray-500 ml-2">{entry.mileage} mi</span>}
+                    {entry.tech_material_cost > 0 && <span className="text-orange-500 ml-2">${entry.tech_material_cost} mat</span>}
                   </div>
                   {entry.notes && <p className="text-xs text-gray-500 mt-1">{entry.notes}</p>}
                 </div>
@@ -421,16 +560,44 @@ function WorkOrderDetail({ workOrder, onBack }) {
         )}
       </div>
       
+      {/* Complete Button - Always visible at bottom if not completed */}
+      {workOrder.status !== 'completed' && (
+        <div className="p-4 bg-gray-50 border-t border-gray-200">
+          {!canComplete && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <strong>⚠️ Cannot complete yet:</strong>
+              <ul className="mt-1 ml-4 list-disc">
+                {!hasBeforePhotos && <li>Before photos required</li>}
+                {!hasAfterPhotos && <li>After photos required</li>}
+                {isPM && !hasPMIWriteup && <li>PMI write-up required</li>}
+              </ul>
+            </div>
+          )}
+          <button
+            onClick={handleComplete}
+            disabled={!canComplete}
+            className={`w-full py-3 rounded-lg font-medium transition ${
+              canComplete 
+                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            ✓ Complete Work Order
+          </button>
+        </div>
+      )}
+      
       {/* Hours Modal */}
       {showHoursModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Log Hours</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Regular Hours</label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={hours.regular}
                   onChange={e => setHours({...hours, regular: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
@@ -441,6 +608,7 @@ function WorkOrderDetail({ workOrder, onBack }) {
                 <label className="block text-sm text-gray-600 mb-1">Overtime Hours</label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={hours.overtime}
                   onChange={e => setHours({...hours, overtime: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
@@ -451,11 +619,29 @@ function WorkOrderDetail({ workOrder, onBack }) {
                 <label className="block text-sm text-gray-600 mb-1">Mileage</label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={hours.mileage}
                   onChange={e => setHours({...hours, mileage: e.target.value})}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="0"
                 />
+              </div>
+              {/* NEW: Tech Material Cost */}
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  <span className="text-orange-600">💰 Tech Material Cost</span>
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={hours.techMaterial}
+                  onChange={e => setHours({...hours, techMaterial: e.target.value})}
+                  className="w-full border-2 border-orange-300 rounded-lg px-3 py-2"
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-orange-600 mt-1">
+                  For materials YOU purchased (for reimbursement)
+                </p>
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Notes</label>

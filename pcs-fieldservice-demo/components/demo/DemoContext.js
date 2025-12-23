@@ -68,6 +68,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(10),
     check_in_time: daysAgo(12, 8),
     check_out_time: daysAgo(12, 2),
+    has_before_photos: true,
+    has_after_photos: true,
+    pmi_writeup_sent: false,
     legacy_labor_total: 384.00,
     legacy_material_total: 245.50,
     legacy_equipment_total: 0,
@@ -90,18 +93,22 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(8),
     check_in_time: daysAgo(10, 6),
     check_out_time: daysAgo(10, 0),
+    has_before_photos: true,
+    has_after_photos: true,
+    pmi_writeup_sent: false,
     legacy_labor_total: 576.00,
     legacy_material_total: 423.75,
     legacy_equipment_total: 85.00,
     legacy_mileage_total: 62.00
   },
+  // PM Work Order - Completed
   {
     id: 'demo-wo-003',
-    wo_number: 'WO-2024-0839',
+    wo_number: 'P2024-0839',
     client_name: 'CBRE',
     location: '445 Commerce Street, Tempe, AZ 85281',
     building_name: 'Tech Hub Building',
-    description: 'Upgrade electrical panel in server room. Coordinate with building management for power shutdown window.',
+    description: 'Quarterly PM inspection - HVAC systems. Check filters, belts, refrigerant levels, and controls.',
     priority: 'medium',
     status: 'invoiced',
     billing_status: null,
@@ -112,6 +119,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(15),
     check_in_time: daysAgo(18, 9),
     check_out_time: daysAgo(17, 0),
+    has_before_photos: true,
+    has_after_photos: true,
+    pmi_writeup_sent: true,
     legacy_labor_total: 896.00,
     legacy_material_total: 1245.00,
     legacy_equipment_total: 150.00,
@@ -134,6 +144,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(3),
     check_in_time: daysAgo(5, 9),
     check_out_time: daysAgo(5, 0),
+    has_before_photos: true,
+    has_after_photos: true,
+    pmi_writeup_sent: false,
     legacy_labor_total: 768.00,
     legacy_material_total: 1856.00,
     legacy_equipment_total: 0,
@@ -143,7 +156,7 @@ const createInitialWorkOrders = () => [
   // IN PROGRESS
   {
     id: 'demo-wo-005',
-    wo_number: 'WO-2024-0891',
+    wo_number: 'P2024-0891',
     client_name: 'CBRE',
     location: '3300 Gateway Boulevard, Phoenix, AZ 85034',
     building_name: 'Gateway Office Complex',
@@ -158,6 +171,9 @@ const createInitialWorkOrders = () => [
     updated_at: new Date().toISOString(),
     check_in_time: hoursAgo(2),
     check_out_time: null,
+    has_before_photos: true,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -180,6 +196,9 @@ const createInitialWorkOrders = () => [
     updated_at: new Date().toISOString(),
     check_in_time: hoursAgo(3),
     check_out_time: null,
+    has_before_photos: true,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 512.00,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -202,6 +221,9 @@ const createInitialWorkOrders = () => [
     updated_at: new Date().toISOString(),
     check_in_time: hoursAgo(3),
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 192.00,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -226,6 +248,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(2),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -233,11 +258,11 @@ const createInitialWorkOrders = () => [
   },
   {
     id: 'demo-wo-009',
-    wo_number: 'WO-2024-0896',
+    wo_number: 'P2024-0896',
     client_name: 'CBRE',
     location: '675 Mill Avenue, Tempe, AZ 85281',
     building_name: 'University Business Center',
-    description: 'Install new programmable thermostat in suite 450. Tenant upgrade request.',
+    description: 'PM Inspection - Fire suppression system quarterly check. Test all valves and sensors.',
     priority: 'low',
     status: 'assigned',
     billing_status: null,
@@ -248,6 +273,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(1),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -270,6 +298,9 @@ const createInitialWorkOrders = () => [
     updated_at: new Date().toISOString(),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -294,6 +325,9 @@ const createInitialWorkOrders = () => [
     updated_at: hoursAgo(4),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -316,6 +350,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(1),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -338,6 +375,9 @@ const createInitialWorkOrders = () => [
     updated_at: minutesAgo(30),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -362,6 +402,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(2),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -384,6 +427,9 @@ const createInitialWorkOrders = () => [
     updated_at: daysAgo(3),
     check_in_time: null,
     check_out_time: null,
+    has_before_photos: false,
+    has_after_photos: false,
+    pmi_writeup_sent: false,
     legacy_labor_total: 0,
     legacy_material_total: 0,
     legacy_equipment_total: 0,
@@ -442,15 +488,15 @@ const createInitialTeamAssignments = () => [
   { id: 'demo-team-023', work_order_id: 'demo-wo-015', user_id: 'demo-user-004', role: 'lead' },
 ];
 
-// Demo Daily Hours
+// Demo Daily Hours - with tech_material_cost field
 const createInitialDailyHours = () => [
-  { id: 'demo-hours-001', work_order_id: 'demo-wo-001', user_id: 'demo-user-003', log_date: daysAgo(12).split('T')[0], regular_hours: 5, overtime_hours: 1, mileage: 45, notes: 'Refrigerant recharge and contactor replacement' },
-  { id: 'demo-hours-002', work_order_id: 'demo-wo-001', user_id: 'demo-user-006', log_date: daysAgo(12).split('T')[0], regular_hours: 5, overtime_hours: 1, mileage: 0, notes: 'Assisted with diagnosis' },
-  { id: 'demo-hours-003', work_order_id: 'demo-wo-002', user_id: 'demo-user-004', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 62, notes: 'Emergency plumbing repair' },
-  { id: 'demo-hours-004', work_order_id: 'demo-wo-002', user_id: 'demo-user-007', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 0, notes: 'Water extraction' },
-  { id: 'demo-hours-005', work_order_id: 'demo-wo-002', user_id: 'demo-user-009', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 0, notes: 'Cleanup assistance' },
-  { id: 'demo-hours-006', work_order_id: 'demo-wo-006', user_id: 'demo-user-004', log_date: daysAgo(1).split('T')[0], regular_hours: 8, overtime_hours: 0, mileage: 55, notes: 'Day 1 - Compressor teardown' },
-  { id: 'demo-hours-007', work_order_id: 'demo-wo-006', user_id: 'demo-user-006', log_date: daysAgo(1).split('T')[0], regular_hours: 8, overtime_hours: 0, mileage: 0, notes: 'Assisted with disassembly' },
+  { id: 'demo-hours-001', work_order_id: 'demo-wo-001', user_id: 'demo-user-003', log_date: daysAgo(12).split('T')[0], regular_hours: 5, overtime_hours: 1, mileage: 45, tech_material_cost: 0, notes: 'Refrigerant recharge and contactor replacement' },
+  { id: 'demo-hours-002', work_order_id: 'demo-wo-001', user_id: 'demo-user-006', log_date: daysAgo(12).split('T')[0], regular_hours: 5, overtime_hours: 1, mileage: 0, tech_material_cost: 0, notes: 'Assisted with diagnosis' },
+  { id: 'demo-hours-003', work_order_id: 'demo-wo-002', user_id: 'demo-user-004', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 62, tech_material_cost: 45.50, notes: 'Emergency plumbing repair - bought fittings at Home Depot' },
+  { id: 'demo-hours-004', work_order_id: 'demo-wo-002', user_id: 'demo-user-007', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 0, tech_material_cost: 0, notes: 'Water extraction' },
+  { id: 'demo-hours-005', work_order_id: 'demo-wo-002', user_id: 'demo-user-009', log_date: daysAgo(10).split('T')[0], regular_hours: 4, overtime_hours: 2, mileage: 0, tech_material_cost: 0, notes: 'Cleanup assistance' },
+  { id: 'demo-hours-006', work_order_id: 'demo-wo-006', user_id: 'demo-user-004', log_date: daysAgo(1).split('T')[0], regular_hours: 8, overtime_hours: 0, mileage: 55, tech_material_cost: 125.00, notes: 'Day 1 - Compressor teardown - purchased specialty gaskets' },
+  { id: 'demo-hours-007', work_order_id: 'demo-wo-006', user_id: 'demo-user-006', log_date: daysAgo(1).split('T')[0], regular_hours: 8, overtime_hours: 0, mileage: 0, tech_material_cost: 0, notes: 'Assisted with disassembly' },
 ];
 
 // Demo Quotes/NTE Requests
@@ -556,6 +602,15 @@ export function DemoProvider({ children }) {
   const generateId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   // ============================================================
+  // HELPER FUNCTIONS
+  // ============================================================
+
+  // Check if work order is a PM (Preventive Maintenance) order
+  const isPMWorkOrder = useCallback((woNumber) => {
+    return woNumber && /^P\d+/.test(woNumber);
+  }, []);
+
+  // ============================================================
   // WORK ORDER ACTIONS
   // ============================================================
 
@@ -626,18 +681,34 @@ export function DemoProvider({ children }) {
   }, []);
 
   const completeWorkOrder = useCallback((workOrderId) => {
-    setWorkOrders(prev => prev.map(wo => 
-      wo.id === workOrderId 
+    const wo = workOrders.find(w => w.id === workOrderId);
+    if (!wo) return { success: false, error: 'Work order not found' };
+    
+    // Check photo requirements
+    if (!wo.has_before_photos || !wo.has_after_photos) {
+      addNotification('❌ Photos required: Before and After photos must be emailed before completing', 'error');
+      return { success: false, error: 'Photos required' };
+    }
+    
+    // Check PMI writeup requirement for PM orders
+    if (isPMWorkOrder(wo.wo_number) && !wo.pmi_writeup_sent) {
+      addNotification('❌ PMI Write-up required: PM work orders require inspection write-up before completing', 'error');
+      return { success: false, error: 'PMI writeup required' };
+    }
+    
+    setWorkOrders(prev => prev.map(w => 
+      w.id === workOrderId 
         ? { 
-            ...wo, 
+            ...w, 
             status: 'completed',
-            check_out_time: wo.check_out_time || new Date().toISOString(),
+            check_out_time: w.check_out_time || new Date().toISOString(),
             updated_at: new Date().toISOString() 
           }
-        : wo
+        : w
     ));
-    addNotification('Work order completed', 'success');
-  }, []);
+    addNotification('✅ Work order completed!', 'success');
+    return { success: true };
+  }, [workOrders, isPMWorkOrder]);
 
   const updateStatus = useCallback((workOrderId, newStatus) => {
     setWorkOrders(prev => prev.map(wo => 
@@ -655,6 +726,34 @@ export function DemoProvider({ children }) {
         : wo
     ));
     addNotification(`Billing status updated`, 'success');
+  }, []);
+
+  // Photo status updates
+  const markPhotosReceived = useCallback((workOrderId, photoType) => {
+    setWorkOrders(prev => prev.map(wo => 
+      wo.id === workOrderId 
+        ? { 
+            ...wo, 
+            [photoType === 'before' ? 'has_before_photos' : 'has_after_photos']: true,
+            updated_at: new Date().toISOString() 
+          }
+        : wo
+    ));
+    addNotification(`✅ ${photoType === 'before' ? 'Before' : 'After'} photos received`, 'success');
+  }, []);
+
+  // PMI Writeup status
+  const markPMIWriteupSent = useCallback((workOrderId) => {
+    setWorkOrders(prev => prev.map(wo => 
+      wo.id === workOrderId 
+        ? { 
+            ...wo, 
+            pmi_writeup_sent: true,
+            updated_at: new Date().toISOString() 
+          }
+        : wo
+    ));
+    addNotification('✅ PMI Write-up sent to office', 'success');
   }, []);
 
   // ============================================================
@@ -709,10 +808,10 @@ export function DemoProvider({ children }) {
   }, []);
 
   // ============================================================
-  // DAILY HOURS ACTIONS
+  // DAILY HOURS ACTIONS - Updated with tech_material_cost
   // ============================================================
 
-  const logHours = useCallback((workOrderId, userId, logDate, regularHours, overtimeHours, mileage, notes) => {
+  const logHours = useCallback((workOrderId, userId, logDate, regularHours, overtimeHours, mileage, notes, techMaterialCost = 0) => {
     // Check if entry exists for this date
     const existingIndex = dailyHours.findIndex(
       dh => dh.work_order_id === workOrderId && dh.user_id === userId && dh.log_date === logDate
@@ -722,7 +821,7 @@ export function DemoProvider({ children }) {
       // Update existing
       setDailyHours(prev => prev.map((dh, idx) => 
         idx === existingIndex
-          ? { ...dh, regular_hours: regularHours, overtime_hours: overtimeHours, mileage, notes }
+          ? { ...dh, regular_hours: regularHours, overtime_hours: overtimeHours, mileage, notes, tech_material_cost: techMaterialCost }
           : dh
       ));
     } else {
@@ -735,6 +834,7 @@ export function DemoProvider({ children }) {
         regular_hours: regularHours,
         overtime_hours: overtimeHours,
         mileage: mileage,
+        tech_material_cost: techMaterialCost,
         notes: notes
       };
       setDailyHours(prev => [...prev, newEntry]);
@@ -926,6 +1026,8 @@ export function DemoProvider({ children }) {
     completeWorkOrder,
     updateStatus,
     updateBillingStatus,
+    markPhotosReceived,
+    markPMIWriteupSent,
     
     // Other Actions
     addComment,
@@ -946,6 +1048,7 @@ export function DemoProvider({ children }) {
     getPhotosForWorkOrder,
     getWorkOrdersForTech,
     getStats,
+    isPMWorkOrder,
     
     // Demo Controls
     resetDemo,

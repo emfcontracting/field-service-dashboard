@@ -1,89 +1,156 @@
 // app/api/email-import/route.js
-// Fetches work order emails from Gmail and parses CBRE dispatch format
+// Fetches work order emails from Gmail via IMAP and parses CBRE dispatch format
 // Supports both regular dispatch and PM (Preventive Maintenance) work orders
 import { createClient } from '@supabase/supabase-js';
+import Imap from 'imap';
+import { simpleParser } from 'mailparser';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Get a fresh access token using refresh token
-async function getAccessToken() {
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+// Connect to Gmail via IMAP
+function connectIMAP() {
+  const email = process.env.EMAIL_IMPORT_USER;
+  const password = process.env.EMAIL_IMPORT_PASSWORD;
 
-  console.log('Gmail config check:', {
-    hasClientId: !!clientId,
-    hasClientSecret: !!clientSecret,
-    hasRefreshToken: !!refreshToken
-  });
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Gmail credentials not configured');
+  if (!email || !password) {
+    throw new Error('IMAP credentials not configured. Please add EMAIL_IMPORT_USER and EMAIL_IMPORT_PASSWORD to environment variables.');
   }
 
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token'
-    })
+  return new Imap({
+    user: email,
+    password: password,
+    host: 'imap.gmail.com',
+    port: 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false }
   });
-
-  const data = await response.json();
-  console.log('OAuth response:', data.error ? data : 'Success');
-  
-  if (data.error) {
-    throw new Error(`OAuth error: ${data.error_description || data.error}`);
-  }
-  return data.access_token;
 }
 
-// Decode base64url encoded content
-function decodeBase64Url(data) {
-  if (!data) return '';
-  const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  const padding = base64.length % 4;
-  const padded = padding ? base64 + '='.repeat(4 - padding) : base64;
-  
-  try {
-    return Buffer.from(padded, 'base64').toString('utf-8');
-  } catch (e) {
-    console.error('Decode error:', e);
-    return '';
-  }
-}
+// Fetch emails from IMAP
+async function fetchEmails(includeRead = false, days = 3) {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+    const emails = [];
 
-// Get email body from Gmail message
-function getEmailBody(message) {
-  let body = '';
-  
-  if (message.payload?.body?.data) {
-    body = decodeBase64Url(message.payload.body.data);
-  } else if (message.payload?.parts) {
-    for (const part of message.payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-        break;
-      } else if (part.mimeType === 'text/plain' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-      } else if (part.parts) {
-        for (const subPart of part.parts) {
-          if (subPart.mimeType === 'text/html' && subPart.body?.data) {
-            body = decodeBase64Url(subPart.body.data);
-            break;
-          }
+    imap.once('ready', () => {
+      // Gmail labels appear as folders in IMAP
+      // The "Dispatch" label appears as "Dispatch" folder
+      imap.openBox('Dispatch', false, (err, box) => {
+        if (err) {
+          imap.end();
+          return reject(new Error(`Could not open Dispatch folder: ${err.message}. Make sure the Gmail label "Dispatch" exists.`));
         }
-      }
-    }
-  }
-  
-  return body;
+
+        // Build search criteria
+        let searchCriteria;
+        if (includeRead) {
+          // Get emails from the last N days
+          const afterDate = new Date();
+          afterDate.setDate(afterDate.getDate() - days);
+          searchCriteria = [['SINCE', afterDate]];
+        } else {
+          // Only unread emails
+          searchCriteria = ['UNSEEN'];
+        }
+
+        imap.search(searchCriteria, (err, results) => {
+          if (err) {
+            imap.end();
+            return reject(err);
+          }
+
+          if (!results || results.length === 0) {
+            imap.end();
+            return resolve([]);
+          }
+
+          const fetch = imap.fetch(results, {
+            bodies: '',
+            markSeen: false // Don't automatically mark as read
+          });
+
+          fetch.on('message', (msg, seqno) => {
+            let buffer = '';
+            let uid;
+
+            msg.on('body', (stream) => {
+              stream.on('data', (chunk) => {
+                buffer += chunk.toString('utf8');
+              });
+            });
+
+            msg.once('attributes', (attrs) => {
+              uid = attrs.uid;
+            });
+
+            msg.once('end', () => {
+              simpleParser(buffer, (err, parsed) => {
+                if (err) {
+                  console.error('Parse error:', err);
+                  return;
+                }
+
+                emails.push({
+                  uid,
+                  subject: parsed.subject || '',
+                  from: parsed.from?.text || '',
+                  date: parsed.date || new Date(),
+                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                });
+              });
+            });
+          });
+
+          fetch.once('error', (err) => {
+            imap.end();
+            reject(err);
+          });
+
+          fetch.once('end', () => {
+            imap.end();
+            resolve(emails);
+          });
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
+}
+
+// Mark email as read
+async function markAsRead(uid) {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+
+    imap.once('ready', () => {
+      imap.openBox('Dispatch', false, (err) => {
+        if (err) {
+          imap.end();
+          return reject(err);
+        }
+
+        imap.addFlags(uid, ['\\Seen'], (err) => {
+          imap.end();
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
 }
 
 // Parse CBRE work order email (supports both regular dispatch and PM work orders)
@@ -268,23 +335,6 @@ function parseCBREEmail(subject, body) {
   return workOrder;
 }
 
-// Mark email as read
-async function markAsRead(accessToken, messageId) {
-  await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        removeLabelIds: ['UNREAD']
-      })
-    }
-  );
-}
-
 // GET: Fetch and preview emails
 export async function GET(request) {
   try {
@@ -293,70 +343,38 @@ export async function GET(request) {
     const includeRead = searchParams.get('includeRead') === 'true';
     const days = parseInt(searchParams.get('days')) || 3;
     
-    console.log('=== Manual Email Import Fetch ===');
+    console.log('=== Manual Email Import Fetch (IMAP) ===');
     console.log('Parameters:', { includeRead, days });
     
-    // Check if Gmail is configured
-    const clientId = process.env.GMAIL_CLIENT_ID;
-    const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-    const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+    // Check if IMAP is configured
+    const email = process.env.EMAIL_IMPORT_USER;
+    const password = process.env.EMAIL_IMPORT_PASSWORD;
 
-    if (!clientId || !clientSecret || !refreshToken) {
+    if (!email || !password) {
       return Response.json({
         success: false,
-        error: 'Gmail API not configured. Please add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN to environment variables.',
+        error: 'IMAP not configured. Please add EMAIL_IMPORT_USER and EMAIL_IMPORT_PASSWORD to environment variables.',
         debug: {
-          hasClientId: !!clientId,
-          hasClientSecret: !!clientSecret,
-          hasRefreshToken: !!refreshToken
+          hasUser: !!email,
+          hasPassword: !!password
         }
       }, { status: 400 });
     }
 
-    const accessToken = await getAccessToken();
+    // Fetch emails via IMAP
+    const rawEmails = await fetchEmails(includeRead, days);
     
-    // Search for emails with "dispatch" label
-    // If includeRead is true, search recent emails regardless of read status
-    let query;
-    if (includeRead) {
-      // Get emails from the last N days with dispatch label
-      const afterDate = new Date();
-      afterDate.setDate(afterDate.getDate() - days);
-      const afterTimestamp = Math.floor(afterDate.getTime() / 1000);
-      query = encodeURIComponent(`label:dispatch after:${afterTimestamp}`);
-    } else {
-      query = encodeURIComponent('is:unread label:dispatch');
-    }
-    
-    console.log('Gmail query:', decodeURIComponent(query));
-    
-    const listResponse = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
-
-    const listData = await listResponse.json();
-    
-    console.log('Gmail API response:', {
-      error: listData.error || null,
-      messageCount: listData.messages?.length || 0,
-      resultSizeEstimate: listData.resultSizeEstimate
+    console.log('IMAP fetch result:', {
+      emailCount: rawEmails.length,
+      timestamp: new Date().toISOString()
     });
     
-    if (listData.error) {
-      throw new Error(`Gmail API error: ${listData.error.message}`);
-    }
-    
-    if (!listData.messages || listData.messages.length === 0) {
-      console.log('No messages found with query:', decodeURIComponent(query));
+    if (rawEmails.length === 0) {
       return Response.json({
         success: true,
         message: 'No new work order emails found',
         emails: [],
         debug: {
-          query: decodeURIComponent(query),
           includeRead,
           timestamp: new Date().toISOString()
         }
@@ -369,53 +387,33 @@ export async function GET(request) {
       .select('wo_number');
     const existingWONumbers = new Set((existingWOs || []).map(wo => wo.wo_number));
 
-    // Fetch full message details for each email
+    // Parse emails
     const emails = [];
     const duplicates = [];
     
-    for (const msg of listData.messages) {
+    for (const email of rawEmails) {
       try {
-        const msgResponse = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` }
-          }
-        );
-        const msgData = await msgResponse.json();
-        
-        if (msgData.error) {
-          console.error('Error fetching message:', msgData.error);
-          continue;
-        }
-        
-        // Get subject
-        const subjectHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
-        const subject = subjectHeader?.value || '';
-
-        // Get body
-        const body = getEmailBody(msgData);
-
         // Parse CBRE format
-        const workOrder = parseCBREEmail(subject, body);
+        const workOrder = parseCBREEmail(email.subject, email.body);
 
         // Check if this WO already exists
         if (workOrder.wo_number && existingWONumbers.has(workOrder.wo_number)) {
           duplicates.push({
             wo_number: workOrder.wo_number,
             building: workOrder.building,
-            subject
+            subject: email.subject
           });
           continue; // Skip duplicates
         }
 
         emails.push({
-          emailId: msgData.id,
-          subject,
-          receivedAt: new Date(parseInt(msgData.internalDate)).toISOString(),
+          emailId: email.uid,
+          subject: email.subject,
+          receivedAt: email.date.toISOString(),
           parsedData: workOrder
         });
-      } catch (msgErr) {
-        console.error('Error processing message:', msgErr);
+      } catch (parseErr) {
+        console.error('Error parsing email:', parseErr);
       }
     }
 
@@ -501,14 +499,13 @@ export async function POST(request) {
       return Response.json({ success: true, message: `Work order ${wo.wo_number} created!`, workOrder: data });
     }
     
-    // Handle bulk import from Gmail
+    // Handle bulk import from IMAP
     const { emailIds, workOrders, markAsRead: shouldMarkRead = true } = body;
 
     if (!workOrders || workOrders.length === 0) {
       return Response.json({ success: false, error: 'No work orders provided' }, { status: 400 });
     }
 
-    const accessToken = await getAccessToken();
     const results = { imported: 0, skipped: 0, errors: [] };
 
     for (let i = 0; i < workOrders.length; i++) {
@@ -554,7 +551,7 @@ export async function POST(request) {
         // Mark email as read if requested
         if (shouldMarkRead && emailId) {
           try {
-            await markAsRead(accessToken, emailId);
+            await markAsRead(emailId);
           } catch (e) {
             console.log('Could not mark email as read:', e.message);
           }

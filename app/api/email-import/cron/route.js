@@ -1,9 +1,11 @@
 // app/api/email-import/cron/route.js
 // Automatic email import cron job - runs every 15 minutes
-// Fetches unread CBRE dispatch emails, imports them automatically, and notifies office
+// Fetches unread CBRE dispatch emails via IMAP, imports them automatically, and notifies office
 
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import Imap from 'imap';
+import { simpleParser } from 'mailparser';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -34,88 +36,137 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Get a fresh access token using refresh token
-async function getAccessToken() {
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+// Connect to Gmail via IMAP
+function connectIMAP() {
+  const email = process.env.EMAIL_IMPORT_USER;
+  const password = process.env.EMAIL_IMPORT_PASSWORD;
 
-  console.log('Gmail credentials check:', {
-    hasClientId: !!clientId,
-    hasClientSecret: !!clientSecret,
-    hasRefreshToken: !!refreshToken,
-    clientIdPrefix: clientId?.substring(0, 10) + '...',
-  });
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Gmail credentials not configured - missing: ' + 
-      [!clientId && 'CLIENT_ID', !clientSecret && 'CLIENT_SECRET', !refreshToken && 'REFRESH_TOKEN'].filter(Boolean).join(', '));
+  if (!email || !password) {
+    throw new Error('IMAP credentials not configured');
   }
 
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token'
-    })
+  return new Imap({
+    user: email,
+    password: password,
+    host: 'imap.gmail.com',
+    port: 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false }
   });
-
-  const data = await response.json();
-  
-  console.log('OAuth token response:', data.error ? data : 'Success - token obtained');
-  
-  if (data.error) {
-    throw new Error(`OAuth error: ${data.error_description || data.error}`);
-  }
-  return data.access_token;
 }
 
-// Decode base64url encoded content
-function decodeBase64Url(data) {
-  if (!data) return '';
-  const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  const padding = base64.length % 4;
-  const padded = padding ? base64 + '='.repeat(4 - padding) : base64;
-  
-  try {
-    return Buffer.from(padded, 'base64').toString('utf-8');
-  } catch (e) {
-    console.error('Decode error:', e);
-    return '';
-  }
-}
+// Fetch emails from IMAP
+async function fetchEmails() {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+    const emails = [];
 
-// Get email body from Gmail message
-function getEmailBody(message) {
-  let body = '';
-  
-  if (message.payload?.body?.data) {
-    body = decodeBase64Url(message.payload.body.data);
-  } else if (message.payload?.parts) {
-    for (const part of message.payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-        break;
-      } else if (part.mimeType === 'text/plain' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-      } else if (part.parts) {
-        for (const subPart of part.parts) {
-          if (subPart.mimeType === 'text/html' && subPart.body?.data) {
-            body = decodeBase64Url(subPart.body.data);
-            break;
-          }
+    imap.once('ready', () => {
+      imap.openBox('Dispatch', false, (err, box) => {
+        if (err) {
+          imap.end();
+          return reject(new Error(`Could not open Dispatch folder: ${err.message}`));
         }
-      }
-    }
-  }
-  
-  return body;
+
+        // Only unread emails
+        imap.search(['UNSEEN'], (err, results) => {
+          if (err) {
+            imap.end();
+            return reject(err);
+          }
+
+          if (!results || results.length === 0) {
+            imap.end();
+            return resolve([]);
+          }
+
+          const fetch = imap.fetch(results, {
+            bodies: '',
+            markSeen: false
+          });
+
+          fetch.on('message', (msg, seqno) => {
+            let buffer = '';
+            let uid;
+
+            msg.on('body', (stream) => {
+              stream.on('data', (chunk) => {
+                buffer += chunk.toString('utf8');
+              });
+            });
+
+            msg.once('attributes', (attrs) => {
+              uid = attrs.uid;
+            });
+
+            msg.once('end', () => {
+              simpleParser(buffer, (err, parsed) => {
+                if (err) {
+                  console.error('Parse error:', err);
+                  return;
+                }
+
+                emails.push({
+                  uid,
+                  subject: parsed.subject || '',
+                  from: parsed.from?.text || '',
+                  date: parsed.date || new Date(),
+                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                });
+              });
+            });
+          });
+
+          fetch.once('error', (err) => {
+            imap.end();
+            reject(err);
+          });
+
+          fetch.once('end', () => {
+            imap.end();
+            resolve(emails);
+          });
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
 }
 
-// Parse CBRE work order email
+// Mark email as read
+async function markAsRead(uid) {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+
+    imap.once('ready', () => {
+      imap.openBox('Dispatch', false, (err) => {
+        if (err) {
+          imap.end();
+          return reject(err);
+        }
+
+        imap.addFlags(uid, ['\\Seen'], (err) => {
+          imap.end();
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
+}
+
+// Parse CBRE work order email (supports both regular dispatch and PM work orders)
 function parseCBREEmail(subject, body) {
   const workOrder = {
     wo_number: '',
@@ -133,33 +184,42 @@ function parseCBREEmail(subject, body) {
     nte: 0
   };
 
-  // Clean the content
+  // Detect if this is a PM (Preventive Maintenance) work order
+  const isPM = (subject || '').toLowerCase().includes('pm work order') || 
+               (body || '').toLowerCase().includes('preventive maintenance description');
+
+  // Clean the content - handle quoted-printable encoding
   const cleanBody = (body || '')
-    .replace(/=\r?\n/g, '')
-    .replace(/=3D/g, '=')
-    .replace(/=20/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/=\r?\n/g, '')           // Remove soft line breaks
+    .replace(/=3D/g, '=')             // Decode =3D to =
+    .replace(/=20/g, ' ')             // Decode =20 to space
+    .replace(/=2F/g, '/')             // Decode =2F to /
+    .replace(/=2C/g, ',')             // Decode =2C to comma
+    .replace(/<[^>]+>/g, ' ')         // Remove HTML tags
+    .replace(/&nbsp;/g, ' ')          // Replace &nbsp;
+    .replace(/&amp;/g, '&')           // Replace &amp;
+    .replace(/\s+/g, ' ')             // Normalize whitespace
     .trim();
 
   // Extract WO number from subject
-  const woMatch = (subject || '').match(/Work Order\s+([A-Z]?\d+)/i);
+  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]?\d+)/i);
   if (woMatch) {
     workOrder.wo_number = woMatch[1];
   }
 
   // Extract Priority
-  const priorityMatch = (body || '').match(/Priority:\s*(P\d)[^a-z]*(\w*)/i) || (subject || '').match(/Priority:\s*(P\d)/i);
+  const priorityMatch = cleanBody.match(/Priority[:\s]*(P\d+)[\s\-]*([^<\n]*)/i) || 
+                        (subject || '').match(/Priority[:\s]*(P\d+)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
     const pText = (priorityMatch[2] || '').toLowerCase();
+    const pNum = parseInt(pCode.replace('P', ''));
     
-    if (pCode === 'P1' || pText.includes('emergency')) {
+    if (pNum === 1 || pText.includes('emergency')) {
       workOrder.priority = 'emergency';
-    } else if (pCode === 'P2' || pText.includes('urgent')) {
+    } else if (pNum === 2 || pText.includes('urgent') || pText.includes('24 hour')) {
       workOrder.priority = 'high';
-    } else if (pCode === 'P3') {
+    } else if (pNum === 3 || pNum === 4 || pText.includes('48 hour') || pText.includes('72 hour')) {
       workOrder.priority = 'medium';
     } else {
       workOrder.priority = 'low';
@@ -167,91 +227,93 @@ function parseCBREEmail(subject, body) {
   }
 
   // Extract Date Entered
-  const dateMatch = cleanBody.match(/Date Entered:\s*([A-Za-z]+\s+\d+\s+\d+\s+[\d:]+\s*[AP]M)/i);
+  const dateMatch = cleanBody.match(/Date Entered:\s*([A-Za-z]+\s+\d+\s+\d+\s+[\d:]+\s*[AP]?M?)/i);
   if (dateMatch) {
     try {
-      const parsed = new Date(dateMatch[1].replace(/\s+/g, ' '));
+      const dateStr = dateMatch[1].replace(/\s+/g, ' ').trim();
+      const parsed = new Date(dateStr);
       if (!isNaN(parsed.getTime())) {
         workOrder.date_entered = parsed.toISOString();
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('Date parse error:', e);
+    }
   }
 
   // Extract Building
-  const buildingMatch = cleanBody.match(/Building:\s*([^\n]+?)(?=Floor|Area|Country|$)/i);
+  const buildingMatch = cleanBody.match(/Building:\s*([^<\n]+?)(?=\s*Floor|\s*Area|\s*Country|$)/i);
   if (buildingMatch) {
     workOrder.building = buildingMatch[1].trim().substring(0, 200);
   }
 
   // Extract Address
-  const addressMatch = cleanBody.match(/Address:\s*([^\n]+?)(?=Country|Building|$)/i);
+  const addressMatch = cleanBody.match(/Address:\s*([^<\n]+?)(?=\s*Country|\s*Building|$)/i);
   if (addressMatch) {
-    workOrder.address = addressMatch[1].trim();
+    workOrder.address = addressMatch[1].replace(/,\s*,/g, ',').replace(/,\s*$/, '').trim();
   }
 
   // Extract City, State
-  const locationMatch = cleanBody.match(/Country,?\s*St,?\s*City[:\s]*[A-Z]+,?\s*([A-Z]{2}),?\s*([A-Z\s]+)/i);
+  const locationMatch = cleanBody.match(/Country,?\s*St,?\s*City[:\s]*(?:USA?),?\s*([A-Z]{2}),?\s*([A-Za-z\s]+)/i);
   if (locationMatch) {
     workOrder.state = locationMatch[1].trim();
     workOrder.city = locationMatch[2].trim();
   }
 
-  // Extract Requestor
-  const requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,]+),?\s*([\d\-\(\)\s]+)/i);
+  // Extract Requestor/Site Contact
+  let requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,<\n]+),?\s*([\d\-\(\)\s]+)?/i);
+  if (!requestorMatch) {
+    requestorMatch = cleanBody.match(/UPS Site Contact:\s*([^(<\n]+)\s*\(?([\d\-]+)\)?/i);
+  }
   if (requestorMatch) {
     workOrder.requestor = requestorMatch[1].trim();
     if (requestorMatch[2]) {
-      workOrder.requestor_phone = requestorMatch[2].trim();
+      workOrder.requestor_phone = requestorMatch[2].replace(/[^\d\-]/g, '').trim();
     }
   }
 
   // Extract NTE
-  const nteMatch = cleanBody.match(/should not exceed\s*([\d,]+\.?\d*)\s*USD/i);
+  const nteMatch = cleanBody.match(/should not exceed\s*\*?\*?([\d,]+\.?\d*)\s*USD\*?\*?/i);
   if (nteMatch) {
     workOrder.nte = parseFloat(nteMatch[1].replace(/,/g, '')) || 0;
   }
 
-  // Extract Problem Description
-  const descMatch = cleanBody.match(/Problem Description:\s*(.+?)(?=Assignment Name|Notes to Vendor|$)/is);
-  if (descMatch) {
-    workOrder.work_order_description = descMatch[1]
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 2000);
+  // Extract Description
+  let description = '';
+  let descMatch = cleanBody.match(/Problem Description:\s*(.+?)(?=Assignment Name|Notes to Vendor|Service Location|$)/is);
+  if (!descMatch || !descMatch[1].trim()) {
+    descMatch = cleanBody.match(/Preventive Maintenance Description:\s*(.+?)(?=Service Location|Asset|PM Action|$)/is);
   }
+  const pmActionMatch = cleanBody.match(/PM Action Steps:\s*[-]+\s*(.+?)(?=If you have any questions|Assignment Name|$)/is);
+  if (descMatch && descMatch[1]) {
+    description = descMatch[1].replace(/\s+/g, ' ').trim();
+  }
+  if (pmActionMatch && pmActionMatch[1]) {
+    const pmAction = pmActionMatch[1].replace(/\s+/g, ' ').trim();
+    if (pmAction && !description.includes(pmAction)) {
+      description = description ? `${description}\n\nPM Action: ${pmAction}` : pmAction;
+    }
+  }
+  workOrder.work_order_description = description.substring(0, 2000);
 
   // Build comments
   const comments = [];
+  if (isPM) comments.push('[PM - Preventive Maintenance]');
   if (workOrder.address) comments.push(`Address: ${workOrder.address}`);
   if (workOrder.city && workOrder.state) comments.push(`Location: ${workOrder.city}, ${workOrder.state}`);
-  if (workOrder.requestor_phone) comments.push(`Requestor Phone: ${workOrder.requestor_phone}`);
-  comments.push(`[Auto-imported from CBRE email on ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST]`);
+  if (workOrder.requestor_phone) comments.push(`Contact Phone: ${workOrder.requestor_phone}`);
+  const targetMatch = cleanBody.match(/Target Completion:\s*([A-Za-z]+\s+\d+\s+\d+)/i);
+  if (targetMatch) comments.push(`Target Completion: ${targetMatch[1].trim()}`);
+  const tagMatch = cleanBody.match(/Tag Number:\s*(\d+)/i);
+  if (tagMatch) comments.push(`Asset Tag: ${tagMatch[1]}`);
+  comments.push(`[Auto-imported from CBRE ${isPM ? 'PM ' : ''}email on ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST]`);
   workOrder.comments = comments.join('\n');
 
   return workOrder;
 }
 
-// Mark email as read
-async function markAsRead(accessToken, messageId) {
-  await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        removeLabelIds: ['UNREAD']
-      })
-    }
-  );
-}
-
 // Send SMS notification to office staff
 async function sendOfficeNotification(importedWOs) {
   try {
-    // Get office users (admins and operations) with SMS enabled
     const { data: officeUsers, error } = await supabase
       .from('users')
       .select('user_id, first_name, last_name, phone, sms_carrier, role')
@@ -265,7 +327,6 @@ async function sendOfficeNotification(importedWOs) {
       return { sent: 0 };
     }
 
-    // Build notification message
     const count = importedWOs.length;
     const emergencyCount = importedWOs.filter(wo => wo.priority === 'emergency').length;
     
@@ -276,7 +337,6 @@ async function sendOfficeNotification(importedWOs) {
       message = `📧 EMF: ${count} new WO(s) auto-imported from email. Check dashboard to assign.`;
     }
 
-    // Add WO numbers if just 1-3
     if (count <= 3) {
       const woNumbers = importedWOs.map(wo => wo.wo_number).join(', ');
       message += `\nWO: ${woNumbers}`;
@@ -323,7 +383,6 @@ async function logImportActivity(results) {
         created_at: new Date().toISOString()
       });
   } catch (e) {
-    // Table might not exist, that's okay
     console.log('Could not log activity (table may not exist):', e.message);
   }
 }
@@ -331,28 +390,20 @@ async function logImportActivity(results) {
 // Main cron handler
 export async function GET(request) {
   const startTime = Date.now();
-  console.log('=== Auto Email Import Cron Started ===');
-  console.log('Request URL:', request.url);
+  console.log('=== Auto Email Import Cron Started (IMAP) ===');
   console.log('Timestamp:', new Date().toISOString());
   
-  // Verify cron secret if configured (Vercel cron protection)
+  // Verify cron secret if configured
   const authHeader = request.headers.get('authorization');
   const { searchParams } = new URL(request.url);
   const isManual = searchParams.get('manual') === 'true';
   
-  console.log('Auth check:', {
-    hasCronSecret: !!process.env.CRON_SECRET,
-    hasAuthHeader: !!authHeader,
-    isManual
-  });
-  
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Allow manual trigger without secret for testing
     if (!isManual) {
-      console.log('Unauthorized cron request - no manual flag and auth mismatch');
+      console.log('Unauthorized cron request');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.log('Manual trigger allowed without CRON_SECRET');
+    console.log('Manual trigger allowed');
   }
 
   const results = {
@@ -367,60 +418,33 @@ export async function GET(request) {
   };
 
   try {
-    // Check if Gmail is configured
-    const clientId = process.env.GMAIL_CLIENT_ID;
-    const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-    const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+    // Check if IMAP is configured
+    const email = process.env.EMAIL_IMPORT_USER;
+    const password = process.env.EMAIL_IMPORT_PASSWORD;
 
-    if (!clientId || !clientSecret || !refreshToken) {
+    if (!email || !password) {
       results.success = false;
-      results.errors.push('Gmail API not configured');
+      results.errors.push('IMAP not configured');
       return Response.json(results, { status: 400 });
     }
 
-    // Check if auto-import is enabled (can be disabled via env var)
+    // Check if auto-import is disabled
     if (process.env.AUTO_EMAIL_IMPORT_DISABLED === 'true') {
-      results.message = 'Auto-import is disabled via environment variable';
+      results.message = 'Auto-import is disabled';
       return Response.json(results);
     }
 
-    console.log('Getting Gmail access token...');
-    const accessToken = await getAccessToken();
-    console.log('Access token obtained successfully');
+    console.log('Fetching emails via IMAP...');
+    const rawEmails = await fetchEmails();
     
-    // Search for unread emails with "dispatch" label
-    const query = encodeURIComponent('is:unread label:dispatch');
-    console.log('Gmail search query:', decodeURIComponent(query));
+    console.log(`Found ${rawEmails.length} unread dispatch email(s)`);
     
-    const listResponse = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
-
-    const listData = await listResponse.json();
-    
-    console.log('Gmail API response:', {
-      status: listResponse.status,
-      error: listData.error || null,
-      messageCount: listData.messages?.length || 0,
-      resultSizeEstimate: listData.resultSizeEstimate
-    });
-    
-    if (listData.error) {
-      throw new Error(`Gmail API error: ${listData.error.message}`);
-    }
-    
-    if (!listData.messages || listData.messages.length === 0) {
+    if (rawEmails.length === 0) {
       results.message = 'No new dispatch emails found';
-      console.log('No new emails to import - query returned 0 results');
       return Response.json(results);
     }
 
-    console.log(`Found ${listData.messages.length} unread dispatch email(s)`);
-
-    // Get existing WO numbers to check for duplicates
+    // Get existing WO numbers
     const { data: existingWOs } = await supabase
       .from('work_orders')
       .select('wo_number');
@@ -429,46 +453,24 @@ export async function GET(request) {
     // Process each email
     const importedWOs = [];
     
-    for (const msg of listData.messages) {
+    for (const email of rawEmails) {
       try {
-        const msgResponse = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` }
-          }
-        );
-        const msgData = await msgResponse.json();
-        
-        if (msgData.error) {
-          console.error('Error fetching message:', msgData.error);
-          results.errors.push(`Email fetch error: ${msgData.error.message}`);
-          continue;
-        }
-        
-        // Get subject
-        const subjectHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
-        const subject = subjectHeader?.value || '';
-
-        // Get body
-        const body = getEmailBody(msgData);
-
         // Parse CBRE format
-        const workOrder = parseCBREEmail(subject, body);
+        const workOrder = parseCBREEmail(email.subject, email.body);
 
         // Skip if no WO number found
         if (!workOrder.wo_number) {
-          console.log('Could not extract WO number from email, skipping');
+          console.log('Could not extract WO number, skipping');
           results.skipped++;
-          // Still mark as read to prevent re-processing
-          await markAsRead(accessToken, msg.id);
+          await markAsRead(email.uid);
           continue;
         }
 
-        // Check if this WO already exists
+        // Check if duplicate
         if (existingWONumbers.has(workOrder.wo_number)) {
           console.log(`WO ${workOrder.wo_number} already exists, skipping`);
           results.duplicates++;
-          await markAsRead(accessToken, msg.id);
+          await markAsRead(email.uid);
           continue;
         }
 
@@ -503,12 +505,10 @@ export async function GET(request) {
           priority: workOrder.priority
         });
         importedWOs.push(workOrder);
-        
-        // Add to existing set to prevent duplicate processing within same batch
         existingWONumbers.add(workOrder.wo_number);
 
-        // Mark email as read
-        await markAsRead(accessToken, msg.id);
+        // Mark as read
+        await markAsRead(email.uid);
 
       } catch (msgErr) {
         console.error('Error processing message:', msgErr);
@@ -516,12 +516,12 @@ export async function GET(request) {
       }
     }
 
-    // Send notifications if any WOs were imported
+    // Send notifications if any WOs imported
     if (importedWOs.length > 0) {
       results.notifications = await sendOfficeNotification(importedWOs);
     }
 
-    // Log the activity
+    // Log activity
     await logImportActivity(results);
 
     results.message = results.imported > 0
@@ -545,9 +545,8 @@ export async function GET(request) {
   }
 }
 
-// POST handler for manual trigger from dashboard
+// POST handler for manual trigger
 export async function POST(request) {
-  // Forward to GET handler with manual flag
   const url = new URL(request.url);
   url.searchParams.set('manual', 'true');
   

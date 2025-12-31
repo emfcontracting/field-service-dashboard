@@ -1,6 +1,8 @@
 // app/api/email-sync/route.js
-// Syncs CBRE status updates from Gmail labels (Escalation, Quote Approval, Quote Rejected, Quote Submitted, Reassignment)
+// Syncs CBRE status updates from Gmail labels via IMAP (Escalation, Quote Approval, Quote Rejected, Quote Submitted, Reassignment)
 import { createClient } from '@supabase/supabase-js';
+import Imap from 'imap';
+import { simpleParser } from 'mailparser';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -8,7 +10,6 @@ const supabase = createClient(
 );
 
 // Gmail label to CBRE status mapping
-// Label names should match Gmail labels (case-insensitive search)
 const LABEL_STATUS_MAP = {
   'escalation': { cbre_status: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false, extractNTE: true },
@@ -19,76 +20,149 @@ const LABEL_STATUS_MAP = {
   'cancellation': { cbre_status: 'cancelled', notify: true, notifyRoles: ['admin', 'office'] },
 };
 
-// Get a fresh access token using refresh token
-async function getAccessToken() {
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.GMAIL_CLIENT_ID,
-      client_secret: process.env.GMAIL_CLIENT_SECRET,
-      refresh_token: process.env.GMAIL_REFRESH_TOKEN,
-      grant_type: 'refresh_token'
-    })
+// Connect to Gmail via IMAP
+function connectIMAP() {
+  const email = process.env.EMAIL_IMPORT_USER;
+  const password = process.env.EMAIL_IMPORT_PASSWORD;
+
+  if (!email || !password) {
+    throw new Error('IMAP credentials not configured');
+  }
+
+  return new Imap({
+    user: email,
+    password: password,
+    host: 'imap.gmail.com',
+    port: 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false }
   });
-
-  const data = await response.json();
-  if (data.error) {
-    throw new Error(`OAuth error: ${data.error_description || data.error}`);
-  }
-  return data.access_token;
 }
 
-// Decode base64url encoded content
-function decodeBase64Url(data) {
-  if (!data) return '';
-  const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  const padding = base64.length % 4;
-  const padded = padding ? base64 + '='.repeat(4 - padding) : base64;
-  
-  try {
-    return Buffer.from(padded, 'base64').toString('utf-8');
-  } catch (e) {
-    return '';
-  }
-}
+// Fetch emails from a specific IMAP folder (Gmail label)
+async function fetchEmailsFromLabel(labelName) {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+    const emails = [];
 
-// Get email body
-function getEmailBody(message) {
-  let body = '';
-  
-  if (message.payload?.body?.data) {
-    body = decodeBase64Url(message.payload.body.data);
-  } else if (message.payload?.parts) {
-    for (const part of message.payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-        break;
-      } else if (part.mimeType === 'text/plain' && part.body?.data) {
-        body = decodeBase64Url(part.body.data);
-      } else if (part.parts) {
-        for (const subPart of part.parts) {
-          if (subPart.mimeType === 'text/html' && subPart.body?.data) {
-            body = decodeBase64Url(subPart.body.data);
-            break;
-          }
+    // Use label name exactly as it appears in Gmail
+    const folderName = labelName;
+
+    imap.once('ready', () => {
+      imap.openBox(folderName, false, (err, box) => {
+        if (err) {
+          imap.end();
+          return reject(new Error(`Could not open ${folderName} folder: ${err.message}`));
         }
-      }
-    }
-  }
-  
-  return body;
+
+        // Only unread emails
+        imap.search(['UNSEEN'], (err, results) => {
+          if (err) {
+            imap.end();
+            return reject(err);
+          }
+
+          if (!results || results.length === 0) {
+            imap.end();
+            return resolve([]);
+          }
+
+          const fetch = imap.fetch(results, {
+            bodies: '',
+            markSeen: false
+          });
+
+          fetch.on('message', (msg, seqno) => {
+            let buffer = '';
+            let uid;
+
+            msg.on('body', (stream) => {
+              stream.on('data', (chunk) => {
+                buffer += chunk.toString('utf8');
+              });
+            });
+
+            msg.once('attributes', (attrs) => {
+              uid = attrs.uid;
+            });
+
+            msg.once('end', () => {
+              simpleParser(buffer, (err, parsed) => {
+                if (err) {
+                  console.error('Parse error:', err);
+                  return;
+                }
+
+                emails.push({
+                  uid,
+                  subject: parsed.subject || '',
+                  from: parsed.from?.text || '',
+                  date: parsed.date || new Date(),
+                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                });
+              });
+            });
+          });
+
+          fetch.once('error', (err) => {
+            imap.end();
+            reject(err);
+          });
+
+          fetch.once('end', () => {
+            imap.end();
+            resolve(emails);
+          });
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
+}
+
+// Mark email as read in specific folder
+async function markAsRead(labelName, uid) {
+  return new Promise((resolve, reject) => {
+    const imap = connectIMAP();
+    
+    // Use label name exactly as it appears in Gmail
+    const folderName = labelName;
+
+    imap.once('ready', () => {
+      imap.openBox(folderName, false, (err) => {
+        if (err) {
+          imap.end();
+          return reject(err);
+        }
+
+        imap.addFlags(uid, ['\\Seen'], (err) => {
+          imap.end();
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    });
+
+    imap.once('error', (err) => {
+      reject(err);
+    });
+
+    imap.connect();
+  });
 }
 
 // Extract WO number from email subject or body
 function extractWONumber(subject, body) {
-  // Try subject first - common patterns:
-  // "Work Order C2926480" or "WO# C2926480" or "WO# ST2652325" or just "C2926480"
   const patterns = [
     /Work Order\s+([A-Z]{0,2}\d{6,})/i,
     /WO#?\s*([A-Z]{0,2}\d{6,})/i,
-    /\b([A-Z]{1,2}\d{6,})\b/,  // C2926480 or ST2652325 pattern
-    /\b(\d{7,})\b/,             // Just numbers
+    /\b([A-Z]{1,2}\d{6,})\b/,
+    /\b(\d{7,})\b/,
   ];
 
   for (const pattern of patterns) {
@@ -96,7 +170,6 @@ function extractWONumber(subject, body) {
     if (match) return match[1];
   }
 
-  // Try body if not found in subject
   const cleanBody = (body || '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
@@ -112,7 +185,6 @@ function extractWONumber(subject, body) {
 
 // Extract approved NTE amount from quote approval email
 function extractApprovedNTE(subject, body) {
-  // Clean the body for parsing
   const cleanBody = (body || '')
     .replace(/=\r?\n/g, '')
     .replace(/=3D/g, '=')
@@ -122,10 +194,6 @@ function extractApprovedNTE(subject, body) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Common patterns for approved amounts in CBRE emails:
-  // "approved for $5,000.00" or "approved amount: $5000" or "NTE: $5,000.00"
-  // "new NTE of $5000" or "increased to $5,000" or "total NTE $5000.00"
-  // "not to exceed $5,000.00" or "NTE has been increased to 5000.00 USD"
   const patterns = [
     /approved\s+(?:for|amount[:\s]*)?[\s:]*\$?([\d,]+\.?\d*)/i,
     /new\s+NTE[:\s]+(?:of\s+)?\$?([\d,]+\.?\d*)/i,
@@ -139,19 +207,16 @@ function extractApprovedNTE(subject, body) {
     /quote\s+(?:of|for)\s+\$?([\d,]+\.?\d*)\s+(?:has\s+been\s+)?approved/i,
   ];
 
-  // Try each pattern
   for (const pattern of patterns) {
     const match = cleanBody.match(pattern);
     if (match) {
       const amount = parseFloat(match[1].replace(/,/g, ''));
-      // Sanity check - NTE should be reasonable (between $100 and $1,000,000)
       if (amount >= 100 && amount <= 1000000) {
         return amount;
       }
     }
   }
 
-  // Also check subject line
   for (const pattern of patterns) {
     const match = (subject || '').match(pattern);
     if (match) {
@@ -167,7 +232,6 @@ function extractApprovedNTE(subject, body) {
 
 // Extract submitted quote amount from quote submitted email
 function extractSubmittedQuoteAmount(subject, body) {
-  // Clean the body for parsing
   const cleanBody = (body || '')
     .replace(/=\r?\n/g, '')
     .replace(/=3D/g, '=')
@@ -177,9 +241,6 @@ function extractSubmittedQuoteAmount(subject, body) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Common patterns for quote amounts in submitted emails:
-  // "quote for $5,000.00" or "quote amount: $5000" or "submitted quote: $5,000.00"
-  // "requesting $5000" or "NTE increase to $5,000" or "total: $5000.00"
   const patterns = [
     /quote\s+(?:for|of|amount)?[:\s]*\$?([\d,]+\.?\d*)/i,
     /submitted\s+(?:quote|for)?[:\s]*\$?([\d,]+\.?\d*)/i,
@@ -190,19 +251,16 @@ function extractSubmittedQuoteAmount(subject, body) {
     /\$([\d,]+\.?\d*)\s*(?:quote|NTE|total)/i,
   ];
 
-  // Try each pattern
   for (const pattern of patterns) {
     const match = cleanBody.match(pattern);
     if (match) {
       const amount = parseFloat(match[1].replace(/,/g, ''));
-      // Sanity check - quote should be reasonable (between $100 and $1,000,000)
       if (amount >= 100 && amount <= 1000000) {
         return amount;
       }
     }
   }
 
-  // Also check subject line
   for (const pattern of patterns) {
     const match = (subject || '').match(pattern);
     if (match) {
@@ -216,27 +274,9 @@ function extractSubmittedQuoteAmount(subject, body) {
   return null;
 }
 
-// Mark email as read
-async function markAsRead(accessToken, messageId) {
-  await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        removeLabelIds: ['UNREAD']
-      })
-    }
-  );
-}
-
 // Send notification to office/admin staff
 async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
   try {
-    // Get office/admin users with phone and carrier
     const { data: users } = await supabase
       .from('users')
       .select('user_id, first_name, last_name, phone, sms_carrier, email')
@@ -249,7 +289,6 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
       return;
     }
 
-    // Build SMS message based on type
     let message = '';
     switch (type) {
       case 'escalation':
@@ -274,7 +313,6 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
         message = `📋 CBRE Update: WO ${workOrder.wo_number} - Status: ${type}`;
     }
 
-    // Send via notifications API
     const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/notifications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -302,17 +340,17 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const labelFilter = searchParams.get('label'); // Optional: sync specific label only
-    const dryRun = searchParams.get('dryRun') === 'true'; // Preview without updating
+    const labelFilter = searchParams.get('label');
+    const dryRun = searchParams.get('dryRun') === 'true';
     
-    // Check Gmail credentials
-    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
-      return Response.json({ success: false, error: 'Gmail not configured' }, { status: 400 });
+    // Check IMAP credentials
+    const email = process.env.EMAIL_IMPORT_USER;
+    const password = process.env.EMAIL_IMPORT_PASSWORD;
+
+    if (!email || !password) {
+      return Response.json({ success: false, error: 'IMAP not configured' }, { status: 400 });
     }
 
-    const accessToken = await getAccessToken();
-    
-    // Labels to check (exclude 'dispatch' as that's handled by email-import)
     const labelsToCheck = labelFilter 
       ? [labelFilter.toLowerCase()]
       : Object.keys(LABEL_STATUS_MAP);
@@ -329,197 +367,162 @@ export async function GET(request) {
       const labelConfig = LABEL_STATUS_MAP[label];
       if (!labelConfig) continue;
 
-      // Search for unread emails with this label
-      const query = encodeURIComponent(`is:unread label:${label}`);
-      
-      const listResponse = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=50`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+      try {
+        const rawEmails = await fetchEmailsFromLabel(label);
 
-      const listData = await listResponse.json();
-      
-      if (listData.error) {
-        results.errors.push(`${label}: ${listData.error.message}`);
-        continue;
-      }
+        if (rawEmails.length === 0) continue;
 
-      if (!listData.messages || listData.messages.length === 0) {
-        continue;
-      }
+        // Process each email
+        for (const email of rawEmails) {
+          try {
+            results.processed++;
 
-      // Process each email
-      for (const msg of listData.messages) {
-        try {
-          results.processed++;
+            // Extract WO number
+            const woNumber = extractWONumber(email.subject, email.body);
 
-          const msgResponse = await fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          );
-          const msgData = await msgResponse.json();
-
-          if (msgData.error) continue;
-
-          // Get subject
-          const subjectHeader = msgData.payload?.headers?.find(h => h.name.toLowerCase() === 'subject');
-          const subject = subjectHeader?.value || '';
-
-          // Get body
-          const body = getEmailBody(msgData);
-
-          // Extract WO number
-          const woNumber = extractWONumber(subject, body);
-
-          if (!woNumber) {
-            results.errors.push(`Could not find WO# in: ${subject.substring(0, 50)}`);
-            // Still mark as read to avoid reprocessing
-            if (!dryRun) await markAsRead(accessToken, msg.id);
-            continue;
-          }
-
-          // Find the work order in database
-          const { data: workOrder, error: woError } = await supabase
-            .from('work_orders')
-            .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
-            .eq('wo_number', woNumber)
-            .single();
-
-          if (woError || !workOrder) {
-            results.notFound++;
-            results.errors.push(`WO ${woNumber} not found in system`);
-            // Still mark as read
-            if (!dryRun) await markAsRead(accessToken, msg.id);
-            continue;
-          }
-
-          // Build update object
-          const updateData = {
-            cbre_status: labelConfig.cbre_status,
-            cbre_status_updated_at: new Date().toISOString()
-          };
-
-          // Also update billing_status if specified
-          if (labelConfig.billing_status) {
-            updateData.billing_status = labelConfig.billing_status;
-          }
-
-          // Extract and update NTE for quote approvals
-          // The approved NTE amount comes directly from CBRE's approval email
-          let newNTE = null;
-          if (labelConfig.extractNTE) {
-            newNTE = extractApprovedNTE(subject, body);
-            if (newNTE) {
-              updateData.nte = newNTE;
-            }
-            // If we can't extract NTE from email, don't update it - leave current value
-            // The NTE Increase feature in the app is for EMF internal tracking only
-          }
-
-          // Extract submitted quote amount for tracking (doesn't update NTE)
-          let submittedQuoteAmount = null;
-          if (labelConfig.extractQuoteAmount) {
-            submittedQuoteAmount = extractSubmittedQuoteAmount(subject, body);
-          }
-
-          // Add to comments
-          const timestamp = new Date().toLocaleString();
-          let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${subject}`;
-          if (newNTE) {
-            newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
-          }
-          if (submittedQuoteAmount) {
-            newComment += `\n📤 Quote Submitted: ${submittedQuoteAmount.toFixed(2)}`;
-          }
-          const updatedComments = workOrder.comments 
-            ? `${workOrder.comments}\n\n${newComment}`
-            : newComment;
-
-          updateData.comments = updatedComments;
-
-          if (!dryRun) {
-            // Update work order
-            const { error: updateError } = await supabase
-              .from('work_orders')
-              .update(updateData)
-              .eq('wo_id', workOrder.wo_id);
-
-            if (updateError) {
-              results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
+            if (!woNumber) {
+              results.errors.push(`Could not find WO# in: ${email.subject.substring(0, 50)}`);
+              if (!dryRun) await markAsRead(label, email.uid);
               continue;
             }
 
-            // Also update any pending NTE increase requests to 'approved' status
-            if (labelConfig.cbre_status === 'quote_approved') {
-              await supabase
-                .from('work_order_quotes')
-                .update({ 
-                  nte_status: 'approved',
-                  approved_at: new Date().toISOString()
-                })
-                .eq('wo_id', workOrder.wo_id)
-                .in('nte_status', ['pending', 'submitted']);
+            // Find the work order
+            const { data: workOrder, error: woError } = await supabase
+              .from('work_orders')
+              .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
+              .eq('wo_number', woNumber)
+              .single();
+
+            if (woError || !workOrder) {
+              results.notFound++;
+              results.errors.push(`WO ${woNumber} not found in system`);
+              if (!dryRun) await markAsRead(label, email.uid);
+              continue;
             }
 
-            // Update invoice status if specified (for invoice-rejected emails)
-            let invoiceUpdated = false;
-            if (labelConfig.invoice_status) {
-              const { data: invoice, error: invoiceError } = await supabase
-                .from('invoices')
-                .select('invoice_id, invoice_number, status')
-                .eq('wo_id', workOrder.wo_id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+            // Build update
+            const updateData = {
+              cbre_status: labelConfig.cbre_status,
+              cbre_status_updated_at: new Date().toISOString()
+            };
 
-              if (invoice && !invoiceError) {
-                const { error: invoiceUpdateError } = await supabase
-                  .from('invoices')
-                  .update({ 
-                    status: labelConfig.invoice_status,
-                    rejection_reason: subject,
-                    rejected_at: new Date().toISOString()
-                  })
-                  .eq('invoice_id', invoice.invoice_id);
+            if (labelConfig.billing_status) {
+              updateData.billing_status = labelConfig.billing_status;
+            }
 
-                if (!invoiceUpdateError) {
-                  invoiceUpdated = true;
-                  console.log(`Updated invoice ${invoice.invoice_number} to status: ${labelConfig.invoice_status}`);
-                } else {
-                  console.error(`Failed to update invoice: ${invoiceUpdateError.message}`);
-                }
-              } else {
-                console.log(`No invoice found for WO ${woNumber}`);
+            // Extract NTE for approvals
+            let newNTE = null;
+            if (labelConfig.extractNTE) {
+              newNTE = extractApprovedNTE(email.subject, email.body);
+              if (newNTE) {
+                updateData.nte = newNTE;
               }
             }
 
-            // Mark email as read
-            await markAsRead(accessToken, msg.id);
-
-            // Send notification if needed (also notify for quote approvals with NTE update)
-            if (labelConfig.notify || newNTE) {
-              await sendNotification(labelConfig.cbre_status, workOrder, subject, newNTE);
+            // Extract quote amount for tracking
+            let submittedQuoteAmount = null;
+            if (labelConfig.extractQuoteAmount) {
+              submittedQuoteAmount = extractSubmittedQuoteAmount(email.subject, email.body);
             }
+
+            // Add to comments
+            const timestamp = new Date().toLocaleString();
+            let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${email.subject}`;
+            if (newNTE) {
+              newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
+            }
+            if (submittedQuoteAmount) {
+              newComment += `\n📤 Quote Submitted: ${submittedQuoteAmount.toFixed(2)}`;
+            }
+            const updatedComments = workOrder.comments 
+              ? `${workOrder.comments}\n\n${newComment}`
+              : newComment;
+
+            updateData.comments = updatedComments;
+
+            if (!dryRun) {
+              // Update work order
+              const { error: updateError } = await supabase
+                .from('work_orders')
+                .update(updateData)
+                .eq('wo_id', workOrder.wo_id);
+
+              if (updateError) {
+                results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
+                continue;
+              }
+
+              // Update NTE increase requests if quote approved
+              if (labelConfig.cbre_status === 'quote_approved') {
+                await supabase
+                  .from('work_order_quotes')
+                  .update({ 
+                    nte_status: 'approved',
+                    approved_at: new Date().toISOString()
+                  })
+                  .eq('wo_id', workOrder.wo_id)
+                  .in('nte_status', ['pending', 'submitted']);
+              }
+
+              // Update invoice status if specified
+              let invoiceUpdated = false;
+              if (labelConfig.invoice_status) {
+                const { data: invoice, error: invoiceError } = await supabase
+                  .from('invoices')
+                  .select('invoice_id, invoice_number, status')
+                  .eq('wo_id', workOrder.wo_id)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .single();
+
+                if (invoice && !invoiceError) {
+                  const { error: invoiceUpdateError } = await supabase
+                    .from('invoices')
+                    .update({ 
+                      status: labelConfig.invoice_status,
+                      rejection_reason: email.subject,
+                      rejected_at: new Date().toISOString()
+                    })
+                    .eq('invoice_id', invoice.invoice_id);
+
+                  if (!invoiceUpdateError) {
+                    invoiceUpdated = true;
+                    console.log(`Updated invoice ${invoice.invoice_number} to status: ${labelConfig.invoice_status}`);
+                  }
+                }
+              }
+
+              // Mark as read
+              await markAsRead(label, email.uid);
+
+              // Send notification
+              if (labelConfig.notify || newNTE) {
+                await sendNotification(labelConfig.cbre_status, workOrder, email.subject, newNTE);
+              }
+            }
+
+            results.updated++;
+            results.updates.push({
+              wo_number: woNumber,
+              building: workOrder.building,
+              label: label,
+              new_status: labelConfig.cbre_status,
+              new_nte: newNTE,
+              old_nte: workOrder.nte,
+              submitted_quote: submittedQuoteAmount,
+              invoice_updated: invoiceUpdated,
+              invoice_status: labelConfig.invoice_status || null,
+              subject: email.subject.substring(0, 80),
+              notified: labelConfig.notify || !!newNTE
+            });
+
+          } catch (msgErr) {
+            results.errors.push(`Error processing message: ${msgErr.message}`);
           }
-
-          results.updated++;
-          results.updates.push({
-            wo_number: woNumber,
-            building: workOrder.building,
-            label: label,
-            new_status: labelConfig.cbre_status,
-            new_nte: newNTE,
-            old_nte: workOrder.nte,
-            submitted_quote: submittedQuoteAmount,
-            invoice_updated: invoiceUpdated,
-            invoice_status: labelConfig.invoice_status || null,
-            subject: subject.substring(0, 80),
-            notified: labelConfig.notify || !!newNTE
-          });
-
-        } catch (msgErr) {
-          results.errors.push(`Error processing message: ${msgErr.message}`);
         }
+
+      } catch (labelErr) {
+        results.errors.push(`Error processing label ${label}: ${labelErr.message}`);
       }
     }
 
@@ -539,13 +542,12 @@ export async function GET(request) {
   }
 }
 
-// POST: Manually trigger sync for specific label or all
+// POST: Manually trigger sync
 export async function POST(request) {
   try {
     const body = await request.json();
     const { label } = body;
 
-    // Redirect to GET with params
     const url = new URL(request.url);
     if (label) url.searchParams.set('label', label);
     

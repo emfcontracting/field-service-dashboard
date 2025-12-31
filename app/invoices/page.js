@@ -562,13 +562,31 @@ export default function InvoicingPage() {
   };
 
   const returnToTech = async (woId, invoiceId) => {
-    const reason = prompt('Enter reason for returning to tech (optional):');
+    const reason = prompt('Enter reason for returning to tech (REQUIRED):');
     
-    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "Tech Review"\n\nThe tech can make changes and mark as completed again.')) {
+    // Require a reason
+    if (!reason || !reason.trim()) {
+      alert('❌ A reason is required to return the work order to the tech.');
+      return;
+    }
+    
+    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "Tech Review"\n- Add reason to comments\n\nThe tech can make changes and mark as completed again.')) {
       return;
     }
 
     try {
+      // Get current comments from work order
+      const { data: woData, error: fetchError } = await supabase
+        .from('work_orders')
+        .select('comments')
+        .eq('wo_id', woId)
+        .single();
+
+      if (fetchError) {
+        alert('Error fetching work order: ' + fetchError.message);
+        return;
+      }
+
       const { error: lineItemsError } = await supabase
         .from('invoice_line_items')
         .delete()
@@ -589,16 +607,21 @@ export default function InvoicingPage() {
         return;
       }
 
-      if (reason && reason.trim()) {
-        await supabase
-          .from('work_order_comments')
-          .insert({
-            wo_id: woId,
-            user_id: null,
-            comment: `RETURNED FROM INVOICING:\n${reason}`,
-            comment_type: 'admin_note'
-          });
-      }
+      // Add reason to comments with timestamp
+      const timestamp = new Date().toLocaleString('en-US', { 
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      const reviewNote = `[${timestamp}] 🔄 RETURNED FROM INVOICING FOR TECH REVIEW:\n${reason}`;
+      const updatedComments = woData.comments 
+        ? `${woData.comments}\n\n${reviewNote}`
+        : reviewNote;
 
       const { error: updateError } = await supabase
         .from('work_orders')
@@ -608,7 +631,8 @@ export default function InvoicingPage() {
           locked_by: null,
           acknowledged: false,
           acknowledged_at: null,
-          status: 'tech_review'
+          status: 'tech_review',
+          comments: updatedComments
         })
         .eq('wo_id', woId);
 
@@ -617,7 +641,7 @@ export default function InvoicingPage() {
         return;
       }
 
-      alert('✅ Work order returned to tech for review');
+      alert('✅ Work order returned to tech for review\n\nThe reason has been added to the comments.');
       setSelectedItem(null);
       await fetchData();
     } catch (error) {

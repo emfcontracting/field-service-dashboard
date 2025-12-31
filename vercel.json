@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/email-import/cron",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/10 * * * *"
     }
   ]
 }

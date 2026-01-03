@@ -10,6 +10,21 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// SMS Gateway addresses for major carriers
+const SMS_GATEWAYS = {
+  verizon: 'vtext.com',
+  att: 'txt.att.net',
+  tmobile: 'tmomail.net',
+  sprint: 'messaging.sprintpcs.com',
+  boost: 'sms.myboostmobile.com',
+  cricket: 'sms.cricketwireless.net',
+  metro: 'mymetropcs.com',
+  uscellular: 'email.uscc.net',
+  googlefi: 'msg.fi.google.com',
+  straight_talk: 'vtext.com',
+  bellsouth: 'sms.bellsouth.com',
+};
+
 // Configure web-push with VAPID keys
 if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
@@ -216,7 +231,7 @@ const sendPushNotification = async (userId, payload) => {
 
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder, customMessage } = await request.json();
+    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email' } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -225,16 +240,21 @@ export async function POST(request) {
     const transporter = createTransporter();
     const results = {
       email: { sent: [], failed: [] },
+      sms: { sent: [], failed: [] },
       push: { sent: [], failed: [] }
     };
 
+    // For work order assignments, always use email (not SMS)
+    const useEmail = deliveryMethod === 'email' || type === 'work_order_assigned' || type === 'emergency_work_order';
+    const useSMS = deliveryMethod === 'sms' && type !== 'work_order_assigned' && type !== 'emergency_work_order';
+
     for (const recipient of recipients) {
-      const { user_id, email, first_name, last_name } = recipient;
+      const { user_id, email, phone, sms_carrier, first_name, last_name } = recipient;
       const recipientName = first_name || 'Team Member';
       const isEmergency = type === 'emergency_work_order' || workOrder?.priority === 'emergency';
 
       // === SEND EMAIL ===
-      if (email) {
+      if (useEmail && email && workOrder) {
         try {
           const subject = isEmergency 
             ? `🚨 EMERGENCY: WO ${workOrder.wo_number} Assigned` 
@@ -261,11 +281,42 @@ export async function POST(request) {
             error: emailError.message 
           });
         }
-      } else {
-        results.email.failed.push({ 
-          name: `${first_name} ${last_name}`, 
-          error: 'No email address' 
-        });
+      }
+
+      // === SEND SMS (Messages page only) ===
+      if (useSMS && phone && sms_carrier) {
+        try {
+          const cleanPhone = phone.replace(/\D/g, '');
+          const gateway = SMS_GATEWAYS[sms_carrier];
+          
+          if (!gateway || cleanPhone.length !== 10) {
+            results.sms.failed.push({ 
+              name: `${first_name} ${last_name}`, 
+              error: 'Invalid phone or carrier' 
+            });
+            continue;
+          }
+
+          const smsEmail = `${cleanPhone}@${gateway}`;
+          const smsMessage = customMessage || `EMF: ${first_name}, you have a message. Check the mobile app for details.`;
+
+          await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'emfcbre@gmail.com',
+            to: smsEmail,
+            subject: '',
+            text: smsMessage.substring(0, 160) // SMS limit
+          });
+
+          results.sms.sent.push({ name: `${first_name} ${last_name}`, phone });
+          console.log(`✅ SMS sent to ${first_name} ${last_name} (${phone})`);
+        } catch (smsError) {
+          console.error(`❌ SMS failed for ${first_name} ${last_name}:`, smsError.message);
+          results.sms.failed.push({ 
+            name: `${first_name} ${last_name}`, 
+            phone,
+            error: smsError.message 
+          });
+        }
       }
 
       // === SEND PUSH NOTIFICATION ===
@@ -302,11 +353,15 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
+      sent: results.email.sent.length + results.sms.sent.length,
+      failed: results.email.failed.length + results.sms.failed.length,
       summary: {
         email: { sent: results.email.sent.length, failed: results.email.failed.length },
+        sms: { sent: results.sms.sent.length, failed: results.sms.failed.length },
         push: { sent: results.push.sent.length, failed: results.push.failed.length }
       },
-      details: results
+      details: results,
+      errors: [...results.email.failed, ...results.sms.failed]
     });
 
   } catch (error) {

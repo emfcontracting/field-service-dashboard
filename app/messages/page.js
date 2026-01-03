@@ -14,6 +14,7 @@ export default function MessagesPage() {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('custom');
+  const [deliveryMethod, setDeliveryMethod] = useState('email'); // 'email' or 'sms'
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
   const [sendResults, setSendResults] = useState(null);
@@ -84,8 +85,10 @@ export default function MessagesPage() {
   }
 
   function selectAllUsers() {
-    const usersWithCarrier = users.filter(u => u.phone && u.sms_carrier);
-    setSelectedUsers(usersWithCarrier.map(u => u.user_id));
+    const availableUsers = deliveryMethod === 'sms' 
+      ? users.filter(u => u.phone && u.sms_carrier)
+      : users.filter(u => u.email);
+    setSelectedUsers(availableUsers.map(u => u.user_id));
   }
 
   function clearSelection() {
@@ -161,9 +164,12 @@ export default function MessagesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: apiType,
+          deliveryMethod: deliveryMethod, // 'email' or 'sms'
           recipients: recipients.map(r => ({
+            user_id: r.user_id,
             phone: r.phone,
             sms_carrier: r.sms_carrier,
+            email: r.email,
             first_name: r.first_name,
             last_name: r.last_name
           })),
@@ -211,8 +217,12 @@ export default function MessagesPage() {
     }
   }
 
-  const usersWithCarrier = users.filter(u => u.phone && u.sms_carrier);
-  const usersWithoutCarrier = users.filter(u => !u.phone || !u.sms_carrier);
+  const usersAvailable = deliveryMethod === 'sms' 
+    ? users.filter(u => u.phone && u.sms_carrier)
+    : users.filter(u => u.email);
+  const usersUnavailable = deliveryMethod === 'sms'
+    ? users.filter(u => !u.phone || !u.sms_carrier)
+    : users.filter(u => !u.email);
   const selectedCount = selectedUsers.length;
 
   if (loading) {
@@ -255,7 +265,7 @@ export default function MessagesPage() {
           <div className="lg:col-span-1">
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold">📱 Recipients</h2>
+                <h2 className="text-lg font-bold">{deliveryMethod === 'sms' ? '📱' : '📧'} Recipients</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={selectAllUsers}
@@ -272,9 +282,33 @@ export default function MessagesPage() {
                 </div>
               </div>
 
-              {/* Users with SMS capability */}
+              {/* Delivery Method Toggle */}
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => { setDeliveryMethod('email'); clearSelection(); }}
+                  className={`flex-1 py-2 px-3 rounded-lg font-semibold transition ${
+                    deliveryMethod === 'email'
+                      ? 'bg-blue-600 ring-2 ring-blue-400'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                >
+                  📧 Email
+                </button>
+                <button
+                  onClick={() => { setDeliveryMethod('sms'); clearSelection(); }}
+                  className={`flex-1 py-2 px-3 rounded-lg font-semibold transition ${
+                    deliveryMethod === 'sms'
+                      ? 'bg-blue-600 ring-2 ring-blue-400'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                >
+                  📱 SMS
+                </button>
+              </div>
+
+              {/* Available users */}
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {usersWithCarrier.map(user => (
+                {usersAvailable.map(user => (
                   <label
                     key={user.user_id}
                     className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
@@ -293,22 +327,28 @@ export default function MessagesPage() {
                       <div className="font-semibold">{user.first_name} {user.last_name}</div>
                       <div className="text-xs text-gray-400 capitalize">{user.role.replace('_', ' ')}</div>
                     </div>
-                    <span className="text-xs px-2 py-1 bg-green-900 text-green-300 rounded">
-                      📱 {user.sms_carrier}
-                    </span>
+                    {deliveryMethod === 'sms' ? (
+                      <span className="text-xs px-2 py-1 bg-green-900 text-green-300 rounded">
+                        📱 {user.sms_carrier}
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-1 bg-blue-900 text-blue-300 rounded truncate max-w-[120px]">
+                        📧 {user.email?.split('@')[0]}
+                      </span>
+                    )}
                   </label>
                 ))}
               </div>
 
-              {/* Users without SMS */}
-              {usersWithoutCarrier.length > 0 && (
+              {/* Unavailable users */}
+              {usersUnavailable.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-700">
-                  <p className="text-sm text-yellow-400 mb-2">⚠️ Cannot receive SMS:</p>
+                  <p className="text-sm text-yellow-400 mb-2">⚠️ Cannot receive {deliveryMethod === 'sms' ? 'SMS' : 'email'}:</p>
                   <div className="space-y-1">
-                    {usersWithoutCarrier.map(user => (
+                    {usersUnavailable.map(user => (
                       <div key={user.user_id} className="text-sm text-gray-500 flex justify-between">
                         <span>{user.first_name} {user.last_name}</span>
-                        <span className="text-xs">No carrier set</span>
+                        <span className="text-xs">{deliveryMethod === 'sms' ? 'No carrier set' : 'No email'}</span>
                       </div>
                     ))}
                   </div>

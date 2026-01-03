@@ -40,14 +40,13 @@ async function findEmailByWO(woNumber) {
           return reject(err);
         }
 
-        // Search for emails from CBRE with this WO number in subject
+        // Search for emails with this WO number in subject (any sender)
         // Search last 30 days, regardless of read status
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
         imap.search([
           ['SINCE', thirtyDaysAgo],
-          ['FROM', 'UPSHelp@cbre.com'],
           ['SUBJECT', woNumber]
         ], (err, results) => {
           if (err) {

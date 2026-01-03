@@ -68,10 +68,9 @@ async function fetchEmails() {
           return reject(new Error(`Could not open INBOX: ${err.message}`));
         }
 
-        // Search for unread emails from UPSHelp@cbre.com with "Work Order" or "Dispatch" in subject
+        // Search for unread emails with "Work Order" or "Dispatch" in subject (any sender)
         imap.search([
           'UNSEEN',
-          ['FROM', 'UPSHelp@cbre.com'],
           ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
         ], (err, results) => {
           if (err) {

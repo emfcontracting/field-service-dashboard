@@ -1,6 +1,6 @@
 // app/api/email-import/cron/route.js
-// Automatic email import cron job - runs every 15 minutes
-// Fetches unread CBRE dispatch emails via IMAP, imports them automatically, and notifies office
+// Automatic email import cron job - runs every 10 minutes
+// Fetches unread dispatch emails via IMAP, imports them automatically, and notifies office via email
 
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
@@ -12,22 +12,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// SMS Gateway addresses for major carriers
-const SMS_GATEWAYS = {
-  verizon: 'vtext.com',
-  att: 'txt.att.net',
-  tmobile: 'tmomail.net',
-  sprint: 'messaging.sprintpcs.com',
-  boost: 'sms.myboostmobile.com',
-  cricket: 'sms.cricketwireless.net',
-  metro: 'mymetropcs.com',
-  uscellular: 'email.uscc.net',
-  googlefi: 'msg.fi.google.com',
-  straight_talk: 'vtext.com',
-  bellsouth: 'sms.bellsouth.com',
-};
-
-// Email transporter for SMS notifications
+// Email transporter for notifications
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -319,57 +304,88 @@ function parseCBREEmail(subject, body) {
   return workOrder;
 }
 
-// Send SMS notification to office staff
+// Send email notification to office staff
 async function sendOfficeNotification(importedWOs) {
   try {
     const { data: officeUsers, error } = await supabase
       .from('users')
-      .select('user_id, first_name, last_name, phone, sms_carrier, role')
+      .select('user_id, first_name, last_name, email, role')
       .in('role', ['admin', 'operations'])
       .eq('is_active', true)
-      .not('phone', 'is', null)
-      .not('sms_carrier', 'is', null);
+      .not('email', 'is', null);
 
     if (error || !officeUsers || officeUsers.length === 0) {
-      console.log('No office users configured for SMS notifications');
+      console.log('No office users configured for email notifications');
       return { sent: 0 };
     }
 
     const count = importedWOs.length;
     const emergencyCount = importedWOs.filter(wo => wo.priority === 'emergency').length;
     
-    let message;
-    if (emergencyCount > 0) {
-      message = `🚨 EMF: ${count} new WO(s) auto-imported! ${emergencyCount} EMERGENCY. Check dashboard now!`;
-    } else {
-      message = `📧 EMF: ${count} new WO(s) auto-imported from email. Check dashboard to assign.`;
-    }
+    // Build work order list
+    const woList = importedWOs.map(wo => {
+      const priorityEmoji = wo.priority === 'emergency' ? '🔴' : 
+                           wo.priority === 'high' ? '🟠' : 
+                           wo.priority === 'medium' ? '🟡' : '🟢';
+      return `${priorityEmoji} <strong>${wo.wo_number}</strong> - ${wo.building} (${wo.priority.toUpperCase()})`;
+    }).join('<br>');
 
-    if (count <= 3) {
-      const woNumbers = importedWOs.map(wo => wo.wo_number).join(', ');
-      message += `\nWO: ${woNumbers}`;
-    }
+    const subject = emergencyCount > 0 
+      ? `🚨 EMERGENCY: ${count} New Work Order${count > 1 ? 's' : ''} Auto-Imported`
+      : `📧 ${count} New Work Order${count > 1 ? 's' : ''} Auto-Imported`;
+
+    const htmlBody = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: ${emergencyCount > 0 ? '#dc2626' : '#2563eb'}; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+          .wo-list { background: white; padding: 15px; border-radius: 6px; margin: 15px 0; }
+          .footer { background: #1f2937; color: #9ca3af; padding: 15px; text-align: center; border-radius: 0 0 8px 8px; font-size: 12px; }
+          .button { display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2 style="margin: 0;">${emergencyCount > 0 ? '🚨 EMERGENCY ALERT' : '📧 New Work Orders'}</h2>
+          </div>
+          <div class="content">
+            <p><strong>${count} work order${count > 1 ? 's have' : ' has'} been automatically imported from email.</strong></p>
+            ${emergencyCount > 0 ? '<p style="color: #dc2626; font-weight: bold;">⚠️ ' + emergencyCount + ' EMERGENCY work order' + (emergencyCount > 1 ? 's' : '') + ' require immediate attention!</p>' : ''}
+            <div class="wo-list">
+              ${woList}
+            </div>
+            <p>Please log in to the dashboard to review and assign these work orders.</p>
+            <a href="https://field-service-dashboard.vercel.app/dashboard" class="button">Open Dashboard</a>
+          </div>
+          <div class="footer">
+            EMF Contracting LLC - PCS FieldService<br>
+            Automated notification - Do not reply
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
 
     let sent = 0;
     for (const user of officeUsers) {
-      const phone = user.phone?.replace(/\D/g, '');
-      const gateway = SMS_GATEWAYS[user.sms_carrier];
-      
-      if (!phone || phone.length !== 10 || !gateway) continue;
-      
-      const smsEmail = `${phone}@${gateway}`;
+      if (!user.email) continue;
       
       try {
         await transporter.sendMail({
-          from: process.env.EMAIL_USER || 'emfcbre@gmail.com',
-          to: smsEmail,
-          subject: emergencyCount > 0 ? 'EMERGENCY WO' : 'New WO',
-          text: message
+          from: `"EMF FieldService" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
+          to: user.email,
+          subject: subject,
+          html: htmlBody
         });
         sent++;
-        console.log(`SMS sent to ${user.first_name} ${user.last_name}`);
+        console.log(`Email sent to ${user.first_name} ${user.last_name} (${user.email})`);
       } catch (e) {
-        console.error(`Failed to send SMS to ${user.first_name}:`, e.message);
+        console.error(`Failed to send email to ${user.first_name}:`, e.message);
       }
     }
 

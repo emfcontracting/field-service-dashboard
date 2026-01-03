@@ -31,6 +31,7 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
   // Quick action links
   const quickLinks = [
     { href: '/', label: 'Home', icon: '🏠', color: 'bg-gray-600' },
+    { href: '/dashboard/backend', label: 'Backend', icon: '🛠️', color: 'bg-red-600' },
     { href: '/weather', label: 'Weather', icon: '🌤️', color: 'bg-sky-600' },
     { href: '/messages', label: 'Messages', icon: '💬', color: 'bg-teal-600' },
     { href: '/invoices', label: 'Invoicing', icon: '💰', color: 'bg-purple-600' },

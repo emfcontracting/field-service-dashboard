@@ -147,7 +147,11 @@ export default function WorkOrdersTable({
             <tr>
               {/* Checkbox column - Superuser only */}
               {isSuperuser && (
-                <th className="px-2 py-2 text-center" style={{ width: '40px' }}>
+                <th 
+                  className="px-2 py-2 text-center" 
+                  style={{ width: '40px' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -202,7 +206,10 @@ export default function WorkOrdersTable({
                 >
                   {/* Checkbox cell - Superuser only */}
                   {isSuperuser && (
-                    <td className="px-2 py-2 text-center">
+                    <td 
+                      className="px-2 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}

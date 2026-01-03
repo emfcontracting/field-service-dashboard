@@ -55,21 +55,25 @@ function connectIMAP() {
   });
 }
 
-// Fetch emails from IMAP
+// Fetch emails from IMAP - search INBOX for CBRE dispatch emails
 async function fetchEmails() {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
     const emails = [];
 
     imap.once('ready', () => {
-      imap.openBox('Dispatch', false, (err, box) => {
+      imap.openBox('INBOX', false, (err, box) => {
         if (err) {
           imap.end();
-          return reject(new Error(`Could not open Dispatch folder: ${err.message}`));
+          return reject(new Error(`Could not open INBOX: ${err.message}`));
         }
 
-        // Only unread emails
-        imap.search(['UNSEEN'], (err, results) => {
+        // Search for unread emails from UPSHelp@cbre.com with "Work Order" or "Dispatch" in subject
+        imap.search([
+          'UNSEEN',
+          ['FROM', 'UPSHelp@cbre.com'],
+          ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
+        ], (err, results) => {
           if (err) {
             imap.end();
             return reject(err);
@@ -138,13 +142,13 @@ async function fetchEmails() {
   });
 }
 
-// Mark email as read
+// Mark email as read in INBOX
 async function markAsRead(uid) {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
 
     imap.once('ready', () => {
-      imap.openBox('Dispatch', false, (err) => {
+      imap.openBox('INBOX', false, (err) => {
         if (err) {
           imap.end();
           return reject(err);

@@ -36,25 +36,32 @@ async function fetchEmails(includeRead = false, days = 3) {
     const emails = [];
 
     imap.once('ready', () => {
-      // Gmail labels appear as folders in IMAP
-      // The "Dispatch" label appears as "Dispatch" folder
-      imap.openBox('Dispatch', false, (err, box) => {
-        if (err) {
-          imap.end();
-          return reject(new Error(`Could not open Dispatch folder: ${err.message}. Make sure the Gmail label "Dispatch" exists.`));
-        }
+    // Search INBOX for CBRE dispatch emails instead of relying on Dispatch label
+    imap.openBox('INBOX', false, (err, box) => {
+      if (err) {
+      imap.end();
+    return reject(new Error(`Could not open INBOX: ${err.message}`));
+    }
 
-        // Build search criteria
-        let searchCriteria;
-        if (includeRead) {
-          // Get emails from the last N days
-          const afterDate = new Date();
-          afterDate.setDate(afterDate.getDate() - days);
-          searchCriteria = [['SINCE', afterDate]];
-        } else {
-          // Only unread emails
-          searchCriteria = ['UNSEEN'];
-        }
+      // Build search criteria for CBRE dispatch emails
+    let searchCriteria;
+    if (includeRead) {
+      // Get emails from the last N days from CBRE
+    const afterDate = new Date();
+    afterDate.setDate(afterDate.getDate() - days);
+    searchCriteria = [
+      ['SINCE', afterDate],
+        ['FROM', 'UPSHelp@cbre.com'],
+      ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
+    ];
+    } else {
+        // Only unread emails from CBRE with Work Order/Dispatch in subject
+        searchCriteria = [
+          'UNSEEN',
+          ['FROM', 'UPSHelp@cbre.com'],
+          ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
+        ];
+      }
 
         imap.search(searchCriteria, (err, results) => {
           if (err) {
@@ -125,13 +132,13 @@ async function fetchEmails(includeRead = false, days = 3) {
   });
 }
 
-// Mark email as read
+// Mark email as read in INBOX
 async function markAsRead(uid) {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
 
     imap.once('ready', () => {
-      imap.openBox('Dispatch', false, (err) => {
+      imap.openBox('INBOX', false, (err) => {
         if (err) {
           imap.end();
           return reject(err);

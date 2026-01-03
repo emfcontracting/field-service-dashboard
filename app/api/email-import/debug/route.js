@@ -37,10 +37,9 @@ async function searchRecentCBRE(days = 7) {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - days);
 
-        // Search for ALL emails from CBRE in last N days
+        // Search for ALL unread emails in last N days (no FROM filter)
         imap.search([
-          ['SINCE', sinceDate],
-          ['FROM', 'UPSHelp@cbre.com']
+          'UNSEEN'
         ], (err, results) => {
           if (err) {
             imap.end();

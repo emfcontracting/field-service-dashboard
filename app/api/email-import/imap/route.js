@@ -100,7 +100,7 @@ async function searchFolder(folderName, searchCriteria = ['ALL']) {
           });
 
           fetch.on('message', (msg, seqno) => {
-            let headers = {};
+            let emailData = { seqno };
 
             msg.on('body', (stream) => {
               let buffer = '';
@@ -110,24 +110,22 @@ async function searchFolder(folderName, searchCriteria = ['ALL']) {
               stream.once('end', () => {
                 simpleParser(buffer, (err, parsed) => {
                   if (!err) {
-                    headers = {
-                      from: parsed.from?.text || '',
-                      to: parsed.to?.text || '',
-                      subject: parsed.subject || '',
-                      date: parsed.date || new Date()
-                    };
+                    emailData.from = parsed.from?.text || '';
+                    emailData.to = parsed.to?.text || '';
+                    emailData.subject = parsed.subject || '';
+                    emailData.date = parsed.date || new Date();
                   }
                 });
               });
             });
 
             msg.once('attributes', (attrs) => {
-              emails.push({
-                seqno,
-                uid: attrs.uid,
-                flags: attrs.flags,
-                ...headers
-              });
+              emailData.uid = attrs.uid;
+              emailData.flags = attrs.flags;
+            });
+
+            msg.once('end', () => {
+              emails.push(emailData);
             });
           });
 
@@ -149,12 +147,11 @@ async function searchFolder(folderName, searchCriteria = ['ALL']) {
   });
 }
 
-// Format box tree for display
+// Format box tree for display (sanitized, no circular refs)
 function formatBoxTree(boxes, indent = 0) {
   let result = [];
   for (const [name, box] of Object.entries(boxes)) {
     const prefix = '  '.repeat(indent);
-    const delimiter = box.delimiter || '/';
     const attribs = box.attribs || [];
     result.push(`${prefix}${name} ${attribs.length > 0 ? `[${attribs.join(', ')}]` : ''}`);
     
@@ -165,9 +162,27 @@ function formatBoxTree(boxes, indent = 0) {
   return result;
 }
 
+// Extract folder names recursively (sanitized)
+function extractFolderNames(boxes, prefix = '') {
+  let names = [];
+  for (const [name, box] of Object.entries(boxes)) {
+    const fullName = prefix ? `${prefix}${box.delimiter || '/'}${name}` : name;
+    names.push({
+      name: fullName,
+      attribs: box.attribs || [],
+      hasChildren: !!box.children
+    });
+    
+    if (box.children) {
+      names = names.concat(extractFolderNames(box.children, fullName));
+    }
+  }
+  return names;
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const action = searchParams.get('action') || 'folders';
+  const action = searchParams.get('action') || 'diagnostic';
   const folder = searchParams.get('folder') || 'INBOX';
   const search = searchParams.get('search') || 'UNSEEN';
 
@@ -176,12 +191,13 @@ export async function GET(request) {
       // List all folders
       const boxes = await listFolders();
       const formatted = formatBoxTree(boxes);
+      const folderNames = extractFolderNames(boxes);
       
       return Response.json({
         success: true,
         message: 'IMAP folders retrieved',
-        folders: formatted,
-        raw: boxes
+        formatted,
+        folders: folderNames
       });
     }
 
@@ -205,12 +221,7 @@ export async function GET(request) {
       } else if (search === 'RECENT') {
         searchCriteria = ['RECENT'];
       } else {
-        // Parse as JSON array
-        try {
-          searchCriteria = JSON.parse(search);
-        } catch {
-          searchCriteria = [search];
-        }
+        searchCriteria = [search];
       }
 
       const emails = await searchFolder(folder, searchCriteria);
@@ -226,30 +237,43 @@ export async function GET(request) {
 
     // Default: comprehensive diagnostic
     const inboxStatus = await getFolderStatus('INBOX');
-    const dispatchStatus = await getFolderStatus('Dispatch').catch(e => ({ error: e.message }));
+    
+    let dispatchStatus;
+    try {
+      dispatchStatus = await getFolderStatus('Dispatch');
+    } catch (e) {
+      dispatchStatus = { error: e.message };
+    }
+    
     const unseenInbox = await searchFolder('INBOX', ['UNSEEN']);
-    const unseenDispatch = await searchFolder('Dispatch', ['UNSEEN']).catch(() => []);
+    
+    let unseenDispatch = [];
+    try {
+      unseenDispatch = await searchFolder('Dispatch', ['UNSEEN']);
+    } catch (e) {
+      unseenDispatch = { error: e.message };
+    }
 
     return Response.json({
       success: true,
       diagnostic: {
         inbox: {
           status: inboxStatus,
-          unseenCount: unseenInbox.length,
-          recentUnseen: unseenInbox.slice(0, 5).map(e => ({
+          unseenCount: Array.isArray(unseenInbox) ? unseenInbox.length : 0,
+          recentUnseen: Array.isArray(unseenInbox) ? unseenInbox.slice(0, 5).map(e => ({
             subject: e.subject,
             from: e.from,
             flags: e.flags
-          }))
+          })) : []
         },
         dispatch: {
           status: dispatchStatus,
-          unseenCount: unseenDispatch.length,
-          recentUnseen: unseenDispatch.slice(0, 5).map(e => ({
+          unseenCount: Array.isArray(unseenDispatch) ? unseenDispatch.length : 0,
+          recentUnseen: Array.isArray(unseenDispatch) ? unseenDispatch.slice(0, 5).map(e => ({
             subject: e.subject,
             from: e.from,
             flags: e.flags
-          }))
+          })) : unseenDispatch
         }
       }
     });
@@ -257,7 +281,8 @@ export async function GET(request) {
   } catch (error) {
     return Response.json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     }, { status: 500 });
   }
 }

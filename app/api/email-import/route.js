@@ -43,7 +43,7 @@ async function fetchEmails(includeRead = false, days = 3) {
     return reject(new Error(`Could not open INBOX: ${err.message}`));
     }
 
-      // Build search criteria for CBRE dispatch emails based on subject only
+      // Build search criteria for work order emails - no FROM filter
     let searchCriteria;
     if (includeRead) {
       // Get emails from the last N days with Work Order in subject
@@ -54,7 +54,7 @@ async function fetchEmails(includeRead = false, days = 3) {
       ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
     ];
     } else {
-        // Only unread emails with Work Order/Dispatch in subject (any sender)
+        // Only unread emails with Work Order/Dispatch in subject
         searchCriteria = [
           'UNSEEN',
           ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]

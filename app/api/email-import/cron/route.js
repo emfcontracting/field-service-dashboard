@@ -68,9 +68,14 @@ async function fetchEmails() {
           return reject(new Error(`Could not open INBOX: ${err.message}`));
         }
 
-        // Search for unread emails with "Work Order" or "Dispatch" in subject (any sender)
+        // Search for unread emails with "Work Order" or "Dispatch" in subject
+        // Only from last 7 days to avoid importing old emails
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
         imap.search([
           'UNSEEN',
+          ['SINCE', sevenDaysAgo],
           ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
         ], (err, results) => {
           if (err) {

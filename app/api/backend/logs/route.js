@@ -1,16 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export async function GET(request) {
   try {
-    const supabase = await createClient();
-    
-    // Check if user is superuser
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user || user.email !== 'jones.emfcontracting@gmail.com') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const logType = searchParams.get('type') || 'all';
     const limit = parseInt(searchParams.get('limit') || '100');
@@ -95,14 +92,6 @@ export async function GET(request) {
 // POST endpoint to create a log entry
 export async function POST(request) {
   try {
-    const supabase = await createClient();
-    
-    // Check if user is superuser
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user || user.email !== 'jones.emfcontracting@gmail.com') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { log_type, message, status, metadata } = await request.json();
 
     if (!log_type || !message) {

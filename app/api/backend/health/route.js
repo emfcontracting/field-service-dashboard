@@ -1,17 +1,14 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import Imap from 'imap';
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
 export async function GET() {
   try {
-    const supabase = await createClient();
-    
-    // Check if user is superuser
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user || user.email !== 'jones.emfcontracting@gmail.com') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const healthData = {
       timestamp: new Date().toISOString(),
       status: 'healthy',
@@ -155,8 +152,8 @@ export async function GET() {
       'NEXT_PUBLIC_SUPABASE_URL',
       'NEXT_PUBLIC_SUPABASE_ANON_KEY',
       'SUPABASE_SERVICE_ROLE_KEY',
-      'GMAIL_USER',
-      'GMAIL_APP_PASSWORD'
+      'EMAIL_IMPORT_USER',
+      'EMAIL_IMPORT_PASSWORD'
     ];
 
     const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -197,8 +194,8 @@ export async function GET() {
 async function checkImapConnection() {
   return new Promise((resolve) => {
     const imap = new Imap({
-      user: process.env.GMAIL_USER,
-      password: process.env.GMAIL_APP_PASSWORD,
+      user: process.env.EMAIL_IMPORT_USER,
+      password: process.env.EMAIL_IMPORT_PASSWORD,
       host: 'imap.gmail.com',
       port: 993,
       tls: true,

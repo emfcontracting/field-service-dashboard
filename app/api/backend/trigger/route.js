@@ -1,16 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export async function POST(request) {
   try {
-    const supabase = await createClient();
-    
-    // Check if user is superuser
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user || user.email !== 'jones.emfcontracting@gmail.com') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { action, params } = await request.json();
 
     let result;
@@ -54,7 +51,7 @@ export async function POST(request) {
       log_type: 'manual_trigger',
       message: `Manual trigger: ${action}`,
       status: result.success ? 'success' : 'failed',
-      metadata: { action, result, triggeredBy: user.email }
+      metadata: { action, result }
     });
 
     return NextResponse.json(result);

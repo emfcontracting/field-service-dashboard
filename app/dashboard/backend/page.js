@@ -7,8 +7,7 @@ import { useRouter } from 'next/navigation';
 export default function BackendDashboard() {
   const router = useRouter();
   const supabase = createClientComponentClient();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('health');
   
   // State for different sections
@@ -23,9 +22,9 @@ export default function BackendDashboard() {
   const [logStatus, setLogStatus] = useState('');
   const [logLimit, setLogLimit] = useState(100);
 
-  // Check authentication
+  // Initialize and fetch health data
   useEffect(() => {
-    checkAuth();
+    fetchHealthData();
   }, []);
 
   // Auto refresh health data
@@ -41,32 +40,12 @@ export default function BackendDashboard() {
 
   // Fetch data when tab changes
   useEffect(() => {
-    if (user) {
-      if (activeTab === 'health') {
-        fetchHealthData();
-      } else if (activeTab === 'logs') {
-        fetchLogs();
-      }
-    }
-  }, [activeTab, user, logType, logStatus, logLimit]);
-
-  async function checkAuth() {
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      
-      if (error || !user || user.email !== 'jones.emfcontracting@gmail.com') {
-        router.push('/');
-        return;
-      }
-      
-      setUser(user);
-      setLoading(false);
+    if (activeTab === 'health') {
       fetchHealthData();
-    } catch (error) {
-      console.error('Auth check error:', error);
-      router.push('/');
+    } else if (activeTab === 'logs') {
+      fetchLogs();
     }
-  }
+  }, [activeTab, logType, logStatus, logLimit]);
 
   async function fetchHealthData() {
     try {
@@ -123,17 +102,6 @@ export default function BackendDashboard() {
     } finally {
       setTriggering(null);
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading Backend Dashboard...</p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -476,7 +444,7 @@ function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, lo
             <select
               value={logType}
               onChange={(e) => setLogType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               {logTypes.map(type => (
                 <option key={type} value={type}>
@@ -493,7 +461,7 @@ function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, lo
             <select
               value={logStatus}
               onChange={(e) => setLogStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               {statusTypes.map(status => (
                 <option key={status} value={status}>
@@ -510,7 +478,7 @@ function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, lo
             <select
               value={logLimit}
               onChange={(e) => setLogLimit(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               <option value="50">50 logs</option>
               <option value="100">100 logs</option>

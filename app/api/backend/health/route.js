@@ -19,7 +19,7 @@ export async function GET() {
     try {
       const { data, error } = await supabase
         .from('work_orders')
-        .select('id')
+        .select('wo_id')
         .limit(1);
       
       healthData.checks.database = {

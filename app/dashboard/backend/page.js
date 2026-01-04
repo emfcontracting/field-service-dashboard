@@ -88,16 +88,26 @@ export default function BackendDashboard() {
 
       const data = await response.json();
       
+      console.log('Trigger response:', data); // Debug log
+      
       if (data.success) {
-        alert(`✓ ${data.message}\n\nDetails: ${JSON.stringify(data.details, null, 2)}`);
+        const detailsStr = JSON.stringify(data.details, null, 2);
+        alert(`✓ ${data.message}\n\nDetails:\n${detailsStr}`);
         
         // Refresh health data and logs
         await fetchHealthData();
         await fetchLogs();
       } else {
-        alert(`✗ ${data.message || 'Action failed'}\n\nError: ${data.error || 'Unknown error'}`);
+        // Show detailed error
+        const errorMsg = data.message || data.error || 'Unknown error occurred';
+        const errorDetails = data.details ? `\n\nDetails:\n${JSON.stringify(data.details, null, 2)}` : '';
+        const fullError = data.error ? `\n\nFull Error:\n${data.error}` : '';
+        
+        console.error('Trigger failed:', data); // Debug log
+        alert(`✗ Action Failed: ${errorMsg}${errorDetails}${fullError}`);
       }
     } catch (error) {
+      console.error('Trigger exception:', error); // Debug log
       alert(`✗ Failed to trigger ${action}\n\nError: ${error.message}`);
     } finally {
       setTriggering(null);

@@ -612,19 +612,27 @@ function DatabaseTab() {
         'users',
         'notifications',
         'daily_hours_log',
-        'team_members',
-        'contractor_invoices',
         'system_logs'
       ];
 
       const counts = {};
       
       for (const table of tables) {
-        const { count, error } = await supabase
-          .from(table)
-          .select('*', { count: 'exact', head: true });
-        
-        counts[table] = error ? 'Error' : count;
+        try {
+          const { count, error } = await supabase
+            .from(table)
+            .select('*', { count: 'exact', head: true });
+          
+          if (error) {
+            counts[table] = 'N/A';
+            console.log(`Table ${table} not found or error:`, error.message);
+          } else {
+            counts[table] = count || 0;
+          }
+        } catch (err) {
+          counts[table] = 'N/A';
+          console.log(`Table ${table} error:`, err.message);
+        }
       }
 
       setStats(counts);
@@ -659,10 +667,10 @@ function DatabaseTab() {
                 {table.replace(/_/g, ' ')}
               </div>
               <div className="text-3xl font-bold text-gray-900">
-                {count !== 'Error' ? count.toLocaleString() : '⚠️'}
+                {count === 'N/A' ? '⚠️' : typeof count === 'number' ? count.toLocaleString() : count}
               </div>
-              {count === 'Error' && (
-                <div className="text-xs text-red-600 mt-1">Failed to fetch</div>
+              {count === 'N/A' && (
+                <div className="text-xs text-red-600 mt-1">Table not found</div>
               )}
             </div>
           ))}

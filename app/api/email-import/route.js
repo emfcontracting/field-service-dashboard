@@ -47,12 +47,25 @@ async function fetchEmails(includeRead = false, days = 3) {
     let searchCriteria;
     if (includeRead) {
       // Get emails from the last N days with Work Order in subject
-    const afterDate = new Date();
-    afterDate.setDate(afterDate.getDate() - days);
-    searchCriteria = [
-      ['SINCE', afterDate],
-      ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
-    ];
+      const afterDate = new Date();
+      afterDate.setDate(afterDate.getDate() - days);
+      
+      // Format date for IMAP (expects "DD-MMM-YYYY" format like "05-Jan-2026")
+      const formatIMAPDate = (date) => {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = months[date.getMonth()];
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+      };
+      
+      const sinceDate = formatIMAPDate(afterDate);
+      console.log(`Manual import searching for emails since: ${sinceDate}`);
+      
+      searchCriteria = [
+        ['SINCE', sinceDate],
+        ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
+      ];
     } else {
         // Only unread emails with Work Order/Dispatch in subject
         searchCriteria = [

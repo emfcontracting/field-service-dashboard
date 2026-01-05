@@ -57,10 +57,22 @@ async function fetchEmails() {
         // Only from last 7 days to avoid importing old emails
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        // Format date for IMAP (expects "DD-MMM-YYYY" format like "05-Jan-2026")
+        const formatIMAPDate = (date) => {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = months[date.getMonth()];
+          const year = date.getFullYear();
+          return `${day}-${month}-${year}`;
+        };
+        
+        const sinceDate = formatIMAPDate(sevenDaysAgo);
+        console.log(`Searching for emails since: ${sinceDate}`);
 
         imap.search([
           'UNSEEN',
-          ['SINCE', sevenDaysAgo],
+          ['SINCE', sinceDate],
           ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Dispatch']]
         ], (err, results) => {
           if (err) {

@@ -402,12 +402,13 @@ async function logImportActivity(results) {
     await supabase
       .from('system_logs')
       .insert({
-        log_type: 'auto_email_import',
-        details: JSON.stringify(results),
-        created_at: new Date().toISOString()
+        log_type: 'email_import',
+        message: results.message || 'Email import completed',
+        status: results.success ? 'success' : 'failed',
+        metadata: results
       });
   } catch (e) {
-    console.log('Could not log activity (table may not exist):', e.message);
+    console.log('Could not log activity:', e.message);
   }
 }
 
@@ -463,8 +464,23 @@ export async function GET(request) {
     
     console.log(`Found ${rawEmails.length} unread dispatch email(s)`);
     
+    // Safety check: if manual trigger, allow large imports. If auto-cron, limit to 50 emails
+    const maxAutoImport = 50;
+    if (!isManual && rawEmails.length > maxAutoImport) {
+      results.message = `Found ${rawEmails.length} emails - too many for automatic import. Please use manual import or mark old emails as read in Gmail.`;
+      results.skipped = rawEmails.length;
+      results.success = false;
+      console.log(`⚠️ Skipping automatic import: ${rawEmails.length} emails exceeds safety limit of ${maxAutoImport}`);
+      
+      // Log this warning
+      await logImportActivity(results);
+      
+      return Response.json(results);
+    }
+    
     if (rawEmails.length === 0) {
       results.message = 'No new dispatch emails found';
+      await logImportActivity(results);
       return Response.json(results);
     }
 

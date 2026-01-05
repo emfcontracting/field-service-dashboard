@@ -162,6 +162,11 @@ export async function GET(request) {
   }
 }
 
+// POST handler for manual trigger
+export async function POST(request) {
+  return GET(request);
+}
+
 async function runAutomation(automation, todayDate) {
   const results = {
     sms_sent: 0,

@@ -6,3 +6,7 @@ export async function GET() {
     manualEndpoint: '/api/aging/send-alerts'
   });
 }
+
+export async function POST() {
+  return GET();
+}

@@ -410,6 +410,32 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               </div>
             )}
 
+            {/* Too Many Emails Warning */}
+            {!gmailLoading && gmailEmails.length > 100 && (
+              <div className="bg-red-900 text-red-200 p-6 rounded-lg border-2 border-red-500">
+                <div className="flex items-start gap-3">
+                  <span className="text-3xl">⚠️</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-lg mb-2">Too Many Emails Detected!</h3>
+                    <p className="mb-3">Found {gmailEmails.length} unread emails. This indicates a backlog of old emails that shouldn't be imported.</p>
+                    
+                    <div className="bg-red-800/50 rounded p-3 mb-3 text-sm">
+                      <p className="font-semibold mb-2">🛑 Recommended Action:</p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Go to Gmail (wo.emfcontractingsc@gmail.com)</li>
+                        <li>Search: <code className="bg-black/30 px-1 rounded">is:unread (subject:"Work Order" OR subject:"Dispatch")</code></li>
+                        <li>Select all old emails (before today)</li>
+                        <li>Click "Mark as read" to clear the backlog</li>
+                        <li>Come back and refresh this import</li>
+                      </ol>
+                    </div>
+                    
+                    <p className="text-xs opacity-75">💡 The automatic email import (runs every 10 min) will skip importing if there are more than 50 unread emails as a safety measure.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Duplicates Info */}
             {!gmailLoading && gmailDuplicates.length > 0 && (
               <div className="bg-yellow-900/50 text-yellow-200 p-4 rounded-lg">

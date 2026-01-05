@@ -90,6 +90,8 @@ async function fetchEmails(includeRead = false, days = 3) {
             markSeen: false // Don't automatically mark as read
           });
 
+          const parsePromises = []; // Track all parse operations
+
           fetch.on('message', (msg, seqno) => {
             let buffer = '';
             let uid;
@@ -105,20 +107,26 @@ async function fetchEmails(includeRead = false, days = 3) {
             });
 
             msg.once('end', () => {
-              simpleParser(buffer, (err, parsed) => {
-                if (err) {
-                  console.error('Parse error:', err);
-                  return;
-                }
+              // Create a promise for each parse operation
+              const parsePromise = new Promise((resolveParser) => {
+                simpleParser(buffer, (err, parsed) => {
+                  if (err) {
+                    console.error('Parse error:', err);
+                    resolveParser(); // Resolve even on error
+                    return;
+                  }
 
-                emails.push({
-                  uid,
-                  subject: parsed.subject || '',
-                  from: parsed.from?.text || '',
-                  date: parsed.date || new Date(),
-                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                  emails.push({
+                    uid,
+                    subject: parsed.subject || '',
+                    from: parsed.from?.text || '',
+                    date: parsed.date || new Date(),
+                    body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                  });
+                  resolveParser();
                 });
               });
+              parsePromises.push(parsePromise);
             });
           });
 
@@ -127,7 +135,9 @@ async function fetchEmails(includeRead = false, days = 3) {
             reject(err);
           });
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
+            // Wait for all parse operations to complete
+            await Promise.all(parsePromises);
             imap.end();
             resolve(emails);
           });

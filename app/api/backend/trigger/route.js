@@ -157,35 +157,60 @@ async function triggerAgingAlert() {
 
 async function sendTestNotification(params) {
   try {
-    const { email, message } = params || {};
+    // Import nodemailer dynamically
+    const nodemailer = await import('nodemailer');
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/notifications`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        to: email || 'jones.emfcontracting@gmail.com',
-        subject: 'Test Notification from Backend Dashboard',
-        text: message || 'This is a test notification from the PCS FieldService Backend Dashboard.',
-        html: `<p>${message || 'This is a test notification from the PCS FieldService Backend Dashboard.'}</p>`
-      })
+    const transporter = nodemailer.default.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER || 'emfcbre@gmail.com',
+        pass: process.env.EMAIL_PASS
+      }
     });
 
-    const data = await response.json();
+    const testEmail = 'jones.emfcontracting@gmail.com';
+    
+    const info = await transporter.sendMail({
+      from: `"PCS FieldService Backend" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
+      to: testEmail,
+      subject: '✅ Backend Dashboard Test Notification',
+      text: 'This is a test notification from the PCS FieldService Backend Dashboard. If you received this, the notification system is working correctly!',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0;">✅ Test Notification Successful</h2>
+          </div>
+          <div style="background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px;">
+            <p>This is a test notification from the <strong>PCS FieldService Backend Dashboard</strong>.</p>
+            <p>If you received this email, the notification system is working correctly!</p>
+            <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+              Sent: ${new Date().toLocaleString()}<br>
+              From: Backend Dashboard Manual Trigger
+            </p>
+          </div>
+        </div>
+      `
+    });
+    
+    console.log('Test email sent:', info.messageId);
     
     return {
-      success: response.ok,
+      success: true,
       action: 'test_notification',
-      message: response.ok ? 'Test notification sent successfully' : 'Test notification failed',
-      details: data,
+      message: `Test email sent successfully to ${testEmail}`,
+      details: { 
+        recipient: testEmail,
+        messageId: info.messageId 
+      },
       timestamp: new Date().toISOString()
     };
   } catch (error) {
+    console.error('Test notification error:', error);
     return {
       success: false,
       action: 'test_notification',
-      message: error.message,
+      message: `Failed to send test email: ${error.message}`,
+      error: error.message,
       timestamp: new Date().toISOString()
     };
   }

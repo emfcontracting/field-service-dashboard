@@ -72,6 +72,8 @@ async function fetchEmailsFromLabel(labelName) {
             markSeen: false
           });
 
+          const parsePromises = []; // Track all parse operations
+
           fetch.on('message', (msg, seqno) => {
             let buffer = '';
             let uid;
@@ -87,20 +89,26 @@ async function fetchEmailsFromLabel(labelName) {
             });
 
             msg.once('end', () => {
-              simpleParser(buffer, (err, parsed) => {
-                if (err) {
-                  console.error('Parse error:', err);
-                  return;
-                }
+              // Create a promise for each parse operation
+              const parsePromise = new Promise((resolveParser) => {
+                simpleParser(buffer, (err, parsed) => {
+                  if (err) {
+                    console.error('Parse error:', err);
+                    resolveParser(); // Resolve even on error
+                    return;
+                  }
 
-                emails.push({
-                  uid,
-                  subject: parsed.subject || '',
-                  from: parsed.from?.text || '',
-                  date: parsed.date || new Date(),
-                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                  emails.push({
+                    uid,
+                    subject: parsed.subject || '',
+                    from: parsed.from?.text || '',
+                    date: parsed.date || new Date(),
+                    body: parsed.html || parsed.textAsHtml || parsed.text || ''
+                  });
+                  resolveParser();
                 });
               });
+              parsePromises.push(parsePromise);
             });
           });
 
@@ -109,7 +117,9 @@ async function fetchEmailsFromLabel(labelName) {
             reject(err);
           });
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
+            // Wait for all parse operations to complete
+            await Promise.all(parsePromises);
             imap.end();
             resolve(emails);
           });
@@ -545,7 +555,17 @@ export async function GET(request) {
 // POST: Manually trigger sync
 export async function POST(request) {
   try {
-    const body = await request.json();
+    // Try to parse body, but don't fail if empty
+    let body = {};
+    try {
+      const text = await request.text();
+      if (text) {
+        body = JSON.parse(text);
+      }
+    } catch (e) {
+      // Empty body is fine
+    }
+    
     const { label } = body;
 
     const url = new URL(request.url);

@@ -207,18 +207,21 @@ function parseCBREEmail(subject, body) {
     .trim();
 
   // Extract WO number from subject
-  // Regular: "Dispatch of Work Order C2926480 - Priority: P1-Emergency"
-  // PM: "Dispatch of PM Work Order P2919408"
-  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]?\d+)/i);
+  // Handle multiple formats:
+  // - "Dispatch of Work Order C2959324 - Priority: P2-Urgent"
+  // - "Dispatch_of_Work_Order_C2959324_-_Priority__P2-Urgent"
+  // - "PM Work Order P2919408"
+  const woMatch = (subject || '').match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]?\d+)/i);
   if (woMatch) {
     workOrder.wo_number = woMatch[1];
   }
 
   // Extract Priority - handle both formats
   // Regular: "Priority: P1-Emergency" or "Priority: P2"
+  // With underscores: "Priority__P2-Urgent"
   // PM: "Priority: P10 - 1 Month" or "Priority: P5 - 1 Week"
-  const priorityMatch = cleanBody.match(/Priority[:\s]*(P\d+)[\s\-]*([^<\n]*)/i) || 
-                        (subject || '').match(/Priority[:\s]*(P\d+)/i);
+  const priorityMatch = cleanBody.match(/Priority[:\s_]*(P\d+)[\s\-_]*([^<\n]*)/i) || 
+                        (subject || '').match(/Priority[:\s_]*(P\d+)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
     const pText = (priorityMatch[2] || '').toLowerCase();

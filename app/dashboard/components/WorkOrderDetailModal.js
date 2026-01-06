@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import TeamMemberModal from './TeamMemberModal';
+import NTEIncreaseModal from './NTEIncreaseModal';
 import { 
   updateWorkOrder, 
   deleteWorkOrder, 
@@ -68,6 +69,7 @@ export default function WorkOrderDetailModal({
   const [loadingNteIncreases, setLoadingNteIncreases] = useState(true);
   const [editingNTE, setEditingNTE] = useState(null); // Track which NTE is being edited
   const [savingNTE, setSavingNTE] = useState(false);
+  const [showNTEModal, setShowNTEModal] = useState(false);
   const adminPassword = 'admin123';
 
   useEffect(() => {
@@ -1655,12 +1657,20 @@ const sendAssignmentNotifications = async () => {
           <div className="bg-yellow-900 rounded-lg p-2 md:p-4">
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold text-sm md:text-base text-yellow-300">💰 NTE Increase Requests</h3>
-              <button
-                onClick={loadNteIncreases}
-                className="text-yellow-400 hover:text-yellow-300 text-xs"
-              >
-                🔄
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowNTEModal(true)}
+                  className="bg-green-600 hover:bg-green-700 px-2 py-0.5 rounded text-xs font-semibold"
+                >
+                  + Create
+                </button>
+                <button
+                  onClick={loadNteIncreases}
+                  className="text-yellow-400 hover:text-yellow-300 text-xs"
+                >
+                  🔄
+                </button>
+              </div>
             </div>
 
             {loadingNteIncreases ? (
@@ -2304,6 +2314,20 @@ const sendAssignmentNotifications = async () => {
           onTeamMemberAdded={(updatedWO) => {
             setSelectedWO(updatedWO);
             setShowTeamModal(false);
+          }}
+        />
+      )}
+
+      {/* NTE Increase Modal */}
+      {showNTEModal && (
+        <NTEIncreaseModal
+          workOrder={selectedWO}
+          currentUser={users.find(u => u.role === 'admin' || u.role === 'office_staff')}
+          supabase={supabase}
+          onClose={() => setShowNTEModal(false)}
+          onSave={(newNTE) => {
+            setNteIncreases([newNTE, ...nteIncreases]);
+            setShowNTEModal(false);
           }}
         />
       )}

@@ -1,4 +1,4 @@
-// Work Order Detail View Component - WITH DAILY HOURS LOG, FIELD DATA, AND NTE INCREASES
+// Work Order Detail View Component - WITH DAILY HOURS LOG, FIELD DATA, NTE INCREASES & JURASSIC PARK VALIDATION 🦖
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -11,6 +11,7 @@ import TeamMembersDailyHours from './TeamMembersDailyHours';
 import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
 import NTEIncreaseList from './quotes/NTEIncreaseList';
+import JurassicParkError from './JurassicParkError';
 
 export default function WorkOrderDetail({
   workOrder,
@@ -54,6 +55,9 @@ export default function WorkOrderDetail({
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   
+  // 🦖 JURASSIC PARK ERROR STATE
+  const [jurassicError, setJurassicError] = useState(null);
+  
   const wo = workOrder || {};
   const woNumber = wo.wo_number || t('unknown');
   const building = wo.building || t('unknown');
@@ -84,6 +88,50 @@ export default function WorkOrderDetail({
     }
     // Pass the comment text to the parent handler
     await onAddComment(newComment.trim());
+  }
+
+  // 🦖 JURASSIC PARK VALIDATION - Validates before completing work order
+  async function handleCompleteWorkOrder() {
+    // Validation 1: Check if Time Entry exists (daily logs)
+    const hasTimeEntry = dailyLogs && dailyLogs.length > 0;
+    
+    if (!hasTimeEntry) {
+      const errorMessage = language === 'en' 
+        ? '⏰ You must log time entries before completing this work order!'
+        : '⏰ ¡Debes registrar las horas antes de completar esta orden de trabajo!';
+      setJurassicError(errorMessage);
+      return;
+    }
+
+    // Validation 2: Check if Photos exist (only when online)
+    if (navigator.onLine) {
+      try {
+        const response = await fetch(`/api/verify-photos/${woNumber}`);
+        const result = await response.json();
+        
+        if (!result.photos_received) {
+          const errorMessage = language === 'en'
+            ? '📸 You must send before/after photos before completing this work order!'
+            : '📸 ¡Debes enviar fotos de antes/después antes de completar esta orden de trabajo!';
+          setJurassicError(errorMessage);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking photos:', err);
+        // If photo check fails (network error), show warning but allow to proceed
+        const continueAnyway = window.confirm(
+          language === 'en'
+            ? '⚠️ Could not verify photos (network issue).\n\nDo you want to continue completing this work order?\n\nMake sure you have sent before/after photos!'
+            : '⚠️ No se pudieron verificar las fotos (problema de red).\n\n¿Deseas continuar completando esta orden de trabajo?\n\n¡Asegúrate de haber enviado fotos de antes/después!'
+        );
+        if (!continueAnyway) {
+          return;
+        }
+      }
+    }
+
+    // ✅ All validations passed - proceed with completion
+    onCompleteWorkOrder();
   }
 
   function downloadCompletionCertificate() {
@@ -570,7 +618,7 @@ export default function WorkOrderDetail({
           {/* Complete Work Order Button - Always visible at bottom */}
           {status !== 'completed' && (
             <button
-              onClick={onCompleteWorkOrder}
+              onClick={handleCompleteWorkOrder}
               disabled={saving}
               className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
             >
@@ -587,6 +635,14 @@ export default function WorkOrderDetail({
         onSave={handleSignatureSave}
         saving={signatureSaving}
       />
+
+      {/* 🦖 Jurassic Park Error Overlay */}
+      {jurassicError && (
+        <JurassicParkError
+          message={jurassicError}
+          onDismiss={() => setJurassicError(null)}
+        />
+      )}
     </div>
   );
 }

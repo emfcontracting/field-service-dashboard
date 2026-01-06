@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
+import AnalyticsTab from '@/app/components/AnalyticsTab';
 
 export default function BackendDashboard() {
   const router = useRouter();
@@ -141,7 +142,7 @@ export default function BackendDashboard() {
           {/* Tabs */}
           <div className="border-t border-gray-200">
             <nav className="-mb-px flex space-x-8">
-              {['health', 'triggers', 'logs', 'database'].map((tab) => (
+              {['health', 'analytics', 'triggers', 'logs', 'database'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -171,6 +172,11 @@ export default function BackendDashboard() {
             setAutoRefresh={setAutoRefresh}
             onRefresh={fetchHealthData}
           />
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <AnalyticsTab />
         )}
 
         {/* Triggers Tab */}

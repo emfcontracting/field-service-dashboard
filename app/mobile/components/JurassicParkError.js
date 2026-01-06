@@ -1,84 +1,54 @@
-// Jurassic Park Error Component - "Ah ah ah, you didn't say the magic word!" WITH SOUND 🦖🔊
+// Jurassic Park Error Component - "Ah ah ah, you didn't say the magic word!" WITH ORIGINAL SOUND 🦖🔊
 import { useLanguage } from '../contexts/LanguageContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function JurassicParkError({ message, onDismiss }) {
   const { language } = useLanguage();
   const [shake, setShake] = useState(false);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     // Trigger shake animation
     setShake(true);
     const shakeTimeout = setTimeout(() => setShake(false), 500);
 
-    // 🔊 PLAY SOUND EFFECT
-    playJurassicParkSound();
+    // 🔊 PLAY ORIGINAL JURASSIC PARK SOUND IN LOOP
+    if (audioRef.current) {
+      audioRef.current.loop = true; // Loop until dismissed
+      audioRef.current.volume = 0.7; // 70% volume
+      audioRef.current.play().catch(err => {
+        console.error('Could not play Jurassic Park sound:', err);
+        // Fallback to vibration if audio fails
+        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+          window.navigator.vibrate([200, 100, 200, 100, 200]);
+        }
+      });
+    }
 
     return () => {
       clearTimeout(shakeTimeout);
+      // Stop audio when component unmounts
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
     };
   }, []);
 
-  // 🔊 Sound Effect Generator using Web Audio API
-  function playJurassicParkSound() {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Create three "Ah" sounds in sequence
-      const playAhSound = (startTime, frequency) => {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Waveform for voice-like sound
-        oscillator.type = 'triangle';
-        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + startTime);
-        
-        // Volume envelope (fade in/out for more natural sound)
-        gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + startTime + 0.05);
-        gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + startTime + 0.15);
-        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + startTime + 0.3);
-        
-        oscillator.start(audioContext.currentTime + startTime);
-        oscillator.stop(audioContext.currentTime + startTime + 0.3);
-      };
-      
-      // Play three "Ah" sounds with slight variation in pitch
-      playAhSound(0, 350);    // First "Ah"
-      playAhSound(0.35, 380); // Second "Ah" 
-      playAhSound(0.7, 400);  // Third "Ah"
-      
-      // Add a subtle warning beep at the end
-      const beepOscillator = audioContext.createOscillator();
-      const beepGain = audioContext.createGain();
-      
-      beepOscillator.connect(beepGain);
-      beepGain.connect(audioContext.destination);
-      
-      beepOscillator.type = 'sine';
-      beepOscillator.frequency.setValueAtTime(800, audioContext.currentTime + 1.1);
-      
-      beepGain.gain.setValueAtTime(0, audioContext.currentTime + 1.1);
-      beepGain.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 1.15);
-      beepGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1.3);
-      
-      beepOscillator.start(audioContext.currentTime + 1.1);
-      beepOscillator.stop(audioContext.currentTime + 1.3);
-      
-    } catch (error) {
-      console.error('Could not play Jurassic Park sound:', error);
-      // Fallback to system beep if Web Audio API fails
-      if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate([200, 100, 200, 100, 200]);
-      }
+  const handleDismiss = () => {
+    // Stop audio before dismissing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
-  }
+    if (onDismiss) onDismiss();
+  };
 
   return (
     <>
+      {/* Hidden Audio Element - Original Jurassic Park Sound */}
+      <audio ref={audioRef} src="/jurassic-park-sound.mp3" preload="auto" />
+
       {/* Backdrop overlay to prevent interaction */}
       <div className="fixed inset-0 bg-black bg-opacity-70 z-40 backdrop-blur-sm" />
       
@@ -119,9 +89,7 @@ export default function JurassicParkError({ message, onDismiss }) {
 
           {/* OK Button - REQUIRED to dismiss */}
           <button
-            onClick={() => {
-              if (onDismiss) onDismiss();
-            }}
+            onClick={handleDismiss}
             className="mt-4 w-full bg-white text-red-700 font-bold py-3 px-6 rounded-lg hover:bg-gray-100 transition transform active:scale-95 text-lg shadow-lg"
           >
             {language === 'en' ? '✓ OK' : '✓ OK'}

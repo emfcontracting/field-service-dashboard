@@ -164,16 +164,7 @@ export default function NTEIncreaseModal({ workOrder, currentUser, supabase, onC
         verbal_approved_by: formData.is_verbal_nte ? formData.verbal_approved_by : null,
         description: formData.description,
         
-        // Additional work estimates
-        hours_regular: parseFloat(formData.hours_regular) || 0,
-        hours_overtime: parseFloat(formData.hours_overtime) || 0,
-        miles: parseFloat(formData.miles) || 0,
-        materials_base: parseFloat(formData.materials_base) || 0,
-        equipment_base: parseFloat(formData.equipment_base) || 0,
-        rental_base: parseFloat(formData.rental_base) || 0,
-        trailer_base: parseFloat(formData.trailer_base) || 0,
-        
-        // Calculated costs (with markup)
+        // Calculated costs (with markup) - only store final calculated values
         labor_total: additionalCosts.labor,
         materials_with_markup: additionalCosts.materials,
         equipment_with_markup: additionalCosts.equipment,

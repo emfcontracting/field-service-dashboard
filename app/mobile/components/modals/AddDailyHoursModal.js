@@ -292,8 +292,8 @@ export default function AddDailyHoursModal({
           <div className="bg-blue-900 rounded-lg p-3 text-sm text-blue-200">
             <p className="font-semibold mb-1">ℹ️ {t('important') || 'Important'}:</p>
             <ul className="text-xs space-y-1 ml-4">
-              <li>• {t('cannotDuplicateDates') || 'Cannot log duplicate entries for the same date'}</li>
-              <li>• {t('totalHoursMust24') || 'Total hours (RT + OT) must not exceed 24 hours'}</li>
+              <li>• {language === 'en' ? 'You can add multiple entries for the same date' : 'Puede agregar múltiples entradas para la misma fecha'}</li>
+              <li>• {t('totalHoursMust24') || 'Total hours (RT + OT) must not exceed 24 hours per entry'}</li>
               <li>• {t('hoursWillBeAddedToSummary') || 'Hours will be added to work order summary'}</li>
             </ul>
           </div>

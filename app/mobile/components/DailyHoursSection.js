@@ -15,9 +15,8 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [todayEntry, setTodayEntry] = useState(null);
   
-  // Form state for adding/editing today's hours
+  // Form state for adding new hours (always create new entry)
   const [formData, setFormData] = useState({
     hours_regular: '',
     hours_overtime: '',
@@ -49,27 +48,13 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
 
       setDailyEntries(data || []);
       
-      // Check if there's an entry for today
-      const today = new Date().toISOString().split('T')[0];
-      const todayData = (data || []).find(e => e.work_date === today);
-      
-      if (todayData) {
-        setTodayEntry(todayData);
-        setFormData({
-          hours_regular: todayData.hours_regular?.toString() || '',
-          hours_overtime: todayData.hours_overtime?.toString() || '',
-          miles: todayData.miles?.toString() || '',
-          notes: todayData.notes || ''
-        });
-      } else {
-        setTodayEntry(null);
-        setFormData({
-          hours_regular: '',
-          hours_overtime: '',
-          miles: '',
-          notes: ''
-        });
-      }
+      // Always reset form to blank for new entry
+      setFormData({
+        hours_regular: '',
+        hours_overtime: '',
+        miles: '',
+        notes: ''
+      });
     } catch (err) {
       console.error('Error loading daily entries:', err);
     } finally {
@@ -93,39 +78,22 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
       setSaving(true);
       const today = new Date().toISOString().split('T')[0];
 
-      if (todayEntry) {
-        // Update existing entry
-        const { error } = await supabase
-          .from('daily_hours_log')
-          .update({
-            hours_regular: rt,
-            hours_overtime: ot,
-            miles: miles,
-            notes: formData.notes || null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', todayEntry.id);
+      // Always insert new entry (allows multiple entries per day)
+      const { error } = await supabase
+        .from('daily_hours_log')
+        .insert({
+          wo_id: wo.wo_id,
+          user_id: currentUser.user_id,
+          work_date: today,
+          hours_regular: rt,
+          hours_overtime: ot,
+          miles: miles,
+          notes: formData.notes || null,
+          created_at: new Date().toISOString()
+        });
 
-        if (error) throw error;
-        alert(language === 'en' ? '✅ Hours updated!' : '✅ ¡Horas actualizadas!');
-      } else {
-        // Insert new entry
-        const { error } = await supabase
-          .from('daily_hours_log')
-          .insert({
-            wo_id: wo.wo_id,
-            user_id: currentUser.user_id,
-            work_date: today,
-            hours_regular: rt,
-            hours_overtime: ot,
-            miles: miles,
-            notes: formData.notes || null,
-            created_at: new Date().toISOString()
-          });
-
-        if (error) throw error;
-        alert(language === 'en' ? '✅ Hours logged!' : '✅ ¡Horas registradas!');
-      }
+      if (error) throw error;
+      alert(language === 'en' ? '✅ Hours added!' : '✅ ¡Horas agregadas!');
 
       await loadDailyEntries();
       setShowAddForm(false);
@@ -159,7 +127,7 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
             onClick={() => setShowAddForm(!showAddForm)}
             className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm font-semibold"
           >
-            {showAddForm ? '✕' : (todayEntry ? '✏️ ' + (language === 'en' ? 'Edit Today' : 'Editar Hoy') : '+ ' + (language === 'en' ? 'Log Hours' : 'Registrar'))}
+            {showAddForm ? '✕' : '+ ' + (language === 'en' ? 'Add Hours' : 'Agregar Horas')}
           </button>
         )}
       </div>
@@ -178,7 +146,7 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
       {showAddForm && !isCompleted && (
         <div className="bg-gray-700 rounded-lg p-3 mb-3 border-2 border-blue-500">
           <p className="text-sm font-semibold mb-2 text-blue-300">
-            📅 {todayEntry ? (language === 'en' ? "Edit Today's Hours" : 'Editar Horas de Hoy') : (language === 'en' ? 'Log Hours for Today' : 'Registrar Horas de Hoy')} ({today})
+            📅 {language === 'en' ? 'Add Hours for Today' : 'Agregar Horas de Hoy'} ({today})
           </p>
           
           <div className="grid grid-cols-2 gap-2 mb-2">
@@ -274,15 +242,15 @@ export default function DailyHoursSection({ workOrder, currentUser, status, savi
         </div>
       ) : (
         <p className="text-gray-500 text-sm text-center py-2">
-          {language === 'en' ? 'No hours logged yet. Tap "Log Hours" to add.' : 'Sin horas registradas. Toque "Registrar" para agregar.'}
+          {language === 'en' ? 'No hours logged yet. Tap "Add Hours" to add.' : 'Sin horas registradas. Toque "Agregar Horas" para agregar.'}
         </p>
       )}
 
       {/* Info Banner */}
       <div className="mt-3 bg-blue-900 rounded p-2 text-xs text-blue-200">
         <p>💡 {language === 'en' 
-          ? 'Log your hours daily. Each day gets its own entry for accurate tracking.' 
-          : 'Registre sus horas diariamente. Cada día tiene su propia entrada para un seguimiento preciso.'}
+          ? 'Add hours as you work. You can add multiple entries per day.' 
+          : 'Agregue horas mientras trabaja. Puede agregar múltiples entradas por día.'}
         </p>
       </div>
     </div>

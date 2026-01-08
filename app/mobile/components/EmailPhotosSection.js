@@ -1,4 +1,4 @@
-// components/EmailPhotosSection.js - Bilingual Email Photos Section with Photo Status + PMI Write-ups for PM Work Orders
+// components/EmailPhotosSection.js - Bilingual Email Photos & Receipts Section with Status + PMI Write-ups for PM Work Orders
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
@@ -81,6 +81,21 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
       `${language === 'en' ? 'Submitted by' : 'Enviado por'}: ${currentUser.first_name} ${currentUser.last_name}\n` +
       `${language === 'en' ? 'Date' : 'Fecha'}: ${new Date().toLocaleString()}\n\n` +
       `--- ${language === 'en' ? 'Attach photos below' : 'Adjuntar fotos abajo'} ---`
+    );
+    const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
+    window.location.href = mailtoLink;
+  }
+
+  function handleEmailReceipts() {
+    const subject = encodeURIComponent(`${language === 'en' ? 'Receipts' : 'Recibos'} - ${woNumber} - ${building}`);
+    const body = encodeURIComponent(
+      `${language === 'en' ? 'Work Order' : 'Orden de Trabajo'}: ${woNumber}\n` +
+      `${t('building')}: ${building}\n` +
+      `${t('description')}: ${description}\n` +
+      `${language === 'en' ? 'Status' : 'Estado'}: ${status.replace('_', ' ').toUpperCase()}\n` +
+      `${language === 'en' ? 'Submitted by' : 'Enviado por'}: ${currentUser.first_name} ${currentUser.last_name}\n` +
+      `${language === 'en' ? 'Date' : 'Fecha'}: ${new Date().toLocaleString()}\n\n` +
+      `--- ${language === 'en' ? 'Attach material receipts below' : 'Adjuntar recibos de materiales abajo'} ---`
     );
     const mailtoLink = `mailto:emfcbre@gmail.com?subject=${subject}&body=${body}`;
     window.location.href = mailtoLink;
@@ -233,14 +248,26 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
       </p>
       
       <div className="space-y-2">
-        {/* Email Photos Button */}
-        <button
-          onClick={handleEmailPhotos}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-4 rounded-lg font-bold text-lg shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
-        >
-          <span className="text-2xl">📸</span>
-          <span>{t('emailPhotosToOffice')}</span>
-        </button>
+        {/* Email Photos and Receipts Buttons - Side by Side */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Email Photos Button */}
+          <button
+            onClick={handleEmailPhotos}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-4 rounded-lg font-bold shadow-lg transition active:scale-95 flex flex-col items-center justify-center gap-1"
+          >
+            <span className="text-2xl">📸</span>
+            <span className="text-sm">{language === 'en' ? 'Photos' : 'Fotos'}</span>
+          </button>
+          
+          {/* Email Receipts Button */}
+          <button
+            onClick={handleEmailReceipts}
+            className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 py-4 rounded-lg font-bold shadow-lg transition active:scale-95 flex flex-col items-center justify-center gap-1"
+          >
+            <span className="text-2xl">🧾</span>
+            <span className="text-sm">{language === 'en' ? 'Receipts' : 'Recibos'}</span>
+          </button>
+        </div>
         
         {/* Refresh Photo Status Button */}
         {navigator.onLine && (
@@ -308,6 +335,11 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
           {language === 'en' 
             ? '💡 Photos must be received before you can complete the work order.' 
             : '💡 Las fotos deben recibirse antes de poder completar la orden de trabajo.'}
+        </p>
+        <p className="mt-1">
+          {language === 'en' 
+            ? '🧾 Use Receipts button to send material purchase receipts to office.' 
+            : '🧾 Use el botón Recibos para enviar recibos de compra de materiales a la oficina.'}
         </p>
         {isPMWorkOrder && (
           <p className="mt-1">

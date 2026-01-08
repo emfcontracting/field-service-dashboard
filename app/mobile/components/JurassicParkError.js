@@ -81,11 +81,11 @@ export default function JurassicParkError({ message, onDismiss }) {
               <div 
                 className="absolute animate-head-shake"
                 style={{
-                  top: '8px',
+                  top: '20px',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  width: '85px',
-                  height: '85px',
+                  width: '65px',
+                  height: '65px',
                   borderRadius: '50%',
                   overflow: 'hidden',
                   zIndex: 10
@@ -94,8 +94,8 @@ export default function JurassicParkError({ message, onDismiss }) {
                 <Image 
                   src="/face.png" 
                   alt="Face" 
-                  width={85} 
-                  height={85}
+                  width={65} 
+                  height={65}
                   className="block object-cover"
                   style={{ 
                     objectFit: 'cover',

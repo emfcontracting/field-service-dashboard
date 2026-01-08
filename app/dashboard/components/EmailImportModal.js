@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { formatDateTimeEST } from '../../mobile/utils/dateUtils';
 
 export default function EmailImportModal({ onClose, onImportComplete }) {
   const [loading, setLoading] = useState(false);
@@ -161,13 +162,7 @@ export default function EmailImportModal({ onClose, onImportComplete }) {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
+    return formatDateTimeEST(dateStr);
   };
 
   return (

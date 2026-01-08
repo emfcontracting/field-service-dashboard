@@ -4,19 +4,15 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { 
+  getTodayEST, 
+  getDateRangeEST, 
+  formatDateEST, 
+  parseLocalDate,
+  getNowEST 
+} from '../../../mobile/utils/dateUtils';
 
 const supabase = getSupabase();
-
-// Helper function to format date without timezone shift
-// Parses YYYY-MM-DD and displays in local format without UTC conversion
-function formatDateLocal(dateString) {
-  if (!dateString) return '-';
-  // Split the date string to avoid timezone conversion
-  const [year, month, day] = dateString.split('-').map(Number);
-  // Create date with local timezone (months are 0-indexed)
-  const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 export default function CreateInvoice() {
   const router = useRouter();
@@ -51,21 +47,11 @@ export default function CreateInvoice() {
     try {
       const parsed = JSON.parse(userData);
       setUser(parsed);
-      // Set default date range (last 14 days) using local dates
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - 14);
+      // Set default date range (last 14 days) using EST timezone
+      const { startDate, endDate } = getDateRangeEST(14);
       
-      // Format as YYYY-MM-DD without timezone issues
-      const formatLocalDate = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-      
-      setPeriodEnd(formatLocalDate(end));
-      setPeriodStart(formatLocalDate(start));
+      setPeriodEnd(endDate);
+      setPeriodStart(startDate);
       
       if (parsed.profile) {
         setRates({
@@ -505,7 +491,7 @@ export default function CreateInvoice() {
                     const rowTotal = regAmount + otAmount + mileAmount + techMaterial;
                     return (
                       <tr key={idx} className="border-b border-gray-700/50">
-                        <td className="py-2 font-medium">{formatDateLocal(entry.work_date)}</td>
+                        <td className="py-2 font-medium">{formatDateEST(parseLocalDate(entry.work_date))}</td>
                         <td className="py-2">
                           <div className="font-medium">{entry.work_order?.wo_number || 'N/A'}</div>
                           <div className="text-xs text-gray-500 truncate max-w-[150px]">{entry.work_order?.building}</div>

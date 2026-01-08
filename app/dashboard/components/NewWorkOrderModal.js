@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { getNowEST, getTodayEST } from '../../mobile/utils/dateUtils';
 
 export default function NewWorkOrderModal({ users, supabase, onClose, refreshWorkOrders }) {
   const [newWO, setNewWO] = useState({
@@ -30,7 +31,7 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     try {
       const insertData = {
         ...newWO,
-        date_entered: new Date().toISOString(),
+        date_entered: getNowEST(),
         scheduled_date: newWO.scheduled_date || null
       };
 
@@ -55,7 +56,7 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     }
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayEST();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 md:p-4">

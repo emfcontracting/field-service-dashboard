@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
 
 const supabase = getSupabase();
 
@@ -45,17 +46,15 @@ export default function ContractorDashboard() {
 
   async function loadDashboardData(userId, profile) {
     try {
-      // Get current period (last 2 weeks)
-      const periodStart = new Date();
-      periodStart.setDate(periodStart.getDate() - 14);
-      const periodStartStr = periodStart.toISOString().split('T')[0];
+      // Get current period (last 14 days) using EST timezone
+      const { startDate } = getDateRangeEST(14);
 
       // Get hours and mileage for current period
       const { data: hoursData, error: hoursError } = await supabase
         .from('daily_hours_log')
         .select('hours_regular, hours_overtime, miles')
         .eq('user_id', userId)
-        .gte('work_date', periodStartStr);
+        .gte('work_date', startDate);
 
       if (hoursError) {
         console.error('Error fetching hours:', hoursError);

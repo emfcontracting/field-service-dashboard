@@ -15,6 +15,14 @@ import {
 } from '../utils/dataFetchers';
 import { calculateInvoiceTotal } from '../utils/calculations';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
+import { 
+  getLocalDateString, 
+  parseLocalDate, 
+  getNowEST, 
+  formatDateEST, 
+  formatDateTimeEST,
+  getTodayEST
+} from '../../mobile/utils/dateUtils';
 
 export default function WorkOrderDetailModal({ 
   workOrder, 
@@ -34,31 +42,9 @@ export default function WorkOrderDetailModal({
   const [savingHours, setSavingHours] = useState(false);
   const [showAddHoursForm, setShowAddHoursForm] = useState(false);
   
-  // Helper function to get local date string in YYYY-MM-DD format
-  // This prevents timezone issues where UTC conversion shifts the date
-  const getLocalDateString = (date = new Date()) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Helper function to parse date string without timezone issues
-  // work_date is stored as YYYY-MM-DD, parse it as local date
-  const parseLocalDate = (dateStr) => {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return new Date(dateStr);
-    return new Date(
-      parseInt(parts[0]), 
-      parseInt(parts[1]) - 1, 
-      parseInt(parts[2])
-    );
-  };
-  
   const [newHoursEntry, setNewHoursEntry] = useState({
     user_id: '',
-    work_date: getLocalDateString(),
+    work_date: getTodayEST(),
     hours_regular: 0,
     hours_overtime: 0,
     miles: 0,

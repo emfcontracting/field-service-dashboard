@@ -1,6 +1,8 @@
 // Jurassic Park Error Component - "Ah ah ah, you didn't say the magic word!" WITH ORIGINAL SOUND 🦖🔊
+// Now with LEGOMAN + FACE animation!
 import { useLanguage } from '../contexts/LanguageContext';
 import { useEffect, useState, useRef } from 'react';
+import Image from 'next/image';
 
 export default function JurassicParkError({ message, onDismiss }) {
   const { language } = useLanguage();
@@ -61,10 +63,47 @@ export default function JurassicParkError({ message, onDismiss }) {
         }}
       >
         <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-lg shadow-2xl p-6 border-4 border-red-800">
-          {/* Animated Finger */}
-          <div className="text-center mb-3">
-            <div className="inline-block animate-wag text-6xl">
-              👆
+          {/* LEGOMAN WITH ANIMATED FACE */}
+          <div className="text-center mb-3 relative">
+            <div className="inline-block relative" style={{ width: '180px', height: '220px' }}>
+              {/* Legoman Body - Static */}
+              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2">
+                <Image 
+                  src="/legoman.png" 
+                  alt="Legoman" 
+                  width={180} 
+                  height={220}
+                  className="block"
+                />
+              </div>
+              
+              {/* Face - Animated Shaking Head */}
+              <div 
+                className="absolute animate-head-shake"
+                style={{
+                  top: '8px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '85px',
+                  height: '85px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  zIndex: 10
+                }}
+              >
+                <Image 
+                  src="/face.png" 
+                  alt="Face" 
+                  width={85} 
+                  height={85}
+                  className="block object-cover"
+                  style={{ 
+                    objectFit: 'cover',
+                    width: '100%',
+                    height: '100%'
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -103,13 +142,14 @@ export default function JurassicParkError({ message, onDismiss }) {
             20%, 40%, 60%, 80% { transform: translate(-50%, -50%) translateX(10px); }
           }
 
-          @keyframes wag {
-            0%, 100% { transform: rotate(-15deg); }
-            50% { transform: rotate(15deg); }
+          @keyframes head-shake {
+            0%, 100% { transform: translateX(-50%) rotate(-8deg); }
+            50% { transform: translateX(-50%) rotate(8deg); }
           }
 
-          .animate-wag {
-            animation: wag 0.3s ease-in-out infinite;
+          .animate-head-shake {
+            animation: head-shake 0.4s ease-in-out infinite;
+            transform-origin: center bottom;
           }
 
           .animate-shake {

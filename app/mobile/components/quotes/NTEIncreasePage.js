@@ -127,21 +127,23 @@ export default function NTEIncreasePage({
       const legacyTotalOT = primaryOT + teamOT;
       const legacyTotalMiles = primaryMiles + teamMiles;
 
-      // 2. Load daily hours totals from daily_hours_log table (NOTE: singular, not plural)
+      // 2. Load daily hours totals from daily_hours_log table (including tech_material_cost)
       const { data: dailyData, error: dailyError } = await supabase
         .from('daily_hours_log')
-        .select('hours_regular, hours_overtime, miles')
+        .select('hours_regular, hours_overtime, miles, tech_material_cost')
         .eq('wo_id', wo.wo_id);
 
       let dailyTotalRT = 0;
       let dailyTotalOT = 0;
       let dailyTotalMiles = 0;
+      let dailyTotalTechMaterial = 0;
 
       if (!dailyError && dailyData) {
         dailyData.forEach(log => {
           dailyTotalRT += parseFloat(log.hours_regular) || 0;
           dailyTotalOT += parseFloat(log.hours_overtime) || 0;
           dailyTotalMiles += parseFloat(log.miles) || 0;
+          dailyTotalTechMaterial += parseFloat(log.tech_material_cost) || 0;
         });
       }
 
@@ -153,9 +155,12 @@ export default function NTEIncreasePage({
       // Labor includes admin hours (2 hrs × $64 = $128)
       const laborCost = (totalRT * RATES.RT_RATE) + (totalOT * RATES.OT_RATE) + (RATES.ADMIN_HOURS * RATES.RT_RATE);
       
-      // Materials, Equipment, Trailer, Rental with 25% markup
-      const materialBase = parseFloat(wo.material_cost) || 0;
-      const materialWithMarkup = materialBase * (1 + RATES.MARKUP_PERCENT);
+      // Materials: EMF Material (company paid) + Tech Material (tech purchased, for reimbursement)
+      // Both get 25% markup applied
+      const emfMaterialBase = parseFloat(wo.material_cost) || 0;
+      const techMaterialBase = dailyTotalTechMaterial;
+      const totalMaterialBase = emfMaterialBase + techMaterialBase;
+      const materialWithMarkup = totalMaterialBase * (1 + RATES.MARKUP_PERCENT);
       
       const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
       const equipmentWithMarkup = equipmentBase * (1 + RATES.MARKUP_PERCENT);
@@ -177,7 +182,9 @@ export default function NTEIncreasePage({
         totalOT,
         totalMiles,
         laborCost,
-        materialBase,
+        materialBase: totalMaterialBase,
+        emfMaterialBase,
+        techMaterialBase,
         materialWithMarkup,
         equipmentBase,
         equipmentWithMarkup,
@@ -394,10 +401,23 @@ export default function NTEIncreasePage({
                 <span>${existingCosts.laborCost.toFixed(2)}</span>
               </div>
               
-              {/* Materials, Equipment, etc. */}
-              <div className="flex justify-between pt-2">
-                <span className="text-gray-300">{language === 'en' ? 'Materials' : 'Materiales'} (+25%)</span>
-                <span>${existingCosts.materialWithMarkup.toFixed(2)}</span>
+              {/* Materials breakdown: EMF + Tech */}
+              <div className="pt-2 space-y-1">
+                <div className="text-xs text-gray-400 font-semibold">{language === 'en' ? 'Materials' : 'Materiales'}:</div>
+                <div className="flex justify-between text-sm ml-2">
+                  <span className="text-gray-300">{language === 'en' ? 'EMF Material (company)' : 'Material EMF (empresa)'}</span>
+                  <span>${(existingCosts.emfMaterialBase || 0).toFixed(2)}</span>
+                </div>
+                {(existingCosts.techMaterialBase || 0) > 0 && (
+                  <div className="flex justify-between text-sm ml-2">
+                    <span className="text-orange-400">{language === 'en' ? 'Tech Material (reimbursable)' : 'Material Técnico (reembolsable)'}</span>
+                    <span className="text-orange-400">${existingCosts.techMaterialBase.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-300">{language === 'en' ? 'Total Materials (+25%)' : 'Total Materiales (+25%)'}</span>
+                  <span>${existingCosts.materialWithMarkup.toFixed(2)}</span>
+                </div>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">{language === 'en' ? 'Equipment' : 'Equipo'} (+25%)</span>

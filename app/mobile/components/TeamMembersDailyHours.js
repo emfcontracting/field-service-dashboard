@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
+import { parseLocalDate, formatDateEST } from '../utils/dateUtils';
 import AddDailyHoursModal from './modals/AddDailyHoursModal';
 
 export default function TeamMembersDailyHours({
@@ -20,19 +21,6 @@ export default function TeamMembersDailyHours({
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
-
-  // Helper function to parse date string without timezone issues
-  // work_date is stored as YYYY-MM-DD, parse it as local date
-  function parseLocalDate(dateStr) {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return new Date(dateStr);
-    return new Date(
-      parseInt(parts[0]), 
-      parseInt(parts[1]) - 1, 
-      parseInt(parts[2])
-    );
-  }
 
   // Check if current user is in the team list
   // Use string comparison to handle potential type mismatches

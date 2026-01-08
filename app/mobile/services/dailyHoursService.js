@@ -1,4 +1,5 @@
 // services/dailyHoursService.js - Daily Hours Logging Service
+import { getNowEST, formatDateTimeEST, formatDateEST, isFutureDate } from '../utils/dateUtils';
 
 /**
  * Load all daily hours logs for a specific work order
@@ -61,7 +62,7 @@ export async function addDailyHours(supabase, hoursData) {
       throw new Error('Hours already logged for this date. Please edit the existing entry.');
     }
 
-    // Insert new entry
+    // Insert new entry - use EST timestamp
     const { data, error } = await supabase
       .from('daily_hours_log')
       .insert([{
@@ -72,8 +73,9 @@ export async function addDailyHours(supabase, hoursData) {
         hours_regular: hoursData.hoursRegular || 0,
         hours_overtime: hoursData.hoursOvertime || 0,
         miles: hoursData.miles || 0,
+        tech_material_cost: hoursData.techMaterialCost || 0,
         notes: hoursData.notes || null,
-        created_at: new Date().toISOString()
+        created_at: getNowEST()
       }])
       .select(`
         *,
@@ -100,8 +102,9 @@ export async function updateDailyHours(supabase, logId, updates) {
         hours_regular: updates.hoursRegular,
         hours_overtime: updates.hoursOvertime,
         miles: updates.miles,
+        tech_material_cost: updates.techMaterialCost,
         notes: updates.notes || null,
-        updated_at: new Date().toISOString()
+        updated_at: getNowEST()
       })
       .eq('log_id', logId)
       .select()
@@ -226,7 +229,7 @@ export function generateCSV(logs) {
       `$${mileageCost.toFixed(2)}`,
       `$${totalCost.toFixed(2)}`,
       log.notes ? `"${log.notes.replace(/"/g, '""')}"` : '',
-      new Date(log.created_at).toLocaleString()
+      formatDateTimeEST(log.created_at)
     ];
   });
 
@@ -343,12 +346,8 @@ export function validateHoursEntry(hoursData) {
     errors.push('Work date is required');
   }
 
-  // Check for future dates - fix timezone issue by using local date
-  const workDate = new Date(hoursData.workDate + 'T12:00:00');
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  
-  if (workDate > today) {
+  // Check for future dates - use EST-aware function
+  if (isFutureDate(hoursData.workDate)) {
     errors.push('Cannot log hours for future dates');
   }
 

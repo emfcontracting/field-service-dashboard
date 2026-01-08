@@ -1,14 +1,5 @@
 // Availability Service - Daily availability management
-
-// Helper to get today's date in EST timezone as YYYY-MM-DD
-function getTodayEST() {
-  const now = new Date();
-  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const year = estTime.getFullYear();
-  const month = String(estTime.getMonth() + 1).padStart(2, '0');
-  const day = String(estTime.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+import { getTodayEST, getNowEST, getESTTimeInfo } from '../utils/dateUtils';
 
 export async function checkTodaySubmission(supabase, userId) {
   const today = getTodayEST();
@@ -24,13 +15,8 @@ export async function checkTodaySubmission(supabase, userId) {
 }
 
 export function calculateAvailabilityWindow() {
-  const now = new Date();
-  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const hour = estTime.getHours();
-  const dayOfWeek = estTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const today = getTodayEST();
-
-  return { hour, dayOfWeek, today };
+  const { hour, dayOfWeek, date } = getESTTimeInfo();
+  return { hour, dayOfWeek, today: date };
 }
 
 export function shouldShowAvailabilityModal(hour, dayOfWeek, hasSubmittedToday) {
@@ -79,7 +65,7 @@ export async function submitAvailability(supabase, userId, scheduledWork, emerge
       scheduled_work: scheduledWork,
       emergency_work: emergencyWork,
       not_available: notAvailable,
-      submitted_at: new Date().toISOString()
+      submitted_at: getNowEST()  // Use EST timestamp
     }, {
       onConflict: 'user_id,availability_date'
     });

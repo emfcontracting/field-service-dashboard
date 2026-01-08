@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
+import { parseLocalDate, formatDateEST } from '../utils/dateUtils';
 import AddDailyHoursModal from './modals/AddDailyHoursModal';
 
 export default function PrimaryTechDailyHours({
@@ -19,19 +20,6 @@ export default function PrimaryTechDailyHours({
   
   const [showAddModal, setShowAddModal] = useState(false);
   const wo = workOrder || {};
-  
-  // Helper function to parse date string without timezone issues
-  // work_date is stored as YYYY-MM-DD, parse it as local date
-  function parseLocalDate(dateStr) {
-    if (!dateStr) return new Date();
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return new Date(dateStr);
-    return new Date(
-      parseInt(parts[0]), 
-      parseInt(parts[1]) - 1, 
-      parseInt(parts[2])
-    );
-  }
   
   // Get the PRIMARY TECH (lead tech) from the work order - NOT the current user
   const leadTechId = wo.lead_tech_id;

@@ -81,7 +81,7 @@ export default function JurassicParkError({ message, onDismiss }) {
               <div 
                 className="absolute animate-head-shake"
                 style={{
-                  top: '20px',
+                  top: '35px',
                   left: '50%',
                   transform: 'translateX(-50%)',
                   width: '65px',

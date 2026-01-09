@@ -134,7 +134,13 @@ export default function MessagesPage() {
     }
 
     const finalMessage = getMessagePreview();
-    if (!finalMessage || finalMessage.includes('(')) {
+    // Check for placeholder messages (they start and end with parentheses)
+    const isPlaceholder = !finalMessage || 
+      finalMessage === '(Enter your message above)' || 
+      finalMessage === '(Select options above)' ||
+      (finalMessage.startsWith('(') && finalMessage.endsWith(')'));
+    
+    if (isPlaceholder) {
       alert('Please complete the message');
       return;
     }

@@ -254,14 +254,56 @@ export async function POST(request) {
       const isEmergency = type === 'emergency_work_order' || workOrder?.priority === 'emergency';
 
       // === SEND EMAIL ===
-      if (useEmail && email && workOrder) {
+      if (useEmail && email) {
         try {
-          const subject = isEmergency 
-            ? `🚨 EMERGENCY: WO ${workOrder.wo_number} Assigned` 
-            : `📋 New Work Order Assigned: ${workOrder.wo_number}`;
+          let subject, textMessage, htmlMessage;
           
-          const textMessage = buildAssignmentEmailText(workOrder, recipientName, isEmergency);
-          const htmlMessage = buildAssignmentEmailHTML(workOrder, recipientName, isEmergency);
+          if (workOrder) {
+            // Work order email
+            subject = isEmergency 
+              ? `🚨 EMERGENCY: WO ${workOrder.wo_number} Assigned` 
+              : `📋 New Work Order Assigned: ${workOrder.wo_number}`;
+            
+            textMessage = buildAssignmentEmailText(workOrder, recipientName, isEmergency);
+            htmlMessage = buildAssignmentEmailHTML(workOrder, recipientName, isEmergency);
+          } else if (customMessage) {
+            // Custom message email
+            subject = '💬 Message from EMF Contracting';
+            textMessage = customMessage;
+            htmlMessage = `
+              <!DOCTYPE html>
+              <html>
+              <head><meta charset="utf-8"></head>
+              <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, sans-serif;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <div style="background-color: #1f2937; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+                      <h1 style="color: white; margin: 0; font-size: 24px;">💬 Message from EMF Contracting</h1>
+                    </div>
+                    <div style="padding: 20px; color: white;">
+                      <p style="margin: 0 0 15px 0; font-size: 16px;">Hi ${recipientName},</p>
+                      <div style="background-color: #374151; border-radius: 8px; padding: 15px; margin-bottom: 20px; white-space: pre-wrap;">
+                        ${customMessage}
+                      </div>
+                      <div style="text-align: center; margin: 25px 0;">
+                        <a href="https://field-service-dashboard.vercel.app/mobile" 
+                           style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                          📱 Open Mobile App
+                        </a>
+                      </div>
+                    </div>
+                    <div style="background-color: #111827; padding: 15px; text-align: center; border-top: 1px solid #374151;">
+                      <p style="margin: 0; color: #6b7280; font-size: 12px;">EMF Contracting LLC</p>
+                    </div>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `;
+          } else {
+            // Skip if no content
+            continue;
+          }
 
           await transporter.sendMail({
             from: `"EMF Contracting" <${process.env.EMAIL_USER || 'emfcbre@gmail.com'}>`,
@@ -319,8 +361,8 @@ export async function POST(request) {
         }
       }
 
-      // === SEND PUSH NOTIFICATION ===
-      if (user_id) {
+      // === SEND PUSH NOTIFICATION (only for work order notifications) ===
+      if (user_id && workOrder) {
         const pushPayload = {
           title: isEmergency 
             ? `🚨 EMERGENCY: ${workOrder.wo_number}` 
@@ -333,6 +375,31 @@ export async function POST(request) {
             url: '/mobile',
             wo_id: workOrder.wo_id,
             wo_number: workOrder.wo_number
+          }
+        };
+
+        const pushResult = await sendPushNotification(user_id, pushPayload);
+        
+        if (pushResult.success) {
+          results.push.sent.push({ name: `${first_name} ${last_name}`, user_id });
+          console.log(`✅ Push sent to ${first_name} ${last_name}`);
+        } else {
+          results.push.failed.push({ 
+            name: `${first_name} ${last_name}`, 
+            user_id,
+            reason: pushResult.reason 
+          });
+        }
+      } else if (user_id && customMessage) {
+        // Custom message push notification
+        const pushPayload = {
+          title: '💬 Message from EMF Contracting',
+          body: customMessage.substring(0, 100) + (customMessage.length > 100 ? '...' : ''),
+          icon: '/emf-logo.png',
+          badge: '/emf-logo.png',
+          tag: 'custom-message',
+          data: {
+            url: '/mobile'
           }
         };
 

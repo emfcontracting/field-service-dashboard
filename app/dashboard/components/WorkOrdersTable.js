@@ -4,6 +4,7 @@
 import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
+import { formatDateEST } from '../utils/dateUtils';
 
 // CBRE Status badge helper - from Gmail labels
 const getCBREStatusBadge = (cbreStatus) => {
@@ -229,21 +230,7 @@ export default function WorkOrdersTable({
                     </div>
                   </td>
                   <td className="px-2 py-2">
-                    {(() => {
-                      const dateValue = wo.date_entered;
-                      if (!dateValue) return 'No Date';
-                      
-                      const date = new Date(dateValue);
-                      if (isNaN(date.getTime()) || date.getFullYear() < 2000) {
-                        return 'Invalid';
-                      }
-                      
-                      return date.toLocaleDateString('en-US', { 
-                        month: '2-digit', 
-                        day: '2-digit',
-                        year: '2-digit'
-                      });
-                    })()}
+                    {wo.date_entered ? formatDateEST(wo.date_entered) : 'No Date'}
                   </td>
                   <td className="px-2 py-2">{wo.building}</td>
                   <td className="px-2 py-2">

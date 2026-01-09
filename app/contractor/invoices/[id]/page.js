@@ -25,6 +25,7 @@ export default function ViewInvoice() {
   const [lineItems, setLineItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
@@ -76,11 +77,41 @@ export default function ViewInvoice() {
     }
   }
 
-  // Download PDF directly from server (works on all devices)
-  function downloadPDF() {
-    // Direct link to server-generated PDF
-    window.location.href = `/api/contractor/invoice-pdf/${invoiceId}`;
-    setMessage({ type: 'success', text: 'PDF downloading...' });
+  // Download PDF directly from server
+  async function downloadPDF() {
+    setPdfLoading(true);
+    setMessage(null);
+    
+    try {
+      const response = await fetch(`/api/contractor/invoice-pdf/${invoiceId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoice.invoice_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setMessage({ type: 'success', text: 'PDF downloaded!' });
+    } catch (error) {
+      console.error('PDF download error:', error);
+      setMessage({ type: 'error', text: `PDF download failed: ${error.message}. Try the Print option instead.` });
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
+  // Print as PDF fallback
+  function printInvoice() {
+    window.print();
   }
 
   async function markAsSent() {
@@ -108,12 +139,43 @@ export default function ViewInvoice() {
     }
   }
 
+  async function markAsPaid() {
+    if (!confirm('Mark this invoice as PAID? This confirms you received payment from EMF Contracting.')) {
+      return;
+    }
+    
+    try {
+      const { error: updateError } = await supabase
+        .from('subcontractor_invoices')
+        .update({
+          status: 'paid',
+          paid_at: new Date().toISOString()
+        })
+        .eq('invoice_id', invoice.invoice_id);
+
+      if (updateError) throw updateError;
+
+      setInvoice({ ...invoice, status: 'paid', paid_at: new Date().toISOString() });
+      setMessage({ type: 'success', text: '✅ Invoice marked as PAID!' });
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+      setMessage({ type: 'error', text: 'Failed to mark invoice as paid' });
+    }
+  }
+
   async function deleteInvoice() {
     if (!confirm('Are you sure you want to delete this invoice? This cannot be undone.')) {
       return;
     }
 
     try {
+      // Delete line items first
+      await supabase
+        .from('subcontractor_invoice_items')
+        .delete()
+        .eq('invoice_id', invoice.invoice_id);
+
+      // Delete the invoice
       const { error } = await supabase
         .from('subcontractor_invoices')
         .delete()
@@ -152,9 +214,21 @@ export default function ViewInvoice() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white' }}>
+      {/* Print styles */}
+      <style jsx global>{`
+        @media print {
+          body { background: white !important; }
+          header, .no-print { display: none !important; }
+          .print-content { 
+            background: white !important; 
+            color: black !important;
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
 
       {/* Header */}
-      <header style={{ backgroundColor: '#1f2937', borderBottom: '1px solid #374151', padding: '16px' }}>
+      <header className="no-print" style={{ backgroundColor: '#1f2937', borderBottom: '1px solid #374151', padding: '16px' }}>
         <div style={{ maxWidth: '896px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link href="/contractor/invoices" style={{ padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
@@ -174,12 +248,31 @@ export default function ViewInvoice() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {/* Download PDF - direct download */}
+            {/* Download PDF */}
             <button
               onClick={downloadPDF}
+              disabled={pdfLoading}
               style={{ 
                 padding: '10px 16px', 
-                backgroundColor: '#2563eb', 
+                backgroundColor: pdfLoading ? '#4b5563' : '#2563eb', 
+                borderRadius: '8px', 
+                fontSize: '14px', 
+                fontWeight: 'bold',
+                color: 'white', 
+                border: 'none', 
+                cursor: pdfLoading ? 'wait' : 'pointer',
+                opacity: pdfLoading ? 0.7 : 1
+              }}
+            >
+              {pdfLoading ? '⏳ Generating...' : '📄 Download PDF'}
+            </button>
+            
+            {/* Print fallback */}
+            <button
+              onClick={printInvoice}
+              style={{ 
+                padding: '10px 16px', 
+                backgroundColor: '#6b7280', 
                 borderRadius: '8px', 
                 fontSize: '14px', 
                 fontWeight: 'bold',
@@ -188,7 +281,7 @@ export default function ViewInvoice() {
                 cursor: 'pointer'
               }}
             >
-              📄 Download PDF
+              🖨️ Print
             </button>
             
             {/* Draft actions */}
@@ -198,7 +291,7 @@ export default function ViewInvoice() {
                   onClick={markAsSent}
                   style={{ padding: '10px 16px', backgroundColor: '#16a34a', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
                 >
-                  ✓ Mark as Sent
+                  📤 Mark as Sent
                 </button>
                 <button 
                   onClick={deleteInvoice} 
@@ -208,13 +301,33 @@ export default function ViewInvoice() {
                 </button>
               </>
             )}
+
+            {/* Sent actions - Add Mark as Paid button */}
+            {invoice.status === 'sent' && (
+              <button 
+                onClick={markAsPaid}
+                style={{ 
+                  padding: '10px 16px', 
+                  backgroundColor: '#059669', 
+                  borderRadius: '8px', 
+                  fontSize: '14px', 
+                  fontWeight: 'bold', 
+                  color: 'white', 
+                  border: 'none', 
+                  cursor: 'pointer',
+                  animation: 'pulse 2s infinite'
+                }}
+              >
+                💵 Mark as Paid
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       {/* Message */}
       {message && (
-        <div style={{ 
+        <div className="no-print" style={{ 
           position: 'fixed', 
           top: '80px', 
           left: '50%', 
@@ -236,18 +349,39 @@ export default function ViewInvoice() {
         
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (
-          <div style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+          <div className="no-print" style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
             <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>📋 How to Send Your Invoice</h3>
             <ol style={{ color: '#d1d5db', fontSize: '14px', margin: 0, paddingLeft: '20px' }}>
-              <li>Click <strong>"Download PDF"</strong> to save the invoice</li>
+              <li>Click <strong>&quot;Download PDF&quot;</strong> to save the invoice</li>
               <li>Email the PDF to <strong>emfcontractingsc2@gmail.com</strong></li>
-              <li>Click <strong>"Mark as Sent"</strong> when done</li>
+              <li>Click <strong>&quot;Mark as Sent&quot;</strong> when done</li>
             </ol>
+          </div>
+        )}
+
+        {/* Instructions for sent invoices */}
+        {invoice.status === 'sent' && (
+          <div className="no-print" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+            <h3 style={{ fontWeight: 'bold', color: '#facc15', marginBottom: '8px' }}>💰 Waiting for Payment</h3>
+            <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
+              Once you receive payment from EMF Contracting, click <strong>&quot;Mark as Paid&quot;</strong> to update the status.
+            </p>
+          </div>
+        )}
+
+        {/* Paid confirmation */}
+        {invoice.status === 'paid' && (
+          <div className="no-print" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+            <h3 style={{ fontWeight: 'bold', color: '#4ade80', marginBottom: '8px' }}>✅ Invoice Paid</h3>
+            <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
+              This invoice was marked as paid on {invoice.paid_at ? new Date(invoice.paid_at).toLocaleDateString() : 'N/A'}.
+            </p>
           </div>
         )}
         
         {/* Invoice Preview */}
         <div 
+          className="print-content"
           style={{
             backgroundColor: '#ffffff',
             color: '#111827',
@@ -440,10 +574,13 @@ export default function ViewInvoice() {
               </div>
             </div>
 
-            {/* Sent info */}
+            {/* Sent/Paid info */}
             {invoice.sent_at && (
               <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>
                 Sent to {invoice.sent_to_email} on {new Date(invoice.sent_at).toLocaleString()}
+                {invoice.paid_at && (
+                  <span style={{ color: '#059669', fontWeight: 'bold' }}> • Paid on {new Date(invoice.paid_at).toLocaleString()}</span>
+                )}
               </div>
             )}
           </div>

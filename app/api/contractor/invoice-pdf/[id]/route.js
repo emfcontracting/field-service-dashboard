@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import PDFDocument from 'pdfkit';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
-// Force Node.js runtime for pdfkit compatibility
+// Force Node.js runtime
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -64,148 +64,322 @@ export async function GET(request, { params }) {
     const materialItems = (lineItems || []).filter(i => i.item_type === 'material');
     const customItems = (lineItems || []).filter(i => i.item_type === 'custom');
 
-    // Create PDF
-    const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
-    const chunks = [];
-
-    doc.on('data', chunk => chunks.push(chunk));
-
-    // Header
-    doc.rect(0, 0, 612, 100).fill('#1f2937');
-    doc.fillColor('#ffffff').fontSize(28).font('Helvetica-Bold').text('INVOICE', 50, 35);
-    doc.fontSize(12).font('Helvetica').fillColor('#9ca3af').text(invoice.invoice_number, 50, 65);
+    // Create PDF with pdf-lib
+    const pdfDoc = await PDFDocument.create();
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     
-    doc.fontSize(10).fillColor('#9ca3af').text('Period', 450, 35, { align: 'right' });
-    doc.fontSize(11).fillColor('#ffffff').text(
-      `${formatDateLocal(invoice.period_start)} - ${formatDateLocal(invoice.period_end)}`,
-      450, 50, { align: 'right' }
-    );
+    let page = pdfDoc.addPage([612, 792]); // Letter size
+    const { width, height } = page.getSize();
+    
+    // Colors
+    const darkGray = rgb(0.12, 0.16, 0.22); // #1f2937
+    const white = rgb(1, 1, 1);
+    const lightGray = rgb(0.42, 0.45, 0.49); // #6b7280
+    const textGray = rgb(0.29, 0.33, 0.39); // #4b5563
+    const green = rgb(0.02, 0.59, 0.40); // #059669
+    const orange = rgb(0.92, 0.34, 0.05); // #ea580c
 
-    // Reset position after header
-    doc.y = 120;
+    // Header background
+    page.drawRectangle({
+      x: 0,
+      y: height - 100,
+      width: width,
+      height: 100,
+      color: darkGray,
+    });
 
-    // From / To section
-    doc.fillColor('#666666').fontSize(9).font('Helvetica-Bold').text('FROM', 50, 120);
-    doc.fillColor('#333333').fontSize(12).font('Helvetica-Bold').text(businessName, 50, 135);
+    // Header text
+    page.drawText('INVOICE', {
+      x: 50,
+      y: height - 45,
+      size: 28,
+      font: helveticaBold,
+      color: white,
+    });
+
+    page.drawText(invoice.invoice_number, {
+      x: 50,
+      y: height - 70,
+      size: 12,
+      font: helvetica,
+      color: rgb(0.61, 0.64, 0.69),
+    });
+
+    // Period (right side)
+    page.drawText('Period', {
+      x: width - 150,
+      y: height - 40,
+      size: 10,
+      font: helvetica,
+      color: rgb(0.61, 0.64, 0.69),
+    });
+
+    page.drawText(`${formatDateLocal(invoice.period_start)} - ${formatDateLocal(invoice.period_end)}`, {
+      x: width - 200,
+      y: height - 55,
+      size: 11,
+      font: helvetica,
+      color: white,
+    });
+
+    let yPos = height - 130;
+
+    // FROM section
+    page.drawText('FROM', {
+      x: 50,
+      y: yPos,
+      size: 9,
+      font: helveticaBold,
+      color: lightGray,
+    });
+
+    yPos -= 15;
+    page.drawText(businessName, {
+      x: 50,
+      y: yPos,
+      size: 12,
+      font: helveticaBold,
+      color: textGray,
+    });
+
     if (businessAddress) {
-      doc.fontSize(10).font('Helvetica').fillColor('#4b5563').text(businessAddress, 50, 152);
+      yPos -= 14;
+      // Split address into lines
+      const addressLines = businessAddress.split('\n');
+      for (const line of addressLines) {
+        page.drawText(line.substring(0, 50), {
+          x: 50,
+          y: yPos,
+          size: 10,
+          font: helvetica,
+          color: textGray,
+        });
+        yPos -= 12;
+      }
     }
-    doc.fontSize(10).font('Helvetica').fillColor('#4b5563').text(userEmail, 50, businessAddress ? 167 : 152);
 
-    doc.fillColor('#666666').fontSize(9).font('Helvetica-Bold').text('TO', 350, 120);
-    doc.fillColor('#333333').fontSize(12).font('Helvetica-Bold').text('EMF Contracting LLC', 350, 135);
-    doc.fontSize(10).font('Helvetica').fillColor('#4b5563')
-      .text('565 Pine Plain Rd', 350, 152)
-      .text('Gaston, SC 29075', 350, 165)
-      .text('emfcontractingsc2@gmail.com', 350, 178);
+    page.drawText(userEmail, {
+      x: 50,
+      y: yPos,
+      size: 10,
+      font: helvetica,
+      color: textGray,
+    });
+
+    // TO section
+    let toY = height - 130;
+    page.drawText('TO', {
+      x: 350,
+      y: toY,
+      size: 9,
+      font: helveticaBold,
+      color: lightGray,
+    });
+
+    toY -= 15;
+    page.drawText('EMF Contracting LLC', {
+      x: 350,
+      y: toY,
+      size: 12,
+      font: helveticaBold,
+      color: textGray,
+    });
+
+    toY -= 14;
+    page.drawText('565 Pine Plain Rd', {
+      x: 350,
+      y: toY,
+      size: 10,
+      font: helvetica,
+      color: textGray,
+    });
+
+    toY -= 12;
+    page.drawText('Gaston, SC 29075', {
+      x: 350,
+      y: toY,
+      size: 10,
+      font: helvetica,
+      color: textGray,
+    });
+
+    toY -= 14;
+    page.drawText('emfcontractingsc2@gmail.com', {
+      x: 350,
+      y: toY,
+      size: 10,
+      font: helvetica,
+      color: textGray,
+    });
 
     // Rates box
-    doc.y = 210;
-    doc.rect(50, 210, 512, 30).fill('#f3f4f6');
-    doc.fillColor('#4b5563').fontSize(10).font('Helvetica')
-      .text(
-        `Rates: $${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr regular | $${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr OT | $${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile`,
-        60, 220
-      );
+    yPos = Math.min(yPos, toY) - 30;
+    page.drawRectangle({
+      x: 50,
+      y: yPos - 25,
+      width: width - 100,
+      height: 30,
+      color: rgb(0.95, 0.96, 0.96),
+    });
 
-    let yPos = 260;
+    page.drawText(
+      `Rates: $${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr regular | $${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr OT | $${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile`,
+      {
+        x: 60,
+        y: yPos - 15,
+        size: 10,
+        font: helvetica,
+        color: textGray,
+      }
+    );
 
-    // Helper function to draw a section
+    yPos -= 50;
+
+    // Helper to draw section
     function drawSection(title, items, columns, isOrange = false) {
       if (items.length === 0) return;
 
-      // Section header
-      doc.fillColor(isOrange ? '#ea580c' : '#374151').fontSize(11).font('Helvetica-Bold').text(title, 50, yPos);
-      yPos += 5;
-      doc.strokeColor('#e5e7eb').lineWidth(1).moveTo(50, yPos + 10).lineTo(562, yPos + 10).stroke();
-      yPos += 20;
+      // Check if we need a new page
+      if (yPos < 150) {
+        page = pdfDoc.addPage([612, 792]);
+        yPos = height - 50;
+      }
+
+      // Section title
+      page.drawText(title, {
+        x: 50,
+        y: yPos,
+        size: 11,
+        font: helveticaBold,
+        color: isOrange ? orange : textGray,
+      });
+
+      yPos -= 5;
+      page.drawLine({
+        start: { x: 50, y: yPos },
+        end: { x: width - 50, y: yPos },
+        thickness: 1,
+        color: rgb(0.9, 0.91, 0.92),
+      });
+
+      yPos -= 18;
 
       // Column headers
-      doc.fillColor('#6b7280').fontSize(9).font('Helvetica');
       let xPos = 50;
-      columns.forEach(col => {
-        doc.text(col.header, xPos, yPos, { width: col.width, align: col.align || 'left' });
+      for (const col of columns) {
+        page.drawText(col.header, {
+          x: xPos,
+          y: yPos,
+          size: 9,
+          font: helvetica,
+          color: lightGray,
+        });
         xPos += col.width;
-      });
-      yPos += 18;
+      }
+
+      yPos -= 16;
 
       // Rows
-      doc.font('Helvetica').fillColor('#333333').fontSize(9);
-      items.forEach(item => {
-        // Check if we need a new page
-        if (yPos > 700) {
-          doc.addPage();
-          yPos = 50;
+      for (const item of items) {
+        if (yPos < 100) {
+          page = pdfDoc.addPage([612, 792]);
+          yPos = height - 50;
         }
 
         xPos = 50;
-        columns.forEach(col => {
+        for (const col of columns) {
           const value = col.getValue(item);
-          const color = col.color || '#333333';
-          doc.fillColor(color).text(value, xPos, yPos, { width: col.width, align: col.align || 'left' });
+          page.drawText(value.substring(0, 40), {
+            x: xPos,
+            y: yPos,
+            size: 9,
+            font: col.bold ? helveticaBold : helvetica,
+            color: col.color || textGray,
+          });
           xPos += col.width;
-        });
-        yPos += 16;
-      });
+        }
+        yPos -= 14;
+      }
 
-      yPos += 15;
+      yPos -= 10;
     }
 
     // Labor section
     drawSection('Labor', hoursItems, [
       { header: 'Date', width: 80, getValue: (i) => i.work_date ? formatDateLocal(i.work_date) : '-' },
-      { header: 'Description', width: 220, getValue: (i) => (i.description || '').substring(0, 40) },
-      { header: 'Hours', width: 60, align: 'right', getValue: (i) => parseFloat(i.quantity || 0).toFixed(1) },
-      { header: 'Rate', width: 70, align: 'right', getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(2) },
-      { header: 'Amount', width: 80, align: 'right', getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2) }
+      { header: 'Description', width: 220, getValue: (i) => (i.description || '').substring(0, 35) },
+      { header: 'Hours', width: 60, getValue: (i) => parseFloat(i.quantity || 0).toFixed(1) },
+      { header: 'Rate', width: 70, getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(2) },
+      { header: 'Amount', width: 80, getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2), bold: true }
     ]);
 
     // Mileage section
     drawSection('Mileage', mileageItems, [
       { header: 'Date', width: 80, getValue: (i) => i.work_date ? formatDateLocal(i.work_date) : '-' },
       { header: 'Description', width: 220, getValue: (i) => i.description || 'Mileage' },
-      { header: 'Miles', width: 60, align: 'right', getValue: (i) => parseFloat(i.quantity || 0).toFixed(0) },
-      { header: 'Rate', width: 70, align: 'right', getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(4) },
-      { header: 'Amount', width: 80, align: 'right', getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2) }
+      { header: 'Miles', width: 60, getValue: (i) => parseFloat(i.quantity || 0).toFixed(0) },
+      { header: 'Rate', width: 70, getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(4) },
+      { header: 'Amount', width: 80, getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2), bold: true }
     ]);
 
     // Material Reimbursement section
     drawSection('Material Reimbursement', materialItems, [
       { header: 'Date', width: 100, getValue: (i) => i.work_date ? formatDateLocal(i.work_date) : '-' },
       { header: 'Description', width: 310, getValue: (i) => i.description || '' },
-      { header: 'Amount', width: 100, align: 'right', getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2), color: '#ea580c' }
+      { header: 'Amount', width: 100, getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2), bold: true, color: orange }
     ], true);
 
     // Custom Items section
     drawSection('Additional Items', customItems, [
       { header: 'Description', width: 280, getValue: (i) => i.description || '' },
-      { header: 'Qty', width: 60, align: 'right', getValue: (i) => parseFloat(i.quantity || 0).toFixed(1) },
-      { header: 'Rate', width: 80, align: 'right', getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(2) },
-      { header: 'Amount', width: 90, align: 'right', getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2) }
+      { header: 'Qty', width: 60, getValue: (i) => parseFloat(i.quantity || 0).toFixed(1) },
+      { header: 'Rate', width: 80, getValue: (i) => '$' + parseFloat(i.rate || 0).toFixed(2) },
+      { header: 'Amount', width: 90, getValue: (i) => '$' + parseFloat(i.amount || 0).toFixed(2), bold: true }
     ]);
 
     // Check if we need a new page for totals
-    if (yPos > 620) {
-      doc.addPage();
-      yPos = 50;
+    if (yPos < 180) {
+      page = pdfDoc.addPage([612, 792]);
+      yPos = height - 50;
     }
 
     // Totals box
-    doc.rect(50, yPos, 512, 120).fill('#f9fafb');
-    yPos += 15;
+    yPos -= 10;
+    page.drawRectangle({
+      x: 50,
+      y: yPos - 120,
+      width: width - 100,
+      height: 130,
+      color: rgb(0.98, 0.98, 0.98),
+    });
 
-    const drawTotalRow = (label, value, isOrange = false, isBold = false) => {
-      doc.fillColor(isOrange ? '#ea580c' : '#4b5563').fontSize(10).font(isBold ? 'Helvetica-Bold' : 'Helvetica')
-        .text(label, 60, yPos);
-      doc.fillColor(isOrange ? '#ea580c' : (isBold ? '#059669' : '#333333'))
-        .text(value, 450, yPos, { align: 'right', width: 100 });
-      yPos += 18;
+    yPos -= 20;
+
+    // Total rows
+    const drawTotalRow = (label, value, isOrangeRow = false) => {
+      page.drawText(label, {
+        x: 60,
+        y: yPos,
+        size: 10,
+        font: helvetica,
+        color: isOrangeRow ? orange : textGray,
+      });
+      page.drawText(value, {
+        x: width - 110,
+        y: yPos,
+        size: 10,
+        font: helvetica,
+        color: isOrangeRow ? orange : textGray,
+      });
+      yPos -= 16;
     };
 
     drawTotalRow(
       `Labor (${parseFloat(invoice.total_regular_hours || 0).toFixed(1)}h reg + ${parseFloat(invoice.total_ot_hours || 0).toFixed(1)}h OT)`,
       '$' + parseFloat(invoice.total_hours_amount || 0).toFixed(2)
     );
+
     drawTotalRow(
       `Mileage (${parseFloat(invoice.total_miles || 0).toFixed(0)} miles)`,
       '$' + parseFloat(invoice.total_mileage_amount || 0).toFixed(2)
@@ -220,29 +394,42 @@ export async function GET(request, { params }) {
     }
 
     // Divider line
-    doc.strokeColor('#d1d5db').lineWidth(2).moveTo(60, yPos).lineTo(550, yPos).stroke();
-    yPos += 10;
-
-    // Grand total
-    doc.fillColor('#333333').fontSize(16).font('Helvetica-Bold').text('TOTAL DUE', 60, yPos);
-    doc.fillColor('#059669').text('$' + parseFloat(invoice.grand_total || 0).toFixed(2), 450, yPos, { align: 'right', width: 100 });
-
-    // Finalize PDF
-    doc.end();
-
-    // Wait for PDF to be generated
-    const pdfBuffer = await new Promise((resolve) => {
-      doc.on('end', () => {
-        resolve(Buffer.concat(chunks));
-      });
+    yPos -= 5;
+    page.drawLine({
+      start: { x: 60, y: yPos },
+      end: { x: width - 60, y: yPos },
+      thickness: 2,
+      color: rgb(0.82, 0.83, 0.86),
     });
 
+    yPos -= 20;
+
+    // Grand total
+    page.drawText('TOTAL DUE', {
+      x: 60,
+      y: yPos,
+      size: 16,
+      font: helveticaBold,
+      color: textGray,
+    });
+
+    page.drawText('$' + parseFloat(invoice.grand_total || 0).toFixed(2), {
+      x: width - 130,
+      y: yPos,
+      size: 16,
+      font: helveticaBold,
+      color: green,
+    });
+
+    // Generate PDF
+    const pdfBytes = await pdfDoc.save();
+
     // Return PDF as downloadable file
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBytes, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${invoice.invoice_number}.pdf"`,
-        'Content-Length': pdfBuffer.length.toString(),
+        'Content-Length': pdfBytes.length.toString(),
       },
     });
 

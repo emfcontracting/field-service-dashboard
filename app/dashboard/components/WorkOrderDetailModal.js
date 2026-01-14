@@ -37,7 +37,7 @@ export default function WorkOrderDetailModal({
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [dailyHoursLog, setDailyHoursLog] = useState([]);
   const [loadingHours, setLoadingHours] = useState(true);
-  const [dailyTotals, setDailyTotals] = useState({ totalRT: 0, totalOT: 0, totalMiles: 0 });
+  const [dailyTotals, setDailyTotals] = useState({ totalRT: 0, totalOT: 0, totalMiles: 0, totalTechMaterial: 0 });
   const [editingHours, setEditingHours] = useState({}); // Track editing state for each entry
   const [savingHours, setSavingHours] = useState(false);
   const [showAddHoursForm, setShowAddHoursForm] = useState(false);
@@ -89,13 +89,14 @@ export default function WorkOrderDetailModal({
   };
 
   const calculateTotals = (data) => {
-    let totalRT = 0, totalOT = 0, totalMiles = 0;
+    let totalRT = 0, totalOT = 0, totalMiles = 0, totalTechMaterial = 0;
     (data || []).forEach(entry => {
       totalRT += parseFloat(entry.hours_regular) || 0;
       totalOT += parseFloat(entry.hours_overtime) || 0;
       totalMiles += parseFloat(entry.miles) || 0;
+      totalTechMaterial += parseFloat(entry.tech_material_cost) || 0;
     });
-    setDailyTotals({ totalRT, totalOT, totalMiles });
+    setDailyTotals({ totalRT, totalOT, totalMiles, totalTechMaterial });
   };
 
   const loadNteIncreases = async () => {
@@ -1119,8 +1120,18 @@ const sendAssignmentNotifications = async () => {
     const adminHours = 2;
     const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
 
-    const materialBase = parseFloat(selectedWO.material_cost) || 0;
-    const materialWithMarkup = materialBase * 1.25;
+    // EMF Material (company paid - from work_orders table)
+    const emfMaterialBase = parseFloat(selectedWO.material_cost) || 0;
+    const emfMaterialWithMarkup = emfMaterialBase * 1.25;
+    
+    // Tech Material (tech purchased - from daily_hours_log)
+    const techMaterialBase = dailyTotals.totalTechMaterial;
+    const techMaterialWithMarkup = techMaterialBase * 1.25;
+    
+    // Total Material = EMF + Tech
+    const totalMaterialBase = emfMaterialBase + techMaterialBase;
+    const totalMaterialWithMarkup = emfMaterialWithMarkup + techMaterialWithMarkup;
+    
     const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
     const equipmentWithMarkup = equipmentBase * 1.25;
     const trailerBase = parseFloat(selectedWO.trailer_cost) || 0;
@@ -1129,7 +1140,8 @@ const sendAssignmentNotifications = async () => {
     const rentalWithMarkup = rentalBase * 1.25;
     const mileageCost = totalMiles * 1.00;
 
-    const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+    // Grand total now includes BOTH EMF and Tech materials
+    const grandTotal = laborCost + totalMaterialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
     const remaining = (selectedWO.nte || 0) - grandTotal;
 
     return {
@@ -1137,8 +1149,18 @@ const sendAssignmentNotifications = async () => {
       totalOT,
       totalMiles,
       laborCost,
-      materialBase,
-      materialWithMarkup,
+      // EMF Material
+      emfMaterialBase,
+      emfMaterialWithMarkup,
+      // Tech Material (from daily logs)
+      techMaterialBase,
+      techMaterialWithMarkup,
+      // Total Material (EMF + Tech)
+      totalMaterialBase,
+      totalMaterialWithMarkup,
+      // Keep old names for backward compatibility
+      materialBase: totalMaterialBase,
+      materialWithMarkup: totalMaterialWithMarkup,
       equipmentBase,
       equipmentWithMarkup,
       trailerBase,
@@ -1150,7 +1172,8 @@ const sendAssignmentNotifications = async () => {
       remaining,
       isOverBudget: remaining < 0,
       hasLegacy: (legacyRT + legacyOT + legacyMiles + legacyTeamRT + legacyTeamOT + legacyTeamMiles) > 0,
-      hasDaily: dailyTotals.totalRT + dailyTotals.totalOT + dailyTotals.totalMiles > 0
+      hasDaily: dailyTotals.totalRT + dailyTotals.totalOT + dailyTotals.totalMiles > 0,
+      hasTechMaterial: techMaterialBase > 0
     };
   };
 
@@ -2132,16 +2155,51 @@ const sendAssignmentNotifications = async () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Materials:</span>
-                <span>${costSummary.materialBase.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-yellow-300">
-                <span className="text-gray-400">+ 25% Markup:</span>
-                <span>= ${costSummary.materialWithMarkup.toFixed(2)}</span>
+            {/* Materials Section - Split EMF and Tech */}
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-gray-300 mb-2">📦 Materials</div>
+              
+              {/* EMF Material */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400 ml-2">EMF Material (company):</span>
+                  <span>${costSummary.emfMaterialBase.toFixed(2)}</span>
+                </div>
+                {costSummary.emfMaterialBase > 0 && (
+                  <div className="flex justify-between text-yellow-300">
+                    <span className="text-gray-400">+ 25% Markup:</span>
+                    <span>= ${costSummary.emfMaterialWithMarkup.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
               
+              {/* Tech Material */}
+              <div className="grid grid-cols-2 gap-3 text-sm mt-1">
+                <div className="flex justify-between">
+                  <span className="text-orange-400 ml-2">Tech Material (reimbursable):</span>
+                  <span className="text-orange-400">${costSummary.techMaterialBase.toFixed(2)}</span>
+                </div>
+                {costSummary.techMaterialBase > 0 && (
+                  <div className="flex justify-between text-yellow-300">
+                    <span className="text-gray-400">+ 25% Markup:</span>
+                    <span>= ${costSummary.techMaterialWithMarkup.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Total Material */}
+              {(costSummary.emfMaterialBase > 0 || costSummary.techMaterialBase > 0) && (
+                <div className="grid grid-cols-2 gap-3 text-sm border-t border-gray-600 pt-1 mt-1">
+                  <div className="flex justify-between font-semibold">
+                    <span className="text-gray-300 ml-2">Total Material (w/ markup):</span>
+                    <span>${costSummary.totalMaterialWithMarkup.toFixed(2)}</span>
+                  </div>
+                  <div></div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div className="flex justify-between">
                 <span className="text-gray-400">Equipment:</span>
                 <span>${costSummary.equipmentBase.toFixed(2)}</span>

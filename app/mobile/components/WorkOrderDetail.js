@@ -55,6 +55,9 @@ export default function WorkOrderDetail({
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   
+  // 💬 COMMENT SAVE STATUS: 'idle' | 'saving' | 'success' | 'error'
+  const [commentSaveStatus, setCommentSaveStatus] = useState('idle');
+  
   // 🦖 JURASSIC PARK ERROR STATE
   const [jurassicError, setJurassicError] = useState(null);
   
@@ -81,13 +84,36 @@ export default function WorkOrderDetail({
     }
   }
 
-  // FIXED: Handle adding comment - passes the newComment value properly
+  // FIXED: Handle adding comment - with visual feedback for techs
   async function handleAddComment() {
     if (!newComment || !newComment.trim()) {
       return;
     }
-    // Pass the comment text to the parent handler
-    await onAddComment(newComment.trim());
+    
+    setCommentSaveStatus('saving');
+    
+    try {
+      // Pass the comment text to the parent handler
+      await onAddComment(newComment.trim());
+      
+      // Success! Show feedback
+      setCommentSaveStatus('success');
+      setNewComment(''); // Clear the input
+      
+      // Reset status after 3 seconds
+      setTimeout(() => {
+        setCommentSaveStatus('idle');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error saving comment:', error);
+      setCommentSaveStatus('error');
+      
+      // Reset error status after 5 seconds
+      setTimeout(() => {
+        setCommentSaveStatus('idle');
+      }, 5000);
+    }
   }
 
   // 🦖 JURASSIC PARK VALIDATION - Validates before completing work order
@@ -602,15 +628,54 @@ export default function WorkOrderDetail({
                   placeholder={t('addComment')}
                   className="w-full px-3 py-2 bg-gray-700 rounded-lg mb-2 text-sm text-white"
                   rows="3"
-                  disabled={saving}
+                  disabled={saving || commentSaveStatus === 'saving'}
                 />
+                
+                {/* Save Comment Button with Status Feedback */}
                 <button
                   onClick={handleAddComment}
-                  disabled={saving || !newComment || !newComment.trim()}
-                  className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-semibold disabled:bg-gray-600"
+                  disabled={saving || commentSaveStatus === 'saving' || !newComment || !newComment.trim()}
+                  className={`w-full py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                    commentSaveStatus === 'success'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : commentSaveStatus === 'error'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : commentSaveStatus === 'saving'
+                      ? 'bg-gray-600 cursor-wait'
+                      : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600'
+                  }`}
                 >
-                  {t('addCommentButton')}
+                  {commentSaveStatus === 'saving' && (
+                    <span>⏳ {language === 'en' ? 'Saving...' : 'Guardando...'}</span>
+                  )}
+                  {commentSaveStatus === 'success' && (
+                    <span>✅ {language === 'en' ? 'Saved!' : '¡Guardado!'}</span>
+                  )}
+                  {commentSaveStatus === 'error' && (
+                    <span>❌ {language === 'en' ? 'Error - Tap to Retry' : 'Error - Toca para Reintentar'}</span>
+                  )}
+                  {commentSaveStatus === 'idle' && (
+                    <span>💾 {language === 'en' ? 'Save Comment' : 'Guardar Comentario'}</span>
+                  )}
                 </button>
+                
+                {/* Success Message */}
+                {commentSaveStatus === 'success' && (
+                  <div className="mt-2 p-2 bg-green-900/50 border border-green-600 rounded-lg text-center">
+                    <span className="text-green-400 text-sm">
+                      ✅ {language === 'en' ? 'Comment saved successfully!' : '¡Comentario guardado exitosamente!'}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Error Message */}
+                {commentSaveStatus === 'error' && (
+                  <div className="mt-2 p-2 bg-red-900/50 border border-red-600 rounded-lg text-center">
+                    <span className="text-red-400 text-sm">
+                      ❌ {language === 'en' ? 'Failed to save. Please try again.' : 'Error al guardar. Por favor intenta de nuevo.'}
+                    </span>
+                  </div>
+                )}
               </>
             )}
           </div>

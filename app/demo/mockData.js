@@ -23,10 +23,20 @@ const randomBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) 
 // Generate random 7-digit number
 const random7Digits = () => String(randomBetween(1000000, 9999999));
 
-// Generate WO number in format: P, ST, PJ, or C followed by 7 random numbers
-const generateWONumber = () => {
-  const prefixes = ['C', 'C', 'C', 'P', 'ST', 'PJ']; // C is most common
-  const prefix = randomFrom(prefixes);
+// Generate WO number based on type
+// P = PMI (Preventive Maintenance)
+// PJ = Projects  
+// C or ST = Regular work / Service Tickets
+// P1 Emergencies use P prefix
+const generateWONumber = (priority, isPM = false, isProject = false) => {
+  if (isPM) {
+    return `P${random7Digits()}`; // PMI work order
+  }
+  if (isProject) {
+    return `PJ${random7Digits()}`; // Project
+  }
+  // Regular work - C or ST
+  const prefix = Math.random() > 0.5 ? 'C' : 'ST';
   return `${prefix}${random7Digits()}`;
 };
 
@@ -45,31 +55,34 @@ const CBRE_STATUSES = [
   'cancelled',         // 🚫 CANCELLED
 ];
 
-// Building locations (generic commercial buildings)
+// UPS Building locations with proper codes (matching live system format)
 const BUILDINGS = [
-  { name: 'Columbia Distribution Center', address: '2523 Commerce Drive, Columbia, SC 29205' },
-  { name: 'Lexington Business Park', address: '5500 Sunset Blvd, Lexington, SC 29072' },
-  { name: 'Irmo Corporate Campus', address: '7501 St Andrews Rd, Irmo, SC 29063' },
-  { name: 'West Columbia Warehouse', address: '1200 Augusta Rd, West Columbia, SC 29169' },
-  { name: 'Cayce Industrial Complex', address: '900 Knox Abbott Dr, Cayce, SC 29033' },
-  { name: 'Blythewood Logistics Hub', address: '201 Blythewood Rd, Blythewood, SC 29016' },
-  { name: 'Northeast Medical Plaza', address: '7620 Two Notch Rd, Columbia, SC 29223' },
-  { name: 'Forest Acres Office Tower', address: '4600 Forest Dr, Columbia, SC 29206' },
-  { name: 'Chapin Retail Center', address: '120 Columbia Ave, Chapin, SC 29036' },
-  { name: 'Newberry Manufacturing', address: '2800 Main St, Newberry, SC 29108' },
+  { name: 'SCCLB - COLUMBIA HUB', address: '2523 Commerce Drive, Columbia, SC 29205' },
+  { name: 'SCLEX - LEXINGTON CENTER', address: '5500 Sunset Blvd, Lexington, SC 29072' },
+  { name: 'SCIRM - IRMO STATION', address: '7501 St Andrews Rd, Irmo, SC 29063' },
+  { name: 'SCWCL - WEST COLUMBIA', address: '1200 Augusta Rd, West Columbia, SC 29169' },
+  { name: 'SCCAY - CAYCE FACILITY', address: '900 Knox Abbott Dr, Cayce, SC 29033' },
+  { name: 'SCBLY - BLYTHEWOOD HUB', address: '201 Blythewood Rd, Blythewood, SC 29016' },
+  { name: 'SCTON - PALMETTO', address: '7620 Two Notch Rd, Columbia, SC 29223' },
+  { name: 'SCFAR - FOREST ACRES', address: '4600 Forest Dr, Columbia, SC 29206' },
+  { name: 'SCCHP - CHAPIN STATION', address: '120 Columbia Ave, Chapin, SC 29036' },
+  { name: 'SCNBY - NEWBERRY DEPOT', address: '2800 Main St, Newberry, SC 29108' },
+  { name: 'NCFAY - FAYETTEVILLE CENTER', address: '1500 Skibo Rd, Fayetteville, NC 28303' },
+  { name: 'NCRAL - RALEIGH HUB', address: '4801 Capital Blvd, Raleigh, NC 27616' },
+  { name: 'NCCLT - CHARLOTTE MAIN', address: '8901 Statesville Rd, Charlotte, NC 28269' },
+  { name: 'GAAUG - AUGUSTA CENTER', address: '3450 Peach Orchard Rd, Augusta, GA 30906' },
+  { name: 'GASAV - SAVANNAH HUB', address: '7 Telfair Pl, Savannah, GA 31415' },
 ];
 
-// Work descriptions (electrical/mechanical/HVAC)
-const WORK_DESCRIPTIONS = [
+// Work descriptions - Regular/Emergency
+const REGULAR_WORK_DESCRIPTIONS = [
   'Replace faulty ballast in warehouse lighting section B',
   'Install new 20A circuit for sorting equipment',
   'Repair dock door motor - not closing properly',
   'Replace HVAC thermostat in break room',
-  'Emergency - main panel breaker tripping repeatedly',
   'Install additional outlets in office area',
   'Troubleshoot conveyor belt motor starter',
   'Replace emergency exit lighting - battery backup failed',
-  'Quarterly PM on RTU-1 and RTU-2',
   'Repair parking lot light pole - knocked down by truck',
   'Install new security camera power feeds',
   'Replace warehouse exhaust fan motor',
@@ -77,10 +90,46 @@ const WORK_DESCRIPTIONS = [
   'Install LED retrofit in loading dock area',
   'Repair automatic door opener - sensor issue',
   'Replace damaged conduit run from recent forklift incident',
-  'Install new EV charging station',
   'Troubleshoot battery backup system',
-  'Quarterly fire alarm inspection and testing',
   'Replace water heater in maintenance room',
+];
+
+// PMI (Preventive Maintenance) work descriptions
+const PMI_WORK_DESCRIPTIONS = [
+  'Quarterly PM on RTU-1 and RTU-2',
+  'Annual fire alarm inspection and testing',
+  'Monthly generator load bank test',
+  'Quarterly HVAC filter replacement - all units',
+  'Semi-annual electrical panel thermography scan',
+  'Monthly emergency lighting test and inspection',
+  'Quarterly dock door preventive maintenance',
+  'Annual backflow preventer inspection',
+  'Monthly UPS battery inspection',
+  'Quarterly conveyor system PM',
+];
+
+// Project work descriptions
+const PROJECT_WORK_DESCRIPTIONS = [
+  'LED lighting upgrade - Phase 1 warehouse area',
+  'Install new EV charging stations (4 units)',
+  'Electrical service upgrade 400A to 800A',
+  'New break room build-out - electrical rough-in',
+  'Security system upgrade - access control installation',
+  'HVAC replacement - RTU-3 and RTU-4',
+  'Parking lot lighting retrofit project',
+  'Generator replacement and installation',
+];
+
+// Emergency work descriptions (P1)
+const EMERGENCY_WORK_DESCRIPTIONS = [
+  'Emergency - main panel breaker tripping repeatedly',
+  'Emergency - no power to sorting area',
+  'Emergency - HVAC failure - building too hot',
+  'Emergency - water leak near electrical panel',
+  'Emergency - dock door stuck open - security risk',
+  'Emergency - generator failed to start during outage',
+  'Emergency - fire alarm system malfunction',
+  'Emergency - conveyor system down - production stopped',
 ];
 
 // Demo Users - Summit Mechanical Services
@@ -153,11 +202,32 @@ export const getCBREStatusBadge = (cbreStatus) => {
   }
 };
 
-// Generate a random work order
-const generateWorkOrder = (index, status, cbreStatus = null) => {
+// Generate a work order
+const generateWorkOrder = (index, status, cbreStatus = null, woType = 'regular') => {
   const building = randomFrom(BUILDINGS);
-  const description = randomFrom(WORK_DESCRIPTIONS);
-  const priority = randomFrom(['normal', 'normal', 'normal', 'high', 'emergency']);
+  
+  // Set priority and description based on work order type
+  let priority, description, woNumber;
+  
+  if (woType === 'emergency') {
+    priority = 'emergency'; // P1
+    description = randomFrom(EMERGENCY_WORK_DESCRIPTIONS);
+    woNumber = `P${random7Digits()}`; // Emergencies use P prefix
+  } else if (woType === 'pmi') {
+    priority = 'normal';
+    description = randomFrom(PMI_WORK_DESCRIPTIONS);
+    woNumber = `P${random7Digits()}`; // PMI uses P prefix
+  } else if (woType === 'project') {
+    priority = randomFrom(['normal', 'high']);
+    description = randomFrom(PROJECT_WORK_DESCRIPTIONS);
+    woNumber = `PJ${random7Digits()}`; // Projects use PJ prefix
+  } else {
+    // Regular work - C or ST prefix
+    priority = randomFrom(['normal', 'normal', 'normal', 'high']);
+    description = randomFrom(REGULAR_WORK_DESCRIPTIONS);
+    woNumber = (Math.random() > 0.5 ? 'C' : 'ST') + random7Digits();
+  }
+  
   const leadTech = status !== 'pending' ? randomFrom(DEMO_USERS.filter(u => u.role === 'lead_tech')) : null;
   const nte = randomFrom([500, 750, 1000, 1500, 2000, 2500, 3000, 5000]);
   
@@ -177,13 +247,14 @@ const generateWorkOrder = (index, status, cbreStatus = null) => {
 
   return {
     wo_id: `demo-wo-${String(index).padStart(3, '0')}`,
-    wo_number: generateWONumber(),
+    wo_number: woNumber,
     building: building.name,
     address: building.address,
     work_order_description: description,
     priority: priority,
     status: status,
     cbre_status: finalCbreStatus,
+    wo_type: woType, // 'regular', 'pmi', 'project', 'emergency'
     nte: nte,
     date_entered: daysAgo(daysOld),
     date_needed: status === 'pending' ? daysFromNow(randomBetween(1, 7)) : null,
@@ -197,7 +268,7 @@ const generateWorkOrder = (index, status, cbreStatus = null) => {
     trailer_cost: Math.random() > 0.9 ? 75 : 0,
     rental_cost: Math.random() > 0.95 ? randomBetween(100, 300) : 0,
     miles: miles,
-    requestor: randomFrom(['John Smith', 'Maria Garcia', 'Robert Johnson', 'Linda Williams', 'Facility Portal']),
+    requestor: randomFrom(['John Smith', 'Maria Garcia', 'Robert Johnson', 'Linda Williams', 'CBRE Portal']),
     requestor_phone: '803-555-' + String(randomBetween(1000, 9999)),
     client: 'CBRE',
     assigned_to_field: ['assigned', 'in_progress', 'completed', 'tech_review', 'return_trip'].includes(status),
@@ -211,74 +282,103 @@ const generateWorkOrder = (index, status, cbreStatus = null) => {
   };
 };
 
-// Generate demo work orders with variety of CBRE statuses
+// Generate demo work orders with variety of types and CBRE statuses
 export const generateDemoWorkOrders = () => {
   const workOrders = [];
   let index = 1;
 
+  // === REGULAR WORK ORDERS (C/ST prefix) ===
+  
   // Pending (new, unassigned) - 4 work orders
   for (let i = 0; i < 4; i++) {
-    workOrders.push(generateWorkOrder(index++, 'pending', null));
+    workOrders.push(generateWorkOrder(index++, 'pending', null, 'regular'));
   }
 
-  // Assigned (has lead tech, ready to work) - 5 work orders
+  // Assigned - 5 work orders
   for (let i = 0; i < 5; i++) {
-    workOrders.push(generateWorkOrder(index++, 'assigned'));
+    workOrders.push(generateWorkOrder(index++, 'assigned', null, 'regular'));
   }
 
   // In Progress - 6 work orders
   for (let i = 0; i < 6; i++) {
-    workOrders.push(generateWorkOrder(index++, 'in_progress'));
+    workOrders.push(generateWorkOrder(index++, 'in_progress', null, 'regular'));
   }
 
   // Completed - 4 work orders
   for (let i = 0; i < 4; i++) {
-    workOrders.push(generateWorkOrder(index++, 'completed', null));
+    workOrders.push(generateWorkOrder(index++, 'completed', null, 'regular'));
   }
 
   // Tech Review - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'tech_review'));
+    workOrders.push(generateWorkOrder(index++, 'tech_review', null, 'regular'));
   }
 
   // Return Trip - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'return_trip'));
+    workOrders.push(generateWorkOrder(index++, 'return_trip', null, 'regular'));
   }
 
-  // === CBRE Status Specific Work Orders ===
+  // === PMI WORK ORDERS (P prefix) ===
   
-  // Escalation - urgent! - 2 work orders
-  for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'in_progress', 'escalation'));
+  // PMI - Assigned - 3 work orders
+  for (let i = 0; i < 3; i++) {
+    workOrders.push(generateWorkOrder(index++, 'assigned', null, 'pmi'));
   }
 
+  // PMI - In Progress - 2 work orders
+  for (let i = 0; i < 2; i++) {
+    workOrders.push(generateWorkOrder(index++, 'in_progress', null, 'pmi'));
+  }
+
+  // === PROJECT WORK ORDERS (PJ prefix) ===
+  
+  // Projects - In Progress - 2 work orders
+  for (let i = 0; i < 2; i++) {
+    workOrders.push(generateWorkOrder(index++, 'in_progress', null, 'project'));
+  }
+
+  // Projects - Assigned - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'assigned', null, 'project'));
+
+  // === EMERGENCY WORK ORDERS (P prefix, P1 priority) ===
+  
+  // Emergency - In Progress - 2 work orders (these get escalation status)
+  for (let i = 0; i < 2; i++) {
+    workOrders.push(generateWorkOrder(index++, 'in_progress', 'escalation', 'emergency'));
+  }
+
+  // Emergency - Assigned - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'assigned', null, 'emergency'));
+
+  // === CBRE STATUS SPECIFIC WORK ORDERS ===
+  
   // Pending Quote - 3 work orders
   for (let i = 0; i < 3; i++) {
-    workOrders.push(generateWorkOrder(index++, 'in_progress', 'pending_quote'));
+    workOrders.push(generateWorkOrder(index++, 'in_progress', 'pending_quote', 'regular'));
   }
 
   // Quote Submitted - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_submitted'));
+    workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_submitted', 'regular'));
   }
 
   // Quote Approved - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'in_progress', 'quote_approved'));
+    workOrders.push(generateWorkOrder(index++, 'in_progress', 'quote_approved', 'regular'));
   }
 
   // Quote Rejected - 1 work order
-  workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_rejected'));
+  workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_rejected', 'regular'));
 
   // Reassigned - 1 work order
-  workOrders.push(generateWorkOrder(index++, 'assigned', 'reassigned'));
+  workOrders.push(generateWorkOrder(index++, 'assigned', 'reassigned', 'regular'));
 
   // Invoice Rejected - 1 work order
-  workOrders.push(generateWorkOrder(index++, 'tech_review', 'invoice_rejected'));
+  workOrders.push(generateWorkOrder(index++, 'tech_review', 'invoice_rejected', 'regular'));
 
   // Cancelled - 1 work order
-  workOrders.push(generateWorkOrder(index++, 'pending', 'cancelled'));
+  workOrders.push(generateWorkOrder(index++, 'pending', 'cancelled', 'regular'));
 
   return workOrders;
 };

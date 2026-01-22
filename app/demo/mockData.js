@@ -1,5 +1,5 @@
 // app/demo/mockData.js
-// Mock data that mirrors your real EMF FSM database schema
+// Mock data for PCS FieldService Demo - Summit Mechanical Services
 
 // Helper functions for generating dates
 const daysAgo = (days) => {
@@ -20,24 +20,34 @@ const today = () => new Date().toISOString().split('T')[0];
 const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const randomBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// UPS Building locations (realistic for SC area)
+// Generate random 7-digit number
+const random7Digits = () => String(randomBetween(1000000, 9999999));
+
+// Generate WO number in format: P, ST, PJ, or C followed by 7 random numbers
+const generateWONumber = () => {
+  const prefixes = ['C', 'C', 'C', 'P', 'ST', 'PJ']; // C is most common
+  const prefix = randomFrom(prefixes);
+  return `${prefix}${random7Digits()}`;
+};
+
+// Building locations (generic commercial buildings)
 const BUILDINGS = [
-  { name: 'UPS Columbia Hub', address: '2523 Commerce Drive, Columbia, SC 29205' },
-  { name: 'UPS Lexington Center', address: '5500 Sunset Blvd, Lexington, SC 29072' },
-  { name: 'UPS Irmo Distribution', address: '7501 St Andrews Rd, Irmo, SC 29063' },
-  { name: 'UPS West Columbia', address: '1200 Augusta Rd, West Columbia, SC 29169' },
-  { name: 'UPS Cayce Facility', address: '900 Knox Abbott Dr, Cayce, SC 29033' },
-  { name: 'UPS Blythewood Hub', address: '201 Blythewood Rd, Blythewood, SC 29016' },
-  { name: 'UPS Northeast Columbia', address: '7620 Two Notch Rd, Columbia, SC 29223' },
-  { name: 'UPS Forest Acres', address: '4600 Forest Dr, Columbia, SC 29206' },
-  { name: 'UPS Chapin Station', address: '120 Columbia Ave, Chapin, SC 29036' },
-  { name: 'UPS Newberry Depot', address: '2800 Main St, Newberry, SC 29108' },
+  { name: 'Columbia Distribution Center', address: '2523 Commerce Drive, Columbia, SC 29205' },
+  { name: 'Lexington Business Park', address: '5500 Sunset Blvd, Lexington, SC 29072' },
+  { name: 'Irmo Corporate Campus', address: '7501 St Andrews Rd, Irmo, SC 29063' },
+  { name: 'West Columbia Warehouse', address: '1200 Augusta Rd, West Columbia, SC 29169' },
+  { name: 'Cayce Industrial Complex', address: '900 Knox Abbott Dr, Cayce, SC 29033' },
+  { name: 'Blythewood Logistics Hub', address: '201 Blythewood Rd, Blythewood, SC 29016' },
+  { name: 'Northeast Medical Plaza', address: '7620 Two Notch Rd, Columbia, SC 29223' },
+  { name: 'Forest Acres Office Tower', address: '4600 Forest Dr, Columbia, SC 29206' },
+  { name: 'Chapin Retail Center', address: '120 Columbia Ave, Chapin, SC 29036' },
+  { name: 'Newberry Manufacturing', address: '2800 Main St, Newberry, SC 29108' },
 ];
 
-// Work descriptions (electrical/mechanical)
+// Work descriptions (electrical/mechanical/HVAC)
 const WORK_DESCRIPTIONS = [
   'Replace faulty ballast in warehouse lighting section B',
-  'Install new 20A circuit for package sorting equipment',
+  'Install new 20A circuit for sorting equipment',
   'Repair dock door motor - not closing properly',
   'Replace HVAC thermostat in break room',
   'Emergency - main panel breaker tripping repeatedly',
@@ -53,23 +63,23 @@ const WORK_DESCRIPTIONS = [
   'Repair automatic door opener - sensor issue',
   'Replace damaged conduit run from recent forklift incident',
   'Install new EV charging station',
-  'Troubleshoot UPS battery backup system',
+  'Troubleshoot battery backup system',
   'Quarterly fire alarm inspection and testing',
   'Replace water heater in maintenance room',
 ];
 
-// Demo Users (matching your schema)
+// Demo Users - Summit Mechanical Services
 export const DEMO_USERS = [
-  { user_id: 'demo-001', first_name: 'John', last_name: 'Mitchell', email: 'john@pcsfield.demo', role: 'admin', phone: '803-555-0101', is_active: true },
-  { user_id: 'demo-002', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@pcsfield.demo', role: 'office', phone: '803-555-0102', is_active: true },
-  { user_id: 'demo-003', first_name: 'Marcus', last_name: 'Williams', email: 'marcus@pcsfield.demo', role: 'lead_tech', phone: '803-555-0201', is_active: true },
-  { user_id: 'demo-004', first_name: 'Roberto', last_name: 'Garcia', email: 'roberto@pcsfield.demo', role: 'lead_tech', phone: '803-555-0202', is_active: true },
-  { user_id: 'demo-005', first_name: 'David', last_name: 'Thompson', email: 'david@pcsfield.demo', role: 'lead_tech', phone: '803-555-0203', is_active: true },
-  { user_id: 'demo-006', first_name: 'James', last_name: 'Wilson', email: 'james@pcsfield.demo', role: 'tech', phone: '803-555-0301', is_active: true },
-  { user_id: 'demo-007', first_name: 'Anthony', last_name: 'Brown', email: 'anthony@pcsfield.demo', role: 'tech', phone: '803-555-0302', is_active: true },
-  { user_id: 'demo-008', first_name: 'Michael', last_name: 'Davis', email: 'michael@pcsfield.demo', role: 'tech', phone: '803-555-0303', is_active: true },
-  { user_id: 'demo-009', first_name: 'Tyler', last_name: 'Anderson', email: 'tyler@pcsfield.demo', role: 'helper', phone: '803-555-0401', is_active: true },
-  { user_id: 'demo-010', first_name: 'Kevin', last_name: 'Martinez', email: 'kevin@pcsfield.demo', role: 'helper', phone: '803-555-0402', is_active: true },
+  { user_id: 'demo-001', first_name: 'John', last_name: 'Mitchell', email: 'john@summit-mech.demo', role: 'admin', phone: '803-555-0101', is_active: true },
+  { user_id: 'demo-002', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@summit-mech.demo', role: 'office', phone: '803-555-0102', is_active: true },
+  { user_id: 'demo-003', first_name: 'Marcus', last_name: 'Williams', email: 'marcus@summit-mech.demo', role: 'lead_tech', phone: '803-555-0201', is_active: true },
+  { user_id: 'demo-004', first_name: 'Roberto', last_name: 'Garcia', email: 'roberto@summit-mech.demo', role: 'lead_tech', phone: '803-555-0202', is_active: true },
+  { user_id: 'demo-005', first_name: 'David', last_name: 'Thompson', email: 'david@summit-mech.demo', role: 'lead_tech', phone: '803-555-0203', is_active: true },
+  { user_id: 'demo-006', first_name: 'James', last_name: 'Wilson', email: 'james@summit-mech.demo', role: 'tech', phone: '803-555-0301', is_active: true },
+  { user_id: 'demo-007', first_name: 'Anthony', last_name: 'Brown', email: 'anthony@summit-mech.demo', role: 'tech', phone: '803-555-0302', is_active: true },
+  { user_id: 'demo-008', first_name: 'Michael', last_name: 'Davis', email: 'michael@summit-mech.demo', role: 'tech', phone: '803-555-0303', is_active: true },
+  { user_id: 'demo-009', first_name: 'Tyler', last_name: 'Anderson', email: 'tyler@summit-mech.demo', role: 'helper', phone: '803-555-0401', is_active: true },
+  { user_id: 'demo-010', first_name: 'Kevin', last_name: 'Martinez', email: 'kevin@summit-mech.demo', role: 'helper', phone: '803-555-0402', is_active: true },
 ];
 
 // Generate a random work order
@@ -93,7 +103,7 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
 
   return {
     wo_id: `demo-wo-${String(index).padStart(3, '0')}`,
-    wo_number: `WO-${2024}-${String(1000 + index).padStart(4, '0')}`,
+    wo_number: generateWONumber(),
     building: building.name,
     address: building.address,
     work_order_description: description,
@@ -109,11 +119,11 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
     hours_regular: hoursRegular,
     hours_overtime: hoursOvertime,
     material_cost: materialCost,
-    emf_equipment_cost: Math.random() > 0.8 ? randomBetween(25, 150) : 0,
+    equipment_cost: Math.random() > 0.8 ? randomBetween(25, 150) : 0,
     trailer_cost: Math.random() > 0.9 ? 75 : 0,
     rental_cost: Math.random() > 0.95 ? randomBetween(100, 300) : 0,
     miles: miles,
-    requestor: randomFrom(['John Smith', 'Maria Garcia', 'Robert Johnson', 'Linda Williams', 'CBRE Portal']),
+    requestor: randomFrom(['John Smith', 'Maria Garcia', 'Robert Johnson', 'Linda Williams', 'Facility Portal']),
     requestor_phone: '803-555-' + String(randomBetween(1000, 9999)),
     client: 'CBRE',
     assigned_to_field: ['assigned', 'in_progress', 'completed', 'tech_review', 'return_trip'].includes(status),
@@ -337,7 +347,7 @@ export const generateDemoInvoices = (workOrders) => {
     const adminHours = 100; // Always 2 hours @ $50
     const mileage = (wo.miles || randomBetween(20, 60)) * 1.00;
     const materials = (wo.material_cost || randomBetween(0, 300)) * 1.15;
-    const equipment = (wo.emf_equipment_cost || 0) * 1.15;
+    const equipment = (wo.equipment_cost || 0) * 1.15;
     
     const subtotal = laborRT + laborOT + adminHours + mileage + materials + equipment;
     const status = randomFrom(['draft', 'draft', 'approved', 'synced']);
@@ -444,7 +454,7 @@ export const generateInvoiceLineItems = (invoice, wo) => {
   }
   
   // Equipment (with 15% markup)
-  const equipmentBase = wo.emf_equipment_cost || (Math.random() > 0.8 ? randomBetween(50, 150) : 0);
+  const equipmentBase = wo.equipment_cost || (Math.random() > 0.8 ? randomBetween(50, 150) : 0);
   if (equipmentBase > 0) {
     const equipmentMarkup = equipmentBase * 1.15;
     items.push({

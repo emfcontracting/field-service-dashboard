@@ -57,7 +57,7 @@ export default function DemoLandingPage() {
           </div>
           <div className="flex items-center gap-3">
             <a 
-              href="https://www.pcsllc.dev" 
+              href="https://pcsllc.dev" 
               target="_blank" 
               rel="noopener noreferrer"
               className="text-slate-400 hover:text-white text-sm hidden sm:block transition"
@@ -276,12 +276,12 @@ export default function DemoLandingPage() {
           {/* Links */}
           <div className="flex items-center gap-6 text-sm">
             <a 
-              href="https://www.pcsllc.dev" 
+              href="https://pcsllc.dev" 
               target="_blank" 
               rel="noopener noreferrer"
               className="text-cyan-400 hover:text-cyan-300 transition font-medium"
             >
-              www.pcsllc.dev
+              pcsllc.dev
             </a>
             <span className="text-slate-600">|</span>
             <span className="text-slate-400">Demo Version</span>
@@ -294,7 +294,7 @@ export default function DemoLandingPage() {
             © {currentYear} Professional Commercial Solutions LLC. All rights reserved.
           </p>
           <p className="text-slate-600 text-xs mt-1">
-            Developed by <a href="https://www.pcsllc.dev" target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400 transition">PCS LLC</a>
+            Developed by <a href="https://pcsllc.dev" target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400 transition">PCS LLC</a>
           </p>
         </div>
       </footer>

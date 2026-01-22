@@ -22,43 +22,71 @@ function DemoBanner({ onReset }) {
   if (!isVisible) return null;
   
   return (
-    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 mb-4 rounded-lg">
+    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 sm:px-4 py-2 sm:py-3 mb-3 sm:mb-4 rounded-lg">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🎯</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="text-xl sm:text-2xl">🎯</span>
           <div>
-            <span className="font-bold">Demo Mode</span>
-            <span className="text-amber-100 text-sm ml-2 hidden sm:inline">
+            <span className="font-bold text-sm sm:text-base">Demo Mode</span>
+            <span className="text-amber-100 text-xs sm:text-sm ml-2 hidden sm:inline">
               - Exploring with sample data. Changes are temporary.
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <Link
             href="/demo"
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition"
+            className="bg-white/20 hover:bg-white/30 px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition"
           >
-            ← Demo Home
+            ← Home
           </Link>
           <Link
             href="/demo/mobile"
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition"
+            className="bg-white/20 hover:bg-white/30 px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition hidden xs:block"
           >
             📱 Mobile
           </Link>
           <button
             onClick={onReset}
-            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition"
+            className="bg-white/20 hover:bg-white/30 px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition"
           >
-            🔄 Reset Data
+            🔄 Reset
           </button>
           <button
             onClick={() => setIsVisible(false)}
-            className="hover:bg-white/20 p-1 rounded transition ml-2"
+            className="hover:bg-white/20 p-1 rounded transition"
           >
             ✕
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Mobile Notice Component
+function MobileNotice() {
+  const [dismissed, setDismissed] = useState(false);
+  
+  if (dismissed) return null;
+  
+  return (
+    <div className="lg:hidden bg-blue-900/50 border border-blue-500/30 rounded-lg p-3 mb-4">
+      <div className="flex items-start gap-2">
+        <span className="text-lg">💡</span>
+        <div className="flex-1">
+          <p className="text-blue-200 text-sm font-medium">Dashboard works best on larger screens</p>
+          <p className="text-blue-300/70 text-xs mt-1">
+            For the best mobile experience, try our{' '}
+            <Link href="/demo/mobile" className="text-cyan-400 underline">Mobile App Demo</Link>
+          </p>
+        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-blue-400 hover:text-blue-300"
+        >
+          ✕
+        </button>
       </div>
     </div>
   );
@@ -277,9 +305,11 @@ export default function DemoDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         <DemoBanner onReset={handleReset} />
+        
+        <MobileNotice />
         
         <DemoDashboardHeader 
           activeView={activeView}
@@ -287,7 +317,10 @@ export default function DemoDashboard() {
           missingHoursCount={missingHoursCount}
         />
 
-        {renderActiveView()}
+        {/* Scrollable container for the view content on mobile */}
+        <div className="overflow-x-auto">
+          {renderActiveView()}
+        </div>
 
         {/* Modals */}
         {selectedWO && (

@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { DEMO_USERS, generateDemoWorkOrders } from '../mockData';
+import { DEMO_USERS, generateDemoWorkOrders, getCBREStatusBadge } from '../mockData';
 
 // Get field workers for demo
 const FIELD_USERS = DEMO_USERS.filter(u => ['lead_tech', 'tech', 'helper'].includes(u.role));
@@ -310,38 +310,50 @@ function WorkOrdersList({
               <p className="text-gray-500 text-sm mt-2">Check back later for new assignments</p>
             </div>
           ) : (
-            workOrders.map(wo => (
-              <div
-                key={wo.wo_id}
-                onClick={() => onSelectWO(wo)}
-                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99]"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="font-bold text-lg">{wo.wo_number}</span>
-                    <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
-                      {getPriorityBadge(wo.priority)}
+            workOrders.map(wo => {
+              const cbreBadge = getCBREStatusBadge(wo.cbre_status);
+              return (
+                <div
+                  key={wo.wo_id}
+                  onClick={() => onSelectWO(wo)}
+                  className={`bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99] ${wo.cbre_status === 'escalation' ? 'border-2 border-red-500' : ''}`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold text-lg">{wo.wo_number}</span>
+                      <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
+                        {getPriorityBadge(wo.priority)}
+                      </span>
+                    </div>
+                    <span className="text-xs bg-gray-700 px-2 py-1 rounded-full ml-2 flex-shrink-0">
+                      {getStatusBadge(wo.status)}
                     </span>
                   </div>
-                  <span className="text-xs bg-gray-700 px-2 py-1 rounded-full ml-2 flex-shrink-0">
-                    {getStatusBadge(wo.status)}
-                  </span>
-                </div>
-                
-                <h3 className="font-semibold mb-1">{wo.building}</h3>
-                <p className="text-sm text-gray-400 mb-2 line-clamp-2">{wo.work_order_description}</p>
-                
-                <div className="flex flex-wrap justify-between items-center text-xs text-gray-500 gap-1">
-                  <div>
-                    <span>Entered: {formatDate(wo.date_entered)}</span>
-                    <span className="ml-2 text-orange-500 font-semibold">
-                      {calculateAge(wo.date_entered)} days old
-                    </span>
+                  
+                  {/* CBRE Status Badge */}
+                  {cbreBadge && (
+                    <div className="mb-2">
+                      <span className={`text-xs px-2 py-1 rounded ${cbreBadge.color}`}>
+                        {cbreBadge.shortText}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <h3 className="font-semibold mb-1">{wo.building}</h3>
+                  <p className="text-sm text-gray-400 mb-2 line-clamp-2">{wo.work_order_description}</p>
+                  
+                  <div className="flex flex-wrap justify-between items-center text-xs text-gray-500 gap-1">
+                    <div>
+                      <span>Entered: {formatDate(wo.date_entered)}</span>
+                      <span className="ml-2 text-orange-500 font-semibold">
+                        {calculateAge(wo.date_entered)} days old
+                      </span>
+                    </div>
+                    <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
                   </div>
-                  <span className="text-green-500 font-bold">NTE: ${(wo.nte || 0).toFixed(2)}</span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -359,6 +371,7 @@ function WorkOrderDetail({
   onComplete
 }) {
   const [activeTab, setActiveTab] = useState('details');
+  const cbreBadge = getCBREStatusBadge(workOrder.cbre_status);
   const [newComment, setNewComment] = useState('');
   const [commentSaveStatus, setCommentSaveStatus] = useState('idle'); // idle, saving, success, error
   
@@ -432,20 +445,30 @@ function WorkOrderDetail({
       <DemoBanner />
 
       {/* Header */}
-      <div className="bg-gray-800 px-4 py-3 flex items-center gap-3">
-        <button onClick={onBack} className="text-2xl">←</button>
-        <div className="flex-1 min-w-0">
-          <div className="font-bold truncate">{workOrder.wo_number}</div>
-          <div className="text-sm text-gray-400 truncate">{workOrder.building}</div>
+      <div className={`bg-gray-800 px-4 py-3 ${workOrder.cbre_status === 'escalation' ? 'border-b-2 border-red-500' : ''}`}>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-2xl">←</button>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold truncate">{workOrder.wo_number}</div>
+            <div className="text-sm text-gray-400 truncate">{workOrder.building}</div>
+          </div>
+          <span className={`px-2 py-1 rounded text-xs font-semibold flex-shrink-0 ${
+            workOrder.status === 'in_progress' ? 'bg-blue-600' :
+            workOrder.status === 'assigned' ? 'bg-yellow-600' :
+            workOrder.status === 'completed' ? 'bg-green-600' :
+            'bg-gray-600'
+          }`}>
+            {getStatusBadge(workOrder.status)}
+          </span>
         </div>
-        <span className={`px-2 py-1 rounded text-xs font-semibold flex-shrink-0 ${
-          workOrder.status === 'in_progress' ? 'bg-blue-600' :
-          workOrder.status === 'assigned' ? 'bg-yellow-600' :
-          workOrder.status === 'completed' ? 'bg-green-600' :
-          'bg-gray-600'
-        }`}>
-          {getStatusBadge(workOrder.status)}
-        </span>
+        {/* CBRE Status Banner */}
+        {cbreBadge && (
+          <div className="mt-2">
+            <span className={`text-xs px-3 py-1 rounded ${cbreBadge.color}`}>
+              {cbreBadge.text}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

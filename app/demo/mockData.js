@@ -30,6 +30,21 @@ const generateWONumber = () => {
   return `${prefix}${random7Digits()}`;
 };
 
+// CBRE Status options (from Gmail labels)
+const CBRE_STATUSES = [
+  null,                // No CBRE status
+  null,                // No CBRE status (more common)
+  null,                // No CBRE status (more common)
+  'pending_quote',     // 📋 PENDING QUOTE
+  'quote_submitted',   // 📤 QUOTE SUBMITTED
+  'quote_approved',    // ✅ QUOTE APPROVED
+  'quote_rejected',    // ❌ QUOTE REJECTED
+  'escalation',        // 🚨 ESCALATION
+  'reassigned',        // 🔄 REASSIGNED
+  'invoice_rejected',  // ❌ INVOICE REJECTED
+  'cancelled',         // 🚫 CANCELLED
+];
+
 // Building locations (generic commercial buildings)
 const BUILDINGS = [
   { name: 'Columbia Distribution Center', address: '2523 Commerce Drive, Columbia, SC 29205' },
@@ -82,13 +97,72 @@ export const DEMO_USERS = [
   { user_id: 'demo-010', first_name: 'Kevin', last_name: 'Martinez', email: 'kevin@summit-mech.demo', role: 'helper', phone: '803-555-0402', is_active: true },
 ];
 
+// CBRE Status badge helper (exported for use in components)
+export const getCBREStatusBadge = (cbreStatus) => {
+  switch (cbreStatus) {
+    case 'escalation':
+      return {
+        text: '🚨 ESCALATION',
+        color: 'bg-red-600 text-red-100',
+        shortText: '🚨 ESC'
+      };
+    case 'quote_approved':
+      return {
+        text: '✅ QUOTE APPROVED',
+        color: 'bg-green-600 text-green-100',
+        shortText: '✅ Approved'
+      };
+    case 'quote_rejected':
+      return {
+        text: '❌ QUOTE REJECTED',
+        color: 'bg-red-700 text-red-100',
+        shortText: '❌ Rejected'
+      };
+    case 'quote_submitted':
+      return {
+        text: '📤 QUOTE SUBMITTED',
+        color: 'bg-blue-600 text-blue-100',
+        shortText: '📤 Submitted'
+      };
+    case 'reassigned':
+      return {
+        text: '🔄 REASSIGNED',
+        color: 'bg-purple-600 text-purple-100',
+        shortText: '🔄 Reassign'
+      };
+    case 'pending_quote':
+      return {
+        text: '📋 PENDING QUOTE',
+        color: 'bg-orange-600 text-orange-100',
+        shortText: '📋 Pending'
+      };
+    case 'invoice_rejected':
+      return {
+        text: '❌ INVOICE REJECTED',
+        color: 'bg-red-800 text-red-100',
+        shortText: '❌ Inv Rej'
+      };
+    case 'cancelled':
+      return {
+        text: '🚫 CANCELLED',
+        color: 'bg-gray-600 text-gray-100',
+        shortText: '🚫 Cancel'
+      };
+    default:
+      return null;
+  }
+};
+
 // Generate a random work order
-const generateWorkOrder = (index, status, billingStatus = null) => {
+const generateWorkOrder = (index, status, cbreStatus = null) => {
   const building = randomFrom(BUILDINGS);
   const description = randomFrom(WORK_DESCRIPTIONS);
   const priority = randomFrom(['normal', 'normal', 'normal', 'high', 'emergency']);
   const leadTech = status !== 'pending' ? randomFrom(DEMO_USERS.filter(u => u.role === 'lead_tech')) : null;
   const nte = randomFrom([500, 750, 1000, 1500, 2000, 2500, 3000, 5000]);
+  
+  // Assign random CBRE status if not provided
+  const finalCbreStatus = cbreStatus !== undefined ? cbreStatus : randomFrom(CBRE_STATUSES);
   
   const daysOld = status === 'pending' ? randomBetween(0, 5) : 
                   status === 'assigned' ? randomBetween(1, 10) :
@@ -109,7 +183,7 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
     work_order_description: description,
     priority: priority,
     status: status,
-    billing_status: billingStatus,
+    cbre_status: finalCbreStatus,
     nte: nte,
     date_entered: daysAgo(daysOld),
     date_needed: status === 'pending' ? daysFromNow(randomBetween(1, 7)) : null,
@@ -132,25 +206,19 @@ const generateWorkOrder = (index, status, billingStatus = null) => {
     is_locked: false,
     created_at: daysAgo(daysOld),
     updated_at: daysAgo(Math.max(0, daysOld - randomBetween(0, 3))),
-    nte_quotes: billingStatus ? [{
-      quote_id: `demo-quote-${index}`,
-      is_verbal_nte: billingStatus === 'quoted' && Math.random() > 0.5,
-      nte_status: billingStatus === 'quote_approved' ? 'approved' : billingStatus === 'quoted' ? 'submitted' : 'pending',
-      created_at: daysAgo(daysOld - 1)
-    }] : [],
     vwas_wo_number: `VWAS-${randomBetween(100000, 999999)}`,
     cbre_nte: nte,
   };
 };
 
-// Generate demo work orders
+// Generate demo work orders with variety of CBRE statuses
 export const generateDemoWorkOrders = () => {
   const workOrders = [];
   let index = 1;
 
   // Pending (new, unassigned) - 4 work orders
   for (let i = 0; i < 4; i++) {
-    workOrders.push(generateWorkOrder(index++, 'pending'));
+    workOrders.push(generateWorkOrder(index++, 'pending', null));
   }
 
   // Assigned (has lead tech, ready to work) - 5 work orders
@@ -165,7 +233,7 @@ export const generateDemoWorkOrders = () => {
 
   // Completed - 4 work orders
   for (let i = 0; i < 4; i++) {
-    workOrders.push(generateWorkOrder(index++, 'completed'));
+    workOrders.push(generateWorkOrder(index++, 'completed', null));
   }
 
   // Tech Review - 2 work orders
@@ -178,21 +246,39 @@ export const generateDemoWorkOrders = () => {
     workOrders.push(generateWorkOrder(index++, 'return_trip'));
   }
 
-  // With billing statuses
-  // Pending CBRE Quote - 3 work orders
-  for (let i = 0; i < 3; i++) {
-    workOrders.push(generateWorkOrder(index++, 'in_progress', 'pending_cbre_quote'));
+  // === CBRE Status Specific Work Orders ===
+  
+  // Escalation - urgent! - 2 work orders
+  for (let i = 0; i < 2; i++) {
+    workOrders.push(generateWorkOrder(index++, 'in_progress', 'escalation'));
   }
 
-  // Quoted (submitted) - 2 work orders
+  // Pending Quote - 3 work orders
+  for (let i = 0; i < 3; i++) {
+    workOrders.push(generateWorkOrder(index++, 'in_progress', 'pending_quote'));
+  }
+
+  // Quote Submitted - 2 work orders
   for (let i = 0; i < 2; i++) {
-    workOrders.push(generateWorkOrder(index++, 'assigned', 'quoted'));
+    workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_submitted'));
   }
 
   // Quote Approved - 2 work orders
   for (let i = 0; i < 2; i++) {
     workOrders.push(generateWorkOrder(index++, 'in_progress', 'quote_approved'));
   }
+
+  // Quote Rejected - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'assigned', 'quote_rejected'));
+
+  // Reassigned - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'assigned', 'reassigned'));
+
+  // Invoice Rejected - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'tech_review', 'invoice_rejected'));
+
+  // Cancelled - 1 work order
+  workOrders.push(generateWorkOrder(index++, 'pending', 'cancelled'));
 
   return workOrders;
 };

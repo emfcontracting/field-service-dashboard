@@ -51,8 +51,22 @@ export function parseLocalDate(dateStr) {
 }
 
 /**
+ * Check if a string is a date-only format (YYYY-MM-DD)
+ * These need special handling to avoid timezone shifts
+ */
+function isDateOnlyString(str) {
+  if (typeof str !== 'string') return false;
+  // Match YYYY-MM-DD exactly (no time component)
+  return /^\d{4}-\d{2}-\d{2}$/.test(str);
+}
+
+/**
  * Format date for display in EST timezone
  * This properly handles UTC dates and displays them correctly in EST
+ * 
+ * IMPORTANT: Date-only strings (YYYY-MM-DD) are parsed as LOCAL dates
+ * to prevent timezone shifts that cause the "1 day behind" issue.
+ * 
  * @param {string|Date} date - Date to format
  * @param {string} locale - Locale for formatting (default: 'en-US')
  * @param {object} options - Intl.DateTimeFormat options
@@ -60,7 +74,32 @@ export function parseLocalDate(dateStr) {
 export function formatDateEST(date, locale = 'en-US', options = {}) {
   if (!date) return 'N/A';
   
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  let dateObj;
+  
+  // Handle date-only strings (YYYY-MM-DD) specially to avoid timezone shift
+  if (isDateOnlyString(date)) {
+    // Parse as local date, not UTC
+    dateObj = parseLocalDate(date);
+    
+    // For date-only values, don't use timezone conversion since we want the literal date
+    const defaultOptions = {
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+      ...options
+    };
+    
+    // Remove timeZone option for date-only strings to prevent shift
+    delete defaultOptions.timeZone;
+    
+    if (isNaN(dateObj.getTime())) return 'Invalid';
+    if (dateObj.getFullYear() < 2000) return 'Invalid';
+    
+    return new Intl.DateTimeFormat(locale, defaultOptions).format(dateObj);
+  }
+  
+  // For full datetime strings or Date objects, use EST timezone
+  dateObj = typeof date === 'string' ? new Date(date) : date;
   
   if (isNaN(dateObj.getTime())) return 'Invalid';
   if (dateObj.getFullYear() < 2000) return 'Invalid';

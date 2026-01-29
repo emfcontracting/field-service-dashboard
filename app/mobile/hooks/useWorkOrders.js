@@ -112,7 +112,7 @@ export function useWorkOrders(currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .eq('lead_tech_id', currentUser.user_id)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review'])
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
@@ -135,7 +135,7 @@ export function useWorkOrders(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
+          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review']);
 
         if (helperError) throw helperError;
         helperWOs = helperWOData || [];

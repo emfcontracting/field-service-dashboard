@@ -50,9 +50,13 @@ export function getPriorityBadge(priority) {
 export function getStatusBadge(status) {
   const statusMap = {
     'new': '🆕 New',
+    'assigned': '📋 Assigned',
     'in_progress': '🔄 In Progress',
     'completed': '✅ Completed',
-    'on_hold': '⏸️ On Hold'
+    'on_hold': '⏸️ On Hold',
+    'needs_return': '🔁 Needs Return',
+    'return_trip': '🔁 Return Trip',
+    'tech_review': '⚠️ REVIEW NEEDED'
   };
   return statusMap[status] || status;
 }

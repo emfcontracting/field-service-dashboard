@@ -418,6 +418,23 @@ export default function WorkOrderDetail({
           </div>
         </div>
 
+        {/* 🚨 TECH REVIEW ALERT - HIGHLY VISIBLE */}
+        {status === 'tech_review' && (
+          <div className="bg-red-600 border-4 border-red-400 rounded-xl p-4 mb-4 animate-pulse">
+            <div className="text-center">
+              <div className="text-3xl mb-2">⚠️</div>
+              <h2 className="text-xl font-bold text-white mb-2">
+                {language === 'en' ? 'RETURNED FROM INVOICE' : 'DEVUELTO DE FACTURA'}
+              </h2>
+              <p className="text-white text-sm">
+                {language === 'en' 
+                  ? 'This work order was returned because something is missing or incorrect. Please review and correct the issue.'
+                  : 'Esta orden fue devuelta porque falta algo o es incorrecto. Por favor revise y corrija el problema.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4">
           {/* Work Order Details */}
           <div className="bg-gray-800 rounded-lg p-4">

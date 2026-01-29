@@ -212,8 +212,19 @@ export default function WorkOrdersList({
               <div
                 key={wo.wo_id}
                 onClick={() => onSelectWO(wo)}
-                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99]"
+                className={`rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${
+                  wo.status === 'tech_review' 
+                    ? 'bg-red-900 border-2 border-red-500 animate-pulse' 
+                    : 'bg-gray-800 hover:bg-gray-750'
+                }`}
               >
+                {/* TECH REVIEW ALERT BANNER */}
+                {wo.status === 'tech_review' && (
+                  <div className="bg-red-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
+                    ⚠️ RETURNED FROM INVOICE - ACTION REQUIRED ⚠️
+                  </div>
+                )}
+                
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1 min-w-0">
                     <span className="font-bold text-lg">{wo.wo_number}</span>
@@ -225,7 +236,11 @@ export default function WorkOrdersList({
                       <span className="ml-2 text-xs text-yellow-500">⏳</span>
                     )}
                   </div>
-                  <span className="text-xs bg-gray-700 px-2 py-1 rounded-full ml-2 flex-shrink-0">
+                  <span className={`text-xs px-2 py-1 rounded-full ml-2 flex-shrink-0 ${
+                    wo.status === 'tech_review' 
+                      ? 'bg-red-600 text-white font-bold' 
+                      : 'bg-gray-700'
+                  }`}>
                     {getStatusBadge(wo.status)}
                   </span>
                 </div>

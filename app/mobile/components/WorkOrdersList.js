@@ -1,5 +1,5 @@
-// components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive) - WITH OFFLINE SUPPORT
-import { useState } from 'react';
+// components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive) - WITH OFFLINE SUPPORT + SORT/FILTER/SELECT
+import { useState, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
@@ -29,6 +29,16 @@ export default function WorkOrdersList({
   const t = (key) => translations[language]?.[key] || key;
   const [weatherExpanded, setWeatherExpanded] = useState(false);
 
+  // SORT, FILTER, SELECT STATE
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState('date_entered'); // date_entered, priority, nte, age, status
+  const [sortOrder, setSortOrder] = useState('desc'); // asc, desc
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedWOs, setSelectedWOs] = useState(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+
   // Format last sync time
   const formatLastSync = () => {
     if (!lastSyncTime) return null;
@@ -40,10 +50,118 @@ export default function WorkOrdersList({
     return `${hours}h ago`;
   };
 
+  // FILTERED AND SORTED WORK ORDERS
+  const filteredAndSortedWOs = useMemo(() => {
+    let filtered = [...workOrders];
+
+    // Search filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(wo => 
+        wo.wo_number?.toLowerCase().includes(term) ||
+        wo.building?.toLowerCase().includes(term) ||
+        wo.work_order_description?.toLowerCase().includes(term)
+      );
+    }
+
+    // Priority filter
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(wo => wo.priority === filterPriority);
+    }
+
+    // Status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(wo => wo.status === filterStatus);
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let valA, valB;
+      
+      switch (sortBy) {
+        case 'date_entered':
+          valA = new Date(a.date_entered).getTime();
+          valB = new Date(b.date_entered).getTime();
+          break;
+        case 'priority':
+          const priorityOrder = { urgent: 3, high: 2, normal: 1, low: 0 };
+          valA = priorityOrder[a.priority] || 0;
+          valB = priorityOrder[b.priority] || 0;
+          break;
+        case 'nte':
+          valA = a.nte || 0;
+          valB = b.nte || 0;
+          break;
+        case 'age':
+          valA = calculateAge(a.date_entered);
+          valB = calculateAge(b.date_entered);
+          break;
+        case 'status':
+          valA = a.status || '';
+          valB = b.status || '';
+          break;
+        default:
+          valA = 0;
+          valB = 0;
+      }
+
+      if (sortOrder === 'asc') {
+        return valA > valB ? 1 : valA < valB ? -1 : 0;
+      } else {
+        return valA < valB ? 1 : valA > valB ? -1 : 0;
+      }
+    });
+
+    return filtered;
+  }, [workOrders, sortBy, sortOrder, filterPriority, filterStatus, searchTerm]);
+
+  // SELECT HANDLERS
+  const toggleSelectMode = () => {
+    setSelectMode(!selectMode);
+    setSelectedWOs(new Set());
+  };
+
+  const toggleSelectWO = (woId) => {
+    const newSelected = new Set(selectedWOs);
+    if (newSelected.has(woId)) {
+      newSelected.delete(woId);
+    } else {
+      newSelected.add(woId);
+    }
+    setSelectedWOs(newSelected);
+  };
+
+  const selectAll = () => {
+    setSelectedWOs(new Set(filteredAndSortedWOs.map(wo => wo.wo_id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedWOs(new Set());
+  };
+
+  const handleBatchAction = (action) => {
+    // TODO: Implement batch actions (e.g., bulk status update, bulk export, etc.)
+    alert(`Batch action "${action}" on ${selectedWOs.size} work orders - Coming soon!`);
+  };
+
+  // Get unique values for filters
+  const uniqueBuildings = useMemo(() => {
+    const buildings = [...new Set(workOrders.map(wo => wo.building))].filter(Boolean);
+    return buildings.sort();
+  }, [workOrders]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterPriority !== 'all') count++;
+    if (filterStatus !== 'all') count++;
+    if (searchTerm.trim()) count++;
+    return count;
+  }, [filterPriority, filterStatus, searchTerm]);
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-900 text-white pb-20">
       {/* Header - Fixed at top */}
-      <div className="bg-gray-800 p-3 sticky top-0 z-10">
+      <div className="bg-gray-800 p-3 sticky top-0 z-20">
         {/* Top Row: Logo/Name, Connection Status and Logout */}
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center gap-2">
@@ -184,40 +302,322 @@ export default function WorkOrdersList({
           />
         )}
 
+        {/* HEADER WITH SORT/FILTER/SELECT */}
         <div className="mb-4">
-          <h2 className="text-xl font-bold">{t('myWorkOrders')}</h2>
-          <p className="text-gray-400 text-sm">
-            {workOrders.length} {t('activeWork')} {workOrders.length === 1 ? t('order') : t('orders')}
-          </p>
-        </div>
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h2 className="text-xl font-bold">{t('myWorkOrders')}</h2>
+              <p className="text-gray-400 text-sm">
+                {filteredAndSortedWOs.length} of {workOrders.length} {t('activeWork')} {workOrders.length === 1 ? t('order') : t('orders')}
+                {activeFiltersCount > 0 && (
+                  <span className="ml-1 text-yellow-500">({activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''})</span>
+                )}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {/* Select Mode Toggle */}
+              <button
+                onClick={toggleSelectMode}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold ${
+                  selectMode 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-700 text-gray-300'
+                }`}
+              >
+                {selectMode ? '✓ Select' : '☐ Select'}
+              </button>
+              {/* Filter Toggle */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold ${
+                  showFilters || activeFiltersCount > 0
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-700 text-gray-300'
+                }`}
+              >
+                🔍 Filter
+                {activeFiltersCount > 0 && (
+                  <span className="ml-1 bg-yellow-500 text-gray-900 rounded-full px-1.5 text-xs">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
 
-        <div className="space-y-3">
-          {workOrders.length === 0 ? (
-            <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <div className="text-4xl mb-3">📋</div>
-              <p className="text-gray-400 text-lg">{t('noActiveWorkOrders')}</p>
-              <p className="text-gray-500 text-sm mt-2">{t('checkBackLater')}</p>
-              {isOnline && onDownloadOffline && (
+          {/* SEARCH BAR */}
+          <div className="mb-3">
+            <input
+              type="text"
+              placeholder="Search by WO#, building, or description..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* FILTER/SORT PANEL */}
+          {showFilters && (
+            <div className="bg-gray-800 rounded-lg p-3 space-y-3 mb-3">
+              {/* Sort By */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Sort By</label>
+                <div className="flex gap-2">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm"
+                  >
+                    <option value="date_entered">Date Entered</option>
+                    <option value="age">Age (Days Old)</option>
+                    <option value="priority">Priority</option>
+                    <option value="nte">NTE Amount</option>
+                    <option value="status">Status</option>
+                  </select>
+                  <button
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded text-sm font-semibold"
+                  >
+                    {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter by Priority */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Priority</label>
+                <div className="grid grid-cols-5 gap-1">
+                  <button
+                    onClick={() => setFilterPriority('all')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterPriority === 'all' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFilterPriority('urgent')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterPriority === 'urgent' 
+                        ? 'bg-red-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Urgent
+                  </button>
+                  <button
+                    onClick={() => setFilterPriority('high')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterPriority === 'high' 
+                        ? 'bg-orange-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    High
+                  </button>
+                  <button
+                    onClick={() => setFilterPriority('normal')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterPriority === 'normal' 
+                        ? 'bg-yellow-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Normal
+                  </button>
+                  <button
+                    onClick={() => setFilterPriority('low')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterPriority === 'low' 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Low
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter by Status */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Status</label>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => setFilterStatus('all')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'all' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFilterStatus('assigned')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'assigned' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Assigned
+                  </button>
+                  <button
+                    onClick={() => setFilterStatus('in_progress')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'in_progress' 
+                        ? 'bg-yellow-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    In Progress
+                  </button>
+                  <button
+                    onClick={() => setFilterStatus('pending_approval')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'pending_approval' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    onClick={() => setFilterStatus('tech_review')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'tech_review' 
+                        ? 'bg-red-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    Returned
+                  </button>
+                  <button
+                    onClick={() => setFilterStatus('on_hold')}
+                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
+                      filterStatus === 'on_hold' 
+                        ? 'bg-gray-600 text-white' 
+                        : 'bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    On Hold
+                  </button>
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {activeFiltersCount > 0 && (
                 <button
-                  onClick={onDownloadOffline}
-                  disabled={isDownloading}
-                  className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"
+                  onClick={() => {
+                    setFilterPriority('all');
+                    setFilterStatus('all');
+                    setSearchTerm('');
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-semibold"
                 >
-                  {isDownloading ? '⟳ Downloading...' : '🔄 Refresh Work Orders'}
+                  Clear All Filters
                 </button>
               )}
             </div>
+          )}
+        </div>
+
+        {/* SELECT MODE HEADER */}
+        {selectMode && (
+          <div className="mb-3 bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">
+                {selectedWOs.size} selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={selectAll}
+                  className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-semibold"
+                >
+                  Select All ({filteredAndSortedWOs.length})
+                </button>
+                {selectedWOs.size > 0 && (
+                  <button
+                    onClick={deselectAll}
+                    className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-semibold"
+                  >
+                    Deselect All
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WORK ORDERS LIST */}
+        <div className="space-y-3">
+          {filteredAndSortedWOs.length === 0 ? (
+            <div className="bg-gray-800 rounded-lg p-8 text-center">
+              <div className="text-4xl mb-3">📋</div>
+              {workOrders.length === 0 ? (
+                <>
+                  <p className="text-gray-400 text-lg">{t('noActiveWorkOrders')}</p>
+                  <p className="text-gray-500 text-sm mt-2">{t('checkBackLater')}</p>
+                  {isOnline && onDownloadOffline && (
+                    <button
+                      onClick={onDownloadOffline}
+                      disabled={isDownloading}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                      {isDownloading ? '⟳ Downloading...' : '🔄 Refresh Work Orders'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-400 text-lg">No work orders match your filters</p>
+                  <button
+                    onClick={() => {
+                      setFilterPriority('all');
+                      setFilterStatus('all');
+                      setSearchTerm('');
+                    }}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"
+                  >
+                    Clear Filters
+                  </button>
+                </>
+              )}
+            </div>
           ) : (
-            workOrders.map(wo => (
+            filteredAndSortedWOs.map(wo => (
               <div
                 key={wo.wo_id}
-                onClick={() => onSelectWO(wo)}
+                onClick={() => {
+                  if (selectMode) {
+                    toggleSelectWO(wo.wo_id);
+                  } else {
+                    onSelectWO(wo);
+                  }
+                }}
                 className={`rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${
                   wo.status === 'tech_review' 
                     ? 'bg-red-900 border-2 border-red-500 animate-pulse' 
+                    : selectedWOs.has(wo.wo_id)
+                    ? 'bg-blue-900 border-2 border-blue-500'
                     : 'bg-gray-800 hover:bg-gray-750'
                 }`}
               >
+                {/* SELECT CHECKBOX */}
+                {selectMode && (
+                  <div className="flex justify-end mb-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedWOs.has(wo.wo_id)}
+                      onChange={() => toggleSelectWO(wo.wo_id)}
+                      className="w-5 h-5 rounded cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
+
                 {/* TECH REVIEW ALERT BANNER */}
                 {wo.status === 'tech_review' && (
                   <div className="bg-red-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
@@ -262,6 +662,29 @@ export default function WorkOrdersList({
           )}
         </div>
       </div>
+
+      {/* FLOATING ACTION BAR (when items selected) */}
+      {selectMode && selectedWOs.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-blue-900 border-t-2 border-blue-500 p-4 z-30">
+          <div className="max-w-md mx-auto flex items-center justify-between">
+            <span className="font-bold text-lg">{selectedWOs.size} Selected</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleBatchAction('export')}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                📄 Export
+              </button>
+              <button
+                onClick={() => handleBatchAction('print')}
+                className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                🖨️ Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

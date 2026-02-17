@@ -81,12 +81,13 @@ export default function WorkOrdersTable({
   searchTerm,
   statusFilter,
   priorityFilter,
-  // Superuser bulk delete props
+  // Selection & bulk action props
   isSuperuser = false,
   selectedWOs = new Set(),
   onToggleSelect,
   onSelectAll,
-  onClearSelection
+  onClearSelection,
+  showCheckboxes = false
 }) {
   
   // Check if work order is "new" (unassigned and less than 24 hours old)
@@ -143,11 +144,11 @@ export default function WorkOrdersTable({
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: isSuperuser ? '1440px' : '1400px' }}>
+        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: (showCheckboxes || isSuperuser) ? '1440px' : '1400px' }}>
           <thead className="bg-gray-700">
             <tr>
-              {/* Checkbox column - Superuser only */}
-              {isSuperuser && (
+              {/* Checkbox column */}
+              {(showCheckboxes || isSuperuser) && (
                 <th 
                   className="px-2 py-2 text-center" 
                   style={{ width: '40px' }}
@@ -197,7 +198,7 @@ export default function WorkOrdersTable({
                   key={wo.wo_id}
                   onClick={() => onSelectWorkOrder(wo)}
                   className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
-                    isSelected ? 'bg-red-900/40' :
+                    isSelected ? 'bg-purple-900/40 border-l-2 border-l-purple-500' :
                     wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
                     wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
                     wo.cbre_status === 'invoice_rejected' ? 'bg-red-900/20' :
@@ -205,8 +206,8 @@ export default function WorkOrdersTable({
                     wo.cbre_status === 'pending_quote' ? 'bg-orange-900/20' : ''
                   }`}
                 >
-                  {/* Checkbox cell - Superuser only */}
-                  {isSuperuser && (
+                  {/* Checkbox cell */}
+                  {(showCheckboxes || isSuperuser) && (
                     <td 
                       className="px-2 py-2 text-center"
                       onClick={(e) => e.stopPropagation()}

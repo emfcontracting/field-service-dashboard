@@ -6,6 +6,7 @@ import WorkOrdersTable from './WorkOrdersTable';
 import StatsCards from './StatsCards';
 import WorkOrdersFilters from './WorkOrdersFilters';
 import ExportDropdown from './ExportDropdown';
+import { exportCostDetailCSV } from '../utils/exportHelpers';
 
 export default function WorkOrdersView({ 
   workOrders, 
@@ -28,8 +29,12 @@ export default function WorkOrdersView({
   const [techFilter, setTechFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Multi-select state for bulk delete (superuser only)
+  // Multi-select state
   const [selectedWOs, setSelectedWOs] = useState(new Set());
+  const [showCheckboxes, setShowCheckboxes] = useState(false);
+  const [isExportingCombined, setIsExportingCombined] = useState(false);
+  
+  // Bulk delete (superuser only)
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -49,10 +54,8 @@ export default function WorkOrdersView({
     // Work status filter - handle both single value and array
     if (statusFilter !== 'all') {
       if (Array.isArray(statusFilter)) {
-        // Multi-select: filter by any of the selected statuses
         filtered = filtered.filter(wo => statusFilter.includes(wo.status));
       } else {
-        // Single select
         filtered = filtered.filter(wo => wo.status === statusFilter);
       }
     }
@@ -78,28 +81,14 @@ export default function WorkOrdersView({
     // Tech filter - handle both single value and array
     if (techFilter !== 'all') {
       if (Array.isArray(techFilter)) {
-        // Multi-select tech filter
         filtered = filtered.filter(wo => {
-          // Check for unassigned
-          if (techFilter.includes('unassigned') && !wo.lead_tech_id) {
-            return true;
-          }
-          // Check if any selected tech is the lead
-          if (techFilter.includes(wo.lead_tech_id)) {
-            return true;
-          }
-          // Check if any selected tech is in team members
-          if (wo.teamMembers && wo.teamMembers.some(tm => techFilter.includes(tm.user_id))) {
-            return true;
-          }
-          // Check lead_tech object
-          if (wo.lead_tech && techFilter.includes(wo.lead_tech.user_id)) {
-            return true;
-          }
+          if (techFilter.includes('unassigned') && !wo.lead_tech_id) return true;
+          if (techFilter.includes(wo.lead_tech_id)) return true;
+          if (wo.teamMembers && wo.teamMembers.some(tm => techFilter.includes(tm.user_id))) return true;
+          if (wo.lead_tech && techFilter.includes(wo.lead_tech.user_id)) return true;
           return false;
         });
       } else {
-        // Single select
         if (techFilter === 'unassigned') {
           filtered = filtered.filter(wo => !wo.lead_tech_id);
         } else {
@@ -131,12 +120,10 @@ export default function WorkOrdersView({
 
   // Handle clicking on CBRE status cards
   const handleFilterByCbreStatus = (status) => {
-    // Set as array for multi-select compatibility
     setCbreStatusFilter([status]);
   };
 
   const selectWorkOrderEnhanced = async (wo) => {
-    // Fetch team members for this work order
     const { data: teamMembers } = await supabase
       .from('work_order_assignments')
       .select(`
@@ -172,7 +159,38 @@ export default function WorkOrdersView({
     setSelectedWOs(new Set());
   };
 
-  // Handle bulk delete
+  // Toggle checkbox mode
+  const toggleCheckboxMode = () => {
+    if (showCheckboxes) {
+      // Turning off - clear selections
+      setSelectedWOs(new Set());
+      setShowCheckboxes(false);
+    } else {
+      setShowCheckboxes(true);
+    }
+  };
+
+  // Download combined cost CSV for selected work orders
+  const handleDownloadCombinedCSV = async () => {
+    if (selectedWOs.size === 0) {
+      alert('Please select at least one work order.');
+      return;
+    }
+
+    setIsExportingCombined(true);
+    try {
+      // Get the selected WO objects from the filtered list
+      const selectedWorkOrders = filteredWorkOrders.filter(wo => selectedWOs.has(wo.wo_id));
+      await exportCostDetailCSV(supabase, selectedWorkOrders);
+    } catch (err) {
+      console.error('Error exporting combined CSV:', err);
+      alert('❌ Error exporting: ' + err.message);
+    } finally {
+      setIsExportingCombined(false);
+    }
+  };
+
+  // Handle bulk delete (superuser only)
   const handleBulkDelete = async () => {
     if (selectedWOs.size === 0) return;
     
@@ -181,7 +199,6 @@ export default function WorkOrdersView({
     try {
       const woIds = Array.from(selectedWOs);
       
-      // Delete related records first (assignments, daily hours, etc.)
       await supabase
         .from('work_order_assignments')
         .delete()
@@ -192,7 +209,6 @@ export default function WorkOrdersView({
         .delete()
         .in('wo_id', woIds);
       
-      // Delete the work orders
       const { error } = await supabase
         .from('work_orders')
         .delete()
@@ -200,7 +216,6 @@ export default function WorkOrdersView({
       
       if (error) throw error;
       
-      // Refresh and clear selection
       await refreshWorkOrders();
       setSelectedWOs(new Set());
       setShowDeleteConfirm(false);
@@ -211,6 +226,14 @@ export default function WorkOrdersView({
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  // Get selected WO numbers for display
+  const getSelectedWONumbers = () => {
+    return filteredWorkOrders
+      .filter(wo => selectedWOs.has(wo.wo_id))
+      .map(wo => wo.wo_number)
+      .join(', ');
   };
 
   return (
@@ -239,26 +262,52 @@ export default function WorkOrdersView({
         exportDropdown={<ExportDropdown workOrders={workOrders} supabase={supabase} />}
       />
 
-      {/* Bulk Delete Bar - Superuser Only */}
-      {isSuperuser && selectedWOs.size > 0 && (
-        <div className="bg-red-900/70 border border-red-500 rounded-lg p-3 mb-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <span className="text-red-100 font-semibold">
-              🗑️ {selectedWOs.size} work order(s) selected
-            </span>
-            <button
-              onClick={clearSelection}
-              className="text-red-300 hover:text-white text-sm underline"
-            >
-              Clear Selection
-            </button>
+      {/* Selection Action Bar - Shows when checkboxes are on and items selected */}
+      {showCheckboxes && selectedWOs.size > 0 && (
+        <div className="bg-purple-900/70 border border-purple-500 rounded-lg p-3 mb-4">
+          <div className="flex flex-wrap justify-between items-center gap-3">
+            <div className="flex items-center gap-4">
+              <span className="text-purple-100 font-semibold">
+                ✅ {selectedWOs.size} work order(s) selected
+              </span>
+              <button
+                onClick={clearSelection}
+                className="text-purple-300 hover:text-white text-sm underline"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Combined Cost CSV Download */}
+              <button
+                onClick={handleDownloadCombinedCSV}
+                disabled={isExportingCombined}
+                className="bg-green-600 hover:bg-green-500 disabled:bg-green-800 px-4 py-2 rounded font-bold text-white flex items-center gap-2"
+              >
+                {isExportingCombined ? (
+                  <>
+                    <span className="animate-spin">⏳</span> Exporting...
+                  </>
+                ) : (
+                  <>💰 Download Combined Cost CSV</>
+                )}
+              </button>
+
+              {/* Bulk Delete - Superuser Only */}
+              {isSuperuser && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-bold text-white flex items-center gap-2"
+                >
+                  🗑️ Delete Selected
+                </button>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-bold text-white flex items-center gap-2"
-          >
-            🗑️ Delete Selected
-          </button>
+          {/* Show selected WO numbers */}
+          <div className="mt-2 text-xs text-purple-300 truncate">
+            Selected: {getSelectedWONumbers()}
+          </div>
         </div>
       )}
 
@@ -299,9 +348,21 @@ export default function WorkOrdersView({
         </div>
       )}
 
-      {/* Results count */}
-      <div className="mb-2 text-sm text-gray-400">
-        Showing {filteredWorkOrders.length} of {workOrders.length} work orders
+      {/* Results count + Select/Combine toggle */}
+      <div className="mb-2 flex justify-between items-center">
+        <span className="text-sm text-gray-400">
+          Showing {filteredWorkOrders.length} of {workOrders.length} work orders
+        </span>
+        <button
+          onClick={toggleCheckboxMode}
+          className={`px-3 py-1 rounded text-sm font-semibold transition flex items-center gap-2 ${
+            showCheckboxes 
+              ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+              : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+          }`}
+        >
+          {showCheckboxes ? '✅ Select Mode ON' : '☑️ Select & Combine'}
+        </button>
       </div>
 
       <WorkOrdersTable
@@ -316,6 +377,7 @@ export default function WorkOrdersView({
         onToggleSelect={toggleWOSelection}
         onSelectAll={selectAllWOs}
         onClearSelection={clearSelection}
+        showCheckboxes={showCheckboxes}
       />
     </>
   );

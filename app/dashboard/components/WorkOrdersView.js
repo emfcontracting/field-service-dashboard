@@ -236,7 +236,7 @@ export default function WorkOrdersView({
         users={users}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
-        exportDropdown={<ExportDropdown workOrders={workOrders} />}
+        exportDropdown={<ExportDropdown workOrders={workOrders} supabase={supabase} />}
       />
 
       {/* Bulk Delete Bar - Superuser Only */}

@@ -14,6 +14,7 @@ import {
   updateTeamMember
 } from '../utils/dataFetchers';
 import { calculateInvoiceTotal } from '../utils/calculations';
+import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { 
   getLocalDateString, 
@@ -1205,6 +1206,13 @@ const sendAssignmentNotifications = async () => {
             </div>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => exportSingleWOCostDetail(supabase, selectedWO)}
+              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              title="Download cost detail CSV for this work order"
+            >
+              💰 Cost CSV
+            </button>
             <button
               onClick={downloadCompletionCertificate}
               className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"

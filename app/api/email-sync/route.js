@@ -467,6 +467,8 @@ export async function GET(request) {
 
             updateData.comments = updatedComments;
 
+            let invoiceUpdated = false;
+
             if (!dryRun) {
               // Update work order
               const { error: updateError } = await supabase
@@ -492,7 +494,6 @@ export async function GET(request) {
               }
 
               // Update invoice status if specified
-              let invoiceUpdated = false;
               if (labelConfig.invoice_status) {
                 const { data: invoice, error: invoiceError } = await supabase
                   .from('invoices')

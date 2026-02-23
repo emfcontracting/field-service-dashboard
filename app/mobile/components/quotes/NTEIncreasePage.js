@@ -4,14 +4,15 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { RATES as QUOTE_RATES, calculateExistingCosts as calcExistingCosts } from '../../services/quoteService';
 
-// Rate constants (matching CostSummarySection)
+// Rate constants from shared quoteService (single source of truth)
 const RATES = {
-  RT_RATE: 64,
-  OT_RATE: 96,
-  MILEAGE_RATE: 1.00,
-  MARKUP_PERCENT: 0.25,
-  ADMIN_HOURS: 2  // 2 hours @ $64 = $128
+  RT_RATE: QUOTE_RATES.RT_HOURLY,
+  OT_RATE: QUOTE_RATES.OT_HOURLY,
+  MILEAGE_RATE: QUOTE_RATES.MILEAGE,
+  MARKUP_PERCENT: QUOTE_RATES.MARKUP_PERCENT,
+  ADMIN_HOURS: QUOTE_RATES.ADMIN_HOURS
 };
 
 export default function NTEIncreasePage({
@@ -80,7 +81,7 @@ export default function NTEIncreasePage({
     }
   }, [wo.wo_id, currentTeamList]);
   
-  // Calculate existing costs - MATCHING CostSummarySection EXACTLY
+  // Calculate existing costs using shared function from quoteService
   const calculateExistingCosts = async () => {
     if (!wo.wo_id) {
       setLoadingExisting(false);
@@ -89,111 +90,24 @@ export default function NTEIncreasePage({
     
     setLoadingExisting(true);
     try {
-      // 1. Calculate legacy totals from work_orders and assignments
-      const primaryRT = parseFloat(wo.hours_regular) || 0;
-      const primaryOT = parseFloat(wo.hours_overtime) || 0;
-      const primaryMiles = parseFloat(wo.miles) || 0;
-
-      let teamRT = 0;
-      let teamOT = 0;
-      let teamMiles = 0;
-
-      // Use passed currentTeamList if available
-      if (currentTeamList && Array.isArray(currentTeamList)) {
-        currentTeamList.forEach(member => {
-          if (member) {
-            teamRT += parseFloat(member.hours_regular) || 0;
-            teamOT += parseFloat(member.hours_overtime) || 0;
-            teamMiles += parseFloat(member.miles) || 0;
-          }
-        });
-      } else {
-        // Fallback: fetch team members from database
-        const { data: teamMembers } = await supabase
-          .from('work_order_assignments')
-          .select('hours_regular, hours_overtime, miles')
-          .eq('wo_id', wo.wo_id);
-        
-        if (teamMembers) {
-          teamMembers.forEach(member => {
-            teamRT += parseFloat(member.hours_regular) || 0;
-            teamOT += parseFloat(member.hours_overtime) || 0;
-            teamMiles += parseFloat(member.miles) || 0;
-          });
-        }
-      }
-
-      const legacyTotalRT = primaryRT + teamRT;
-      const legacyTotalOT = primaryOT + teamOT;
-      const legacyTotalMiles = primaryMiles + teamMiles;
-
-      // 2. Load daily hours totals from daily_hours_log table (including tech_material_cost)
-      const { data: dailyData, error: dailyError } = await supabase
-        .from('daily_hours_log')
-        .select('hours_regular, hours_overtime, miles, tech_material_cost')
-        .eq('wo_id', wo.wo_id);
-
-      let dailyTotalRT = 0;
-      let dailyTotalOT = 0;
-      let dailyTotalMiles = 0;
-      let dailyTotalTechMaterial = 0;
-
-      if (!dailyError && dailyData) {
-        dailyData.forEach(log => {
-          dailyTotalRT += parseFloat(log.hours_regular) || 0;
-          dailyTotalOT += parseFloat(log.hours_overtime) || 0;
-          dailyTotalMiles += parseFloat(log.miles) || 0;
-          dailyTotalTechMaterial += parseFloat(log.tech_material_cost) || 0;
-        });
-      }
-
-      // Combined totals = legacy + daily hours (same as CostSummarySection)
-      const totalRT = legacyTotalRT + dailyTotalRT;
-      const totalOT = legacyTotalOT + dailyTotalOT;
-      const totalMiles = legacyTotalMiles + dailyTotalMiles;
-      
-      // Labor includes admin hours (2 hrs × $64 = $128)
-      const laborCost = (totalRT * RATES.RT_RATE) + (totalOT * RATES.OT_RATE) + (RATES.ADMIN_HOURS * RATES.RT_RATE);
-      
-      // Materials: EMF Material (company paid) + Tech Material (tech purchased, for reimbursement)
-      // Both get 25% markup applied
-      const emfMaterialBase = parseFloat(wo.material_cost) || 0;
-      const techMaterialBase = dailyTotalTechMaterial;
-      const totalMaterialBase = emfMaterialBase + techMaterialBase;
-      const materialWithMarkup = totalMaterialBase * (1 + RATES.MARKUP_PERCENT);
-      
-      const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-      const equipmentWithMarkup = equipmentBase * (1 + RATES.MARKUP_PERCENT);
-      
-      const trailerBase = parseFloat(wo.trailer_cost) || 0;
-      const trailerWithMarkup = trailerBase * (1 + RATES.MARKUP_PERCENT);
-      
-      const rentalBase = parseFloat(wo.rental_cost) || 0;
-      const rentalWithMarkup = rentalBase * (1 + RATES.MARKUP_PERCENT);
-      
-      // Mileage
-      const mileageCost = totalMiles * RATES.MILEAGE_RATE;
-      
-      // Grand total (same calculation as CostSummarySection)
-      const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
-      
+      const costs = await calcExistingCosts(supabase, wo, currentTeamList);
       setExistingCosts({
-        totalRT,
-        totalOT,
-        totalMiles,
-        laborCost,
-        materialBase: totalMaterialBase,
-        emfMaterialBase,
-        techMaterialBase,
-        materialWithMarkup,
-        equipmentBase,
-        equipmentWithMarkup,
-        trailerBase,
-        trailerWithMarkup,
-        rentalBase,
-        rentalWithMarkup,
-        mileageCost,
-        grandTotal
+        totalRT: costs.totalRT || 0,
+        totalOT: costs.totalOT || 0,
+        totalMiles: costs.totalMiles || 0,
+        laborCost: costs.laborCost || 0,
+        materialBase: costs.totalMaterialBase || 0,
+        emfMaterialBase: costs.emfMaterialBase || 0,
+        techMaterialBase: costs.techMaterialBase || 0,
+        materialWithMarkup: costs.materialWithMarkup || 0,
+        equipmentBase: costs.equipmentBase || 0,
+        equipmentWithMarkup: costs.equipmentWithMarkup || 0,
+        trailerBase: costs.trailerBase || 0,
+        trailerWithMarkup: costs.trailerWithMarkup || 0,
+        rentalBase: costs.rentalBase || 0,
+        rentalWithMarkup: costs.rentalWithMarkup || 0,
+        mileageCost: costs.mileageCost || 0,
+        grandTotal: costs.grandTotal || 0
       });
     } catch (err) {
       console.error('Error calculating existing costs:', err);
@@ -281,7 +195,8 @@ export default function NTEIncreasePage({
     const dataToSave = {
       ...formData,
       ...additionalCosts,
-      // Store existing costs reference for the print/display
+      wo_id: wo.wo_id,
+      // SNAPSHOT: Store existing costs frozen at this moment
       existing_costs_total: existingCosts.grandTotal,
       projected_total: projectedTotalCost,
       original_nte: originalNTE,
@@ -330,6 +245,25 @@ export default function NTEIncreasePage({
       </div>
 
       <div className="p-4 space-y-4">
+        {/* ===== CRITICAL WARNING BANNER ===== */}
+        <div className="bg-amber-800 rounded-lg p-4 border-2 border-amber-400">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl flex-shrink-0">⚠️</span>
+            <div>
+              <h3 className="font-bold text-amber-300 text-sm mb-2">
+                {language === 'en' 
+                  ? 'IMPORTANT – Before Creating This Request' 
+                  : 'IMPORTANTE – Antes de Crear Esta Solicitud'}
+              </h3>
+              <p className="text-amber-100 text-sm leading-relaxed">
+                {language === 'en'
+                  ? 'ALL technicians on this ticket must have entered their complete data before this NTE Increase Request is created. This includes all hours worked, materials, mileage, and return trip home. Written approvals may take time and verbal approvals may not be granted immediately – all current costs must be fully recorded first.'
+                  : 'TODOS los técnicos en este ticket deben haber ingresado sus datos completos antes de crear esta Solicitud de Aumento NTE. Esto incluye todas las horas trabajadas, materiales, millaje y el viaje de regreso a casa. Las aprobaciones escritas pueden tomar tiempo y las aprobaciones verbales pueden no otorgarse de inmediato – todos los costos actuales deben estar completamente registrados primero.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* NTE Type Toggle */}
         <div className="bg-gray-800 rounded-lg p-4">
           <label className="flex items-center gap-3 cursor-pointer">

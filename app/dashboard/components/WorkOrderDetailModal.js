@@ -183,53 +183,50 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  // Print NTE Increase - CORRECTED VERSION
-  // Shows: Current Accrued + Additional Estimate = Projected Total (New NTE Needed)
-  // Printable version shows final costs only - NO markup percentages displayed
+  // Print NTE Increase - USES SNAPSHOT VALUES
+  // If quote has a saved snapshot, use those frozen values (single source of truth)
+  // Only falls back to recalculation for legacy quotes without snapshots
   const printNTEIncrease = async (quote) => {
-    // Calculate existing/accrued costs from the work order
-    let existingCostsTotal = 0;
-    let existingBreakdown = {
-      labor: 0,
-      materials: 0,
-      equipment: 0,
-      rental: 0,
-      trailer: 0,
-      mileage: 0,
-      admin: 128
-    };
+    const hasSnapshot = quote.current_costs_snapshot !== null && quote.current_costs_snapshot !== undefined;
     
-    try {
-      // Get daily hours logs for this work order
-      const { data: dailyLogs } = await supabase
-        .from('daily_hours_log')
-        .select('*')
-        .eq('wo_id', selectedWO.wo_id);
-      
-      // Get team member assignments  
-      const { data: teamMembers } = await supabase
-        .from('work_order_assignments')
-        .select('*')
-        .eq('wo_id', selectedWO.wo_id);
-      
-      // Calculate labor and mileage from daily logs or legacy fields
-      let totalRT = 0;
-      let totalOT = 0;
-      let totalMileage = 0;
-      
-      if (dailyLogs && dailyLogs.length > 0) {
-        // Use daily logs for hours AND mileage
-        dailyLogs.forEach(log => {
-          totalRT += parseFloat(log.hours_regular) || 0;
-          totalOT += parseFloat(log.hours_overtime) || 0;
-          totalMileage += parseFloat(log.miles) || 0;
-        });
-      } else {
-        // Legacy fields
-        totalRT = parseFloat(selectedWO.hours_regular) || 0;
-        totalOT = parseFloat(selectedWO.hours_overtime) || 0;
-        totalMileage = parseFloat(selectedWO.miles) || 0;
+    // Additional work estimate from the quote fields
+    const laborTotal = parseFloat(quote.labor_total) || 0;
+    const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
+    const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
+    const rentalWithMarkup = parseFloat(quote.rental_with_markup) || 0;
+    const trailerWithMarkup = parseFloat(quote.trailer_with_markup) || 0;
+    const mileageTotal = parseFloat(quote.mileage_total) || 0;
+    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
+    
+    let existingCostsTotal = 0;
+    let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: 128 };
+    
+    if (hasSnapshot) {
+      // USE SAVED SNAPSHOT - matches what the NTE card shows
+      existingCostsTotal = parseFloat(quote.current_costs_snapshot) || 0;
+      // We don't have individual breakdown saved, so show total only
+      existingBreakdown = null; // Signal to use total-only display
+    } else {
+      // LEGACY FALLBACK: Recalculate using the CORRECT combined method
+      // (matches calculateCostSummaryWithDailyHours exactly)
+      try {
+        const { data: dailyLogs } = await supabase
+          .from('daily_hours_log')
+          .select('*')
+          .eq('wo_id', selectedWO.wo_id);
         
+        const { data: teamMembers } = await supabase
+          .from('work_order_assignments')
+          .select('*')
+          .eq('wo_id', selectedWO.wo_id);
+        
+        // COMBINE legacy + daily (not either/or)
+        let totalRT = parseFloat(selectedWO.hours_regular) || 0;
+        let totalOT = parseFloat(selectedWO.hours_overtime) || 0;
+        let totalMileage = parseFloat(selectedWO.miles) || 0;
+        let totalTechMaterial = 0;
+        
+        // Add legacy team member hours
         if (teamMembers) {
           teamMembers.forEach(tm => {
             totalRT += parseFloat(tm.hours_regular) || 0;
@@ -237,41 +234,43 @@ export default function WorkOrderDetailModal({
             totalMileage += parseFloat(tm.miles) || 0;
           });
         }
+        
+        // Add daily log hours
+        if (dailyLogs && dailyLogs.length > 0) {
+          dailyLogs.forEach(log => {
+            totalRT += parseFloat(log.hours_regular) || 0;
+            totalOT += parseFloat(log.hours_overtime) || 0;
+            totalMileage += parseFloat(log.miles) || 0;
+            totalTechMaterial += parseFloat(log.tech_material_cost) || 0;
+          });
+        }
+        
+        existingBreakdown.labor = (totalRT * 64) + (totalOT * 96);
+        existingBreakdown.materials = ((parseFloat(selectedWO.material_cost) || 0) + totalTechMaterial) * 1.25;
+        existingBreakdown.equipment = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
+        existingBreakdown.rental = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
+        existingBreakdown.trailer = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
+        existingBreakdown.mileage = totalMileage * 1.00;
+        
+        existingCostsTotal = existingBreakdown.labor + existingBreakdown.materials + 
+                             existingBreakdown.equipment + existingBreakdown.rental + 
+                             existingBreakdown.trailer + existingBreakdown.mileage + 
+                             existingBreakdown.admin;
+      } catch (err) {
+        console.error('Error calculating existing costs:', err);
       }
-      
-      existingBreakdown.labor = (totalRT * 64) + (totalOT * 96);
-      existingBreakdown.materials = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
-      existingBreakdown.equipment = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-      existingBreakdown.rental = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-      existingBreakdown.trailer = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-      existingBreakdown.mileage = totalMileage * 1.00;
-      
-      existingCostsTotal = existingBreakdown.labor + existingBreakdown.materials + 
-                           existingBreakdown.equipment + existingBreakdown.rental + 
-                           existingBreakdown.trailer + existingBreakdown.mileage + 
-                           existingBreakdown.admin;
-    } catch (err) {
-      console.error('Error calculating existing costs:', err);
     }
     
-    // Additional work estimate from the quote - calculate from individual fields (NO admin fee)
-    // MUST include ALL components: labor + materials + equipment + rental + trailer + mileage
-    const laborTotal = parseFloat(quote.labor_total) || 0;
-    const materialsWithMarkup = parseFloat(quote.materials_with_markup) || 0;
-    const equipmentWithMarkup = parseFloat(quote.equipment_with_markup) || 0;
-    const rentalWithMarkup = parseFloat(quote.rental_with_markup) || 0;
-    const trailerWithMarkup = parseFloat(quote.trailer_with_markup) || 0;
-    const mileageTotal = parseFloat(quote.mileage_total) || 0;
-    // NO admin fee in additional work - it's already in current/accrued costs
-    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
+    // Use saved new_nte_amount if available, otherwise calculate
+    const projectedTotal = hasSnapshot && quote.new_nte_amount 
+      ? parseFloat(quote.new_nte_amount) 
+      : existingCostsTotal + additionalTotal;
     
-    // Projected total = existing + additional
-    const projectedTotal = existingCostsTotal + additionalTotal;
+    // Original NTE - use saved original_nte from snapshot if available
+    const originalNTE = hasSnapshot && quote.original_nte 
+      ? parseFloat(quote.original_nte) 
+      : (parseFloat(selectedWO.nte) || 0);
     
-    // Original NTE budget
-    const originalNTE = parseFloat(selectedWO.nte) || 0;
-    
-    // New NTE needed = projected total cost
     const newNTENeeded = projectedTotal;
     
     const htmlContent = `
@@ -360,6 +359,7 @@ export default function WorkOrderDetailModal({
         <!-- Current Costs Accrued -->
         <div class="cost-box cost-box-blue">
           <div class="cost-box-title">CURRENT COSTS ACCRUED (Work Completed So Far)</div>
+          ${existingBreakdown ? `
           <div class="summary-row">
             <span>Labor</span>
             <span>${existingBreakdown.labor.toFixed(2)}</span>
@@ -388,6 +388,9 @@ export default function WorkOrderDetailModal({
             <span>Admin Fee</span>
             <span>${existingBreakdown.admin.toFixed(2)}</span>
           </div>
+          ` : `
+          <div style="text-align: center; color: #666; font-size: 10px; margin-bottom: 8px;">📸 Snapshot from ${new Date(quote.created_at).toLocaleDateString()}</div>
+          `}
           <div class="summary-total">
             <div class="summary-row" style="border: none;">
               <span>CURRENT TOTAL</span>

@@ -40,7 +40,8 @@ function connectIMAP() {
 }
 
 // Fetch emails from a specific IMAP folder (Gmail label)
-async function fetchEmailsFromLabel(labelName) {
+// searchDays: how many days back to search (default 30, use higher for rescan)
+async function fetchEmailsFromLabel(labelName, searchDays = 30) {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
     const emails = [];
@@ -55,8 +56,19 @@ async function fetchEmailsFromLabel(labelName) {
           return reject(new Error(`Could not open ${folderName} folder: ${err.message}`));
         }
 
-        // Only unread emails
-        imap.search(['UNSEEN'], (err, results) => {
+        // Search emails from last N days (read or unread)
+        // Office staff often reads emails before sync runs, so we can't rely on UNSEEN
+        // Duplicate prevention: we skip WOs that already have the matching status
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - searchDays);
+        const formatIMAPDate = (date) => {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${date.getDate().toString().padStart(2, '0')}-${months[date.getMonth()]}-${date.getFullYear()}`;
+        };
+        
+        console.log(`[${labelName}] Searching emails since ${formatIMAPDate(sinceDate)} (${searchDays} days)`);
+        
+        imap.search([['SINCE', formatIMAPDate(sinceDate)]], (err, results) => {
           if (err) {
             imap.end();
             return reject(err);
@@ -352,6 +364,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const labelFilter = searchParams.get('label');
     const dryRun = searchParams.get('dryRun') === 'true';
+    const searchDays = parseInt(searchParams.get('days')) || 30; // Default 30 days, use ?days=90 for deeper rescan
     
     // Check IMAP credentials
     const email = process.env.EMAIL_IMPORT_USER;
@@ -378,7 +391,7 @@ export async function GET(request) {
       if (!labelConfig) continue;
 
       try {
-        const rawEmails = await fetchEmailsFromLabel(label);
+        const rawEmails = await fetchEmailsFromLabel(label, searchDays);
 
         if (rawEmails.length === 0) continue;
 
@@ -406,7 +419,11 @@ export async function GET(request) {
             if (woError || !workOrder) {
               results.notFound++;
               results.errors.push(`WO ${woNumber} not found in system`);
-              if (!dryRun) await markAsRead(label, email.uid);
+              continue;
+            }
+
+            // Skip if WO already has this status (duplicate prevention)
+            if (workOrder.cbre_status === labelConfig.cbre_status) {
               continue;
             }
 

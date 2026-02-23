@@ -58,15 +58,25 @@ function NTEStatusBadge({ cbreStatus, language }) {
 export default function WorkOrderCard({ workOrder, onClick }) {
   const { language } = useLanguage();
   
+  // Highlight card border for escalation
+  const isEscalation = workOrder.cbre_status === 'escalation';
+  const isRejected = workOrder.cbre_status === 'quote_rejected' || workOrder.cbre_status === 'invoice_rejected';
+  const cardBorder = isEscalation 
+    ? 'border-l-4 border-red-500' 
+    : isRejected 
+      ? 'border-l-4 border-orange-500' 
+      : '';
+  
   return (
     <div
       onClick={onClick}
-      className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98"
+      className={`bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-98 ${cardBorder}`}
     >
+      {/* Row 1: WO Number + Priority + Work Status */}
       <div className="flex justify-between items-start mb-2">
-        <div>
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-lg">{workOrder.wo_number}</span>
-          <span className={`ml-2 text-sm ${getPriorityColor(workOrder.priority)}`}>
+          <span className={`text-sm ${getPriorityColor(workOrder.priority)}`}>
             {getPriorityBadge(workOrder.priority)}
           </span>
         </div>
@@ -75,15 +85,15 @@ export default function WorkOrderCard({ workOrder, onClick }) {
         </span>
       </div>
       
-      <h3 className="font-semibold mb-1">{workOrder.building}</h3>
-      <p className="text-sm text-gray-400 mb-2">{workOrder.work_order_description}</p>
-      
-      {/* NTE Status Badge - visible to tech at a glance */}
+      {/* CBRE Status Badge - prominent, right below WO number */}
       {workOrder.cbre_status && (
         <div className="mb-2">
           <NTEStatusBadge cbreStatus={workOrder.cbre_status} language={language} />
         </div>
       )}
+      
+      <h3 className="font-semibold mb-1">{workOrder.building}</h3>
+      <p className="text-sm text-gray-400 mb-2 line-clamp-2">{workOrder.work_order_description}</p>
       
       <div className="flex justify-between items-center text-xs text-gray-500">
         <div>

@@ -340,11 +340,28 @@ export default function CompletedWorkOrders({
               </p>
             </div>
             
-            {filteredWorkOrders.map(wo => (
+            {filteredWorkOrders.map(wo => {
+              const isEsc = wo.cbre_status === 'escalation';
+              const isRej = wo.cbre_status === 'quote_rejected' || wo.cbre_status === 'invoice_rejected';
+              const border = isEsc ? 'border-l-4 border-red-500' : isRej ? 'border-l-4 border-orange-500' : '';
+              
+              const cbreConfigs = {
+                'pending_quote': { bg: 'bg-orange-600', text: language === 'en' ? '📋 NTE Pending' : '📋 NTE Pendiente' },
+                'quote_submitted': { bg: 'bg-blue-600', text: language === 'en' ? '📤 NTE Submitted' : '📤 NTE Enviado' },
+                'quote_approved': { bg: 'bg-green-600', text: language === 'en' ? '✅ NTE Approved' : '✅ NTE Aprobado' },
+                'quote_rejected': { bg: 'bg-red-600', text: language === 'en' ? '❌ NTE Rejected' : '❌ NTE Rechazado' },
+                'escalation': { bg: 'bg-red-600 animate-pulse', text: language === 'en' ? '🚨 Escalation' : '🚨 Escalación' },
+                'reassigned': { bg: 'bg-purple-600', text: language === 'en' ? '🔄 Reassigned' : '🔄 Reasignado' },
+                'invoice_rejected': { bg: 'bg-red-600', text: language === 'en' ? '❌ Invoice Rejected' : '❌ Factura Rechazada' },
+                'cancelled': { bg: 'bg-gray-600', text: language === 'en' ? '🚫 Cancelled' : '🚫 Cancelado' },
+              };
+              const cbreConfig = wo.cbre_status ? cbreConfigs[wo.cbre_status] : null;
+              
+              return (
               <div
                 key={wo.wo_id}
                 onClick={() => onSelectWO(wo)}
-                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99]"
+                className={`bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99] ${border}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -357,6 +374,15 @@ export default function CompletedWorkOrders({
                     <span className="text-green-500 text-sm">✅ {t('completedLabel')}</span>
                   </div>
                 </div>
+                
+                {/* CBRE Status Badge */}
+                {cbreConfig && (
+                  <div className="mb-2">
+                    <span className={`${cbreConfig.bg} text-white text-xs px-2 py-0.5 rounded-full font-semibold`}>
+                      {cbreConfig.text}
+                    </span>
+                  </div>
+                )}
                 
                 <div className="text-sm space-y-1">
                   <p className="font-semibold">{wo.building}</p>
@@ -384,7 +410,8 @@ export default function CompletedWorkOrders({
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
           </>
         )}
       </div>

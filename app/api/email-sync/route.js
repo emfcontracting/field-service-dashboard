@@ -296,13 +296,14 @@ function extractSubmittedQuoteAmount(subject, body) {
   return null;
 }
 
-// Send notification to office/admin staff
+// Send notification to EMF primary email only
 async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
   try {
+    // Only notify emfcontractingsc@gmail.com
     const { data: users } = await supabase
       .from('users')
       .select('user_id, first_name, last_name, phone, sms_carrier, email')
-      .in('role', ['admin', 'office']);
+      .eq('email', 'emfcontractingsc@gmail.com');
 
     const recipients = (users || []).filter(u => u.phone && u.sms_carrier);
     
@@ -365,6 +366,7 @@ export async function GET(request) {
     const labelFilter = searchParams.get('label');
     const dryRun = searchParams.get('dryRun') === 'true';
     const searchDays = parseInt(searchParams.get('days')) || 30; // Default 30 days, use ?days=90 for deeper rescan
+    const skipNotify = searchParams.get('skipNotify') === 'true'; // Skip all notifications for this run
     
     // Check IMAP credentials
     const email = process.env.EMAIL_IMPORT_USER;
@@ -537,8 +539,8 @@ export async function GET(request) {
             }
           }
 
-          // Send notification
-          if (labelConfig.notify || newNTE) {
+          // Send notification (unless skipNotify is set)
+          if (!skipNotify && (labelConfig.notify || newNTE)) {
             await sendNotification(labelConfig.cbre_status, workOrder, winningEmail.subject, newNTE);
           }
         }

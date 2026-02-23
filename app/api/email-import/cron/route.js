@@ -587,6 +587,34 @@ export async function GET(request) {
       results.notifications = await sendOfficeNotification(importedWOs);
     }
 
+    // ============================================================
+    // ALSO RUN: CBRE Label Sync (email-sync)
+    // Checks Gmail labels for status updates: escalation, quote-approval,
+    // quote-rejected, quote-submitted, reassignment, invoice-rejected, cancellation
+    // ============================================================
+    let syncResults = null;
+    try {
+      console.log('=== Running CBRE Label Sync ===');
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL 
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || 'http://localhost:3000';
+      
+      const syncResponse = await fetch(`${baseUrl}/api/email-sync`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (syncResponse.ok) {
+        syncResults = await syncResponse.json();
+        console.log(`CBRE Sync: Processed ${syncResults.processed || 0}, Updated ${syncResults.updated || 0}`);
+      } else {
+        console.error('CBRE Sync failed:', syncResponse.status);
+      }
+    } catch (syncErr) {
+      console.error('CBRE Label Sync error:', syncErr.message);
+      // Don't fail the whole cron - import was successful
+    }
+
     // Log activity
     await logImportActivity(results);
 
@@ -594,9 +622,17 @@ export async function GET(request) {
       ? `Auto-imported ${results.imported} work order(s)`
       : 'No new work orders to import';
     
+    if (syncResults) {
+      results.cbreSync = {
+        processed: syncResults.processed || 0,
+        updated: syncResults.updated || 0,
+        updates: syncResults.updates || []
+      };
+    }
+    
     results.duration = `${Date.now() - startTime}ms`;
     
-    console.log('=== Auto Email Import Cron Complete ===');
+    console.log('=== Auto Email Import + CBRE Sync Cron Complete ===');
     console.log(JSON.stringify(results, null, 2));
 
     return Response.json(results);

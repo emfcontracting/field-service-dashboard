@@ -587,7 +587,24 @@ export default function WorkOrdersList({
               )}
             </div>
           ) : (
-            filteredAndSortedWOs.map(wo => (
+            filteredAndSortedWOs.map(wo => {
+              // CBRE status badge config
+              const cbreConfigs = {
+                'pending_quote': { bg: 'bg-orange-600', text: language === 'en' ? '📋 NTE Pending' : '📋 NTE Pendiente' },
+                'quote_submitted': { bg: 'bg-blue-600', text: language === 'en' ? '📤 NTE Submitted' : '📤 NTE Enviado' },
+                'quote_approved': { bg: 'bg-green-600', text: language === 'en' ? '✅ NTE Approved' : '✅ NTE Aprobado' },
+                'quote_rejected': { bg: 'bg-red-600', text: language === 'en' ? '❌ NTE Rejected' : '❌ NTE Rechazado' },
+                'escalation': { bg: 'bg-red-600 animate-pulse', text: language === 'en' ? '🚨 Escalation' : '🚨 Escalación' },
+                'reassigned': { bg: 'bg-purple-600', text: language === 'en' ? '🔄 Reassigned' : '🔄 Reasignado' },
+                'invoice_rejected': { bg: 'bg-red-600', text: language === 'en' ? '❌ Invoice Rejected' : '❌ Factura Rechazada' },
+                'cancelled': { bg: 'bg-gray-600', text: language === 'en' ? '🚫 Cancelled' : '🚫 Cancelado' },
+              };
+              const cbreConfig = wo.cbre_status ? cbreConfigs[wo.cbre_status] : null;
+              const isEscalation = wo.cbre_status === 'escalation';
+              const isRejected = wo.cbre_status === 'quote_rejected' || wo.cbre_status === 'invoice_rejected';
+              const cbreBorder = isEscalation ? 'border-l-4 border-red-500' : isRejected ? 'border-l-4 border-orange-500' : '';
+              
+              return (
               <div
                 key={wo.wo_id}
                 onClick={() => {
@@ -597,7 +614,7 @@ export default function WorkOrdersList({
                     onSelectWO(wo);
                   }
                 }}
-                className={`rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${
+                className={`rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${cbreBorder} ${
                   wo.status === 'tech_review' 
                     ? 'bg-red-900 border-2 border-red-500 animate-pulse' 
                     : selectedWOs.has(wo.wo_id)
@@ -645,6 +662,15 @@ export default function WorkOrdersList({
                   </span>
                 </div>
                 
+                {/* CBRE Status Badge */}
+                {cbreConfig && (
+                  <div className="mb-2">
+                    <span className={`${cbreConfig.bg} text-white text-xs px-2 py-0.5 rounded-full font-semibold`}>
+                      {cbreConfig.text}
+                    </span>
+                  </div>
+                )}
+                
                 <h3 className="font-semibold mb-1">{wo.building}</h3>
                 <p className="text-sm text-gray-400 mb-2 line-clamp-2">{wo.work_order_description}</p>
                 
@@ -658,7 +684,8 @@ export default function WorkOrdersList({
                   <span className="text-green-500 font-bold">{t('nte')}: ${(wo.nte || 0).toFixed(2)}</span>
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </div>

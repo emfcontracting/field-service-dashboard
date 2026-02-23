@@ -1973,31 +1973,7 @@ const sendAssignmentNotifications = async () => {
                       );
                     })()}
 
-                    {/* NTE Status Dropdown */}
-                    <div className="mt-3 pt-3 border-t border-gray-600">
-                      <div className="flex justify-between items-center">
-                        <label className="text-xs text-gray-400 font-semibold">NTE Status:</label>
-                        <select
-                          value={quote.nte_status || 'pending'}
-                          onChange={(e) => handleUpdateNTEIncrease(quote.quote_id, { nte_status: e.target.value })}
-                          disabled={savingNTE}
-                          className={`px-3 py-1 rounded text-sm font-bold ${
-                            quote.nte_status === 'approved' 
-                              ? 'bg-green-600 text-white' 
-                              : quote.nte_status === 'verbal_approved'
-                              ? 'bg-yellow-600 text-white'
-                              : quote.nte_status === 'submitted'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-orange-600 text-white'
-                          }`}
-                        >
-                          <option value="pending">📋 Pending - Needs to Send</option>
-                          <option value="submitted">📤 Submitted to CBRE</option>
-                          <option value="verbal_approved">📞 Verbal Approved</option>
-                          <option value="approved">✅ Approved by CBRE</option>
-                        </select>
-                      </div>
-                    </div>
+
 
                     {/* Creator Info */}
                     <div className="text-xs text-gray-400 mt-3">

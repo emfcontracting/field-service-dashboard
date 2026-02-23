@@ -381,10 +381,15 @@ export async function GET(request) {
     const results = {
       processed: 0,
       updated: 0,
+      skipped: 0,
       notFound: 0,
       errors: [],
       updates: []
     };
+
+    // ========== PHASE 1: Collect ALL emails from ALL labels ==========
+    // Group by WO number, keep only the NEWEST email per WO
+    const woEmailMap = {}; // woNumber -> { email, label, labelConfig, date }
 
     for (const label of labelsToCheck) {
       const labelConfig = LABEL_STATUS_MAP[label];
@@ -392,172 +397,179 @@ export async function GET(request) {
 
       try {
         const rawEmails = await fetchEmailsFromLabel(label, searchDays);
-
         if (rawEmails.length === 0) continue;
 
-        // Process each email
         for (const email of rawEmails) {
-          try {
-            results.processed++;
+          results.processed++;
 
-            // Extract WO number
-            const woNumber = extractWONumber(email.subject, email.body);
+          const woNumber = extractWONumber(email.subject, email.body);
+          if (!woNumber) {
+            results.errors.push(`Could not find WO# in: ${email.subject.substring(0, 50)}`);
+            continue;
+          }
 
-            if (!woNumber) {
-              results.errors.push(`Could not find WO# in: ${email.subject.substring(0, 50)}`);
-              if (!dryRun) await markAsRead(label, email.uid);
-              continue;
-            }
+          const emailDate = new Date(email.date);
 
-            // Find the work order
-            const { data: workOrder, error: woError } = await supabase
-              .from('work_orders')
-              .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
-              .eq('wo_number', woNumber)
-              .single();
+          // Keep only the NEWEST email per WO (most recent status wins)
+          if (!woEmailMap[woNumber] || emailDate > woEmailMap[woNumber].date) {
+            woEmailMap[woNumber] = { email, label, labelConfig, date: emailDate };
+          }
+        }
+      } catch (labelErr) {
+        results.errors.push(`Error fetching label ${label}: ${labelErr.message}`);
+      }
+    }
 
-            if (woError || !workOrder) {
-              results.notFound++;
-              results.errors.push(`WO ${woNumber} not found in system`);
-              continue;
-            }
+    // ========== PHASE 2: Apply the winning (newest) status per WO ==========
+    for (const [woNumber, entry] of Object.entries(woEmailMap)) {
+      const { email: winningEmail, label, labelConfig } = entry;
 
-            // Skip if WO already has this status (duplicate prevention)
-            if (workOrder.cbre_status === labelConfig.cbre_status) {
-              continue;
-            }
+      try {
+        // Find the work order
+        const { data: workOrder, error: woError } = await supabase
+          .from('work_orders')
+          .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
+          .eq('wo_number', woNumber)
+          .single();
 
-            // Build update
-            const updateData = {
-              cbre_status: labelConfig.cbre_status,
-              cbre_status_updated_at: new Date().toISOString()
-            };
+        if (woError || !workOrder) {
+          results.notFound++;
+          results.errors.push(`WO ${woNumber} not found in system`);
+          continue;
+        }
 
-            if (labelConfig.billing_status) {
-              updateData.billing_status = labelConfig.billing_status;
-            }
+        // Skip if WO already has this status (duplicate prevention)
+        if (workOrder.cbre_status === labelConfig.cbre_status) {
+          results.skipped++;
+          continue;
+        }
 
-            // Extract NTE for approvals
-            let newNTE = null;
-            if (labelConfig.extractNTE) {
-              newNTE = extractApprovedNTE(email.subject, email.body);
-              if (newNTE) {
-                updateData.nte = newNTE;
-              }
-            }
+        // Build update
+        const updateData = {
+          cbre_status: labelConfig.cbre_status,
+          cbre_status_updated_at: new Date().toISOString()
+        };
 
-            // Extract quote amount for tracking
-            let submittedQuoteAmount = null;
-            if (labelConfig.extractQuoteAmount) {
-              submittedQuoteAmount = extractSubmittedQuoteAmount(email.subject, email.body);
-            }
+        if (labelConfig.billing_status) {
+          updateData.billing_status = labelConfig.billing_status;
+        }
 
-            // Add to comments
-            const timestamp = new Date().toLocaleString();
-            let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${email.subject}`;
-            if (newNTE) {
-              newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
-            }
-            if (submittedQuoteAmount) {
-              newComment += `\n📤 Quote Submitted: ${submittedQuoteAmount.toFixed(2)}`;
-            }
-            const updatedComments = workOrder.comments 
-              ? `${workOrder.comments}\n\n${newComment}`
-              : newComment;
-
-            updateData.comments = updatedComments;
-
-            let invoiceUpdated = false;
-
-            if (!dryRun) {
-              // Update work order
-              const { error: updateError } = await supabase
-                .from('work_orders')
-                .update(updateData)
-                .eq('wo_id', workOrder.wo_id);
-
-              if (updateError) {
-                results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
-                continue;
-              }
-
-              // Update NTE increase requests if quote approved
-              if (labelConfig.cbre_status === 'quote_approved') {
-                await supabase
-                  .from('work_order_quotes')
-                  .update({ 
-                    nte_status: 'approved',
-                    approved_at: new Date().toISOString()
-                  })
-                  .eq('wo_id', workOrder.wo_id)
-                  .in('nte_status', ['pending', 'submitted']);
-              }
-
-              // Update invoice status if specified
-              if (labelConfig.invoice_status) {
-                const { data: invoice, error: invoiceError } = await supabase
-                  .from('invoices')
-                  .select('invoice_id, invoice_number, status')
-                  .eq('wo_id', workOrder.wo_id)
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                  .single();
-
-                if (invoice && !invoiceError) {
-                  const { error: invoiceUpdateError } = await supabase
-                    .from('invoices')
-                    .update({ 
-                      status: labelConfig.invoice_status,
-                      rejection_reason: email.subject,
-                      rejected_at: new Date().toISOString()
-                    })
-                    .eq('invoice_id', invoice.invoice_id);
-
-                  if (!invoiceUpdateError) {
-                    invoiceUpdated = true;
-                    console.log(`Updated invoice ${invoice.invoice_number} to status: ${labelConfig.invoice_status}`);
-                  }
-                }
-              }
-
-              // Mark as read
-              await markAsRead(label, email.uid);
-
-              // Send notification
-              if (labelConfig.notify || newNTE) {
-                await sendNotification(labelConfig.cbre_status, workOrder, email.subject, newNTE);
-              }
-            }
-
-            results.updated++;
-            results.updates.push({
-              wo_number: woNumber,
-              building: workOrder.building,
-              label: label,
-              new_status: labelConfig.cbre_status,
-              new_nte: newNTE,
-              old_nte: workOrder.nte,
-              submitted_quote: submittedQuoteAmount,
-              invoice_updated: invoiceUpdated,
-              invoice_status: labelConfig.invoice_status || null,
-              subject: email.subject.substring(0, 80),
-              notified: labelConfig.notify || !!newNTE
-            });
-
-          } catch (msgErr) {
-            results.errors.push(`Error processing message: ${msgErr.message}`);
+        // Extract NTE for approvals
+        let newNTE = null;
+        if (labelConfig.extractNTE) {
+          newNTE = extractApprovedNTE(winningEmail.subject, winningEmail.body);
+          if (newNTE) {
+            updateData.nte = newNTE;
           }
         }
 
-      } catch (labelErr) {
-        results.errors.push(`Error processing label ${label}: ${labelErr.message}`);
+        // Extract quote amount for tracking
+        let submittedQuoteAmount = null;
+        if (labelConfig.extractQuoteAmount) {
+          submittedQuoteAmount = extractSubmittedQuoteAmount(winningEmail.subject, winningEmail.body);
+        }
+
+        // Add to comments
+        const timestamp = new Date().toLocaleString();
+        let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${winningEmail.subject}`;
+        if (newNTE) {
+          newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
+        }
+        if (submittedQuoteAmount) {
+          newComment += `\n📤 Quote Submitted: ${submittedQuoteAmount.toFixed(2)}`;
+        }
+        const updatedComments = workOrder.comments 
+          ? `${workOrder.comments}\n\n${newComment}`
+          : newComment;
+
+        updateData.comments = updatedComments;
+
+        let invoiceUpdated = false;
+
+        if (!dryRun) {
+          // Update work order
+          const { error: updateError } = await supabase
+            .from('work_orders')
+            .update(updateData)
+            .eq('wo_id', workOrder.wo_id);
+
+          if (updateError) {
+            results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
+            continue;
+          }
+
+          // Update NTE increase requests if quote approved
+          if (labelConfig.cbre_status === 'quote_approved') {
+            await supabase
+              .from('work_order_quotes')
+              .update({ 
+                nte_status: 'approved',
+                approved_at: new Date().toISOString()
+              })
+              .eq('wo_id', workOrder.wo_id)
+              .in('nte_status', ['pending', 'submitted']);
+          }
+
+          // Update invoice status if specified
+          if (labelConfig.invoice_status) {
+            const { data: invoice, error: invoiceError } = await supabase
+              .from('invoices')
+              .select('invoice_id, invoice_number, status')
+              .eq('wo_id', workOrder.wo_id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (invoice && !invoiceError) {
+              const { error: invoiceUpdateError } = await supabase
+                .from('invoices')
+                .update({ 
+                  status: labelConfig.invoice_status,
+                  rejection_reason: winningEmail.subject,
+                  rejected_at: new Date().toISOString()
+                })
+                .eq('invoice_id', invoice.invoice_id);
+
+              if (!invoiceUpdateError) {
+                invoiceUpdated = true;
+                console.log(`Updated invoice ${invoice.invoice_number} to status: ${labelConfig.invoice_status}`);
+              }
+            }
+          }
+
+          // Send notification
+          if (labelConfig.notify || newNTE) {
+            await sendNotification(labelConfig.cbre_status, workOrder, winningEmail.subject, newNTE);
+          }
+        }
+
+        results.updated++;
+        results.updates.push({
+          wo_number: woNumber,
+          building: workOrder.building,
+          label: label,
+          new_status: labelConfig.cbre_status,
+          email_date: entry.date.toISOString(),
+          new_nte: newNTE,
+          old_nte: workOrder.nte,
+          old_status: workOrder.cbre_status,
+          submitted_quote: submittedQuoteAmount,
+          invoice_updated: invoiceUpdated,
+          invoice_status: labelConfig.invoice_status || null,
+          subject: winningEmail.subject.substring(0, 80),
+          notified: labelConfig.notify || !!newNTE
+        });
+
+      } catch (msgErr) {
+        results.errors.push(`Error processing WO ${woNumber}: ${msgErr.message}`);
       }
     }
 
     return Response.json({
       success: true,
-      message: `Processed ${results.processed} emails, updated ${results.updated} work orders`,
+      message: `Processed ${results.processed} emails, ${Object.keys(woEmailMap).length} unique WOs, updated ${results.updated}, skipped ${results.skipped} (already current)`,
       dryRun,
+      searchDays,
       ...results
     });
 

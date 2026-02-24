@@ -32,7 +32,8 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
       const insertData = {
         ...newWO,
         date_entered: getNowEST(),
-        scheduled_date: newWO.scheduled_date || null
+        scheduled_date: newWO.scheduled_date || null,
+        lead_tech_id: newWO.lead_tech_id || null
       };
 
       const { data, error } = await supabase

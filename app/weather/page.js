@@ -1,63 +1,114 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import AppShell from '@/app/components/AppShell';
 
-const SEVERITY_COLORS = {
-  'Extreme': 'bg-red-600 border-red-500',
-  'Severe': 'bg-orange-600 border-orange-500',
-  'Moderate': 'bg-yellow-600 border-yellow-500',
-  'Minor': 'bg-blue-600 border-blue-500',
-  'Unknown': 'bg-gray-600 border-gray-500'
-};
-
-const SEVERITY_TEXT = {
-  'Extreme': 'text-red-400',
-  'Severe': 'text-orange-400',
-  'Moderate': 'text-yellow-400',
-  'Minor': 'text-blue-400',
-  'Unknown': 'text-gray-400'
+// ── Severity config ──────────────────────────────────────────────────────────
+const SEVERITY = {
+  Extreme: { bar: 'bg-red-500',    badge: 'bg-red-500/15 text-red-400 border-red-500/30',    glow: 'border-red-500/30 bg-red-500/5' },
+  Severe:  { bar: 'bg-orange-500', badge: 'bg-orange-500/15 text-orange-400 border-orange-500/30', glow: 'border-orange-500/30 bg-orange-500/5' },
+  Moderate:{ bar: 'bg-yellow-500', badge: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', glow: 'border-yellow-500/30 bg-yellow-500/5' },
+  Minor:   { bar: 'bg-blue-500',   badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30',   glow: 'border-blue-500/30 bg-blue-500/5' },
+  Unknown: { bar: 'bg-slate-500',  badge: 'bg-slate-500/15 text-slate-400 border-slate-500/30', glow: 'border-slate-500/30 bg-slate-500/5' },
 };
 
 const HAZARD_COLORS = {
-  'lightning': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  'tornado': 'bg-red-500/20 text-red-300 border-red-500/30',
-  'flood': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'ice': 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-  'snow': 'bg-slate-500/20 text-slate-300 border-slate-500/30',
-  'wind': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  'heat': 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-  'fog': 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-  'hail': 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+  lightning: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  tornado:   'bg-red-500/15 text-red-400 border-red-500/30',
+  flood:     'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  ice:       'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+  snow:      'bg-slate-500/15 text-slate-400 border-slate-500/30',
+  wind:      'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  heat:      'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  fog:       'bg-gray-500/15 text-gray-400 border-gray-500/30',
+  hail:      'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
 };
 
+// ── UI primitives ────────────────────────────────────────────────────────────
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-[#0d0d14] border border-[#1e1e2e] rounded-xl ${className}`}>{children}</div>
+);
+const CardHeader = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 border-b border-[#1e1e2e] ${className}`}>{children}</div>
+);
+const CardBody = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 ${className}`}>{children}</div>
+);
+
+const Btn = ({ children, onClick, disabled, variant = 'default', size = 'md', className = '' }) => {
+  const variants = {
+    default: 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:text-slate-100 hover:bg-[#2d2d44]',
+    primary: 'bg-blue-600 hover:bg-blue-500 text-white',
+    danger:  'bg-red-600 hover:bg-red-500 text-white',
+    warning: 'bg-yellow-600 hover:bg-yellow-500 text-white',
+    success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
+    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-[#1e1e2e]',
+  };
+  const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-3 text-base' };
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors
+        disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}>
+      {children}
+    </button>
+  );
+};
+
+// ── Weather icon based on forecast text ─────────────────────────────────────
+const weatherIcon = (text = '', isDaytime = true) => {
+  const t = text.toLowerCase();
+  if (t.includes('thunder') || t.includes('lightning')) return '⛈️';
+  if (t.includes('tornado'))   return '🌪️';
+  if (t.includes('snow') || t.includes('blizzard')) return '❄️';
+  if (t.includes('sleet') || t.includes('ice'))     return '🌨️';
+  if (t.includes('rain') || t.includes('shower'))   return '🌧️';
+  if (t.includes('drizzle'))   return '🌦️';
+  if (t.includes('fog') || t.includes('mist'))      return '🌫️';
+  if (t.includes('wind') || t.includes('breezy') || t.includes('blustery')) return '💨';
+  if (t.includes('cloud') || t.includes('overcast')) return isDaytime ? '⛅' : '☁️';
+  if (t.includes('partly'))    return isDaytime ? '⛅' : '🌤️';
+  if (t.includes('clear') || t.includes('sunny')) return isDaytime ? '☀️' : '🌙';
+  return isDaytime ? '🌤️' : '🌙';
+};
+
+// ── Temp color ───────────────────────────────────────────────────────────────
+const tempColor = (t) => {
+  if (t >= 100) return 'text-red-400';
+  if (t >= 90)  return 'text-orange-400';
+  if (t >= 80)  return 'text-yellow-400';
+  if (t >= 60)  return 'text-emerald-400';
+  if (t >= 40)  return 'text-blue-400';
+  return 'text-cyan-400';
+};
+
+// ════════════════════════════════════════════════════════════════════════════
 export default function WeatherPage() {
-  const [weather, setWeather] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [weather, setWeather]               = useState(null);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState(null);
   const [selectedLocation, setSelectedLocation] = useState('lexington');
-  const [showAllAlerts, setShowAllAlerts] = useState(false);
-  const [sendingAlert, setSendingAlert] = useState(false);
-  const [alertSent, setAlertSent] = useState(false);
+  const [showAllAlerts, setShowAllAlerts]   = useState(false);
+  const [sendingAlert, setSendingAlert]     = useState(false);
+  const [alertSent, setAlertSent]           = useState(false);
+  const [expandedAlert, setExpandedAlert]   = useState(null);
+  const [lastUpdated, setLastUpdated]       = useState(null);
 
   useEffect(() => {
     fetchWeather();
-    // Refresh every 15 minutes
-    const interval = setInterval(fetchWeather, 15 * 60 * 1000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchWeather, 15 * 60 * 1000);
+    return () => clearInterval(iv);
   }, []);
 
   async function fetchWeather() {
     try {
       setLoading(true);
-      const response = await fetch('/api/weather?location=all');
-      if (!response.ok) throw new Error('Failed to fetch weather');
-      const data = await response.json();
+      const res = await fetch('/api/weather?location=all');
+      if (!res.ok) throw new Error('Failed to fetch weather');
+      const data = await res.json();
       setWeather(data);
+      setLastUpdated(new Date());
       setError(null);
     } catch (err) {
-      console.error('Weather fetch error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -65,350 +116,324 @@ export default function WeatherPage() {
   }
 
   async function sendWeatherAlert() {
-    if (!weather || weather.alerts.length === 0) return;
-    
+    if (!weather?.alerts?.length) return;
     setSendingAlert(true);
     try {
-      // Get the most severe alert
-      const severeAlerts = weather.alerts.filter(a => 
-        a.severity === 'Extreme' || a.severity === 'Severe'
-      );
-      
-      const primaryAlert = severeAlerts.length > 0 ? severeAlerts[0] : weather.alerts[0];
-      
-      const alertText = `EMF WEATHER ALERT: ${primaryAlert.event}. ${primaryAlert.headline?.slice(0, 80) || 'Check forecast before outdoor work.'}`.slice(0, 160);
-
-      const response = await fetch('/api/weather/alert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          alertType: primaryAlert.event,
-          alertMessage: alertText,
-          alertDetails: primaryAlert.instruction?.slice(0, 500),
-          severity: primaryAlert.severity
-        })
+      const severe = weather.alerts.filter(a => a.severity === 'Extreme' || a.severity === 'Severe');
+      const primary = severe[0] || weather.alerts[0];
+      const alertText = `EMF WEATHER ALERT: ${primary.event}. ${primary.headline?.slice(0, 80) || 'Check forecast before outdoor work.'}`.slice(0, 160);
+      const res = await fetch('/api/weather/alert', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertType: primary.event, alertMessage: alertText, alertDetails: primary.instruction?.slice(0, 500), severity: primary.severity }),
       });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setAlertSent(true);
-        setTimeout(() => setAlertSent(false), 5000);
-      } else {
-        alert('Failed to send alert: ' + result.error);
-      }
-    } catch (err) {
-      console.error('Failed to send alert:', err);
-      alert('Failed to send alert: ' + err.message);
-    } finally {
-      setSendingAlert(false);
-    }
+      const result = await res.json();
+      if (result.success) { setAlertSent(true); setTimeout(() => setAlertSent(false), 4000); }
+      else alert('Failed to send alert: ' + result.error);
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setSendingAlert(false); }
   }
 
+  const hasAlerts  = weather?.alerts?.length > 0;
+  const hasSevere  = weather?.alerts?.some(a => a.severity === 'Extreme' || a.severity === 'Severe');
+  const hasHazards = weather?.hazardous_conditions?.length > 0;
+  const forecast   = weather?.forecasts?.[selectedLocation];
+  const visibleAlerts = showAllAlerts ? weather?.alerts : weather?.alerts?.slice(0, 2);
+
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading && !weather) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Loading weather data...</p>
+      <AppShell activeLink="/weather">
+        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+            <p className="text-slate-500 text-sm">Loading weather data…</p>
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
-  const selectedForecast = weather?.forecasts?.[selectedLocation];
-  const hasActiveAlerts = weather?.alerts?.length > 0;
-  const hasSevereAlerts = weather?.alerts?.some(a => a.severity === 'Extreme' || a.severity === 'Severe');
-  const hasHazards = weather?.hazardous_conditions?.length > 0;
-
   return (
-    <AppShell>
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
-      {/* Header */}
-      <header className={`border-b px-6 py-4 ${
-        hasSevereAlerts 
-          ? 'bg-red-900/50 border-red-700' 
-          : hasActiveAlerts 
-            ? 'bg-yellow-900/30 border-yellow-700' 
-            : 'bg-gray-800 border-gray-700'
-      }`}>
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/dashboard"
-              className="px-4 py-2 bg-[#1e1e2e] hover:bg-[#2d2d44] border border-[#2d2d44] rounded-lg text-sm text-slate-300"
-            >
-              ← Dashboard
-            </Link>
+    <AppShell activeLink="/weather">
+      <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
+
+        {/* ── Toast ── */}
+        {alertSent && (
+          <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-semibold">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Weather alert sent to team!
+          </div>
+        )}
+
+        {/* ── Page Header ── */}
+        <div className={`border-b px-6 py-5 ${hasSevere ? 'bg-red-950/40 border-red-800/50' : hasAlerts ? 'bg-yellow-950/30 border-yellow-800/40' : 'bg-[#0d0d14] border-[#1e1e2e]'}`}>
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                🌤️ Weather & Alerts
-                {hasSevereAlerts && <span className="text-red-400 animate-pulse">⚠️</span>}
-              </h1>
-              <p className="text-gray-400 text-sm">
-                South Carolina Service Areas • Updated {weather?.timestamp ? new Date(weather.timestamp).toLocaleTimeString() : 'Loading...'}
+              <div className="flex items-center gap-2.5 mb-0.5">
+                {hasSevere && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                {!hasSevere && hasAlerts && <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />}
+                {!hasAlerts && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                <p className="text-slate-500 text-xs uppercase tracking-widest font-semibold">
+                  {hasSevere ? 'Severe Weather Active' : hasAlerts ? 'Weather Alerts Active' : 'All Clear'}
+                </p>
+              </div>
+              <h1 className="text-2xl font-bold text-slate-100">Weather &amp; Alerts</h1>
+              <p className="text-slate-500 text-sm mt-0.5">
+                South Carolina Service Areas
+                {lastUpdated && <span className="ml-2 text-slate-600">• Updated {lastUpdated.toLocaleTimeString()}</span>}
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={fetchWeather}
-              disabled={loading}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm disabled:opacity-50"
-            >
-              🔄 Refresh
-            </button>
-            {hasActiveAlerts && (
-              <button
-                onClick={sendWeatherAlert}
-                disabled={sendingAlert}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  hasSevereAlerts 
-                    ? 'bg-red-600 hover:bg-red-700' 
-                    : 'bg-yellow-600 hover:bg-yellow-700'
-                } disabled:opacity-50`}
-              >
-                {sendingAlert ? 'Sending...' : '📢 Alert Team'}
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Alert Sent Toast */}
-      {alertSent && (
-        <div className="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50">
-          ✓ Weather alert sent to team!
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        
-        {/* Active Alerts Banner */}
-        {hasActiveAlerts && (
-          <div className={`rounded-xl border p-4 ${
-            hasSevereAlerts 
-              ? 'bg-red-900/30 border-red-500/50' 
-              : 'bg-yellow-900/30 border-yellow-500/50'
-          }`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                🚨 Active Weather Alerts ({weather.alerts.length})
-              </h2>
-              {weather.alerts.length > 2 && (
-                <button
-                  onClick={() => setShowAllAlerts(!showAllAlerts)}
-                  className="text-sm text-blue-400 hover:text-blue-300"
-                >
-                  {showAllAlerts ? 'Show Less' : `Show All ${weather.alerts.length}`}
-                </button>
+            <div className="flex items-center gap-2">
+              <Btn onClick={fetchWeather} disabled={loading} variant="default" size="sm">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className={loading ? 'animate-spin' : ''}>
+                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                Refresh
+              </Btn>
+              {hasAlerts && (
+                <Btn onClick={sendWeatherAlert} disabled={sendingAlert}
+                  variant={hasSevere ? 'danger' : 'warning'} size="sm">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/></svg>
+                  {sendingAlert ? 'Sending…' : 'Alert Team'}
+                </Btn>
               )}
             </div>
-            
-            <div className="space-y-3">
-              {(showAllAlerts ? weather.alerts : weather.alerts.slice(0, 2)).map((alert, idx) => (
-                <div 
-                  key={alert.id || idx}
-                  className={`rounded-lg border p-3 ${SEVERITY_COLORS[alert.severity] || SEVERITY_COLORS['Unknown']}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className={`text-xs font-bold uppercase ${SEVERITY_TEXT[alert.severity]}`}>
-                        {alert.severity}
-                      </span>
-                      <h3 className="font-bold text-white">{alert.event}</h3>
-                      <p className="text-sm text-gray-200 mt-1">{alert.headline}</p>
-                    </div>
-                    <div className="text-right text-xs text-gray-300">
-                      <div>Expires: {alert.expires ? new Date(alert.expires).toLocaleString() : 'Unknown'}</div>
-                    </div>
-                  </div>
-                  {alert.areas && (
-                    <p className="text-xs text-gray-300 mt-2">
-                      📍 Areas: {alert.areas}
-                    </p>
-                  )}
-                  {alert.instruction && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-gray-300 cursor-pointer hover:text-white">
-                        View Instructions
-                      </summary>
-                      <p className="text-xs text-gray-200 mt-1 whitespace-pre-wrap">
-                        {alert.instruction}
-                      </p>
-                    </details>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
-        )}
+        </div>
 
-        {/* Hazardous Conditions for Outdoor Work */}
-        {hasHazards && (
-          <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl p-4">
-            <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-              ⚠️ Hazardous Conditions for Outdoor Work
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {weather.hazardous_conditions.map((condition, idx) => (
-                <div key={idx} className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="font-medium">{condition.location}</span>
-                    <span className="text-sm text-gray-400">{condition.period}</span>
-                  </div>
-                  <p className="text-sm text-gray-300 mb-2">{condition.forecast}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {condition.hazards.map((hazard, hIdx) => (
-                      <span 
-                        key={hIdx}
-                        className={`text-xs px-2 py-1 rounded border ${HAZARD_COLORS[hazard.type] || 'bg-gray-500/20 text-gray-300'}`}
-                      >
-                        {hazard.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
+
+          {/* ── Error ── */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+              <p className="text-red-400 text-sm">Error loading weather: {error}</p>
+              <Btn onClick={fetchWeather} variant="danger" size="sm">Try Again</Btn>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* No Alerts Banner */}
-        {!hasActiveAlerts && !hasHazards && (
-          <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">✅</span>
+          {/* ── All Clear Banner ── */}
+          {!hasAlerts && !hasHazards && !error && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-5 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-2xl flex-shrink-0">✅</div>
               <div>
-                <h2 className="text-lg font-bold text-green-400">All Clear</h2>
-                <p className="text-gray-400">No active weather alerts or hazardous conditions for outdoor work.</p>
+                <h2 className="text-lg font-bold text-emerald-400">All Clear</h2>
+                <p className="text-slate-500 text-sm">No active weather alerts or hazardous conditions for outdoor work.</p>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Location Forecasts */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-          <div className="p-4 border-b border-gray-700">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">📍 Location Forecast</h2>
-              <select
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
-              >
+          {/* ── Active Alerts ── */}
+          {hasAlerts && (
+            <Card className={hasSevere ? 'border-red-500/30' : 'border-yellow-500/30'}>
+              <CardHeader className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${hasSevere ? 'bg-red-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`} />
+                  <h2 className="text-sm font-semibold text-slate-200">
+                    Active Weather Alerts
+                    <span className={`ml-2 text-xs px-2 py-0.5 rounded-full border font-bold
+                      ${hasSevere ? 'bg-red-500/15 text-red-400 border-red-500/30' : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'}`}>
+                      {weather.alerts.length}
+                    </span>
+                  </h2>
+                </div>
+                {weather.alerts.length > 2 && (
+                  <Btn onClick={() => setShowAllAlerts(p => !p)} variant="ghost" size="sm">
+                    {showAllAlerts ? 'Show Less' : `Show All ${weather.alerts.length}`}
+                  </Btn>
+                )}
+              </CardHeader>
+              <CardBody className="space-y-3">
+                {visibleAlerts?.map((alert, idx) => {
+                  const sev = SEVERITY[alert.severity] || SEVERITY.Unknown;
+                  const isOpen = expandedAlert === idx;
+                  return (
+                    <div key={alert.id || idx} className={`rounded-xl border ${sev.glow} overflow-hidden`}>
+                      {/* Severity bar */}
+                      <div className={`h-0.5 ${sev.bar}`} />
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full border ${sev.badge}`}>
+                                {alert.severity}
+                              </span>
+                            </div>
+                            <h3 className="font-bold text-slate-100 text-base">{alert.event}</h3>
+                            <p className="text-slate-400 text-sm mt-1 leading-relaxed">{alert.headline}</p>
+                            {alert.areas && (
+                              <p className="text-slate-600 text-xs mt-2 flex items-center gap-1">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                {alert.areas}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-xs text-slate-600">Expires</p>
+                            <p className="text-xs text-slate-400 font-mono">
+                              {alert.expires ? new Date(alert.expires).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '—'}
+                            </p>
+                          </div>
+                        </div>
+                        {alert.instruction && (
+                          <div className="mt-3 pt-3 border-t border-[#1e1e2e]">
+                            <button onClick={() => setExpandedAlert(isOpen ? null : idx)}
+                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-semibold transition">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}>
+                                <polyline points="9 18 15 12 9 6"/>
+                              </svg>
+                              {isOpen ? 'Hide' : 'Show'} Instructions
+                            </button>
+                            {isOpen && (
+                              <p className="text-xs text-slate-400 mt-2 leading-relaxed whitespace-pre-wrap bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-3">
+                                {alert.instruction}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardBody>
+            </Card>
+          )}
+
+          {/* ── Hazardous Conditions ── */}
+          {hasHazards && (
+            <Card className="border-orange-500/20">
+              <CardHeader>
+                <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                  <span className="text-orange-400">⚠</span>
+                  Hazardous Conditions for Outdoor Work
+                </h2>
+              </CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {weather.hazardous_conditions.map((cond, idx) => (
+                    <div key={idx} className="bg-[#0a0a0f] border border-[#2d2d44] rounded-xl p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <p className="font-semibold text-slate-200 text-sm">{cond.location}</p>
+                        <p className="text-xs text-slate-600">{cond.period}</p>
+                      </div>
+                      <p className="text-xs text-slate-400 mb-3 leading-relaxed">{cond.forecast}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {cond.hazards?.map((h, hi) => (
+                          <span key={hi} className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${HAZARD_COLORS[h.type] || 'bg-slate-500/15 text-slate-400 border-slate-500/30'}`}>
+                            {h.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          )}
+
+          {/* ── Location Forecast ── */}
+          <Card>
+            <CardHeader className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-200">Location Forecast</h2>
+              <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}
+                className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500/60 transition">
                 {weather?.forecasts && Object.entries(weather.forecasts).map(([key, loc]) => (
                   <option key={key} value={key}>{loc.name}</option>
                 ))}
               </select>
-            </div>
-          </div>
+            </CardHeader>
+            <CardBody>
+              {forecast ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {forecast.periods?.slice(0, 6).map((period, idx) => (
+                    <div key={idx}
+                      className={`rounded-xl p-3 text-center border transition
+                        ${idx === 0
+                          ? 'bg-blue-500/10 border-blue-500/20'
+                          : period.isDaytime
+                            ? 'bg-[#0a0a0f] border-[#1e1e2e] hover:border-[#2d2d44]'
+                            : 'bg-[#080810] border-[#1e1e2e] hover:border-[#2d2d44]'}`}>
+                      <p className={`text-xs font-semibold mb-2 ${idx === 0 ? 'text-blue-400' : 'text-slate-500'}`}>
+                        {period.name}
+                      </p>
+                      <div className="text-3xl mb-2">{weatherIcon(period.shortForecast, period.isDaytime)}</div>
+                      <p className={`text-2xl font-bold font-mono mb-1 ${tempColor(period.temperature)}`}>
+                        {period.temperature}°
+                      </p>
+                      <p className="text-[10px] text-slate-600 mb-2 font-mono">
+                        {period.windSpeed} {period.windDirection}
+                      </p>
+                      <p className="text-[10px] text-slate-400 leading-tight">{period.shortForecast}</p>
+                      {period.probabilityOfPrecipitation > 0 && (
+                        <p className="text-[10px] text-blue-400 mt-1.5 font-semibold">
+                          💧 {period.probabilityOfPrecipitation}%
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center py-8 text-slate-600">No forecast data available.</p>
+              )}
+            </CardBody>
+          </Card>
 
-          {selectedForecast ? (
-            <div className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {selectedForecast.periods.map((period, idx) => (
-                  <div 
-                    key={idx}
-                    className={`rounded-lg p-3 text-center ${
-                      period.isDaytime ? 'bg-blue-900/20' : 'bg-gray-700/50'
-                    }`}
-                  >
-                    <div className="text-sm font-medium text-gray-300 mb-1">
-                      {period.name}
-                    </div>
-                    <div className="text-3xl font-bold mb-1">
-                      {period.temperature}°{period.temperatureUnit}
-                    </div>
-                    <div className="text-xs text-gray-400 mb-2">
-                      {period.windSpeed} {period.windDirection}
-                    </div>
-                    <div className="text-sm">
-                      {period.shortForecast}
-                    </div>
-                    {period.probabilityOfPrecipitation > 0 && (
-                      <div className="text-xs text-blue-400 mt-1">
-                        💧 {period.probabilityOfPrecipitation}% precip
+          {/* ── Bottom grid ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            {/* All locations current */}
+            <Card>
+              <CardHeader><h3 className="text-sm font-semibold text-slate-200">All Locations — Current</h3></CardHeader>
+              <CardBody className="space-y-1 p-3">
+                {weather?.forecasts && Object.entries(weather.forecasts).map(([key, loc]) => {
+                  const cur = loc.periods?.[0];
+                  if (!cur) return null;
+                  const isSelected = key === selectedLocation;
+                  return (
+                    <button key={key} onClick={() => setSelectedLocation(key)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition text-left
+                        ${isSelected ? 'bg-blue-500/10 border border-blue-500/20' : 'hover:bg-[#1e1e2e]/40 border border-transparent'}`}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">{weatherIcon(cur.shortForecast, cur.isDaytime)}</span>
+                        <p className={`text-sm font-medium ${isSelected ? 'text-blue-300' : 'text-slate-300'}`}>{loc.name}</p>
                       </div>
-                    )}
+                      <div className="flex items-center gap-3">
+                        <p className={`text-xs text-slate-500 hidden sm:block max-w-[120px] truncate`}>{cur.shortForecast}</p>
+                        <p className={`font-bold font-mono text-sm ${tempColor(cur.temperature)}`}>
+                          {cur.temperature}°{cur.temperatureUnit}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </CardBody>
+            </Card>
+
+            {/* Safety guidelines */}
+            <Card>
+              <CardHeader><h3 className="text-sm font-semibold text-slate-200">Outdoor Work Safety</h3></CardHeader>
+              <CardBody className="space-y-3">
+                {[
+                  { icon: '⚡', label: 'Lightning',    text: 'Stop outdoor work, seek shelter. Wait 30 min after last strike.' },
+                  { icon: '💨', label: 'High Winds',   text: 'No ladder/lift work above 25 mph sustained winds.' },
+                  { icon: '🔥', label: 'Extreme Heat', text: 'Frequent breaks, stay hydrated. Watch for heat exhaustion signs.' },
+                  { icon: '🧊', label: 'Ice / Snow',   text: 'Check road conditions. Extra caution on ladders and roofs.' },
+                  { icon: '🌧️', label: 'Heavy Rain',   text: 'No electrical work in wet outdoor conditions.' },
+                ].map(item => (
+                  <div key={item.label} className="flex items-start gap-3 p-3 bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl">
+                    <span className="text-lg flex-shrink-0">{item.icon}</span>
+                    <div>
+                      <p className="text-xs font-bold text-slate-300 mb-0.5">{item.label}</p>
+                      <p className="text-xs text-slate-500 leading-relaxed">{item.text}</p>
+                    </div>
                   </div>
                 ))}
-              </div>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-gray-500">
-              No forecast data available
-            </div>
-          )}
-        </div>
-
-        {/* Quick Reference */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* All Locations Overview */}
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h3 className="font-bold mb-3">🗺️ All Locations - Current</h3>
-            <div className="space-y-2">
-              {weather?.forecasts && Object.entries(weather.forecasts).map(([key, loc]) => {
-                const current = loc.periods?.[0];
-                if (!current) return null;
-                return (
-                  <div 
-                    key={key}
-                    className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0"
-                  >
-                    <span className="font-medium">{loc.name}</span>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="font-bold">{current.temperature}°{current.temperatureUnit}</span>
-                      <span className="text-gray-400 w-32 truncate text-right">{current.shortForecast}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Work Safety Guidelines */}
-          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h3 className="font-bold mb-3">🦺 Outdoor Work Safety</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-start gap-2">
-                <span>⚡</span>
-                <span><strong>Lightning:</strong> Stop outdoor work, seek shelter. Wait 30 min after last strike.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>💨</span>
-                <span><strong>High Winds:</strong> No ladder/lift work above 25mph sustained winds.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>🔥</span>
-                <span><strong>Extreme Heat:</strong> Frequent breaks, hydration. Watch for heat exhaustion.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>🧊</span>
-                <span><strong>Ice/Snow:</strong> Check road conditions. Extra caution on ladders/roofs.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>🌧️</span>
-                <span><strong>Heavy Rain:</strong> No electrical work in wet conditions outdoors.</span>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           </div>
         </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4 text-center">
-            <p className="text-red-400">Error loading weather: {error}</p>
-            <button 
-              onClick={fetchWeather}
-              className="mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
       </div>
-    </div>
     </AppShell>
   );
 }

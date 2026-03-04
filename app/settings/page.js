@@ -3,347 +3,327 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
-import Link from 'next/link';
 import AppShell from '@/app/components/AppShell';
 
 const supabase = getSupabase();
 
+// ── UI primitives ────────────────────────────────────────────────────────────
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-[#0d0d14] border border-[#1e1e2e] rounded-xl ${className}`}>{children}</div>
+);
+const CardHeader = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 border-b border-[#1e1e2e] ${className}`}>{children}</div>
+);
+const CardBody = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 ${className}`}>{children}</div>
+);
+
+const Btn = ({ children, onClick, disabled, type = 'button', variant = 'default', size = 'md', className = '' }) => {
+  const variants = {
+    default: 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:text-slate-100 hover:bg-[#2d2d44]',
+    primary: 'bg-blue-600 hover:bg-blue-500 text-white',
+    success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
+    danger:  'bg-red-600 hover:bg-red-500 text-white',
+    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-[#1e1e2e]',
+    gradient:'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white',
+  };
+  const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-3 text-base' };
+  return (
+    <button type={type} onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors
+        disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}>
+      {children}
+    </button>
+  );
+};
+
+const Input = ({ label, hint, error, className = '', ...props }) => (
+  <div>
+    {label && <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">{label}</label>}
+    <input
+      className={`w-full bg-[#0a0a0f] border ${error ? 'border-red-500/50' : 'border-[#2d2d44]'} text-slate-200 placeholder-slate-600
+        rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500/60 transition ${className}`}
+      {...props}
+    />
+    {hint  && <p className="text-slate-600 text-xs mt-1">{hint}</p>}
+    {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+  </div>
+);
+
+const KV = ({ label, value }) => (
+  <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl px-4 py-3">
+    <p className="text-slate-600 text-[10px] uppercase tracking-widest mb-1">{label}</p>
+    <p className="text-slate-200 font-semibold text-sm">{value || <span className="text-slate-600 font-normal">Not set</span>}</p>
+  </div>
+);
+
+// ── Admin tool card ──────────────────────────────────────────────────────────
+const AdminTool = ({ icon, label, onClick }) => (
+  <button onClick={onClick}
+    className="flex flex-col items-center gap-2.5 p-4 bg-[#0a0a0f] border border-[#1e1e2e]
+      hover:border-[#3d3d5e] hover:bg-[#1e1e2e]/40 rounded-xl transition group">
+    <span className="text-2xl group-hover:scale-110 transition-transform">{icon}</span>
+    <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-200 transition text-center leading-tight">{label}</span>
+  </button>
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 export default function SettingsPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
+  const [currentUser, setCurrentUser]     = useState(null);
+  const [loading, setLoading]             = useState(true);
   const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [newPassword, setNewPassword]     = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
-  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwError, setPwError]             = useState('');
+  const [pwSuccess, setPwSuccess]         = useState('');
+  const [changing, setChanging]           = useState(false);
+  const [showCurrent, setShowCurrent]     = useState(false);
+  const [showNew, setShowNew]             = useState(false);
+  const [showConfirm, setShowConfirm]     = useState(false);
 
   const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
 
-  useEffect(() => {
-    fetchCurrentUser();
-  }, []);
+  useEffect(() => { fetchCurrentUser(); }, []);
 
   async function fetchCurrentUser() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', user.id)
-        .single();
-
-      setCurrentUser(userData);
-    } catch (error) {
-      console.error('Error fetching user:', error);
-    } finally {
-      setLoading(false);
-    }
+      if (!user) { router.push('/login'); return; }
+      const { data } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
+      setCurrentUser(data);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   }
 
   async function handleChangePassword(e) {
     e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('New passwords do not match');
-      return;
-    }
-
-    if (currentPassword === newPassword) {
-      setPasswordError('New password must be different from current password');
-      return;
-    }
-
-    setChangingPassword(true);
-
+    setPwError(''); setPwSuccess('');
+    if (newPassword.length < 6)         { setPwError('New password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setPwError('Passwords do not match'); return; }
+    if (currentPassword === newPassword) { setPwError('New password must differ from current'); return; }
+    setChanging(true);
     try {
-      const response = await fetch('/api/users/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-          userEmail: currentUser?.email
-        })
+      const res  = await fetch('/api/users/change-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, userEmail: currentUser?.email }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to change password');
-      }
-
-      setPasswordSuccess('Password changed successfully!');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-
-      setTimeout(() => setPasswordSuccess(''), 5000);
-
-    } catch (error) {
-      console.error('Password change error:', error);
-      setPasswordError(error.message);
-    } finally {
-      setChangingPassword(false);
-    }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to change password');
+      setPwSuccess('Password changed successfully!');
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+      setTimeout(() => setPwSuccess(''), 5000);
+    } catch (err) { setPwError(err.message); }
+    finally { setChanging(false); }
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push('/login');
-  }
+  // ── Eye toggle input ─────────────────────────────────────────────────────
+  const PwInput = ({ label, value, onChange, show, onToggle, placeholder }) => (
+    <div>
+      <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">{label}</label>
+      <div className="relative">
+        <input type={show ? 'text' : 'password'} value={value} onChange={onChange} placeholder={placeholder} required
+          className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600
+            rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:border-blue-500/60 transition" />
+        <button type="button" onClick={onToggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400 transition">
+          {show
+            ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          }
+        </button>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Loading settings...</p>
+      <AppShell activeLink="/settings">
+        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+            <p className="text-slate-500 text-sm">Loading settings…</p>
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
+  const roleLabel = currentUser?.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
   return (
-    <AppShell>
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
-      {/* Header */}
-      <header className="bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-4">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-100">⚙️ Settings</h1>
-          {isSuperuser && (
-            <p className="text-sm text-green-400 mt-1">🔑 Superuser Account</p>
-          )}
-        </div>
-      </header>
+    <AppShell activeLink="/settings">
+      <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        
-        {/* Profile Information */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            👤 Profile Information
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div>
-              <p className="text-sm text-gray-400">Name</p>
-              <p className="text-lg font-medium">
-                {currentUser?.first_name} {currentUser?.last_name}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Email</p>
-              <p className="text-lg font-medium">{currentUser?.email}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Role</p>
-              <p className="text-lg font-medium capitalize">
-                {currentUser?.role?.replace('_', ' ')}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Status</p>
-              <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${
-                currentUser?.is_active 
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
-              }`}>
-                {currentUser?.is_active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Admin Tools - Moved up for superusers */}
-        {isSuperuser && (
-          <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-xl border border-blue-500/30 p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              🔧 Admin Tools
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button
-                onClick={() => router.push('/users')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">👥</span>
-                <span>Manage Users</span>
-              </button>
-              <button
-                onClick={() => router.push('/settings/automations')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">🤖</span>
-                <span>Automations</span>
-              </button>
-              <button
-                onClick={() => router.push('/settings/subcontractors')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">🧱</span>
-                <span>Subcontractors</span>
-              </button>
-              <button
-                onClick={() => router.push('/admin/subcontractor-invoices')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">🔍</span>
-                <span>Invoice Review</span>
-              </button>
-              <button
-                onClick={() => router.push('/admin/invoice-verification')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">🧾</span>
-                <span>External Invoices</span>
-              </button>
-              <button
-                onClick={() => router.push('/messages')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">💬</span>
-                <span>Send Messages</span>
-              </button>
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold py-4 px-4 rounded-xl transition flex flex-col items-center gap-2"
-              >
-                <span className="text-2xl">📊</span>
-                <span>Dashboard</span>
-              </button>
-            </div>
-            <p className="text-sm text-gray-400 mt-4">
-              As superuser, you can manage users, configure automated messages, and send notifications to the team.
+        {/* ── Header ── */}
+        <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6 py-5">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
+            <p className="text-slate-500 text-sm mt-0.5">
+              Account preferences and configuration
+              {isSuperuser && <span className="ml-2 text-purple-400 text-xs font-semibold">🔑 Superuser</span>}
             </p>
           </div>
-        )}
-
-        {/* Change Password */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-            🔒 Change Password
-          </h2>
-          <p className="text-gray-400 mb-6">
-            Update your password to keep your account secure. Minimum 6 characters.
-          </p>
-
-          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Current Password *
-              </label>
-              <input
-                type="password"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
-                placeholder="Enter your current password"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                New Password *
-              </label>
-              <input
-                type="password"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
-                placeholder="Enter new password (min 6 characters)"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm New Password *
-              </label>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
-                placeholder="Confirm your new password"
-              />
-            </div>
-
-            {passwordError && (
-              <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
-                <p className="text-red-400 text-sm">❌ {passwordError}</p>
-              </div>
-            )}
-
-            {passwordSuccess && (
-              <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-3">
-                <p className="text-green-400 text-sm">✓ {passwordSuccess}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={changingPassword}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:bg-gray-600 disabled:cursor-not-allowed"
-            >
-              {changingPassword ? 'Changing Password...' : 'Change Password'}
-            </button>
-          </form>
-
-          <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/20 rounded-lg max-w-md">
-            <h3 className="font-medium text-blue-300 mb-2">💡 Password Tips:</h3>
-            <ul className="text-sm text-blue-200/70 space-y-1">
-              <li>• Use at least 6 characters</li>
-              <li>• Mix letters, numbers, and symbols</li>
-              <li>• Don't use common passwords</li>
-              <li>• Change your password regularly</li>
-            </ul>
-          </div>
         </div>
 
-        {/* SMS/Notification Settings */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-            📱 Notification Settings
-          </h2>
-          <p className="text-gray-400 mb-4">
-            Your phone and carrier for receiving SMS notifications.
-          </p>
-          <div className="grid grid-cols-2 gap-6 max-w-md">
-            <div>
-              <p className="text-sm text-gray-400">Phone</p>
-              <p className="text-lg font-medium">
-                {currentUser?.phone || <span className="text-gray-500">Not set</span>}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">SMS Carrier</p>
-              <p className="text-lg font-medium capitalize">
-                {currentUser?.sms_carrier?.replace('_', ' ') || <span className="text-gray-500">Not set</span>}
-              </p>
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-4">
-            Contact an admin to update your phone number and carrier.
-          </p>
-        </div>
+        <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
 
+          {/* ── Profile ── */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Profile Information
+              </h2>
+            </CardHeader>
+            <CardBody>
+              <div className="flex items-center gap-4 mb-5">
+                {/* Avatar */}
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xl font-bold">
+                    {currentUser?.first_name?.charAt(0)?.toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-slate-100">{currentUser?.first_name} {currentUser?.last_name}</p>
+                  <p className="text-slate-500 text-sm">{currentUser?.email}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KV label="Role"   value={roleLabel} />
+                <KV label="Phone"  value={currentUser?.phone} />
+                <KV label="Carrier" value={currentUser?.sms_carrier?.replace(/_/g, ' ')} />
+                <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl px-4 py-3">
+                  <p className="text-slate-600 text-[10px] uppercase tracking-widest mb-1">Status</p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border
+                    ${currentUser?.is_active
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-red-500/15 text-red-400 border-red-500/30'}`}>
+                    {currentUser?.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-slate-600 text-xs mt-3">Contact an admin to update your phone number or carrier.</p>
+            </CardBody>
+          </Card>
+
+          {/* ── Admin Tools (superuser only) ── */}
+          {isSuperuser && (
+            <Card className="border-purple-500/20">
+              <CardHeader className="bg-gradient-to-r from-blue-500/5 to-purple-500/5">
+                <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                  Admin Tools
+                  <span className="text-xs text-purple-400 font-normal ml-1">Superuser only</span>
+                </h2>
+              </CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                  <AdminTool icon="👥" label="Manage Users"      onClick={() => router.push('/users')} />
+                  <AdminTool icon="🤖" label="Automations"       onClick={() => router.push('/settings/automations')} />
+                  <AdminTool icon="💰" label="QuickBooks"        onClick={() => router.push('/settings/quickbooks')} />
+                  <AdminTool icon="🧱" label="Subcontractors"    onClick={() => router.push('/settings/subcontractors')} />
+                  <AdminTool icon="🔍" label="Invoice Review"    onClick={() => router.push('/admin/subcontractor-invoices')} />
+                  <AdminTool icon="🧾" label="Ext. Invoices"     onClick={() => router.push('/admin/invoice-verification')} />
+                  <AdminTool icon="💬" label="Send Messages"     onClick={() => router.push('/messages')} />
+                </div>
+              </CardBody>
+            </Card>
+          )}
+
+          {/* ── Change Password ── */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Change Password
+              </h2>
+            </CardHeader>
+            <CardBody>
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                <PwInput label="Current Password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                  show={showCurrent} onToggle={() => setShowCurrent(p => !p)} placeholder="Enter current password" />
+                <PwInput label="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                  show={showNew} onToggle={() => setShowNew(p => !p)} placeholder="Min 6 characters" />
+                <PwInput label="Confirm New Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                  show={showConfirm} onToggle={() => setShowConfirm(p => !p)} placeholder="Repeat new password" />
+
+                {/* Strength indicator */}
+                {newPassword.length > 0 && (
+                  <div>
+                    <div className="flex gap-1 mb-1">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className={`h-1 flex-1 rounded-full transition ${
+                          newPassword.length >= i * 3
+                            ? i <= 1 ? 'bg-red-500' : i <= 2 ? 'bg-yellow-500' : i <= 3 ? 'bg-blue-500' : 'bg-emerald-500'
+                            : 'bg-[#2d2d44]'
+                        }`} />
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      {newPassword.length < 4 ? 'Too short' : newPassword.length < 7 ? 'Weak' : newPassword.length < 10 ? 'Fair' : 'Strong'}
+                    </p>
+                  </div>
+                )}
+
+                {pwError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400 flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p className="text-red-400 text-xs">{pwError}</p>
+                  </div>
+                )}
+                {pwSuccess && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-400 flex-shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
+                    <p className="text-emerald-400 text-xs">{pwSuccess}</p>
+                  </div>
+                )}
+
+                <Btn type="submit" disabled={changing} variant="primary" size="lg" className="w-full">
+                  {changing ? 'Changing…' : 'Change Password'}
+                </Btn>
+              </form>
+
+              <div className="mt-5 max-w-md">
+                <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl p-4">
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Password Tips</p>
+                  <ul className="space-y-1 text-xs text-slate-600">
+                    <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-slate-700 flex-shrink-0"/>Use at least 6 characters</li>
+                    <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-slate-700 flex-shrink-0"/>Mix letters, numbers and symbols</li>
+                    <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-slate-700 flex-shrink-0"/>Avoid common or reused passwords</li>
+                  </ul>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* ── Notification Settings (read-only) ── */}
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/></svg>
+                Notification Settings
+              </h2>
+            </CardHeader>
+            <CardBody>
+              <p className="text-slate-500 text-sm mb-4">Your phone and carrier for receiving SMS job notifications.</p>
+              <div className="grid grid-cols-2 gap-3 max-w-sm">
+                <KV label="Phone"   value={currentUser?.phone} />
+                <KV label="Carrier" value={currentUser?.sms_carrier?.replace(/_/g, ' ')} />
+              </div>
+              {(!currentUser?.phone || !currentUser?.sms_carrier) && (
+                <div className="mt-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 max-w-sm">
+                  <p className="text-yellow-400 text-xs flex items-center gap-1.5">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    SMS notifications disabled — phone or carrier missing. Ask an admin to update your profile.
+                  </p>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+        </div>
       </div>
-    </div>
     </AppShell>
   );
 }

@@ -2,593 +2,277 @@
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useRouter } from 'next/navigation';
+import AppShell from '@/app/components/AppShell';
 import AnalyticsTab from '@/app/components/AnalyticsTab';
 import BulkOperationsTab from '@/app/components/BulkOperationsTab';
 
-export default function BackendDashboard() {
-  const router = useRouter();
-  const supabase = createClientComponentClient();
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('health');
-  
-  // State for different sections
-  const [healthData, setHealthData] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [logStats, setLogStats] = useState(null);
-  const [triggering, setTriggering] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  
-  // Log filters
-  const [logType, setLogType] = useState('all');
-  const [logStatus, setLogStatus] = useState('');
-  const [logLimit, setLogLimit] = useState(100);
+// ── UI primitives ────────────────────────────────────────────────────────────
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-[#0d0d14] border border-[#1e1e2e] rounded-xl ${className}`}>{children}</div>
+);
+const CardHeader = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 border-b border-[#1e1e2e] ${className}`}>{children}</div>
+);
+const CardBody = ({ children, className = '' }) => (
+  <div className={`px-5 py-4 ${className}`}>{children}</div>
+);
 
-  // Initialize and fetch health data
-  useEffect(() => {
-    fetchHealthData();
-  }, []);
-
-  // Auto refresh health data
-  useEffect(() => {
-    if (autoRefresh && activeTab === 'health') {
-      const interval = setInterval(() => {
-        fetchHealthData();
-      }, 30000); // Refresh every 30 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [autoRefresh, activeTab]);
-
-  // Fetch data when tab changes
-  useEffect(() => {
-    if (activeTab === 'health') {
-      fetchHealthData();
-    } else if (activeTab === 'logs') {
-      fetchLogs();
-    }
-  }, [activeTab, logType, logStatus, logLimit]);
-
-  async function fetchHealthData() {
-    try {
-      const response = await fetch('/api/backend/health');
-      const data = await response.json();
-      setHealthData(data);
-    } catch (error) {
-      console.error('Failed to fetch health data:', error);
-    }
-  }
-
-  async function fetchLogs() {
-    try {
-      const params = new URLSearchParams({
-        type: logType,
-        limit: logLimit.toString()
-      });
-      
-      if (logStatus) {
-        params.append('status', logStatus);
-      }
-
-      const response = await fetch(`/api/backend/logs?${params}`);
-      const data = await response.json();
-      setLogs(data.logs || []);
-      setLogStats(data.stats || null);
-    } catch (error) {
-      console.error('Failed to fetch logs:', error);
-    }
-  }
-
-  async function trigger(action, params = {}) {
-    setTriggering(action);
-    try {
-      const response = await fetch('/api/backend/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, params })
-      });
-
-      const data = await response.json();
-      
-      console.log('Trigger response:', data); // Debug log
-      
-      if (data.success) {
-        const detailsStr = JSON.stringify(data.details, null, 2);
-        alert(`✓ ${data.message}\n\nDetails:\n${detailsStr}`);
-        
-        // Refresh health data and logs
-        await fetchHealthData();
-        await fetchLogs();
-      } else {
-        // Show detailed error
-        const errorMsg = data.message || data.error || 'Unknown error occurred';
-        const errorDetails = data.details ? `\n\nDetails:\n${JSON.stringify(data.details, null, 2)}` : '';
-        const fullError = data.error ? `\n\nFull Error:\n${data.error}` : '';
-        
-        console.error('Trigger failed:', data); // Debug log
-        alert(`✗ Action Failed: ${errorMsg}${errorDetails}${fullError}`);
-      }
-    } catch (error) {
-      console.error('Trigger exception:', error); // Debug log
-      alert(`✗ Failed to trigger ${action}\n\nError: ${error.message}`);
-    } finally {
-      setTriggering(null);
-    }
-  }
-
+const Btn = ({ children, onClick, disabled, variant = 'default', size = 'md', className = '' }) => {
+  const v = {
+    default: 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:text-slate-100 hover:bg-[#2d2d44]',
+    primary: 'bg-blue-600 hover:bg-blue-500 text-white',
+    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-[#1e1e2e]',
+  };
+  const s = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-3 text-base' };
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">🛠️ Backend Dashboard</h1>
-                <p className="mt-1 text-sm text-gray-500">
-                  System monitoring and administration
-                </p>
-              </div>
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  ← Back to Dashboard
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="border-t border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              {['health', 'analytics', 'bulk-ops', 'triggers', 'logs', 'database'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`
-                    py-4 px-1 border-b-2 font-medium text-sm capitalize
-                    ${activeTab === tab
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  {tab}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Health Tab */}
-        {activeTab === 'health' && (
-          <HealthTab 
-            healthData={healthData}
-            autoRefresh={autoRefresh}
-            setAutoRefresh={setAutoRefresh}
-            onRefresh={fetchHealthData}
-          />
-        )}
-
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <AnalyticsTab />
-        )}
-
-        {/* Bulk Operations Tab */}
-        {activeTab === 'bulk-ops' && (
-          <BulkOperationsTab />
-        )}
-
-        {/* Triggers Tab */}
-        {activeTab === 'triggers' && (
-          <TriggersTab trigger={trigger} triggering={triggering} />
-        )}
-
-        {/* Logs Tab */}
-        {activeTab === 'logs' && (
-          <LogsTab
-            logs={logs}
-            stats={logStats}
-            logType={logType}
-            setLogType={setLogType}
-            logStatus={logStatus}
-            setLogStatus={setLogStatus}
-            logLimit={logLimit}
-            setLogLimit={setLogLimit}
-            onRefresh={fetchLogs}
-          />
-        )}
-
-        {/* Database Tab */}
-        {activeTab === 'database' && (
-          <DatabaseTab />
-        )}
-      </div>
-    </div>
+    <button onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors
+        disabled:opacity-40 disabled:cursor-not-allowed ${v[variant]} ${s[size]} ${className}`}>
+      {children}
+    </button>
   );
-}
+};
 
-// Health Tab Component
+const StatusBadge = ({ status }) => {
+  const cfg = {
+    healthy: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    warning: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    error:   'bg-red-500/15 text-red-400 border-red-500/30',
+    failed:  'bg-red-500/15 text-red-400 border-red-500/30',
+    info:    'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  };
+  const icons = { healthy:'✓', success:'✓', warning:'⚠', error:'✗', failed:'✗', info:'i' };
+  const cls = cfg[status] || 'bg-slate-500/15 text-slate-400 border-slate-500/30';
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border uppercase ${cls}`}>
+      {icons[status] || '?'} {status}
+    </span>
+  );
+};
+
+// ── Stat card ────────────────────────────────────────────────────────────────
+const StatCard = ({ label, value, color = 'text-slate-200' }) => (
+  <Card>
+    <div className="px-5 py-4">
+      <p className="text-slate-600 text-[10px] uppercase tracking-widest mb-1">{label}</p>
+      <p className={`text-3xl font-bold font-mono ${color}`}>{value}</p>
+    </div>
+  </Card>
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── Health Tab ───────────────────────────────────────────────────────────────
 function HealthTab({ healthData, autoRefresh, setAutoRefresh, onRefresh }) {
   if (!healthData) {
-    return <div className="text-center py-12">Loading health data...</div>;
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+          <p className="text-slate-500 text-sm">Loading health data…</p>
+        </div>
+      </div>
+    );
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'healthy':
-      case 'success':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'warning':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'error':
-      case 'failed':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'healthy':
-      case 'success':
-        return '✓';
-      case 'warning':
-        return '⚠️';
-      case 'error':
-      case 'failed':
-        return '✗';
-      default:
-        return '?';
-    }
+  const overall = healthData.status;
+  const overallCfg = {
+    healthy: 'border-emerald-500/30 bg-emerald-500/5',
+    warning: 'border-yellow-500/30 bg-yellow-500/5',
+    error:   'border-red-500/30 bg-red-500/5',
   };
 
   return (
-    <div className="space-y-6">
-      {/* Overall Status */}
-      <div className={`p-6 rounded-lg border-2 ${getStatusColor(healthData.status)}`}>
-        <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {/* Overall status banner */}
+      <div className={`rounded-xl border p-5 flex items-center justify-between ${overallCfg[overall] || 'border-[#1e1e2e]'}`}>
+        <div className="flex items-center gap-3">
+          <StatusBadge status={overall} />
           <div>
-            <h2 className="text-2xl font-bold flex items-center">
-              <span className="mr-3">{getStatusIcon(healthData.status)}</span>
-              System Status: {healthData.status.toUpperCase()}
-            </h2>
-            <p className="mt-1 text-sm opacity-75">
-              Last checked: {new Date(healthData.timestamp).toLocaleString()}
-            </p>
+            <p className="font-bold text-slate-100">System Status</p>
+            <p className="text-slate-500 text-xs">Last checked: {new Date(healthData.timestamp).toLocaleString()}</p>
           </div>
-          <div className="flex items-center space-x-3">
-            <label className="flex items-center space-x-2 text-sm">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="rounded"
-              />
-              <span>Auto-refresh (30s)</span>
-            </label>
-            <button
-              onClick={onRefresh}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
-            >
-              🔄 Refresh Now
-            </button>
-          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+            <div onClick={() => setAutoRefresh(p => !p)}
+              className={`w-8 h-4 rounded-full transition-colors relative cursor-pointer
+                ${autoRefresh ? 'bg-blue-600' : 'bg-[#2d2d44]'}`}>
+              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform
+                ${autoRefresh ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            Auto-refresh (30s)
+          </label>
+          <Btn onClick={onRefresh} variant="default" size="sm">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </Btn>
         </div>
       </div>
 
-      {/* Health Checks Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Checks grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(healthData.checks).map(([key, check]) => (
-          <div key={key} className={`p-6 rounded-lg border ${getStatusColor(check.status)}`}>
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold capitalize flex items-center">
-                  <span className="mr-2">{getStatusIcon(check.status)}</span>
-                  {key.replace(/_/g, ' ')}
-                </h3>
-                <p className="mt-2 text-sm opacity-90">
-                  {check.message}
-                </p>
-                
-                {/* Additional details */}
-                {check.lastRun && (
-                  <p className="mt-1 text-xs opacity-75">
-                    Last run: {new Date(check.lastRun).toLocaleString()}
-                  </p>
-                )}
-                {check.sentToday !== undefined && (
-                  <div className="mt-2 text-xs space-y-1">
-                    <p>📧 Sent today: {check.sentToday}</p>
-                    <p>❌ Failed today: {check.failedToday}</p>
-                    <p>📊 Success rate: {check.successRate}</p>
-                  </div>
-                )}
-                {check.minutesAgo !== undefined && check.minutesAgo !== null && (
-                  <p className="mt-1 text-xs opacity-75">
-                    {check.minutesAgo < 60 
-                      ? `${check.minutesAgo} minutes ago`
-                      : `${Math.floor(check.minutesAgo / 60)} hours ago`
-                    }
-                  </p>
-                )}
-
-                {/* Cron Jobs Details */}
-                {key === 'cronJobs' && typeof check === 'object' && (
-                  <div className="mt-3 space-y-2">
-                    {Object.entries(check).filter(([k]) => k !== 'status').map(([jobKey, jobData]) => (
-                      <div key={jobKey} className="text-xs bg-white bg-opacity-50 p-2 rounded">
-                        <div className="font-semibold capitalize">{jobKey.replace(/_/g, ' ')}</div>
-                        <div className="opacity-75">
-                          Status: {jobData.status || 'unknown'}
-                        </div>
-                        {jobData.lastRun && (
-                          <div className="opacity-75">
-                            Last: {new Date(jobData.lastRun).toLocaleTimeString()}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          <Card key={key} className={
+            check.status === 'healthy' || check.status === 'success' ? 'border-emerald-500/20' :
+            check.status === 'warning' ? 'border-yellow-500/20' :
+            check.status === 'error' || check.status === 'failed' ? 'border-red-500/20' : ''
+          }>
+            <CardBody>
+              <div className="flex items-start justify-between mb-3">
+                <p className="font-semibold text-slate-200 text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                <StatusBadge status={check.status} />
               </div>
-            </div>
-          </div>
+              <p className="text-slate-500 text-xs leading-relaxed mb-2">{check.message}</p>
+              {check.lastRun && (
+                <p className="text-slate-700 text-[10px]">Last run: {new Date(check.lastRun).toLocaleString()}</p>
+              )}
+              {check.sentToday !== undefined && (
+                <div className="mt-2 space-y-0.5 text-[10px] text-slate-600">
+                  <p>📧 Sent today: <span className="text-emerald-400">{check.sentToday}</span></p>
+                  <p>❌ Failed: <span className="text-red-400">{check.failedToday}</span></p>
+                  <p>📊 Success rate: <span className="text-blue-400">{check.successRate}</span></p>
+                </div>
+              )}
+              {check.minutesAgo !== undefined && check.minutesAgo !== null && (
+                <p className="text-slate-700 text-[10px] mt-1">
+                  {check.minutesAgo < 60
+                    ? `${check.minutesAgo}m ago`
+                    : `${Math.floor(check.minutesAgo / 60)}h ago`}
+                </p>
+              )}
+            </CardBody>
+          </Card>
         ))}
       </div>
     </div>
   );
 }
 
-// Triggers Tab Component
+// ── Triggers Tab ─────────────────────────────────────────────────────────────
 function TriggersTab({ trigger, triggering }) {
   const triggers = [
-    {
-      id: 'email_import',
-      name: 'Force Email Import',
-      description: 'Manually trigger the IMAP email import cron job',
-      icon: '📧',
-      color: 'blue'
-    },
-    {
-      id: 'availability_reminder',
-      name: 'Send Availability Reminder',
-      description: 'Send availability reminder to all technicians',
-      icon: '📅',
-      color: 'green'
-    },
-    {
-      id: 'aging_alert',
-      name: 'Trigger Aging Alert',
-      description: 'Send aging work order alerts',
-      icon: '⚠️',
-      color: 'yellow'
-    },
-    {
-      id: 'sync_email_status',
-      name: 'Sync Email Status',
-      description: 'Sync work order status from Gmail labels',
-      icon: '🔄',
-      color: 'purple'
-    },
-    {
-      id: 'test_notification',
-      name: 'Test Notification',
-      description: 'Send a test email notification',
-      icon: '✉️',
-      color: 'pink'
-    }
+    { id: 'email_import',          name: 'Force Email Import',       desc: 'Manually trigger the IMAP email import cron job',  icon: '📧', color: 'blue' },
+    { id: 'availability_reminder', name: 'Availability Reminder',    desc: 'Send availability reminder to all technicians',     icon: '📅', color: 'emerald' },
+    { id: 'aging_alert',           name: 'Aging Work Order Alert',   desc: 'Send aging work order alerts to assigned techs',    icon: '⚠️', color: 'yellow' },
+    { id: 'sync_email_status',     name: 'Sync Email Status',        desc: 'Sync work order status from Gmail labels',          icon: '🔄', color: 'purple' },
+    { id: 'test_notification',     name: 'Test Notification',        desc: 'Send a test email notification to verify setup',    icon: '✉️', color: 'slate' },
   ];
 
-  const getColorClasses = (color) => {
-    const colors = {
-      blue: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
-      green: 'bg-green-50 border-green-200 hover:bg-green-100',
-      yellow: 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100',
-      purple: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
-      pink: 'bg-pink-50 border-pink-200 hover:bg-pink-100'
-    };
-    return colors[color] || colors.blue;
-  };
+  const borderColor = { blue:'border-blue-500/20 hover:border-blue-500/40', emerald:'border-emerald-500/20 hover:border-emerald-500/40', yellow:'border-yellow-500/20 hover:border-yellow-500/40', purple:'border-purple-500/20 hover:border-purple-500/40', slate:'border-slate-500/20 hover:border-slate-500/40' };
+  const iconBg = { blue:'bg-blue-500/10', emerald:'bg-emerald-500/10', yellow:'bg-yellow-500/10', purple:'bg-purple-500/10', slate:'bg-slate-500/10' };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800">
-          ℹ️ <strong>Manual Triggers:</strong> Use these controls to manually execute system operations. 
-          Results will be logged in the system logs.
+    <div className="space-y-5">
+      <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-4">
+        <p className="text-xs text-slate-500">
+          <span className="text-blue-400 font-semibold">Manual Triggers</span> — Use these to manually execute system operations. Results are logged in system logs.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {triggers.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => trigger(item.id)}
-            disabled={triggering === item.id}
-            className={`
-              p-6 rounded-lg border-2 text-left transition-all
-              ${getColorClasses(item.color)}
-              ${triggering === item.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-            `}
-          >
-            <div className="text-4xl mb-3">{item.icon}</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {item.name}
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {item.description}
-            </p>
-            {triggering === item.id && (
-              <div className="flex items-center text-sm text-gray-600">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                Executing...
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {triggers.map(item => {
+          const isRunning = triggering === item.id;
+          return (
+            <button key={item.id} onClick={() => trigger(item.id)} disabled={!!triggering}
+              className={`text-left p-5 bg-[#0d0d14] rounded-xl border transition
+                ${borderColor[item.color]} ${triggering && !isRunning ? 'opacity-40' : ''}`}>
+              <div className={`w-10 h-10 rounded-xl ${iconBg[item.color]} flex items-center justify-center text-xl mb-3`}>
+                {isRunning
+                  ? <div className="w-5 h-5 rounded-full border-2 border-slate-400/30 border-t-slate-400 animate-spin" />
+                  : item.icon
+                }
               </div>
-            )}
-          </button>
-        ))}
+              <p className="font-semibold text-slate-200 text-sm mb-1">{item.name}</p>
+              <p className="text-slate-600 text-xs leading-relaxed">{item.desc}</p>
+              {isRunning && <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">Executing…</p>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// Logs Tab Component
+// ── Logs Tab ─────────────────────────────────────────────────────────────────
 function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, logLimit, setLogLimit, onRefresh }) {
-  const logTypes = ['all', 'email_import', 'availability_reminder', 'aging_alert', 'manual_trigger', 'notification', 'error'];
-  const statusTypes = ['', 'success', 'failed', 'warning', 'info'];
+  const LOG_TYPES   = ['all','email_import','availability_reminder','aging_alert','manual_trigger','notification','error'];
+  const STATUS_OPTS = ['','success','failed','warning','info'];
 
   return (
-    <div className="space-y-6">
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Log Filters</h3>
-          <button
-            onClick={onRefresh}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            🔄 Refresh
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Log Type
-            </label>
-            <select
-              value={logType}
-              onChange={(e) => setLogType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-            >
-              {logTypes.map(type => (
-                <option key={type} value={type}>
-                  {type === 'all' ? 'All Types' : type.replace(/_/g, ' ').toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status
-            </label>
-            <select
-              value={logStatus}
-              onChange={(e) => setLogStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-            >
-              {statusTypes.map(status => (
-                <option key={status} value={status}>
-                  {status === '' ? 'All Statuses' : status.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Limit
-            </label>
-            <select
-              value={logLimit}
-              onChange={(e) => setLogLimit(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-            >
-              <option value="50">50 logs</option>
-              <option value="100">100 logs</option>
-              <option value="200">200 logs</option>
-              <option value="500">500 logs</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-600">Total Logs</div>
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-600">Last Hour</div>
-            <div className="text-2xl font-bold text-blue-600">{stats.recent.lastHour}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-600">Last 24 Hours</div>
-            <div className="text-2xl font-bold text-green-600">{stats.recent.last24Hours}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-sm text-gray-600">Last Week</div>
-            <div className="text-2xl font-bold text-purple-600">{stats.recent.lastWeek}</div>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Total Logs"    value={stats.total}                color="text-slate-200" />
+          <StatCard label="Last Hour"     value={stats.recent?.lastHour}     color="text-blue-400" />
+          <StatCard label="Last 24 Hours" value={stats.recent?.last24Hours}  color="text-emerald-400" />
+          <StatCard label="Last Week"     value={stats.recent?.lastWeek}     color="text-purple-400" />
         </div>
       )}
 
-      {/* Logs Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Filters */}
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-200">Filters</h3>
+          <Btn onClick={onRefresh} variant="default" size="sm">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </Btn>
+        </CardHeader>
+        <CardBody>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { label:'Log Type', value:logType, onChange:setLogType, opts:LOG_TYPES.map(t => ({ v:t, l:t==='all'?'All Types':t.replace(/_/g,' ').toUpperCase() })) },
+              { label:'Status',   value:logStatus, onChange:setLogStatus, opts:STATUS_OPTS.map(s => ({ v:s, l:s===''?'All Statuses':s.toUpperCase() })) },
+              { label:'Limit',    value:logLimit,  onChange:v => setLogLimit(parseInt(v)), opts:[50,100,200,500].map(n => ({ v:n, l:`${n} logs` })) },
+            ].map(f => (
+              <div key={f.label}>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">{f.label}</label>
+                <select value={f.value} onChange={e => f.onChange(e.target.value)}
+                  className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/60 transition">
+                  {f.opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Logs table */}
+      <Card>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Time
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Message
-                </th>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e1e2e]">
+                {['Time','Type','Status','Message'].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-[10px] text-slate-600 uppercase tracking-widest font-semibold">{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-[#1e1e2e]">
               {logs.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
-                    No logs found
-                  </td>
-                </tr>
+                <tr><td colSpan="4" className="px-5 py-12 text-center text-slate-600 text-sm">No logs found</td></tr>
               ) : (
-                logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                logs.map(log => (
+                  <tr key={log.id} className="hover:bg-[#1e1e2e]/30 transition">
+                    <td className="px-5 py-3 text-xs text-slate-600 font-mono whitespace-nowrap">
                       {new Date(log.created_at).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                    <td className="px-5 py-3">
+                      <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-semibold">
                         {log.log_type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        log.status === 'success' ? 'bg-green-100 text-green-800' :
-                        log.status === 'failed' || log.status === 'error' ? 'bg-red-100 text-red-800' :
-                        log.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {log.status || 'info'}
-                      </span>
+                    <td className="px-5 py-3">
+                      <StatusBadge status={log.status || 'info'} />
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="max-w-md truncate" title={log.message}>
-                        {log.message}
-                      </div>
+                    <td className="px-5 py-3 text-slate-400 text-xs max-w-md">
+                      <div className="truncate" title={log.message}>{log.message}</div>
                       {log.metadata && Object.keys(log.metadata).length > 0 && (
                         <details className="mt-1">
-                          <summary className="text-xs text-blue-600 cursor-pointer">View metadata</summary>
-                          <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-auto max-h-40">
+                          <summary className="text-blue-400 cursor-pointer hover:text-blue-300">Metadata</summary>
+                          <pre className="mt-1.5 text-[10px] bg-[#0a0a0f] border border-[#1e1e2e] p-2 rounded-lg overflow-auto max-h-32 text-slate-500">
                             {JSON.stringify(log.metadata, null, 2)}
                           </pre>
                         </details>
@@ -600,101 +284,183 @@ function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, lo
             </tbody>
           </table>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Database Tab ─────────────────────────────────────────────────────────────
+function DatabaseTab() {
+  const [dbStats, setDbStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClientComponentClient();
+
+  useEffect(() => { fetchStats(); }, []);
+
+  async function fetchStats() {
+    setLoading(true);
+    const tables = ['work_orders','users','notifications','daily_hours_log','system_logs'];
+    const counts = {};
+    for (const t of tables) {
+      try {
+        const { count, error } = await supabase.from(t).select('*', { count:'exact', head:true });
+        counts[t] = error ? null : (count ?? 0);
+      } catch { counts[t] = null; }
+    }
+    setDbStats(counts);
+    setLoading(false);
+  }
+
+  const TABLE_ICONS = { work_orders:'📋', users:'👥', notifications:'🔔', daily_hours_log:'⏱️', system_logs:'📜' };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Btn onClick={fetchStats} disabled={loading} variant="default" size="sm">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            className={loading ? 'animate-spin' : ''}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </Btn>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {dbStats && Object.entries(dbStats).map(([table, count]) => (
+            <Card key={table}>
+              <CardBody>
+                <div className="text-2xl mb-2">{TABLE_ICONS[table] || '🗄️'}</div>
+                <p className="text-slate-600 text-[10px] uppercase tracking-widest mb-1 capitalize">{table.replace(/_/g,' ')}</p>
+                {count === null
+                  ? <p className="text-red-400 text-xs font-semibold">Not found</p>
+                  : <p className="text-2xl font-bold font-mono text-slate-200">{count.toLocaleString()}</p>
+                }
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl p-4 flex items-start gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-yellow-400 flex-shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <p className="text-yellow-400 text-xs">Direct database operations should be performed carefully. Always test in development first.</p>
       </div>
     </div>
   );
 }
 
-// Database Tab Component
-function DatabaseTab() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
+// ════════════════════════════════════════════════════════════════════════════
+// ── Main page ────────────────────────────────────────────────────────────────
+const TABS = [
+  { id:'health',    label:'Health',     icon:'💚' },
+  { id:'analytics', label:'Analytics',  icon:'📊' },
+  { id:'bulk-ops',  label:'Bulk Ops',   icon:'⚙️' },
+  { id:'triggers',  label:'Triggers',   icon:'⚡' },
+  { id:'logs',      label:'Logs',       icon:'📜' },
+  { id:'database',  label:'Database',   icon:'🗄️' },
+];
+
+export default function BackendDashboard() {
+  const [activeTab, setActiveTab]   = useState('health');
+  const [healthData, setHealthData] = useState(null);
+  const [logs, setLogs]             = useState([]);
+  const [logStats, setLogStats]     = useState(null);
+  const [triggering, setTriggering] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [logType, setLogType]       = useState('all');
+  const [logStatus, setLogStatus]   = useState('');
+  const [logLimit, setLogLimit]     = useState(100);
+
+  useEffect(() => { fetchHealthData(); }, []);
 
   useEffect(() => {
-    fetchDatabaseStats();
-  }, []);
-
-  async function fetchDatabaseStats() {
-    setLoading(true);
-    try {
-      // Fetch counts from various tables
-      const tables = [
-        'work_orders',
-        'users',
-        'notifications',
-        'daily_hours_log',
-        'system_logs'
-      ];
-
-      const counts = {};
-      
-      for (const table of tables) {
-        try {
-          const { count, error } = await supabase
-            .from(table)
-            .select('*', { count: 'exact', head: true });
-          
-          if (error) {
-            counts[table] = 'N/A';
-            console.log(`Table ${table} not found or error:`, error.message);
-          } else {
-            counts[table] = count || 0;
-          }
-        } catch (err) {
-          counts[table] = 'N/A';
-          console.log(`Table ${table} error:`, err.message);
-        }
-      }
-
-      setStats(counts);
-    } catch (error) {
-      console.error('Failed to fetch database stats:', error);
-    } finally {
-      setLoading(false);
+    if (autoRefresh && activeTab === 'health') {
+      const iv = setInterval(fetchHealthData, 30000);
+      return () => clearInterval(iv);
     }
+  }, [autoRefresh, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'health') fetchHealthData();
+    else if (activeTab === 'logs') fetchLogs();
+  }, [activeTab, logType, logStatus, logLimit]);
+
+  async function fetchHealthData() {
+    try {
+      const res = await fetch('/api/backend/health');
+      setHealthData(await res.json());
+    } catch (err) { console.error(err); }
   }
 
-  if (loading) {
-    return <div className="text-center py-12">Loading database stats...</div>;
+  async function fetchLogs() {
+    try {
+      const p = new URLSearchParams({ type: logType, limit: logLimit.toString() });
+      if (logStatus) p.append('status', logStatus);
+      const res  = await fetch(`/api/backend/logs?${p}`);
+      const data = await res.json();
+      setLogs(data.logs || []);
+      setLogStats(data.stats || null);
+    } catch (err) { console.error(err); }
+  }
+
+  async function trigger(action, params = {}) {
+    setTriggering(action);
+    try {
+      const res  = await fetch('/api/backend/trigger', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, params }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✓ ${data.message}\n\n${JSON.stringify(data.details, null, 2)}`);
+        fetchHealthData(); fetchLogs();
+      } else {
+        alert(`✗ ${data.message || data.error}\n\n${data.details ? JSON.stringify(data.details, null, 2) : ''}`);
+      }
+    } catch (err) { alert(`✗ Failed: ${err.message}`); }
+    finally { setTriggering(null); }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold">Database Statistics</h3>
-          <button
-            onClick={fetchDatabaseStats}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-          >
-            🔄 Refresh
-          </button>
+    <AppShell activeLink="/dashboard">
+      <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
+
+        {/* ── Header ── */}
+        <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6 py-5">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-2xl font-bold text-slate-100">Backend Dashboard</h1>
+            <p className="text-slate-500 text-sm mt-0.5">System monitoring and administration</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats && Object.entries(stats).map(([table, count]) => (
-            <div key={table} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="text-sm text-gray-600 capitalize mb-1">
-                {table.replace(/_/g, ' ')}
-              </div>
-              <div className="text-3xl font-bold text-gray-900">
-                {count === 'N/A' ? '⚠️' : typeof count === 'number' ? count.toLocaleString() : count}
-              </div>
-              {count === 'N/A' && (
-                <div className="text-xs text-red-600 mt-1">Table not found</div>
-              )}
-            </div>
-          ))}
+        {/* ── Tab bar ── */}
+        <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6">
+          <div className="max-w-7xl mx-auto flex gap-1 overflow-x-auto">
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-3.5 text-xs font-semibold border-b-2 transition whitespace-nowrap
+                  ${activeTab === tab.id
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Content ── */}
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          {activeTab === 'health'    && <HealthTab healthData={healthData} autoRefresh={autoRefresh} setAutoRefresh={setAutoRefresh} onRefresh={fetchHealthData} />}
+          {activeTab === 'analytics' && <AnalyticsTab />}
+          {activeTab === 'bulk-ops'  && <BulkOperationsTab />}
+          {activeTab === 'triggers'  && <TriggersTab trigger={trigger} triggering={triggering} />}
+          {activeTab === 'logs'      && <LogsTab logs={logs} stats={logStats} logType={logType} setLogType={setLogType} logStatus={logStatus} setLogStatus={setLogStatus} logLimit={logLimit} setLogLimit={setLogLimit} onRefresh={fetchLogs} />}
+          {activeTab === 'database'  && <DatabaseTab />}
         </div>
       </div>
-
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <p className="text-sm text-yellow-800">
-          ⚠️ <strong>Note:</strong> Direct database operations should be performed carefully. 
-          Always test queries in a development environment first.
-        </p>
-      </div>
-    </div>
+    </AppShell>
   );
 }

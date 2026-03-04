@@ -1,311 +1,142 @@
-// app/dashboard/components/aging/SendAlertModal.js
 'use client';
 
 import { useState, useMemo } from 'react';
 
-export default function SendAlertModal({ 
-  stats, 
-  agingWorkOrders, 
-  leadTechs,
-  users,
-  preselectedTechId,
-  onClose, 
-  onAlertSent 
-}) {
-  const [selectedTechs, setSelectedTechs] = useState(
-    preselectedTechId ? [preselectedTechId] : []
+export default function SendAlertModal({ stats, agingWorkOrders, leadTechs, users, preselectedTechId, onClose, onAlertSent }) {
+  const [selectedTechs, setSelectedTechs] = useState(preselectedTechId ? [preselectedTechId] : []);
+  const [sendToAll,     setSendToAll]     = useState(!preselectedTechId);
+  const [sending,       setSending]       = useState(false);
+  const [results,       setResults]       = useState(null);
+
+  const techsWithAging = useMemo(() =>
+    Object.entries(stats.byTech)
+      .filter(([id, d]) => id !== 'unassigned' && d.total > 0)
+      .map(([id, d]) => ({ techId:id, ...d, email: users.find(u=>u.user_id===id)?.email||'No email' }))
+      .sort((a,b) => b.total - a.total),
+    [stats.byTech, users]
   );
-  const [sendToAll, setSendToAll] = useState(!preselectedTechId);
-  const [sending, setSending] = useState(false);
-  const [results, setResults] = useState(null);
 
-  // Get techs with aging work orders
-  const techsWithAging = useMemo(() => {
-    return Object.entries(stats.byTech)
-      .filter(([techId, data]) => techId !== 'unassigned' && data.total > 0)
-      .map(([techId, data]) => {
-        // Find tech email from users
-        const techUser = users.find(u => u.user_id === techId);
-        return {
-          techId,
-          name: data.name,
-          email: techUser?.email || 'No email',
-          critical: data.critical,
-          warning: data.warning,
-          stale: data.stale,
-          total: data.total,
-          workOrders: data.workOrders
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-  }, [stats.byTech, users]);
-
-  // Toggle tech selection
-  const toggleTech = (techId) => {
-    if (sendToAll) {
-      setSendToAll(false);
-      setSelectedTechs([techId]);
-    } else {
-      setSelectedTechs(prev => 
-        prev.includes(techId) 
-          ? prev.filter(id => id !== techId)
-          : [...prev, techId]
-      );
-    }
+  const toggle = id => {
+    if (sendToAll) { setSendToAll(false); setSelectedTechs([id]); }
+    else setSelectedTechs(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
   };
 
-  // Select all techs
-  const handleSelectAll = () => {
-    setSendToAll(true);
-    setSelectedTechs([]);
-  };
+  const selCount = sendToAll ? techsWithAging.length : selectedTechs.length;
 
-  // Get work orders for selected techs
-  const selectedWorkOrders = useMemo(() => {
-    if (sendToAll) {
-      return agingWorkOrders;
-    }
-    return agingWorkOrders.filter(wo => selectedTechs.includes(wo.lead_tech_id));
-  }, [sendToAll, selectedTechs, agingWorkOrders]);
-
-  // Get selected tech count
-  const selectedCount = sendToAll ? techsWithAging.length : selectedTechs.length;
-
-  // Send alerts
   const handleSend = async () => {
-    if (selectedCount === 0) {
-      alert('Please select at least one technician');
-      return;
-    }
-
-    const techNames = sendToAll 
-      ? 'ALL technicians' 
-      : techsWithAging
-          .filter(t => selectedTechs.includes(t.techId))
-          .map(t => t.name)
-          .join(', ');
-
-    if (!confirm(`Send aging alert emails to ${techNames}?`)) {
-      return;
-    }
-
-    setSending(true);
-    setResults(null);
-
+    if (!selCount) { alert('Select at least one technician'); return; }
+    const names = sendToAll ? 'ALL technicians' : techsWithAging.filter(t=>selectedTechs.includes(t.techId)).map(t=>t.name).join(', ');
+    if (!confirm(`Send aging alerts to ${names}?`)) return;
+    setSending(true); setResults(null);
     try {
-      // Filter work orders based on selection
-      const workOrdersToSend = sendToAll 
-        ? agingWorkOrders 
-        : agingWorkOrders.filter(wo => selectedTechs.includes(wo.lead_tech_id));
-
-      // If sending to specific techs, pass that info
-      const response = await fetch('/api/aging/send-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          workOrders: workOrdersToSend,
-          targetTechIds: sendToAll ? null : selectedTechs
-        })
-      });
-
-      const result = await response.json();
-      
-      setResults(result);
-
-      if (result.success) {
-        onAlertSent();
-      }
-    } catch (err) {
-      console.error('Error sending alerts:', err);
-      setResults({ success: false, error: err.message });
-    } finally {
-      setSending(false);
-    }
+      const wos = sendToAll ? agingWorkOrders : agingWorkOrders.filter(wo=>selectedTechs.includes(wo.lead_tech_id));
+      const res = await fetch('/api/aging/send-alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workOrders:wos,targetTechIds:sendToAll?null:selectedTechs})});
+      const data = await res.json();
+      setResults(data);
+      if (data.success) onAlertSent();
+    } catch(e) { setResults({success:false,error:e.message}); }
+    finally { setSending(false); }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+
         {/* Header */}
-        <div className="p-6 border-b border-gray-700">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              📧 Send Aging Alert Emails
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white text-2xl leading-none"
-            >
-              ×
-            </button>
+        <div className="px-6 py-5 border-b border-[#1e1e2e] flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-bold text-slate-200">Send Aging Alert Emails</h2>
+            <p className="text-slate-500 text-xs mt-0.5">Select which technicians should receive alerts</p>
           </div>
-          <p className="text-sm text-gray-400 mt-1">
-            Select which technicians should receive aging alerts
-          </p>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-2xl leading-none transition">×</button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Results Display */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          {/* Results */}
           {results && (
-            <div className={`mb-4 p-4 rounded-lg ${results.success ? 'bg-green-900/50 border border-green-600' : 'bg-red-900/50 border border-red-600'}`}>
+            <div className={`p-4 rounded-xl border ${results.success ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-red-500/10 border-red-500/25'}`}>
               {results.success ? (
                 <>
-                  <div className="font-bold text-green-400 mb-2">
-                    ✅ Sent {results.emailsSent} alert email(s)!
-                  </div>
-                  {results.results && (
-                    <div className="text-sm space-y-1">
-                      {results.results.map((r, i) => (
-                        <div key={i} className={r.status === 'sent' ? 'text-green-300' : 'text-red-300'}>
-                          {r.status === 'sent' ? '✓' : '✗'} {r.tech} ({r.email})
-                          {r.error && <span className="text-red-400 ml-2">- {r.error}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <p className="text-emerald-400 font-bold text-sm mb-2">✓ Sent {results.emailsSent} alert email(s)</p>
+                  {results.results?.map((r,i) => (
+                    <p key={i} className={`text-xs ${r.status==='sent'?'text-emerald-300':'text-red-400'}`}>
+                      {r.status==='sent'?'✓':'✗'} {r.tech} ({r.email}){r.error&&` — ${r.error}`}
+                    </p>
+                  ))}
                 </>
-              ) : (
-                <div className="text-red-400">
-                  ❌ Failed to send alerts: {results.error}
-                </div>
-              )}
+              ) : <p className="text-red-400 text-sm">Failed: {results.error}</p>}
             </div>
           )}
 
-          {/* Select All Option */}
-          <div className="mb-4">
-            <button
-              onClick={handleSelectAll}
-              className={`w-full p-4 rounded-lg border-2 transition text-left ${
-                sendToAll 
-                  ? 'border-blue-500 bg-blue-900/30' 
-                  : 'border-gray-600 hover:border-gray-500'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                    sendToAll ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
-                  }`}>
-                    {sendToAll && <span className="text-white text-sm">✓</span>}
-                  </div>
-                  <div>
-                    <div className="font-semibold">Send to All Technicians</div>
-                    <div className="text-sm text-gray-400">
-                      {techsWithAging.length} techs with {agingWorkOrders.length} aging work orders
-                    </div>
-                  </div>
-                </div>
+          {/* Send to all */}
+          <button onClick={() => { setSendToAll(true); setSelectedTechs([]); }}
+            className={`w-full p-4 rounded-xl border-2 transition text-left ${sendToAll ? 'border-blue-500/50 bg-blue-500/10' : 'border-[#2d2d44] hover:border-[#3d3d5e]'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${sendToAll ? 'bg-blue-500 border-blue-500' : 'border-[#2d2d44]'}`}>
+                {sendToAll && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
               </div>
-            </button>
+              <div>
+                <p className="font-semibold text-slate-200 text-sm">Send to All Technicians</p>
+                <p className="text-slate-500 text-xs">{techsWithAging.length} techs with {agingWorkOrders.length} aging work orders</p>
+              </div>
+            </div>
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-[#2d2d44]"/>
+            <span className="text-slate-600 text-xs">OR select individual</span>
+            <div className="flex-1 border-t border-[#2d2d44]"/>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1 border-t border-gray-600"></div>
-            <span className="text-gray-500 text-sm">OR select individual techs</span>
-            <div className="flex-1 border-t border-gray-600"></div>
-          </div>
-
-          {/* Individual Tech Selection */}
+          {/* Individual techs */}
           <div className="space-y-2">
             {techsWithAging.length === 0 ? (
-              <div className="text-center text-gray-500 py-4">
-                No technicians have aging work orders
-              </div>
-            ) : (
-              techsWithAging.map(tech => {
-                const isSelected = !sendToAll && selectedTechs.includes(tech.techId);
-                
-                return (
-                  <button
-                    key={tech.techId}
-                    onClick={() => toggleTech(tech.techId)}
-                    className={`w-full p-4 rounded-lg border-2 transition text-left ${
-                      isSelected 
-                        ? 'border-blue-500 bg-blue-900/30' 
-                        : sendToAll 
-                          ? 'border-gray-700 bg-gray-700/30 opacity-50'
-                          : 'border-gray-600 hover:border-gray-500'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-500'
-                        }`}>
-                          {isSelected && <span className="text-white text-sm">✓</span>}
-                        </div>
-                        <div>
-                          <div className="font-semibold">{tech.name}</div>
-                          <div className="text-sm text-gray-400">{tech.email}</div>
-                        </div>
+              <p className="text-center text-slate-600 text-sm py-4">No technicians with aging work orders</p>
+            ) : techsWithAging.map(tech => {
+              const isSel = !sendToAll && selectedTechs.includes(tech.techId);
+              return (
+                <button key={tech.techId} onClick={() => toggle(tech.techId)}
+                  className={`w-full p-4 rounded-xl border-2 transition text-left ${isSel ? 'border-blue-500/50 bg-blue-500/10' : sendToAll ? 'border-[#1e1e2e] opacity-50' : 'border-[#2d2d44] hover:border-[#3d3d5e]'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSel ? 'bg-blue-500 border-blue-500' : 'border-[#2d2d44]'}`}>
+                        {isSel && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                       </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {tech.critical > 0 && (
-                          <span className="bg-red-600 text-white text-xs px-2 py-1 rounded">
-                            🔴 {tech.critical}
-                          </span>
-                        )}
-                        {tech.warning > 0 && (
-                          <span className="bg-orange-600 text-white text-xs px-2 py-1 rounded">
-                            🟠 {tech.warning}
-                          </span>
-                        )}
-                        {tech.stale > 0 && (
-                          <span className="bg-yellow-600 text-white text-xs px-2 py-1 rounded">
-                            🟡 {tech.stale}
-                          </span>
-                        )}
-                        <span className="text-gray-400 text-sm ml-2">
-                          {tech.total} WO{tech.total !== 1 ? 's' : ''}
-                        </span>
+                      <div>
+                        <p className="font-semibold text-slate-200 text-sm">{tech.name}</p>
+                        <p className="text-slate-500 text-xs">{tech.email}</p>
                       </div>
                     </div>
-                  </button>
-                );
-              })
-            )}
+                    <div className="flex gap-1.5">
+                      {tech.critical > 0 && <span className="bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{tech.critical} crit</span>}
+                      {tech.warning  > 0 && <span className="bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{tech.warning} warn</span>}
+                      {tech.stale    > 0 && <span className="bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{tech.stale} stale</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-700 bg-gray-900/50">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-400">
-              {sendToAll ? (
-                <>Sending to <span className="text-white font-semibold">{techsWithAging.length}</span> technicians</>
-              ) : selectedTechs.length > 0 ? (
-                <>Sending to <span className="text-white font-semibold">{selectedTechs.length}</span> selected technician{selectedTechs.length !== 1 ? 's' : ''}</>
-              ) : (
-                <>Select technicians to send alerts</>
-              )}
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition"
-              >
-                {results?.success ? 'Close' : 'Cancel'}
+        <div className="px-6 py-4 border-t border-[#1e1e2e] flex items-center justify-between">
+          <p className="text-slate-500 text-sm">
+            {sendToAll ? <><span className="text-slate-200 font-semibold">{techsWithAging.length}</span> technicians</> :
+             selectedTechs.length > 0 ? <><span className="text-slate-200 font-semibold">{selectedTechs.length}</span> selected</> :
+             'Select technicians'}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:text-slate-100 px-4 py-2 rounded-lg text-sm font-semibold transition">
+              {results?.success ? 'Close' : 'Cancel'}
+            </button>
+            {!results?.success && (
+              <button onClick={handleSend} disabled={sending || !selCount}
+                className="bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition">
+                {sending ? 'Sending...' : 'Send Alerts'}
               </button>
-              
-              {!results?.success && (
-                <button
-                  onClick={handleSend}
-                  disabled={sending || selectedCount === 0}
-                  className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold transition flex items-center gap-2"
-                >
-                  {sending ? (
-                    <>⏳ Sending...</>
-                  ) : (
-                    <>📧 Send Alerts</>
-                  )}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>

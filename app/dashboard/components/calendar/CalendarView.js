@@ -1,4 +1,3 @@
-// app/dashboard/components/calendar/CalendarView.js
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,306 +5,161 @@ import CalendarGrid from './CalendarGrid';
 import CalendarWeekView from './CalendarWeekView';
 import CapacityPanel from './CapacityPanel';
 
-export default function CalendarView({ 
-  workOrders, 
-  users, 
-  supabase, 
-  refreshWorkOrders,
-  onSelectWorkOrder 
-}) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month');
-  const [draggedWorkOrder, setDraggedWorkOrder] = useState(null);
-  const [showCapacityPanel, setShowCapacityPanel] = useState(false); // Hidden by default on mobile
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [leadTechFilter, setLeadTechFilter] = useState('all');
+export default function CalendarView({ workOrders, users, supabase, refreshWorkOrders, onSelectWorkOrder }) {
+  const [currentDate,       setCurrentDate]       = useState(new Date());
+  const [viewMode,          setViewMode]          = useState('month');
+  const [draggedWO,         setDraggedWO]         = useState(null);
+  const [showCapacity,      setShowCapacity]      = useState(false);
+  const [selectedDate,      setSelectedDate]      = useState(null);
+  const [isUpdating,        setIsUpdating]        = useState(false);
+  const [leadTechFilter,    setLeadTechFilter]    = useState('all');
 
-  // Check if mobile on mount
   useEffect(() => {
-    const checkMobile = () => {
-      setShowCapacityPanel(window.innerWidth >= 1024);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const check = () => setShowCapacity(window.innerWidth >= 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   const leadTechs = users.filter(u => u.role === 'lead_tech' || u.role === 'admin');
+  const filtered  = leadTechFilter === 'all' ? workOrders : workOrders.filter(wo => wo.lead_tech_id === leadTechFilter);
 
-  const filteredWorkOrders = leadTechFilter === 'all' 
-    ? workOrders 
-    : workOrders.filter(wo => wo.lead_tech_id === leadTechFilter);
-
-  const getWorkOrdersByDate = useCallback(() => {
-    const grouped = {};
-    
-    filteredWorkOrders.forEach(wo => {
-      const dateKey = wo.scheduled_date 
-        ? new Date(wo.scheduled_date).toISOString().split('T')[0]
-        : null;
-      
-      if (dateKey) {
-        if (!grouped[dateKey]) {
-          grouped[dateKey] = [];
-        }
-        grouped[dateKey].push(wo);
-      }
+  const byDate = useCallback(() => {
+    const g = {};
+    filtered.forEach(wo => {
+      if (!wo.scheduled_date) return;
+      const k = new Date(wo.scheduled_date).toISOString().split('T')[0];
+      if (!g[k]) g[k] = [];
+      g[k].push(wo);
     });
-    
-    return grouped;
-  }, [filteredWorkOrders]);
+    return g;
+  }, [filtered]);
 
-  const unscheduledWorkOrders = filteredWorkOrders.filter(wo => 
-    !wo.scheduled_date && 
-    wo.status !== 'completed' && 
-    wo.status !== 'needs_return'
+  const unscheduled = filtered.filter(wo => !wo.scheduled_date && !['completed','needs_return'].includes(wo.status));
+
+  const handleDragStart = (e, wo) => {
+    setDraggedWO(wo);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', wo.wo_id);
+    setTimeout(() => { e.target.style.opacity = '0.5'; }, 0);
+  };
+  const handleDragEnd   = (e) => { e.target.style.opacity = '1'; setDraggedWO(null); };
+  const handleDragOver  = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+
+  const handleDrop = async (e, date) => {
+    e.preventDefault();
+    if (!draggedWO) return;
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase.from('work_orders').update({ scheduled_date: date.toISOString().split('T')[0] }).eq('wo_id', draggedWO.wo_id);
+      if (error) throw error;
+      await refreshWorkOrders();
+    } catch (err) { alert('Failed to reschedule: ' + err.message); }
+    finally { setIsUpdating(false); setDraggedWO(null); }
+  };
+
+  const handleUnschedule = async (wo) => {
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase.from('work_orders').update({ scheduled_date: null }).eq('wo_id', wo.wo_id);
+      if (error) throw error;
+      await refreshWorkOrders();
+    } catch (err) { alert('Failed to unschedule: ' + err.message); }
+    finally { setIsUpdating(false); }
+  };
+
+  const navigate = (d) => {
+    const n = new Date(currentDate);
+    viewMode === 'month' ? n.setMonth(n.getMonth() + d) : n.setDate(n.getDate() + d * 7);
+    setCurrentDate(n);
+  };
+
+  const calcCapacity = (date) => {
+    const k  = date.toISOString().split('T')[0];
+    const wos = byDate()[k] || [];
+    const max = leadTechs.length * 3;
+    return { count: wos.length, maxCapacity: max, percentage: max > 0 ? (wos.length / max) * 100 : 0 };
+  };
+
+  const Btn = ({ active, onClick, children, className='' }) => (
+    <button onClick={onClick}
+      className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${active ? 'bg-blue-600 text-white' : 'bg-[#0a0a0f] border border-[#2d2d44] text-slate-400 hover:text-slate-200 hover:border-[#3d3d5e]'} ${className}`}>
+      {children}
+    </button>
   );
 
-  const handleDragStart = (e, workOrder) => {
-    setDraggedWorkOrder(workOrder);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', workOrder.wo_id);
-    
-    setTimeout(() => {
-      e.target.style.opacity = '0.5';
-    }, 0);
-  };
-
-  const handleDragEnd = (e) => {
-    e.target.style.opacity = '1';
-    setDraggedWorkOrder(null);
-  };
-
-  const handleDrop = async (e, targetDate) => {
-    e.preventDefault();
-    
-    if (!draggedWorkOrder) return;
-    
-    setIsUpdating(true);
-    
-    try {
-      const formattedDate = targetDate.toISOString().split('T')[0];
-      
-      const { error } = await supabase
-        .from('work_orders')
-        .update({ scheduled_date: formattedDate })
-        .eq('wo_id', draggedWorkOrder.wo_id);
-
-      if (error) throw error;
-
-      await refreshWorkOrders();
-      
-    } catch (err) {
-      console.error('Error updating scheduled date:', err);
-      alert('Failed to reschedule work order: ' + err.message);
-    } finally {
-      setIsUpdating(false);
-      setDraggedWorkOrder(null);
-    }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const navigateMonth = (direction) => {
-    const newDate = new Date(currentDate);
-    if (viewMode === 'month') {
-      newDate.setMonth(newDate.getMonth() + direction);
-    } else {
-      newDate.setDate(newDate.getDate() + (direction * 7));
-    }
-    setCurrentDate(newDate);
-  };
-
-  const goToToday = () => {
-    setCurrentDate(new Date());
-  };
-
-  const calculateDayCapacity = (date) => {
-    const dateKey = date.toISOString().split('T')[0];
-    const workOrdersOnDate = getWorkOrdersByDate()[dateKey] || [];
-    
-    const techWorkload = {};
-    workOrdersOnDate.forEach(wo => {
-      if (wo.lead_tech_id) {
-        techWorkload[wo.lead_tech_id] = (techWorkload[wo.lead_tech_id] || 0) + 1;
-      }
-    });
-
-    const totalWOs = workOrdersOnDate.length;
-    const activeTechs = leadTechs.length;
-    const maxCapacity = activeTechs * 3;
-
-    return {
-      count: totalWOs,
-      maxCapacity,
-      percentage: maxCapacity > 0 ? (totalWOs / maxCapacity) * 100 : 0,
-      techWorkload
-    };
-  };
-
-  const handleUnschedule = async (workOrder) => {
-    setIsUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('work_orders')
-        .update({ scheduled_date: null })
-        .eq('wo_id', workOrder.wo_id);
-
-      if (error) throw error;
-      await refreshWorkOrders();
-    } catch (err) {
-      console.error('Error unscheduling:', err);
-      alert('Failed to unschedule: ' + err.message);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
   return (
-    <div className="space-y-3 md:space-y-4">
-      {/* Calendar Controls */}
-      <div className="bg-gray-800 rounded-lg p-3 md:p-4">
-        {/* Row 1: Navigation */}
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-1 md:gap-2">
-            <button
-              onClick={() => navigateMonth(-1)}
-              className="p-1.5 md:p-2 hover:bg-gray-700 rounded-lg transition text-base md:text-xl"
-            >
-              ◀
-            </button>
-            
-            <h2 className="text-sm md:text-xl font-bold min-w-[120px] md:min-w-[200px] text-center">
-              {currentDate.toLocaleDateString('en-US', { 
-                month: 'long', 
-                year: 'numeric'
-              })}
-            </h2>
-            
-            <button
-              onClick={() => navigateMonth(1)}
-              className="p-1.5 md:p-2 hover:bg-gray-700 rounded-lg transition text-base md:text-xl"
-            >
-              ▶
-            </button>
-          </div>
+    <div className="space-y-4">
 
-          <button
-            onClick={goToToday}
-            className="px-2 md:px-3 py-1 md:py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-xs md:text-sm font-semibold transition"
-          >
-            Today
-          </button>
+      {/* Controls */}
+      <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl px-5 py-4 space-y-3">
+        {/* Nav */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate(-1)} className="bg-[#0a0a0f] border border-[#2d2d44] hover:border-[#3d3d5e] text-slate-400 px-3 py-2 rounded-lg text-sm transition">←</button>
+            <h2 className="text-sm font-bold text-slate-200 min-w-[160px] text-center">
+              {currentDate.toLocaleDateString('en-US', { month:'long', year:'numeric' })}
+            </h2>
+            <button onClick={() => navigate(1)} className="bg-[#0a0a0f] border border-[#2d2d44] hover:border-[#3d3d5e] text-slate-400 px-3 py-2 rounded-lg text-sm transition">→</button>
+          </div>
+          <Btn active={false} onClick={() => setCurrentDate(new Date())} className="text-xs !px-3 !py-1.5">Today</Btn>
         </div>
 
-        {/* Row 2: View toggle & filters - scrollable */}
+        {/* Filters */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {/* View Toggle */}
-          <div className="flex items-center bg-gray-700 rounded-lg p-0.5 flex-shrink-0">
-            <button
-              onClick={() => setViewMode('month')}
-              className={`flex items-center gap-1 px-2 md:px-3 py-1 rounded text-xs md:text-sm font-semibold transition ${
-                viewMode === 'month' ? 'bg-blue-600' : 'hover:bg-gray-600'
-              }`}
-            >
-              <span className="hidden sm:inline">📅</span> Month
-            </button>
-            <button
-              onClick={() => setViewMode('week')}
-              className={`flex items-center gap-1 px-2 md:px-3 py-1 rounded text-xs md:text-sm font-semibold transition ${
-                viewMode === 'week' ? 'bg-blue-600' : 'hover:bg-gray-600'
-              }`}
-            >
-              <span className="hidden sm:inline">📋</span> Week
-            </button>
+          <div className="flex bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-0.5 flex-shrink-0">
+            {['month','week'].map(v => (
+              <button key={v} onClick={() => setViewMode(v)}
+                className={`px-3 py-1.5 rounded text-xs font-semibold transition capitalize ${viewMode===v ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                {v}
+              </button>
+            ))}
           </div>
 
-          {/* Lead Tech Filter */}
-          <select
-            value={leadTechFilter}
-            onChange={(e) => setLeadTechFilter(e.target.value)}
-            className="bg-gray-700 text-white px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm flex-shrink-0"
-          >
+          <select value={leadTechFilter} onChange={e => setLeadTechFilter(e.target.value)}
+            className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60 transition flex-shrink-0">
             <option value="all">All Techs</option>
-            {leadTechs.map(tech => (
-              <option key={tech.user_id} value={tech.user_id}>
-                {tech.first_name} {tech.last_name}
-              </option>
-            ))}
+            {leadTechs.map(t => <option key={t.user_id} value={t.user_id}>{t.first_name} {t.last_name}</option>)}
           </select>
 
-          {/* Capacity Panel Toggle */}
-          <button
-            onClick={() => setShowCapacityPanel(!showCapacityPanel)}
-            className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition flex-shrink-0 ${
-              showCapacityPanel ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'
-            }`}
-          >
-            👥 <span className="hidden sm:inline">Capacity</span>
+          <button onClick={() => setShowCapacity(p => !p)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition flex-shrink-0 ${showCapacity ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400' : 'bg-[#0a0a0f] border border-[#2d2d44] text-slate-500 hover:text-slate-300'}`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Capacity
           </button>
-        </div>
 
-        {/* Loading indicator */}
-        {isUpdating && (
-          <div className="mt-2 text-center text-yellow-400 text-xs md:text-sm">
-            ⏳ Updating schedule...
-          </div>
-        )}
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex flex-col lg:flex-row gap-3 md:gap-4">
-        {/* Calendar Grid */}
-        <div className="flex-1 overflow-x-auto">
-          {viewMode === 'month' ? (
-            <CalendarGrid
-              currentDate={currentDate}
-              workOrdersByDate={getWorkOrdersByDate()}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onSelectWorkOrder={onSelectWorkOrder}
-              onSelectDate={setSelectedDate}
-              selectedDate={selectedDate}
-              calculateDayCapacity={calculateDayCapacity}
-              onUnschedule={handleUnschedule}
-              leadTechs={leadTechs}
-            />
-          ) : (
-            <CalendarWeekView
-              currentDate={currentDate}
-              workOrdersByDate={getWorkOrdersByDate()}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onSelectWorkOrder={onSelectWorkOrder}
-              calculateDayCapacity={calculateDayCapacity}
-              onUnschedule={handleUnschedule}
-              leadTechs={leadTechs}
-            />
+          {isUpdating && (
+            <div className="flex items-center gap-2 text-yellow-400 text-xs flex-shrink-0">
+              <div className="w-3 h-3 rounded-full border-2 border-yellow-500/30 border-t-yellow-500 animate-spin"/>
+              Updating...
+            </div>
           )}
         </div>
+      </div>
 
-        {/* Capacity Panel (Sidebar) */}
-        {showCapacityPanel && (
-          <div className="w-full lg:w-80 flex-shrink-0">
-            <CapacityPanel
-              currentDate={currentDate}
-              viewMode={viewMode}
-              workOrdersByDate={getWorkOrdersByDate()}
-              unscheduledWorkOrders={unscheduledWorkOrders}
-              leadTechs={leadTechs}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onSelectWorkOrder={onSelectWorkOrder}
-              calculateDayCapacity={calculateDayCapacity}
-            />
+      {/* Calendar + Sidebar */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex-1 overflow-x-auto">
+          {viewMode === 'month'
+            ? <CalendarGrid currentDate={currentDate} workOrdersByDate={byDate()}
+                onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+                onDrop={handleDrop} onDragOver={handleDragOver}
+                onSelectWorkOrder={onSelectWorkOrder} onSelectDate={setSelectedDate}
+                selectedDate={selectedDate} calculateDayCapacity={calcCapacity}
+                onUnschedule={handleUnschedule} leadTechs={leadTechs} />
+            : <CalendarWeekView currentDate={currentDate} workOrdersByDate={byDate()}
+                onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+                onDrop={handleDrop} onDragOver={handleDragOver}
+                onSelectWorkOrder={onSelectWorkOrder} calculateDayCapacity={calcCapacity}
+                onUnschedule={handleUnschedule} leadTechs={leadTechs} />}
+        </div>
+
+        {showCapacity && (
+          <div className="w-full lg:w-72 flex-shrink-0">
+            <CapacityPanel currentDate={currentDate} viewMode={viewMode}
+              workOrdersByDate={byDate()} unscheduledWorkOrders={unscheduled}
+              leadTechs={leadTechs} onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+              onSelectWorkOrder={onSelectWorkOrder} calculateDayCapacity={calcCapacity} />
           </div>
         )}
       </div>

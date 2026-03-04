@@ -1,4 +1,3 @@
-// app/dashboard/components/aging/AgingView.js
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -7,247 +6,131 @@ import AgingWorkOrdersList from './AgingWorkOrdersList';
 import AgingByTechChart from './AgingByTechChart';
 import SendAlertModal from './SendAlertModal';
 
-export default function AgingView({ 
-  workOrders, 
-  users, 
-  supabase, 
-  refreshWorkOrders,
-  onSelectWorkOrder 
-}) {
+export default function AgingView({ workOrders, users, supabase, refreshWorkOrders, onSelectWorkOrder }) {
   const [filterSeverity, setFilterSeverity] = useState('all');
-  const [filterTech, setFilterTech] = useState('all');
-  const [sortBy, setSortBy] = useState('age');
-  const [lastAlertSent, setLastAlertSent] = useState(null);
-  const [sendingAlerts, setSendingAlerts] = useState(false);
-  const [showSendModal, setShowSendModal] = useState(false);
+  const [filterTech,     setFilterTech]     = useState('all');
+  const [sortBy,         setSortBy]         = useState('age');
+  const [lastAlert,      setLastAlert]      = useState(null);
+  const [showModal,      setShowModal]      = useState(false);
 
-  // Get lead techs for filter
   const leadTechs = users.filter(u => u.role === 'lead_tech' || u.role === 'admin');
 
-  // Calculate aging for each work order
-  const calculateAging = (wo) => {
+  const calcAging = (wo) => {
     if (!wo.lead_tech_id) return null;
-    if (wo.status === 'completed' || wo.status === 'needs_return') return null;
-
-    const assignedDate = wo.lead_tech_assigned_at 
-      ? new Date(wo.lead_tech_assigned_at)
-      : wo.date_entered 
-        ? new Date(wo.date_entered)
-        : null;
-
-    if (!assignedDate || isNaN(assignedDate.getTime())) return null;
-
-    const now = new Date();
-    const diffTime = now - assignedDate;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-    let severity = 'ok';
-    if (diffDays >= 5) {
-      severity = 'critical';
-    } else if (diffDays >= 3) {
-      severity = 'warning';
-    } else if (diffDays >= 2) {
-      severity = 'stale';
-    }
-
-    return {
-      days: diffDays,
-      hours: diffHours,
-      totalHours: Math.floor(diffTime / (1000 * 60 * 60)),
-      severity,
-      assignedDate
-    };
+    if (['completed','needs_return'].includes(wo.status)) return null;
+    const assigned = wo.lead_tech_assigned_at ? new Date(wo.lead_tech_assigned_at) : wo.date_entered ? new Date(wo.date_entered) : null;
+    if (!assigned || isNaN(assigned)) return null;
+    const diff   = Date.now() - assigned;
+    const days   = Math.floor(diff / 86400000);
+    const hours  = Math.floor((diff % 86400000) / 3600000);
+    const total  = Math.floor(diff / 3600000);
+    const sev    = days >= 5 ? 'critical' : days >= 3 ? 'warning' : days >= 2 ? 'stale' : 'ok';
+    return { days, hours, totalHours: total, severity: sev, assignedDate: assigned };
   };
 
-  // Process all work orders with aging data
-  const agingWorkOrders = useMemo(() => {
+  const agingWOs = useMemo(() => {
     return workOrders
-      .map(wo => {
-        const aging = calculateAging(wo);
-        return { ...wo, aging };
-      })
-      .filter(wo => wo.aging !== null && wo.aging.days >= 2)
+      .map(wo => ({ ...wo, aging: calcAging(wo) }))
+      .filter(wo => wo.aging && wo.aging.days >= 2)
       .sort((a, b) => {
-        if (sortBy === 'age') {
-          return b.aging.totalHours - a.aging.totalHours;
-        } else if (sortBy === 'priority') {
-          const priorityOrder = { emergency: 0, high: 1, medium: 2, low: 3 };
-          return (priorityOrder[a.priority] || 4) - (priorityOrder[b.priority] || 4);
-        } else if (sortBy === 'tech') {
-          const techA = a.lead_tech ? `${a.lead_tech.first_name} ${a.lead_tech.last_name}` : 'ZZZ';
-          const techB = b.lead_tech ? `${b.lead_tech.first_name} ${b.lead_tech.last_name}` : 'ZZZ';
-          return techA.localeCompare(techB);
-        }
+        if (sortBy === 'age')      return b.aging.totalHours - a.aging.totalHours;
+        if (sortBy === 'priority') { const o={emergency:0,high:1,medium:2,low:3}; return (o[a.priority]||4)-(o[b.priority]||4); }
+        if (sortBy === 'tech')     { const n=t=>t.lead_tech?`${t.lead_tech.first_name} ${t.lead_tech.last_name}`:'ZZZ'; return n(a).localeCompare(n(b)); }
         return 0;
       });
   }, [workOrders, sortBy]);
 
-  // Apply filters
-  const filteredWorkOrders = useMemo(() => {
-    return agingWorkOrders.filter(wo => {
-      if (filterSeverity !== 'all' && wo.aging.severity !== filterSeverity) {
-        return false;
-      }
-      if (filterTech !== 'all' && wo.lead_tech_id !== filterTech) {
-        return false;
-      }
-      return true;
-    });
-  }, [agingWorkOrders, filterSeverity, filterTech]);
+  const filtered = useMemo(() => agingWOs.filter(wo => {
+    if (filterSeverity !== 'all' && wo.aging.severity !== filterSeverity) return false;
+    if (filterTech !== 'all' && wo.lead_tech_id !== filterTech) return false;
+    return true;
+  }), [agingWOs, filterSeverity, filterTech]);
 
-  // Calculate stats
   const stats = useMemo(() => {
-    const critical = agingWorkOrders.filter(wo => wo.aging.severity === 'critical').length;
-    const warning = agingWorkOrders.filter(wo => wo.aging.severity === 'warning').length;
-    const stale = agingWorkOrders.filter(wo => wo.aging.severity === 'stale').length;
-    const total = agingWorkOrders.length;
-
-    const byTech = {};
-    agingWorkOrders.forEach(wo => {
-      const techId = wo.lead_tech_id || 'unassigned';
-      const techName = wo.lead_tech 
-        ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`
-        : 'Unassigned';
-      
-      if (!byTech[techId]) {
-        byTech[techId] = { 
-          name: techName, 
-          visibleName: techName,
-          visibleNameWithId: techId,
-          critical: 0, 
-          warning: 0, 
-          stale: 0, 
-          total: 0,
-          workOrders: []
-        };
-      }
-      byTech[techId][wo.aging.severity]++;
-      byTech[techId].total++;
-      byTech[techId].workOrders.push(wo);
+    const critical = agingWOs.filter(w=>w.aging.severity==='critical').length;
+    const warning  = agingWOs.filter(w=>w.aging.severity==='warning').length;
+    const stale    = agingWOs.filter(w=>w.aging.severity==='stale').length;
+    const byTech   = {};
+    agingWOs.forEach(wo => {
+      const id   = wo.lead_tech_id || 'unassigned';
+      const name = wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'Unassigned';
+      if (!byTech[id]) byTech[id] = { name, critical:0, warning:0, stale:0, total:0, workOrders:[] };
+      byTech[id][wo.aging.severity]++;
+      byTech[id].total++;
+      byTech[id].workOrders.push(wo);
     });
+    return { critical, warning, stale, total: agingWOs.length, byTech, oldest: agingWOs[0] || null };
+  }, [agingWOs]);
 
-    const oldest = agingWorkOrders.length > 0 ? agingWorkOrders[0] : null;
-
-    return { critical, warning, stale, total, byTech, oldest };
-  }, [agingWorkOrders]);
-
-  const handleAlertSent = () => {
-    setLastAlertSent(new Date());
-  };
+  const Sel = ({ children, ...props }) => (
+    <select className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60 transition flex-shrink-0" {...props}>
+      {children}
+    </select>
+  );
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4">
+
       {/* Header */}
-      <div className="bg-gray-800 rounded-lg p-3 md:p-4">
+      <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl px-5 py-4">
         <div className="flex flex-col gap-3">
-          {/* Title Row */}
-          <div>
-            <h2 className="text-base md:text-xl font-bold flex items-center gap-2">
-              ⚠️ Aging Report & Priority Alerts
-            </h2>
-            <p className="text-xs md:text-sm text-gray-400 mt-1">
-              Work orders open 2+ days since tech assignment
-            </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-400"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Aging Report & Priority Alerts
+              </h2>
+              <p className="text-slate-600 text-xs mt-1">Work orders open 2+ days since tech assignment</p>
+            </div>
+            {lastAlert && <p className="text-slate-600 text-xs">Last alert: {lastAlert.toLocaleString()}</p>}
           </div>
 
-          {/* Filters Row - Scrollable on mobile */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-            {/* Severity Filter */}
-            <select
-              value={filterSeverity}
-              onChange={(e) => setFilterSeverity(e.target.value)}
-              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
-            >
+          {/* Filters */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <Sel value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}>
               <option value="all">All Severities</option>
-              <option value="critical">🔴 Critical (5+)</option>
-              <option value="warning">🟠 Warning (3-4)</option>
-              <option value="stale">🟡 Stale (2-3)</option>
-            </select>
-
-            {/* Tech Filter */}
-            <select
-              value={filterTech}
-              onChange={(e) => setFilterTech(e.target.value)}
-              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
-            >
+              <option value="critical">Critical (5+d)</option>
+              <option value="warning">Warning (3-4d)</option>
+              <option value="stale">Stale (2-3d)</option>
+            </Sel>
+            <Sel value={filterTech} onChange={e => setFilterTech(e.target.value)}>
               <option value="all">All Techs</option>
-              {leadTechs.map(tech => (
-                <option key={tech.user_id} value={tech.user_id}>
-                  {tech.first_name} {tech.last_name}
-                </option>
-              ))}
-            </select>
-
-            {/* Sort By */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-gray-700 text-white px-2 md:px-3 py-1.5 md:py-2 rounded-lg text-xs md:text-sm flex-shrink-0"
-            >
-              <option value="age">Sort by Age</option>
-              <option value="priority">Sort by Priority</option>
-              <option value="tech">Sort by Tech</option>
-            </select>
-
-            {/* Send Alerts Button */}
-            <button
-              onClick={() => setShowSendModal(true)}
-              disabled={stats.total === 0}
-              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-2 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-semibold transition flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
-            >
-              <span>📧</span>
+              {leadTechs.map(t => <option key={t.user_id} value={t.user_id}>{t.first_name} {t.last_name}</option>)}
+            </Sel>
+            <Sel value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="age">Sort: Age</option>
+              <option value="priority">Sort: Priority</option>
+              <option value="tech">Sort: Tech</option>
+            </Sel>
+            <button onClick={() => setShowModal(true)} disabled={stats.total === 0}
+              className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-semibold transition flex-shrink-0 flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
               <span className="hidden sm:inline">Send Alert Emails</span>
-              <span className="sm:hidden">Send</span>
+              <span className="sm:hidden">Alerts</span>
             </button>
           </div>
         </div>
-
-        {lastAlertSent && (
-          <div className="mt-2 text-xs text-gray-500">
-            Last alert sent: {lastAlertSent.toLocaleString()}
-          </div>
-        )}
       </div>
 
-      {/* Stats Cards */}
-      <AgingStatsCards 
-        stats={stats} 
-        onFilterClick={setFilterSeverity}
-      />
+      {/* Stats */}
+      <AgingStatsCards stats={stats} onFilterClick={setFilterSeverity} />
 
-      {/* Main Content - Stack on mobile */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        {/* Work Orders List */}
+      {/* Main grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <AgingWorkOrdersList
-            workOrders={filteredWorkOrders}
-            onSelectWorkOrder={onSelectWorkOrder}
-            leadTechs={leadTechs}
-          />
+          <AgingWorkOrdersList workOrders={filtered} onSelectWorkOrder={onSelectWorkOrder} leadTechs={leadTechs} />
         </div>
-
-        {/* Sidebar - By Tech Breakdown (Hidden on small mobile, shown on tablet+) */}
         <div className="hidden md:block">
-          <AgingByTechChart
-            stats={stats}
-            onTechClick={setFilterTech}
-            selectedTech={filterTech}
-            onSendToTech={(techId) => setShowSendModal({ techId })}
-          />
+          <AgingByTechChart stats={stats} onTechClick={setFilterTech} selectedTech={filterTech} onSendToTech={tid => setShowModal({ techId: tid })} />
         </div>
       </div>
 
-      {/* Send Alert Modal */}
-      {showSendModal && (
+      {showModal && (
         <SendAlertModal
-          stats={stats}
-          agingWorkOrders={agingWorkOrders}
-          leadTechs={leadTechs}
-          users={users}
-          preselectedTechId={showSendModal.techId || null}
-          onClose={() => setShowSendModal(false)}
-          onAlertSent={handleAlertSent}
+          stats={stats} agingWorkOrders={agingWOs} leadTechs={leadTechs} users={users}
+          preselectedTechId={showModal.techId || null}
+          onClose={() => setShowModal(false)}
+          onAlertSent={() => setLastAlert(new Date())}
         />
       )}
     </div>

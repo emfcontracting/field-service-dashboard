@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import AppShell from '@/app/components/AppShell';
 import AnalyticsTab from '@/app/components/AnalyticsTab';
 import BulkOperationsTab from '@/app/components/BulkOperationsTab';
 
@@ -425,8 +424,7 @@ export default function BackendDashboard() {
   }
 
   return (
-    <AppShell activeLink="/dashboard">
-      <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
 
         {/* ── Header ── */}
         <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6 py-5">
@@ -460,7 +458,6 @@ export default function BackendDashboard() {
           {activeTab === 'logs'      && <LogsTab logs={logs} stats={logStats} logType={logType} setLogType={setLogType} logStatus={logStatus} setLogStatus={setLogStatus} logLimit={logLimit} setLogLimit={setLogLimit} onRefresh={fetchLogs} />}
           {activeTab === 'database'  && <DatabaseTab />}
         </div>
-      </div>
-    </AppShell>
+    </div>
   );
 }

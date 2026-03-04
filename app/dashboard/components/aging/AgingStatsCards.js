@@ -1,100 +1,42 @@
-// app/dashboard/components/aging/AgingStatsCards.js
 'use client';
 
 export default function AgingStatsCards({ stats, onFilterClick }) {
   const cards = [
-    {
-      id: 'critical',
-      label: 'Critical',
-      sublabel: '5+ days',
-      value: stats.critical,
-      icon: '🔴',
-      bgColor: 'bg-red-900/50',
-      borderColor: 'border-red-500',
-      textColor: 'text-red-400'
-    },
-    {
-      id: 'warning',
-      label: 'Warning',
-      sublabel: '3-4 days',
-      value: stats.warning,
-      icon: '🟠',
-      bgColor: 'bg-orange-900/50',
-      borderColor: 'border-orange-500',
-      textColor: 'text-orange-400'
-    },
-    {
-      id: 'stale',
-      label: 'Stale',
-      sublabel: '2-3 days',
-      value: stats.stale,
-      icon: '🟡',
-      bgColor: 'bg-yellow-900/50',
-      borderColor: 'border-yellow-500',
-      textColor: 'text-yellow-400'
-    },
-    {
-      id: 'all',
-      label: 'Total Aging',
-      sublabel: '2+ days',
-      value: stats.total,
-      icon: '⚠️',
-      bgColor: 'bg-gray-800',
-      borderColor: 'border-gray-600',
-      textColor: 'text-white'
-    }
+    { id:'critical', label:'Critical', sub:'5+ days',  val:stats.critical, bar:'border-red-500/50',    bg:'bg-red-500/10',    text:'text-red-400'    },
+    { id:'warning',  label:'Warning',  sub:'3-4 days', val:stats.warning,  bar:'border-orange-500/50', bg:'bg-orange-500/10', text:'text-orange-400' },
+    { id:'stale',    label:'Stale',    sub:'2-3 days', val:stats.stale,    bar:'border-yellow-500/50', bg:'bg-yellow-500/10', text:'text-yellow-400' },
+    { id:'all',      label:'Total',    sub:'2+ days',  val:stats.total,    bar:'border-[#2d2d44]',     bg:'bg-[#0d0d14]',    text:'text-slate-200'  },
   ];
 
   return (
     <div className="space-y-3">
-      {/* Stats Cards - 2x2 grid on mobile, 4 cols on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
-        {cards.map(card => (
-          <button
-            key={card.id}
-            onClick={() => onFilterClick(card.id)}
-            className={`
-              ${card.bgColor} border-l-4 ${card.borderColor}
-              rounded-lg p-2 md:p-4 text-left transition hover:ring-2 hover:ring-blue-400
-            `}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-lg md:text-2xl">{card.icon}</span>
-              <span className={`text-xl md:text-3xl font-bold ${card.textColor}`}>
-                {card.value}
-              </span>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map(c => (
+          <button key={c.id} onClick={() => onFilterClick(c.id)}
+            className={`${c.bg} border-l-4 ${c.bar} border border-[#1e1e2e] rounded-xl p-4 text-left transition hover:border-blue-500/40 group`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-2xl font-black font-mono ${c.text}`}>{c.val}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-600 group-hover:text-slate-400 transition"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
-            <div className="mt-1 md:mt-2">
-              <div className="font-semibold text-white text-xs md:text-base">{card.label}</div>
-              <div className="text-[10px] md:text-xs text-gray-400">{card.sublabel}</div>
-            </div>
+            <p className="font-semibold text-slate-200 text-sm">{c.label}</p>
+            <p className="text-slate-600 text-[10px] mt-0.5">{c.sub}</p>
           </button>
         ))}
       </div>
 
-      {/* Oldest Work Order Highlight */}
       {stats.oldest && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 md:p-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
+        <div className="bg-red-500/10 border border-red-500/25 rounded-xl p-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <div className="text-xs md:text-sm text-red-400 font-semibold">🕐 OLDEST OPEN WORK ORDER</div>
-              <div className="text-sm md:text-lg font-bold text-white mt-1 truncate">
-                {stats.oldest.wo_number} - {stats.oldest.building}
-              </div>
-              <div className="text-xs md:text-sm text-gray-400 mt-1 line-clamp-2">
-                {stats.oldest.work_order_description?.substring(0, 100)}
-                {stats.oldest.work_order_description?.length > 100 ? '...' : ''}
-              </div>
+              <p className="text-red-400 text-xs font-bold uppercase tracking-wide mb-1">Oldest Open Work Order</p>
+              <p className="text-slate-200 font-bold truncate">{stats.oldest.wo_number} — {stats.oldest.building}</p>
+              <p className="text-slate-500 text-xs mt-1 line-clamp-2">{stats.oldest.work_order_description?.substring(0,100)}{stats.oldest.work_order_description?.length>100?'...':''}</p>
             </div>
-            <div className="flex items-center md:flex-col md:items-end gap-2 md:gap-0 flex-shrink-0">
-              <div className="text-2xl md:text-3xl font-bold text-red-400">
-                {stats.oldest.aging.days}
-              </div>
-              <div className="text-xs md:text-sm text-gray-400">days old</div>
+            <div className="flex items-center md:flex-col md:items-end gap-3 md:gap-0 flex-shrink-0">
+              <p className="text-4xl font-black font-mono text-red-400">{stats.oldest.aging.days}</p>
+              <p className="text-slate-600 text-xs">days old</p>
               {stats.oldest.lead_tech && (
-                <div className="text-xs text-blue-400 mt-0 md:mt-1">
-                  👤 {stats.oldest.lead_tech.first_name} {stats.oldest.lead_tech.last_name}
-                </div>
+                <p className="text-blue-400 text-xs mt-1">{stats.oldest.lead_tech.first_name} {stats.oldest.lead_tech.last_name}</p>
               )}
             </div>
           </div>

@@ -2,39 +2,62 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 
 const supabase = getSupabase();
 
+const NAV_ITEMS = [
+  { id: 'workorders', label: 'Work Orders', icon: '◫' },
+  { id: 'calendar',   label: 'Calendar',    icon: '⬡' },
+  { id: 'aging',      label: 'Aging',       icon: '◉' },
+  { id: 'missing-hours', label: 'Missing Hours', icon: '⚠', alert: true },
+  { id: 'availability', label: 'Availability', icon: '◈' },
+];
+
+const QUICK_LINKS = [
+  { href: '/',                   label: 'Home',      icon: '🏠' },
+  { href: '/dashboard/backend',  label: 'Backend',   icon: '🛠️' },
+  { href: '/weather',            label: 'Weather',   icon: '🌤️' },
+  { href: '/messages',           label: 'Messages',  icon: '💬' },
+  { href: '/invoices',           label: 'Invoicing', icon: '💰' },
+  { href: '/users',              label: 'Users',     icon: '👥' },
+  { href: '/settings',           label: 'Settings',  icon: '⚙️' },
+  { href: '/mobile',             label: 'Mobile',    icon: '📱' },
+];
+
 export default function DashboardLayout({ children }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+
+  const [loading, setLoading]           = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
-  const [userInfo, setUserInfo] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [userInfo, setUserInfo]         = useState(null);
+  const [isMobile, setIsMobile]         = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [missingHoursCount, setMissingHoursCount] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const activeView = searchParams.get('view') || 'workorders';
+
+  const setActiveView = (viewId) => {
+    router.push(`/dashboard?view=${viewId}`);
+    setMobileNavOpen(false);
+  };
 
   useEffect(() => {
-    // Check for mobile on mount
     const checkMobile = () => {
-      const width = window.innerWidth;
-      const userAgent = navigator.userAgent || '';
-      const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-      setIsMobile(width < 768 || mobileRegex.test(userAgent));
+      const w = window.innerWidth;
+      setIsMobile(w < 768);
+      if (w < 1280) setSidebarCollapsed(true);
     };
-    
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    
     checkAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        router.push('/login');
-      } else if (event === 'SIGNED_IN') {
-        checkAuth();
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') router.push('/login');
+      else if (event === 'SIGNED_IN') checkAuth();
     });
 
     return () => {
@@ -43,21 +66,29 @@ export default function DashboardLayout({ children }) {
     };
   }, []);
 
+  // Fetch missing hours count for badge
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchMissingHours = async () => {
+      try {
+        const { data } = await supabase
+          .from('work_orders')
+          .select('wo_id')
+          .in('status', ['in_progress', 'return_trip', 'tech_review', 'completed'])
+          .eq('acknowledged', false);
+        setMissingHoursCount(data?.length || 0);
+      } catch {}
+    };
+    fetchMissingHours();
+  }, [authenticated]);
+
   async function checkAuth() {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
+      if (authError || !user) { router.push('/login'); return; }
 
       const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', user.id)
-        .eq('is_active', true)
-        .single();
+        .from('users').select('*').eq('auth_id', user.id).eq('is_active', true).single();
 
       if (userError || !userData) {
         await supabase.auth.signOut();
@@ -74,12 +105,8 @@ export default function DashboardLayout({ children }) {
 
       setUserInfo(userData);
       setAuthenticated(true);
-    } catch (error) {
-      console.error('Auth check error:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
-    }
+    } catch { router.push('/login'); }
+    finally { setLoading(false); }
   }
 
   async function handleLogout() {
@@ -89,110 +116,155 @@ export default function DashboardLayout({ children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 animate-pulse" />
+          <p className="text-slate-500 text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
-  if (!authenticated) {
-    return null;
-  }
+  if (!authenticated) return null;
 
-  // Mobile User Bar
+  /* ─────────────── MOBILE ─────────────── */
   if (isMobile) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        {/* Mobile User info bar */}
-        <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">
-                <span className="text-gray-900 font-semibold">
-                  {userInfo?.first_name}
-                </span>
-              </span>
-              <span className="px-2 py-0.5 bg-blue-600 rounded text-xs text-white">
-                {userInfo?.role?.replace('_', ' ').toUpperCase()}
-              </span>
-            </div>
-            
-            {/* Mobile menu toggle */}
-            <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium p-2"
-              >
-                ⚙️
-              </button>
-              
-              {showUserMenu && (
-                <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[140px]">
-                  <button
-                    onClick={() => {
-                      router.push('/settings');
-                      setShowUserMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    ⚙️ Settings
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                  >
-                    🚪 Logout
-                  </button>
-                </div>
-              )}
+      <div className="min-h-screen bg-[#0a0a0f] flex flex-col">
+        {/* Mobile top bar */}
+        <div className="bg-[#0d0d14] border-b border-[#1e1e2e] px-4 py-2.5 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs">P</div>
+            <span className="text-slate-300 font-semibold text-sm">PCS FieldService</span>
+          </div>
+          <button onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-400 p-2 rounded-lg text-sm">
+            {mobileNavOpen ? '✕' : '☰'}
+          </button>
+        </div>
+
+        {/* Mobile nav drawer */}
+        {mobileNavOpen && (
+          <div className="bg-[#0d0d14] border-b border-[#1e1e2e] py-2">
+            {NAV_ITEMS.map(item => {
+              const isActive = activeView === item.id;
+              return (
+                <button key={item.id} onClick={() => setActiveView(item.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition
+                    ${isActive ? 'bg-blue-600/10 text-blue-400 border-l-2 border-l-blue-500' : 'text-slate-400 hover:bg-[#1e1e2e]'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs opacity-70">{item.icon}</span>
+                    <span className="font-medium">{item.label}</span>
+                  </div>
+                  {item.alert && missingHoursCount > 0 && (
+                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                      {missingHoursCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <div className="border-t border-[#1e1e2e] mt-2 pt-2 px-4 flex justify-between">
+              <span className="text-xs text-slate-600">{userInfo?.first_name} {userInfo?.last_name}</span>
+              <button onClick={handleLogout} className="text-xs text-red-500">Logout</button>
             </div>
           </div>
-        </div>
-        
-        {/* Dashboard content */}
-        <main className="flex-1">
-          {children}
-        </main>
+        )}
+
+        <main className="flex-1">{children}</main>
       </div>
     );
   }
 
-  // Desktop/Tablet Layout
+  /* ─────────────── DESKTOP ─────────────── */
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* User info bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            Logged in as: <span className="text-gray-900 font-semibold">
-              {userInfo?.first_name} {userInfo?.last_name}
-            </span>
-            <span className="ml-2 px-2 py-1 bg-blue-600 rounded text-xs text-white">
-              {userInfo?.role?.replace('_', ' ').toUpperCase()}
-            </span>
+    <div className="min-h-screen bg-[#0a0a0f] flex">
+
+      {/* ── Sidebar ── */}
+      <aside className={`flex flex-col bg-[#0d0d14] border-r border-[#1e1e2e] transition-all duration-200 flex-shrink-0 ${sidebarCollapsed ? 'w-14' : 'w-52'}`}>
+
+        {/* Logo */}
+        <div className={`flex items-center gap-3 px-3 py-4 border-b border-[#1e1e2e] ${sidebarCollapsed ? 'justify-center' : ''}`}>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P</div>
+          {!sidebarCollapsed && (
+            <div>
+              <div className="text-slate-200 font-semibold text-sm leading-tight">PCS FieldService</div>
+              <div className="text-slate-600 text-xs">EMF Contracting</div>
+            </div>
+          )}
+        </div>
+
+        {/* View navigation */}
+        <nav className="flex-1 py-3 space-y-0.5 px-2">
+          {/* Section label */}
+          {!sidebarCollapsed && <div className="text-slate-600 text-xs px-2 pb-1 tracking-wider font-medium">VIEWS</div>}
+
+          {NAV_ITEMS.map(item => {
+            const isActive = activeView === item.id;
+            return (
+              <button key={item.id} onClick={() => setActiveView(item.id)} title={sidebarCollapsed ? item.label : ''}
+                className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium transition relative
+                  ${isActive
+                    ? item.id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
+                      : item.id === 'aging' ? 'bg-red-500/10 text-red-400'
+                      : 'bg-blue-600/10 text-blue-400'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]'
+                  } ${sidebarCollapsed ? 'justify-center' : ''}`}
+              >
+                {/* Active indicator */}
+                {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-500 rounded-r-full" />}
+
+                <span className={`text-xs ${sidebarCollapsed ? 'text-base' : 'opacity-80'}`}>{item.icon}</span>
+                {!sidebarCollapsed && <span>{item.label}</span>}
+
+                {/* Alert badge */}
+                {item.alert && missingHoursCount > 0 && (
+                  <span className={`bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full ${sidebarCollapsed ? 'absolute -top-1 -right-1 text-[9px] px-1' : 'ml-auto'}`}>
+                    {missingHoursCount > 99 ? '99+' : missingHoursCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Quick links section */}
+          <div className={`pt-3 ${!sidebarCollapsed ? '' : ''}`}>
+            {!sidebarCollapsed && <div className="text-slate-600 text-xs px-2 pb-1 tracking-wider font-medium">QUICK LINKS</div>}
+            {sidebarCollapsed && <div className="border-t border-[#1e1e2e] my-2" />}
+
+            {QUICK_LINKS.map(link => (
+              <a key={link.href} href={link.href} title={sidebarCollapsed ? link.label : ''}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-xs text-slate-600 hover:text-slate-300 hover:bg-[#1e1e2e] transition ${sidebarCollapsed ? 'justify-center' : ''}`}>
+                <span>{link.icon}</span>
+                {!sidebarCollapsed && <span>{link.label}</span>}
+              </a>
+            ))}
           </div>
-          <div className="flex gap-4">
-            <button
-              onClick={() => router.push('/settings')}
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium transition"
-            >
-              ⚙️ Settings
+        </nav>
+
+        {/* User info + collapse toggle at bottom */}
+        <div className="border-t border-[#1e1e2e] p-2 space-y-1">
+          {!sidebarCollapsed && userInfo && (
+            <div className="px-2 py-1.5 rounded-lg">
+              <div className="text-slate-300 text-xs font-medium truncate">{userInfo.first_name} {userInfo.last_name}</div>
+              <div className="text-slate-600 text-xs">{userInfo.role?.replace('_', ' ')}</div>
+            </div>
+          )}
+          <div className={`flex gap-1 ${sidebarCollapsed ? 'flex-col items-center' : ''}`}>
+            <button onClick={handleLogout} title="Logout"
+              className={`text-red-500/60 hover:text-red-400 hover:bg-red-950/30 p-2 rounded-lg text-xs transition ${sidebarCollapsed ? 'w-full flex justify-center' : ''}`}>
+              {sidebarCollapsed ? '🚪' : '🚪 Logout'}
             </button>
-            <button
-              onClick={handleLogout}
-              className="text-red-600 hover:text-red-700 text-sm font-medium transition"
-            >
-              Logout
+            <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} title={sidebarCollapsed ? 'Expand' : 'Collapse'}
+              className={`text-slate-600 hover:text-slate-400 hover:bg-[#1e1e2e] p-2 rounded-lg text-xs transition ${sidebarCollapsed ? 'w-full flex justify-center' : 'ml-auto'}`}>
+              {sidebarCollapsed ? '→' : '← Collapse'}
             </button>
           </div>
         </div>
-      </div>
-      
-      {/* Dashboard content */}
-      <main className="flex-1">
+      </aside>
+
+      {/* ── Main content ── */}
+      <main className="flex-1 min-w-0 overflow-auto">
         {children}
       </main>
     </div>

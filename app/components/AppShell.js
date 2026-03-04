@@ -142,7 +142,7 @@ export const QUICK_LINKS = [
 ];
 
 // ── SidebarNav (inner component — needs useSearchParams) ──────────────────────
-function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse, onLogout, isMobile, activeLink }) {
+function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -311,8 +311,17 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         })}
       </nav>
 
-      {/* ── Footer: Logout ── */}
-      <div className="border-t border-[#1e1e2e] p-1.5">
+      {/* ── Footer: Theme toggle + Logout ── */}
+      <div className="border-t border-[#1e1e2e] p-1.5 space-y-0.5">
+        <button onClick={onThemeToggle} title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
+          className={`w-full flex items-center gap-2.5 rounded-lg py-2 transition text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]
+            ${sidebarCollapsed ? 'justify-center px-0' : 'px-3 text-xs'}`}>
+          {theme === 'dark'
+            ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          }
+          {!sidebarCollapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+        </button>
         <button onClick={onLogout} title="Logout"
           className={`w-full flex items-center gap-2.5 rounded-lg py-2 transition text-red-500/50 hover:text-red-400 hover:bg-red-950/20
             ${sidebarCollapsed ? 'justify-center px-0' : 'px-3 text-xs'}`}>
@@ -324,6 +333,23 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
   );
 }
 
+// ── Theme toggle helper ──────────────────────────────────────────────────────
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('pcs-theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  const toggle = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('pcs-theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  };
+  return { theme, toggle };
+}
+
 // ── AppShell (default export) ─────────────────────────────────────────────────
 export default function AppShell({ children, activeLink, requireRole = ['admin', 'office_staff'] }) {
   const router = useRouter();
@@ -333,6 +359,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   const [isMobile, setIsMobile]           = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [missingHoursCount, setMissingHoursCount] = useState(0);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -413,6 +440,8 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
           sidebarCollapsed={sidebarCollapsed}
           onCollapse={() => setSidebarCollapsed(p => !p)}
           onLogout={handleLogout}
+          onThemeToggle={toggleTheme}
+          theme={theme}
           isMobile={isMobile}
           activeLink={activeLink}
         />

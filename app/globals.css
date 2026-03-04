@@ -85,3 +85,65 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ══════════════════════════════════════════════════════════
+   LIGHT THEME — Obsidian color overrides
+   Activated via: document.documentElement.setAttribute('data-theme','light')
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Backgrounds ── */
+[data-theme="light"] .bg-\[\#0a0a0f\]    { background-color: #f8fafc !important; }
+[data-theme="light"] .bg-\[\#0d0d14\]    { background-color: #ffffff !important; }
+[data-theme="light"] .bg-\[\#1e1e2e\]    { background-color: #f1f5f9 !important; }
+[data-theme="light"] .bg-\[\#2d2d44\]    { background-color: #e2e8f0 !important; }
+[data-theme="light"] .bg-\[\#3d3d5e\]    { background-color: #cbd5e1 !important; }
+[data-theme="light"] .bg-\[\#0a0a0f\]\/80 { background-color: rgba(248,250,252,0.85) !important; }
+[data-theme="light"] .bg-\[\#0a0a0f\]\/50 { background-color: rgba(248,250,252,0.5) !important; }
+[data-theme="light"] .bg-\[\#1e1e2e\]\/50 { background-color: rgba(241,245,249,0.5) !important; }
+[data-theme="light"] .bg-\[\#1e1e2e\]\/30 { background-color: rgba(241,245,249,0.3) !important; }
+
+/* ── Borders ── */
+[data-theme="light"] .border-\[\#1e1e2e\] { border-color: #e2e8f0 !important; }
+[data-theme="light"] .border-\[\#2d2d44\] { border-color: #cbd5e1 !important; }
+[data-theme="light"] .border-\[\#3d3d5e\] { border-color: #94a3b8 !important; }
+[data-theme="light"] .divide-\[\#1e1e2e\] > * + * { border-color: #e2e8f0 !important; }
+
+/* ── Text ── */
+[data-theme="light"] .text-slate-100 { color: #0f172a !important; }
+[data-theme="light"] .text-slate-200 { color: #1e293b !important; }
+[data-theme="light"] .text-slate-300 { color: #334155 !important; }
+[data-theme="light"] .text-slate-400 { color: #475569 !important; }
+[data-theme="light"] .text-slate-500 { color: #64748b !important; }
+[data-theme="light"] .text-slate-600 { color: #94a3b8 !important; }
+[data-theme="light"] .text-slate-700 { color: #cbd5e1 !important; }
+
+/* ── Hover backgrounds ── */
+[data-theme="light"] .hover\:bg-\[\#1e1e2e\]:hover { background-color: #f1f5f9 !important; }
+[data-theme="light"] .hover\:bg-\[\#2d2d44\]:hover { background-color: #e2e8f0 !important; }
+[data-theme="light"] .hover\:border-\[\#1e1e2e\]:hover { border-color: #e2e8f0 !important; }
+[data-theme="light"] .hover\:border-\[\#2d2d44\]:hover { border-color: #cbd5e1 !important; }
+[data-theme="light"] .hover\:border-\[\#3d3d5e\]:hover { border-color: #94a3b8 !important; }
+
+/* ── Ring / Focus ── */
+[data-theme="light"] .focus\:border-blue-500\/60:focus { border-color: rgba(59,130,246,0.6) !important; }
+
+/* ── Inputs & Selects ── */
+[data-theme="light"] select,
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="password"],
+[data-theme="light"] input[type="number"],
+[data-theme="light"] textarea {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ── Modal backdrop ── */
+[data-theme="light"] .bg-black\/70 { background-color: rgba(15,23,42,0.5) !important; }
+[data-theme="light"] .bg-black\/50 { background-color: rgba(15,23,42,0.35) !important; }
+
+/* ── Scrollbars in light mode ── */
+[data-theme="light"] ::-webkit-scrollbar-track { background: #f1f5f9; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

@@ -7,37 +7,31 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
   const [menuOpen, setMenuOpen] = useState(false);
   const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  
-  // Check screen size on mount and resize
+
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // View navigation tabs
   const viewTabs = [
-    { id: 'workorders', label: 'Work Orders', shortLabel: 'WOs', icon: '📋' },
-    { id: 'calendar', label: 'Calendar', shortLabel: 'Cal', icon: '📅' },
-    { id: 'aging', label: 'Aging', shortLabel: 'Age', icon: '⏰' },
-    { id: 'missing-hours', label: 'Missing Hours', shortLabel: 'Hrs', icon: '⚠️', alert: missingHoursCount > 0 },
-    { id: 'availability', label: 'Availability', shortLabel: 'Avail', icon: '👥' },
+    { id: 'workorders', label: 'Work Orders', icon: '◫' },
+    { id: 'calendar', label: 'Calendar', icon: '⬡' },
+    { id: 'aging', label: 'Aging', icon: '◉' },
+    { id: 'missing-hours', label: 'Missing Hours', icon: '⚠', alert: missingHoursCount > 0 },
+    { id: 'availability', label: 'Availability', icon: '◈' },
   ];
 
-  // Quick action links
   const quickLinks = [
-    { href: '/', label: 'Home', icon: '🏠', color: 'bg-gray-600' },
-    { href: '/dashboard/backend', label: 'Backend', icon: '🛠️', color: 'bg-red-600' },
-    { href: '/weather', label: 'Weather', icon: '🌤️', color: 'bg-sky-600' },
-    { href: '/messages', label: 'Messages', icon: '💬', color: 'bg-teal-600' },
-    { href: '/invoices', label: 'Invoicing', icon: '💰', color: 'bg-purple-600' },
-    { href: '/users', label: 'Users', icon: '👥', color: 'bg-blue-600' },
-    { href: '/settings', label: 'Settings', icon: '⚙️', color: 'bg-gray-600' },
-    { href: '/mobile', label: 'Mobile', icon: '📱', color: 'bg-green-600' },
+    { href: '/', label: 'Home', icon: '🏠' },
+    { href: '/dashboard/backend', label: 'Backend', icon: '🛠️' },
+    { href: '/weather', label: 'Weather', icon: '🌤️' },
+    { href: '/messages', label: 'Messages', icon: '💬' },
+    { href: '/invoices', label: 'Invoicing', icon: '💰' },
+    { href: '/users', label: 'Users', icon: '👥' },
+    { href: '/settings', label: 'Settings', icon: '⚙️' },
+    { href: '/mobile', label: 'Mobile', icon: '📱' },
   ];
 
   const handleViewChange = (viewId) => {
@@ -45,13 +39,11 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
     setNavMenuOpen(false);
   };
 
-  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
       setMenuOpen(false);
       setNavMenuOpen(false);
     };
-    
     if (menuOpen || navMenuOpen) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
@@ -59,105 +51,75 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
   }, [menuOpen, navMenuOpen]);
 
   return (
-    <div className="mb-4">
-      {/* ===== MOBILE HEADER (hidden on md+) ===== */}
+    <div className="mb-6">
+
+      {/* ===== MOBILE HEADER ===== */}
       <div className="md:hidden">
-        {/* Mobile Header Row */}
         <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center gap-2">
-            <img src="/emf-logo.png" alt="EMF" className="h-8 w-auto" />
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P</div>
             <div>
-              <h1 className="text-base font-bold leading-tight">EMF Contracting</h1>
-              <p className="text-xs text-gray-400">Field Service</p>
+              <h1 className="text-sm font-semibold text-slate-200 leading-tight">PCS FieldService</h1>
+              <p className="text-xs text-slate-500">EMF Contracting LLC</p>
             </div>
           </div>
-          
           <div className="flex gap-2">
             {onGlobalSearch && (
-              <button
-                onClick={onGlobalSearch}
-                className="bg-blue-600 active:bg-blue-700 p-2.5 rounded-lg"
-                aria-label="Search"
-              >
-                🔍
-              </button>
+              <button onClick={onGlobalSearch} className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-400 p-2 rounded-lg text-sm">🔍</button>
             )}
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-              className="bg-gray-700 active:bg-gray-600 p-2.5 rounded-lg text-lg"
-              aria-label="Menu"
+              className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-400 p-2 rounded-lg text-sm"
             >
               {menuOpen ? '✕' : '☰'}
             </button>
           </div>
         </div>
 
-        {/* Mobile Quick Links Dropdown */}
         {menuOpen && (
-          <div 
-            className="bg-gray-800 rounded-lg p-3 mb-3 border border-gray-700"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-3 mb-3" onClick={(e) => e.stopPropagation()}>
             <div className="grid grid-cols-4 gap-2">
               {quickLinks.map(link => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className={`${link.color} p-2.5 rounded-lg text-center flex flex-col items-center gap-1 active:opacity-80`}
-                >
-                  <span className="text-lg">{link.icon}</span>
-                  <span className="text-[10px] font-medium leading-tight">{link.label}</span>
+                <a key={link.href} href={link.href}
+                  className="bg-[#1e1e2e] hover:bg-[#2d2d44] border border-[#2d2d44] p-2 rounded-lg text-center flex flex-col items-center gap-1 transition">
+                  <span className="text-base">{link.icon}</span>
+                  <span className="text-xs text-slate-400">{link.label}</span>
                 </a>
               ))}
             </div>
           </div>
         )}
 
-        {/* Mobile View Selector - Dropdown Style */}
         <div className="relative">
           <button
             onClick={(e) => { e.stopPropagation(); setNavMenuOpen(!navMenuOpen); }}
-            className="w-full bg-gray-800 p-3 rounded-lg flex justify-between items-center border border-gray-700"
+            className="w-full bg-[#0d0d14] border border-[#1e1e2e] p-3 rounded-lg flex justify-between items-center"
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">{viewTabs.find(t => t.id === activeView)?.icon}</span>
-              <span className="font-semibold">{viewTabs.find(t => t.id === activeView)?.label}</span>
+              <span className="text-slate-400">{viewTabs.find(t => t.id === activeView)?.icon}</span>
+              <span className="text-slate-200 font-medium text-sm">{viewTabs.find(t => t.id === activeView)?.label}</span>
               {activeView === 'missing-hours' && missingHoursCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                  {missingHoursCount}
-                </span>
+                <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-2 py-0.5 rounded-full">{missingHoursCount}</span>
               )}
             </div>
-            <span className="text-gray-400">{navMenuOpen ? '▲' : '▼'}</span>
+            <span className="text-slate-500 text-xs">{navMenuOpen ? '▲' : '▼'}</span>
           </button>
 
           {navMenuOpen && (
-            <div 
-              className="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-lg overflow-hidden z-50 border border-gray-700 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d0d14] border border-[#1e1e2e] rounded-lg overflow-hidden z-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               {viewTabs.map(tab => {
                 const isActive = activeView === tab.id;
                 return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleViewChange(tab.id)}
-                    className={`
-                      w-full flex items-center justify-between px-4 py-3.5 transition border-b border-gray-700 last:border-b-0
-                      ${isActive 
-                        ? tab.id === 'missing-hours' ? 'bg-orange-600 text-white'
-                          : tab.id === 'aging' ? 'bg-red-600 text-white'
-                          : 'bg-blue-600 text-white'
-                        : 'text-gray-300 active:bg-gray-700'
-                      }
-                    `}
+                  <button key={tab.id} onClick={() => handleViewChange(tab.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 transition border-b border-[#1e1e2e] last:border-b-0 text-sm
+                      ${isActive ? 'bg-blue-600/10 text-blue-400 border-l-2 border-l-blue-500' : 'text-slate-400 hover:bg-[#1e1e2e]'}`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-lg">{tab.icon}</span>
+                      <span>{tab.icon}</span>
                       <span className="font-medium">{tab.label}</span>
                     </div>
                     {tab.alert && (
-                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
                         {missingHoursCount > 99 ? '99+' : missingHoursCount}
                       </span>
                     )}
@@ -169,62 +131,56 @@ export default function DashboardHeader({ activeView, setActiveView, missingHour
         </div>
       </div>
 
-      {/* ===== DESKTOP/TABLET HEADER (hidden on mobile) ===== */}
+      {/* ===== DESKTOP HEADER ===== */}
       <div className="hidden md:block">
-        {/* Top row - Logo and quick actions */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-4">
-            <img src="/emf-logo.png" alt="EMF Contracting LLC" className="h-12 w-auto" />
+        <div className="flex justify-between items-center mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-lg">P</div>
             <div>
-              <h1 className="text-2xl font-bold">EMF Contracting LLC</h1>
-              <p className="text-sm text-gray-400">Field Service Dashboard</p>
+              <h1 className="text-base font-semibold text-slate-200 leading-tight tracking-tight">PCS FieldService</h1>
+              <p className="text-xs text-slate-500">EMF Contracting LLC</p>
             </div>
           </div>
-          
-          {/* Quick action buttons */}
-          <div className="flex gap-2 flex-wrap justify-end">
+
+          <div className="flex gap-1.5 flex-wrap justify-end items-center">
             {onGlobalSearch && (
-              <button
-                onClick={onGlobalSearch}
-                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg font-semibold transition text-sm"
-              >
-                🔍 Search All
+              <button onClick={onGlobalSearch}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-md text-xs font-medium transition">
+                🔍 Search
               </button>
             )}
             {quickLinks.map(link => (
-              <a
-                key={link.href}
-                href={link.href}
-                className={`${link.color} hover:opacity-90 px-3 py-2 rounded-lg font-semibold transition text-sm`}
-              >
+              <a key={link.href} href={link.href}
+                className="bg-[#1e1e2e] hover:bg-[#2d2d44] border border-[#2d2d44] text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-md text-xs font-medium transition">
                 {link.icon} {link.label}
               </a>
             ))}
           </div>
         </div>
 
-        {/* View tabs */}
-        <div className="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
+        {/* View tabs - underline style */}
+        <div className="flex gap-0 border-b border-[#1e1e2e]">
           {viewTabs.map(tab => {
             const isActive = activeView === tab.id;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveView(tab.id)}
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-md font-semibold transition relative
-                  ${isActive 
-                    ? tab.id === 'missing-hours' ? 'bg-orange-600 text-white'
-                      : tab.id === 'aging' ? 'bg-red-600 text-white'
-                      : 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  }
-                `}
+              <button key={tab.id} onClick={() => setActiveView(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition relative border-b-2 -mb-px
+                  ${isActive
+                    ? tab.id === 'missing-hours' ? 'border-orange-500 text-orange-400'
+                      : tab.id === 'aging' ? 'border-red-500 text-red-400'
+                      : 'border-blue-500 text-slate-200'
+                    : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'
+                  }`}
               >
-                <span>{tab.icon}</span>
+                <span className="text-xs opacity-70">{tab.icon}</span>
                 {tab.label}
                 {tab.alert && !isActive && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                  <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                    {missingHoursCount > 99 ? '99+' : missingHoursCount}
+                  </span>
+                )}
+                {tab.alert && isActive && (
+                  <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full">
                     {missingHoursCount > 99 ? '99+' : missingHoursCount}
                   </span>
                 )}

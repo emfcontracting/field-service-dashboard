@@ -6,82 +6,76 @@ import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 import { formatDateEST } from '../utils/dateUtils';
 
-// CBRE Status badge helper - from Gmail labels
 const getCBREStatusBadge = (cbreStatus) => {
   switch (cbreStatus) {
     case 'escalation':
-      return {
-        text: '🚨 ESCALATION',
-        color: 'bg-red-600 text-red-100 animate-pulse',
-        shortText: '🚨 ESC'
-      };
+      return { text: '🚨 ESCALATION', color: 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse', shortText: '🚨 ESC' };
     case 'quote_approved':
-      return {
-        text: '✅ QUOTE APPROVED',
-        color: 'bg-green-600 text-green-100',
-        shortText: '✅ Approved'
-      };
+      return { text: '✅ QUOTE APPROVED', color: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30', shortText: '✅ Approved' };
     case 'quote_rejected':
-      return {
-        text: '❌ QUOTE REJECTED',
-        color: 'bg-red-700 text-red-100',
-        shortText: '❌ Rejected'
-      };
+      return { text: '❌ QUOTE REJECTED', color: 'bg-red-500/20 text-red-400 border border-red-500/30', shortText: '❌ Rejected' };
     case 'quote_submitted':
-      return {
-        text: '📤 QUOTE SUBMITTED',
-        color: 'bg-blue-600 text-blue-100',
-        shortText: '📤 Submitted'
-      };
+      return { text: '📤 QUOTE SUBMITTED', color: 'bg-blue-500/20 text-blue-400 border border-blue-500/30', shortText: '📤 Submitted' };
     case 'reassigned':
-      return {
-        text: '🔄 REASSIGNED',
-        color: 'bg-purple-600 text-purple-100',
-        shortText: '🔄 Reassign'
-      };
+      return { text: '🔄 REASSIGNED', color: 'bg-purple-500/20 text-purple-400 border border-purple-500/30', shortText: '🔄 Reassign' };
     case 'pending_quote':
-      return {
-        text: '📋 PENDING QUOTE',
-        color: 'bg-orange-600 text-orange-100',
-        shortText: '📋 Pending'
-      };
+      return { text: '📋 PENDING QUOTE', color: 'bg-orange-500/20 text-orange-400 border border-orange-500/30', shortText: '📋 Pending' };
     case 'invoice_rejected':
-      return {
-        text: '❌ INVOICE REJECTED',
-        color: 'bg-red-800 text-red-100',
-        shortText: '❌ Inv Rej'
-      };
+      return { text: '❌ INVOICE REJECTED', color: 'bg-red-500/20 text-red-400 border border-red-500/30', shortText: '❌ Inv Rej' };
     case 'cancelled':
-      return {
-        text: '🚫 CANCELLED',
-        color: 'bg-gray-600 text-gray-100',
-        shortText: '🚫 Cancel'
-      };
+      return { text: '🚫 CANCELLED', color: 'bg-slate-500/20 text-slate-400 border border-slate-500/30', shortText: '🚫 Cancel' };
     default:
       return null;
   }
 };
 
-// Helper to get compact priority text (e.g., "🔴 P1" from "🔴 P1 - Emergency")
-const getCompactPriorityText = (badge) => {
-  if (!badge || !badge.text) return '—';
-  
-  const parts = badge.text.split(' ');
-  // Get first two parts (emoji and P-code), but handle fallbacks
-  if (parts.length >= 2) {
-    return `${parts[0]} ${parts[1]}`;
+const getStatusBadge = (status) => {
+  switch (status) {
+    case 'pending':
+      return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
+    case 'assigned':
+      return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+    case 'in_progress':
+      return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
+    case 'tech_review':
+      return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+    case 'return_trip':
+      return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
+    case 'completed':
+      return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+    default:
+      return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
   }
-  return badge.text;
 };
 
-export default function WorkOrdersTable({ 
-  workOrders, 
-  loading, 
+const getPriorityStyle = (badge) => {
+  if (!badge) return { cls: 'text-slate-500', text: '—' };
+  const text = badge.text || '';
+  const parts = text.split(' ');
+  const compact = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : text;
+
+  if (badge.color?.includes('red')) return { cls: 'text-red-400 font-bold', text: compact };
+  if (badge.color?.includes('orange')) return { cls: 'text-orange-400 font-bold', text: compact };
+  if (badge.color?.includes('yellow')) return { cls: 'text-yellow-400 font-semibold', text: compact };
+  if (badge.color?.includes('blue')) return { cls: 'text-blue-400', text: compact };
+  if (badge.color?.includes('green') || badge.color?.includes('emerald')) return { cls: 'text-emerald-400', text: compact };
+  return { cls: 'text-slate-400', text: compact };
+};
+
+const isNewWorkOrder = (wo) => {
+  if (wo.lead_tech_id) return false;
+  const created = new Date(wo.date_entered || wo.created_at);
+  const hours = (new Date() - created) / (1000 * 60 * 60);
+  return hours <= 24;
+};
+
+export default function WorkOrdersTable({
+  workOrders,
+  loading,
   onSelectWorkOrder,
   searchTerm,
   statusFilter,
   priorityFilter,
-  // Selection & bulk action props
   isSuperuser = false,
   selectedWOs = new Set(),
   onToggleSelect,
@@ -89,35 +83,14 @@ export default function WorkOrdersTable({
   onClearSelection,
   showCheckboxes = false
 }) {
-  
-  // Check if work order is "new" (unassigned and less than 24 hours old)
-  const isNewWorkOrder = (wo) => {
-    // Must be unassigned
-    if (wo.lead_tech_id) return false;
-    
-    // Check if created within last 24 hours
-    const createdDate = new Date(wo.date_entered || wo.created_at);
-    const now = new Date();
-    const hoursSinceCreation = (now - createdDate) / (1000 * 60 * 60);
-    
-    return hoursSinceCreation <= 24;
-  };
-
-  // Check if all visible WOs are selected
   const allSelected = workOrders.length > 0 && workOrders.every(wo => selectedWOs.has(wo.wo_id));
   const someSelected = workOrders.some(wo => selectedWOs.has(wo.wo_id));
 
-  // Handle header checkbox click
   const handleHeaderCheckbox = (e) => {
     e.stopPropagation();
-    if (allSelected) {
-      onClearSelection();
-    } else {
-      onSelectAll();
-    }
+    allSelected ? onClearSelection() : onSelectAll();
   };
 
-  // Handle row checkbox click
   const handleRowCheckbox = (e, woId) => {
     e.stopPropagation();
     onToggleSelect(woId);
@@ -125,114 +98,102 @@ export default function WorkOrdersTable({
 
   if (loading) {
     return (
-      <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-        Loading work orders...
+      <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-10 text-center text-slate-500 text-sm">
+        <div className="animate-pulse">Loading work orders...</div>
       </div>
     );
   }
 
   if (workOrders.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
+      <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-10 text-center text-slate-500 text-sm">
         {searchTerm || statusFilter !== 'all' || priorityFilter !== 'all'
-          ? 'No work orders match your filters'
+          ? 'No work orders match your filters.'
           : 'No work orders yet. Create your first one!'}
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg overflow-hidden">
+    <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg overflow-hidden">
       <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-        <table className="w-full text-xs" style={{ tableLayout: 'fixed', minWidth: (showCheckboxes || isSuperuser) ? '1440px' : '1400px' }}>
-          <thead className="bg-gray-700">
-            <tr>
-              {/* Checkbox column */}
+        <table
+          className="w-full text-xs"
+          style={{ tableLayout: 'fixed', minWidth: (showCheckboxes || isSuperuser) ? '1440px' : '1400px' }}
+        >
+          <thead>
+            <tr className="border-b border-[#1e1e2e] bg-[#0a0a0f]">
               {(showCheckboxes || isSuperuser) && (
-                <th 
-                  className="px-2 py-2 text-center" 
-                  style={{ width: '40px' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <th className="px-3 py-2.5 text-center" style={{ width: '40px' }} onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={allSelected}
-                    ref={input => {
-                      if (input) {
-                        input.indeterminate = someSelected && !allSelected;
-                      }
-                    }}
+                    ref={input => { if (input) input.indeterminate = someSelected && !allSelected; }}
                     onChange={handleHeaderCheckbox}
-                    className="w-4 h-4 rounded cursor-pointer"
-                    title={allSelected ? 'Deselect all' : 'Select all'}
+                    className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-500"
                   />
                 </th>
               )}
-              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>WO#</th>
-              <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Date</th>
-              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Building</th>
-              <th className="px-2 py-2 text-left" style={{ width: '280px' }}>Description</th>
-              <th className="px-2 py-2 text-left" style={{ width: '100px' }}>Work Status</th>
-              <th className="px-2 py-2 text-left" style={{ width: '90px' }}>CBRE</th>
-              <th className="px-2 py-2 text-left" style={{ width: '80px' }}>Priority</th>
-              <th className="px-2 py-2 text-left" style={{ width: '110px' }}>Lead Tech</th>
-              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>NTE</th>
-              <th className="px-2 py-2 text-right" style={{ width: '80px' }}>Est Cost</th>
-              <th className="px-2 py-2 text-center" style={{ width: '40px' }}>🔒</th>
-              <th className="px-2 py-2 text-center" style={{ width: '60px' }}>Action</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '100px' }}>WO #</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '80px' }}>Date</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '100px' }}>Building</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '280px' }}>Description</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '110px' }}>Status</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '100px' }}>CBRE</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '72px' }}>Priority</th>
+              <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '110px' }}>Lead Tech</th>
+              <th className="px-3 py-2.5 text-right text-slate-500 font-medium tracking-wide" style={{ width: '80px' }}>NTE</th>
+              <th className="px-3 py-2.5 text-right text-slate-500 font-medium tracking-wide" style={{ width: '80px' }}>Est Cost</th>
+              <th className="px-3 py-2.5 text-center text-slate-500 font-medium" style={{ width: '36px' }}>🔒</th>
+              <th className="px-3 py-2.5 text-center text-slate-500 font-medium tracking-wide" style={{ width: '64px' }}>Open</th>
             </tr>
           </thead>
           <tbody>
-            {workOrders.map(wo => {
+            {workOrders.map((wo, idx) => {
               const totalCost = calculateTotalCost(wo);
               const overBudget = totalCost > (wo.nte || 0) && (wo.nte || 0) > 0;
               const isNew = isNewWorkOrder(wo);
               const isSelected = selectedWOs.has(wo.wo_id);
-              // CBRE status badge from Gmail labels
               const cbreBadge = getCBREStatusBadge(wo.cbre_status);
-              // Priority badge
               const priorityBadge = getPriorityBadge(wo.priority);
-              // NTE pending: tech submitted NTE request, needs to be forwarded to CBRE
+              const priorityStyle = getPriorityStyle(priorityBadge);
               const hasPendingNTE = wo.nte_quotes?.some(q => q.nte_status === 'pending');
+
+              const rowBg = isSelected
+                ? 'bg-blue-600/10 border-l-2 border-l-blue-500'
+                : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
+                : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'
+                : '';
 
               return (
                 <tr
                   key={wo.wo_id}
                   onClick={() => onSelectWorkOrder(wo)}
-                  className={`border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer ${
-                    isSelected ? 'bg-purple-900/40 border-l-2 border-l-purple-500' :
-                    wo.cbre_status === 'escalation' ? 'bg-red-900/30' :
-                    wo.cbre_status === 'quote_rejected' ? 'bg-red-900/20' :
-                    wo.cbre_status === 'invoice_rejected' ? 'bg-red-900/20' :
-                    wo.cbre_status === 'cancelled' ? 'bg-gray-900/40' :
-                    wo.cbre_status === 'pending_quote' ? 'bg-orange-900/20' : ''
-                  }`}
+                  className={`border-b border-[#1a1a28] hover:bg-[#1e1e2e] transition cursor-pointer ${rowBg}`}
                 >
-                  {/* Checkbox cell */}
                   {(showCheckboxes || isSuperuser) && (
-                    <td 
-                      className="px-2 py-2 text-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(e) => handleRowCheckbox(e, wo.wo_id)}
-                        className="w-4 h-4 rounded cursor-pointer"
+                        className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-500"
                       />
                     </td>
                   )}
-                  <td className="px-2 py-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">{wo.wo_number}</span>
+
+                  {/* WO Number */}
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
                       {isNew && (
-                        <span className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+                        <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
                           NEW
                         </span>
                       )}
                       {hasPendingNTE && (
                         <span
-                          className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse"
+                          className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                           title="Tech submitted NTE request – needs to be sent to CBRE"
                         >
                           💰 NTE
@@ -240,72 +201,82 @@ export default function WorkOrdersTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-2">
-                    {wo.date_entered ? formatDateEST(wo.date_entered) : 'No Date'}
+
+                  {/* Date */}
+                  <td className="px-3 py-2.5 text-slate-500">
+                    {wo.date_entered ? formatDateEST(wo.date_entered) : '—'}
                   </td>
-                  <td className="px-2 py-2">{wo.building}</td>
-                  <td className="px-2 py-2">
-                    <div className="truncate" title={wo.work_order_description}>
+
+                  {/* Building */}
+                  <td className="px-3 py-2.5 text-slate-300 font-medium">{wo.building}</td>
+
+                  {/* Description */}
+                  <td className="px-3 py-2.5">
+                    <div className="truncate text-slate-400" title={wo.work_order_description}>
                       {wo.work_order_description}
                     </div>
                   </td>
-                  <td className="px-2 py-2">
+
+                  {/* Status */}
+                  <td className="px-3 py-2.5">
                     <div className="flex flex-col gap-1">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold text-center ${getStatusColor(wo.status)}`}>
-                        {wo.status.replace('_', ' ').toUpperCase()}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium inline-flex items-center gap-1 ${getStatusBadge(wo.status)}`}>
+                        {wo.status.replace(/_/g, ' ')}
                       </span>
                       {wo.assigned_to_field && (
-                        <span className="px-1 py-0.5 bg-blue-600 rounded text-xs font-bold text-center">
-                          📱
-                        </span>
+                        <span className="text-[10px] text-blue-400">📱 Field</span>
                       )}
                     </div>
                   </td>
-                  {/* CBRE Status Column */}
-                  <td className="px-2 py-2">
+
+                  {/* CBRE */}
+                  <td className="px-3 py-2.5">
                     {cbreBadge ? (
-                      <span 
-                        className={`px-2 py-1 rounded text-[10px] font-bold ${cbreBadge.color}`}
-                        title={cbreBadge.text}
-                      >
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${cbreBadge.color}`} title={cbreBadge.text}>
                         {cbreBadge.shortText}
                       </span>
                     ) : (
-                      <span className="text-gray-500 text-[10px]">—</span>
+                      <span className="text-slate-700">—</span>
                     )}
                   </td>
-                  {/* Priority Column */}
-                  <td className="px-2 py-2 text-center">
-                    <span 
-                      className={`px-2 py-1 rounded text-xs font-semibold text-white ${priorityBadge.color} whitespace-nowrap`}
-                      title={priorityBadge.text}
-                    >
-                      {getCompactPriorityText(priorityBadge)}
-                    </span>
+
+                  {/* Priority */}
+                  <td className="px-3 py-2.5">
+                    <span className={`text-[11px] ${priorityStyle.cls}`}>{priorityStyle.text}</span>
                   </td>
-                  <td className="px-2 py-2">
+
+                  {/* Lead Tech */}
+                  <td className="px-3 py-2.5">
                     {wo.lead_tech ? (
-                      <div className="truncate" title={`${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`}>
+                      <span className="text-slate-300 truncate block" title={`${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`}>
                         {wo.lead_tech.first_name} {wo.lead_tech.last_name.charAt(0)}.
-                      </div>
+                      </span>
                     ) : (
-                      <span className="text-gray-500">Unassigned</span>
+                      <span className="text-yellow-600/70 text-[10px]">Unassigned</span>
                     )}
                   </td>
-                  <td className="px-2 py-2 text-right font-semibold">
+
+                  {/* NTE */}
+                  <td className="px-3 py-2.5 text-right text-slate-400 font-medium">
                     ${(wo.nte || 0).toFixed(0)}
                   </td>
-                  <td className="px-2 py-2 text-right">
-                    <span className={overBudget ? 'text-red-400 font-bold' : ''}>
+
+                  {/* Est Cost */}
+                  <td className="px-3 py-2.5 text-right font-semibold">
+                    <span className={overBudget ? 'text-red-400' : 'text-emerald-400'}>
                       ${(totalCost || 0).toFixed(0)}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-center">
-                    {wo.is_locked && '🔒'}
+
+                  {/* Locked */}
+                  <td className="px-3 py-2.5 text-center text-slate-600">
+                    {wo.is_locked ? '🔒' : ''}
                   </td>
-                  <td className="px-2 py-2 text-center">
-                    <button className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-bold">
-                      View
+
+                  {/* Open button */}
+                  <td className="px-3 py-2.5 text-center">
+                    <button className="bg-[#1e1e2e] hover:bg-blue-600/20 border border-[#2d2d44] hover:border-blue-500/40 text-slate-400 hover:text-blue-400 px-2.5 py-1 rounded-md text-[11px] font-medium transition">
+                      Open →
                     </button>
                   </td>
                 </tr>

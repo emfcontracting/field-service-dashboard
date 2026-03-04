@@ -7,77 +7,195 @@ import { getSupabase } from '@/lib/supabase';
 
 const supabase = getSupabase();
 
+// ── SVG Icon components (16x16, consistent stroke style) ──
+const Icons = {
+  workorders: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+      <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+    </svg>
+  ),
+  calendar: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
+      <line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>
+    </svg>
+  ),
+  aging: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <polyline points="12 7 12 12 15 15"/>
+    </svg>
+  ),
+  missingHours: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+  ),
+  availability: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  ),
+  home: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  ),
+  backend: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+    </svg>
+  ),
+  weather: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  ),
+  messages: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
+  invoices: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  ),
+  users: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  ),
+  settings: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  ),
+  mobile: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+      <line x1="12" y1="18" x2="12.01" y2="18"/>
+    </svg>
+  ),
+  logout: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  ),
+  expand: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
+    </svg>
+  ),
+  collapse: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+    </svg>
+  ),
+};
+
 const NAV_ITEMS = [
-  { id: 'workorders',    label: 'Work Orders',   icon: '◫' },
-  { id: 'calendar',      label: 'Calendar',       icon: '⬡' },
-  { id: 'aging',         label: 'Aging',          icon: '◉' },
-  { id: 'missing-hours', label: 'Missing Hours',  icon: '⚠', alert: true },
-  { id: 'availability',  label: 'Availability',   icon: '◈' },
+  { id: 'workorders',    label: 'Work Orders',   Icon: Icons.workorders },
+  { id: 'calendar',      label: 'Calendar',       Icon: Icons.calendar },
+  { id: 'aging',         label: 'Aging',          Icon: Icons.aging },
+  { id: 'missing-hours', label: 'Missing Hours',  Icon: Icons.missingHours, alert: true },
+  { id: 'availability',  label: 'Availability',   Icon: Icons.availability },
 ];
 
 const QUICK_LINKS = [
-  { href: '/',                  label: 'Home',      icon: '🏠' },
-  { href: '/dashboard/backend', label: 'Backend',   icon: '🛠️' },
-  { href: '/weather',           label: 'Weather',   icon: '🌤️' },
-  { href: '/messages',          label: 'Messages',  icon: '💬' },
-  { href: '/invoices',          label: 'Invoicing', icon: '💰' },
-  { href: '/users',             label: 'Users',     icon: '👥' },
-  { href: '/settings',          label: 'Settings',  icon: '⚙️' },
-  { href: '/mobile',            label: 'Mobile',    icon: '📱' },
+  { href: '/',                  label: 'Home',      Icon: Icons.home },
+  { href: '/dashboard/backend', label: 'Backend',   Icon: Icons.backend },
+  { href: '/weather',           label: 'Weather',   Icon: Icons.weather },
+  { href: '/messages',          label: 'Messages',  Icon: Icons.messages },
+  { href: '/invoices',          label: 'Invoicing', Icon: Icons.invoices },
+  { href: '/users',             label: 'Users',     Icon: Icons.users },
+  { href: '/settings',          label: 'Settings',  Icon: Icons.settings },
+  { href: '/mobile',            label: 'Mobile',    Icon: Icons.mobile },
 ];
 
-// ── Sidebar inner component (needs useSearchParams) ──
+// Shared button style for both nav + quick links
+const itemBase = (active, collapsed) =>
+  `relative w-full flex items-center gap-3 rounded-lg transition-all duration-150 font-medium
+   ${collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5'}
+   ${active
+     ? 'bg-blue-600/15 text-blue-400'
+     : 'text-slate-500 hover:text-slate-200 hover:bg-[#1e1e2e]'}`;
+
+const quickBase = (collapsed) =>
+  `relative w-full flex items-center gap-3 rounded-lg transition-all duration-150
+   text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]
+   ${collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5'}`;
+
+// ── Sidebar inner (uses useSearchParams) ──
 function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse, onLogout, isMobile }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const activeView = searchParams.get('view') || 'workorders';
-
-  const setActiveView = (viewId) => {
-    router.push(`/dashboard?view=${viewId}`);
-    setMobileNavOpen(false);
-  };
+  const setActiveView = (id) => { router.push(`/dashboard?view=${id}`); setMobileNavOpen(false); };
 
   /* ── MOBILE ── */
   if (isMobile) {
     return (
       <>
-        {/* Mobile top bar */}
-        <div className="bg-[#0d0d14] border-b border-[#1e1e2e] px-4 py-2.5 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs">P</div>
-            <span className="text-slate-300 font-semibold text-sm">PCS FieldService</span>
+        <div className="bg-[#0d0d14] border-b border-[#1e1e2e] px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">P</div>
+            <span className="text-slate-200 font-semibold text-sm">PCS FieldService</span>
           </div>
           <button onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-400 p-2 rounded-lg text-sm">
-            {mobileNavOpen ? '✕' : '☰'}
+            className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-400 p-2 rounded-lg">
+            {mobileNavOpen
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            }
           </button>
         </div>
 
         {mobileNavOpen && (
-          <div className="bg-[#0d0d14] border-b border-[#1e1e2e] py-2">
-            {NAV_ITEMS.map(item => {
-              const isActive = activeView === item.id;
+          <div className="bg-[#0d0d14] border-b border-[#1e1e2e] py-1.5">
+            {NAV_ITEMS.map(({ id, label, Icon, alert }) => {
+              const isActive = activeView === id;
               return (
-                <button key={item.id} onClick={() => setActiveView(item.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition
-                    ${isActive ? 'bg-blue-600/10 text-blue-400 border-l-2 border-l-blue-500' : 'text-slate-400 hover:bg-[#1e1e2e]'}`}>
+                <button key={id} onClick={() => setActiveView(id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition border-l-2
+                    ${isActive ? 'bg-blue-600/10 text-blue-400 border-blue-500' : 'text-slate-400 hover:bg-[#1e1e2e] border-transparent'}`}>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs opacity-70">{item.icon}</span>
-                    <span className="font-medium">{item.label}</span>
+                    <Icon /><span className="font-medium">{label}</span>
                   </div>
-                  {item.alert && missingHoursCount > 0 && (
-                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                      {missingHoursCount}
-                    </span>
+                  {alert && missingHoursCount > 0 && (
+                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full">{missingHoursCount}</span>
                   )}
                 </button>
               );
             })}
-            <div className="border-t border-[#1e1e2e] mt-2 pt-2 px-4 flex justify-between items-center">
+            <div className="mx-4 my-1.5 border-t border-[#1e1e2e]" />
+            {QUICK_LINKS.map(({ href, label, Icon }) => (
+              <a key={href} href={href}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e] transition">
+                <Icon /><span>{label}</span>
+              </a>
+            ))}
+            <div className="mx-4 my-1.5 border-t border-[#1e1e2e]" />
+            <div className="px-4 py-2 flex justify-between items-center">
               <span className="text-xs text-slate-600">{userInfo?.first_name} {userInfo?.last_name}</span>
-              <button onClick={onLogout} className="text-xs text-red-500 hover:text-red-400">Logout</button>
+              <button onClick={onLogout} className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-400">
+                <Icons.logout /><span>Logout</span>
+              </button>
             </div>
           </div>
         )}
@@ -87,41 +205,50 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
 
   /* ── DESKTOP ── */
   return (
-    <aside className={`flex flex-col bg-[#0d0d14] border-r border-[#1e1e2e] transition-all duration-200 flex-shrink-0 ${sidebarCollapsed ? 'w-14' : 'w-52'}`}>
+    <aside className={`flex flex-col bg-[#0d0d14] border-r border-[#1e1e2e] transition-all duration-200 flex-shrink-0 ${sidebarCollapsed ? 'w-[52px]' : 'w-[200px]'}`}>
 
       {/* Logo */}
-      <div className={`flex items-center gap-3 px-3 py-4 border-b border-[#1e1e2e] ${sidebarCollapsed ? 'justify-center' : ''}`}>
+      <div className={`flex items-center border-b border-[#1e1e2e] h-[52px] px-3 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P</div>
         {!sidebarCollapsed && (
-          <div>
-            <div className="text-slate-200 font-semibold text-sm leading-tight">PCS FieldService</div>
-            <div className="text-slate-600 text-xs">EMF Contracting</div>
+          <div className="overflow-hidden">
+            <div className="text-slate-200 font-semibold text-sm leading-tight whitespace-nowrap">PCS FieldService</div>
+            <div className="text-slate-600 text-xs whitespace-nowrap">EMF Contracting</div>
           </div>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-3 space-y-0.5 px-2 overflow-y-auto">
-        {!sidebarCollapsed && <div className="text-slate-600 text-xs px-2 pb-1 tracking-wider font-medium">VIEWS</div>}
+      {/* Scrollable nav area */}
+      <nav className="flex-1 overflow-y-auto py-2 px-1.5 flex flex-col gap-0.5">
 
-        {NAV_ITEMS.map(item => {
-          const isActive = activeView === item.id;
+        {/* Views section */}
+        {!sidebarCollapsed && <div className="text-slate-700 text-[10px] px-2 pt-1 pb-1 tracking-widest font-semibold uppercase">Views</div>}
+        {sidebarCollapsed && <div className="h-2" />}
+
+        {NAV_ITEMS.map(({ id, label, Icon, alert }) => {
+          const isActive = activeView === id;
+          const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
+            : id === 'aging' ? 'bg-red-500/10 text-red-400'
+            : 'bg-blue-600/15 text-blue-400';
+
           return (
-            <button key={item.id} onClick={() => setActiveView(item.id)} title={sidebarCollapsed ? item.label : ''}
-              className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm font-medium transition relative
-                ${isActive
-                  ? item.id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
-                    : item.id === 'aging' ? 'bg-red-500/10 text-red-400'
-                    : 'bg-blue-600/10 text-blue-400'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]'
-                } ${sidebarCollapsed ? 'justify-center' : ''}`}
+            <button key={id} onClick={() => setActiveView(id)} title={sidebarCollapsed ? label : undefined}
+              className={`relative w-full flex items-center gap-3 rounded-lg transition-all duration-150 font-medium
+                ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5 text-sm'}
+                ${isActive ? activeColor : 'text-slate-500 hover:text-slate-200 hover:bg-[#1e1e2e]'}`}
             >
-              {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-500 rounded-r-full" />}
-              <span className={`${sidebarCollapsed ? 'text-base' : 'text-xs opacity-80'}`}>{item.icon}</span>
-              {!sidebarCollapsed && <span>{item.label}</span>}
-              {item.alert && missingHoursCount > 0 && (
-                <span className={`bg-red-500/20 text-red-400 border border-red-500/30 font-bold rounded-full
-                  ${sidebarCollapsed ? 'absolute -top-1 -right-1 text-[9px] px-1 py-0' : 'ml-auto text-xs px-1.5 py-0.5'}`}>
+              {/* Active left indicator */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500" />
+              )}
+              <Icon />
+              {!sidebarCollapsed && <span className="truncate">{label}</span>}
+              {/* Alert badge */}
+              {alert && missingHoursCount > 0 && (
+                <span className={`bg-red-500/20 text-red-400 border border-red-500/30 font-bold rounded-full leading-none
+                  ${sidebarCollapsed
+                    ? 'absolute top-1 right-1 text-[8px] w-4 h-4 flex items-center justify-center'
+                    : 'ml-auto text-[10px] px-1.5 py-0.5'}`}>
                   {missingHoursCount > 99 ? '99+' : missingHoursCount}
                 </span>
               )}
@@ -129,36 +256,42 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
           );
         })}
 
-        {/* Quick links */}
-        <div className="pt-3">
-          {!sidebarCollapsed && <div className="text-slate-600 text-xs px-2 pb-1 tracking-wider font-medium">QUICK LINKS</div>}
-          {sidebarCollapsed && <div className="border-t border-[#1e1e2e] my-2" />}
-          {QUICK_LINKS.map(link => (
-            <a key={link.href} href={link.href} title={sidebarCollapsed ? link.label : ''}
-              className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-xs text-slate-600 hover:text-slate-300 hover:bg-[#1e1e2e] transition ${sidebarCollapsed ? 'justify-center' : ''}`}>
-              <span>{link.icon}</span>
-              {!sidebarCollapsed && <span>{link.label}</span>}
-            </a>
-          ))}
-        </div>
+        {/* Divider */}
+        <div className="my-1.5 border-t border-[#1e1e2e]" />
+
+        {/* Quick links section */}
+        {!sidebarCollapsed && <div className="text-slate-700 text-[10px] px-2 pb-1 tracking-widest font-semibold uppercase">Links</div>}
+
+        {QUICK_LINKS.map(({ href, label, Icon }) => (
+          <a key={href} href={href} title={sidebarCollapsed ? label : undefined}
+            className={`relative w-full flex items-center gap-3 rounded-lg transition-all duration-150
+              text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]
+              ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5 text-sm'}`}>
+            <Icon />
+            {!sidebarCollapsed && <span className="truncate">{label}</span>}
+          </a>
+        ))}
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-[#1e1e2e] p-2 space-y-1">
+      <div className="border-t border-[#1e1e2e] p-1.5 flex flex-col gap-0.5">
         {!sidebarCollapsed && userInfo && (
-          <div className="px-2 py-1.5">
+          <div className="px-3 py-2">
             <div className="text-slate-300 text-xs font-medium truncate">{userInfo.first_name} {userInfo.last_name}</div>
-            <div className="text-slate-600 text-xs">{userInfo.role?.replace('_', ' ')}</div>
+            <div className="text-slate-600 text-[10px] truncate">{userInfo.role?.replace(/_/g, ' ')}</div>
           </div>
         )}
-        <div className={`flex gap-1 ${sidebarCollapsed ? 'flex-col items-center' : ''}`}>
+        <div className={`flex ${sidebarCollapsed ? 'flex-col' : 'flex-row'} gap-0.5`}>
           <button onClick={onLogout} title="Logout"
-            className={`text-red-500/60 hover:text-red-400 hover:bg-red-950/30 p-2 rounded-lg text-xs transition ${sidebarCollapsed ? 'w-full flex justify-center' : ''}`}>
-            {sidebarCollapsed ? '🚪' : '🚪 Logout'}
+            className={`flex items-center gap-2.5 rounded-lg py-2 transition text-red-500/50 hover:text-red-400 hover:bg-red-950/20
+              ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-3 text-xs w-auto'}`}>
+            <Icons.logout />
+            {!sidebarCollapsed && <span>Logout</span>}
           </button>
-          <button onClick={onCollapse} title={sidebarCollapsed ? 'Expand' : 'Collapse'}
-            className={`text-slate-600 hover:text-slate-400 hover:bg-[#1e1e2e] p-2 rounded-lg text-xs transition ${sidebarCollapsed ? 'w-full flex justify-center' : 'ml-auto'}`}>
-            {sidebarCollapsed ? '→' : '← Collapse'}
+          <button onClick={onCollapse} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={`flex items-center gap-2.5 rounded-lg py-2 transition text-slate-600 hover:text-slate-400 hover:bg-[#1e1e2e]
+              ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-3 text-xs ml-auto'}`}>
+            {sidebarCollapsed ? <Icons.expand /> : <><Icons.collapse /><span>Collapse</span></>}
           </button>
         </div>
       </div>
@@ -173,15 +306,11 @@ export default function DashboardLayout({ children }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [userInfo, setUserInfo]           = useState(null);
   const [isMobile, setIsMobile]           = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // collapsed by default
   const [missingHoursCount, setMissingHoursCount] = useState(0);
 
   useEffect(() => {
-    const checkMobile = () => {
-      const w = window.innerWidth;
-      setIsMobile(w < 768);
-      if (w < 1280) setSidebarCollapsed(true);
-    };
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     checkAuth();
@@ -190,26 +319,18 @@ export default function DashboardLayout({ children }) {
       if (event === 'SIGNED_OUT') router.push('/login');
       else if (event === 'SIGNED_IN') checkAuth();
     });
-
-    return () => {
-      subscription.unsubscribe();
-      window.removeEventListener('resize', checkMobile);
-    };
+    return () => { subscription.unsubscribe(); window.removeEventListener('resize', checkMobile); };
   }, []);
 
   useEffect(() => {
     if (!authenticated) return;
-    const fetch = async () => {
+    (async () => {
       try {
-        const { data } = await supabase
-          .from('work_orders')
-          .select('wo_id')
-          .in('status', ['in_progress', 'return_trip', 'tech_review', 'completed'])
-          .eq('acknowledged', false);
+        const { data } = await supabase.from('work_orders').select('wo_id')
+          .in('status', ['in_progress', 'return_trip', 'tech_review', 'completed']).eq('acknowledged', false);
         setMissingHoursCount(data?.length || 0);
       } catch {}
-    };
-    fetch();
+    })();
   }, [authenticated]);
 
   async function checkAuth() {
@@ -220,11 +341,7 @@ export default function DashboardLayout({ children }) {
       const { data: userData, error: userError } = await supabase
         .from('users').select('*').eq('auth_id', user.id).eq('is_active', true).single();
 
-      if (userError || !userData) {
-        await supabase.auth.signOut();
-        router.push('/login');
-        return;
-      }
+      if (userError || !userData) { await supabase.auth.signOut(); router.push('/login'); return; }
 
       if (!['admin', 'office_staff'].includes(userData.role)) {
         await supabase.auth.signOut();
@@ -232,7 +349,6 @@ export default function DashboardLayout({ children }) {
         router.push('/login');
         return;
       }
-
       setUserInfo(userData);
       setAuthenticated(true);
     } catch { router.push('/login'); }
@@ -259,17 +375,16 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className={`min-h-screen bg-[#0a0a0f] ${isMobile ? 'flex flex-col' : 'flex'}`}>
-      {/* Sidebar wrapped in Suspense because SidebarNav uses useSearchParams */}
       <Suspense fallback={
         isMobile ? null : (
-          <div className={`bg-[#0d0d14] border-r border-[#1e1e2e] flex-shrink-0 ${sidebarCollapsed ? 'w-14' : 'w-52'}`} />
+          <div className={`bg-[#0d0d14] border-r border-[#1e1e2e] flex-shrink-0 ${sidebarCollapsed ? 'w-[52px]' : 'w-[200px]'}`} />
         )
       }>
         <SidebarNav
           userInfo={userInfo}
           missingHoursCount={missingHoursCount}
           sidebarCollapsed={sidebarCollapsed}
-          onCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onCollapse={() => setSidebarCollapsed(p => !p)}
           onLogout={handleLogout}
           isMobile={isMobile}
         />

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
+import AppShell from '@/app/components/AppShell';
 
 const supabase = getSupabase();
 
@@ -118,33 +119,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/dashboard"
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex items-center gap-2"
-            >
-              ← Back to Dashboard
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <img src="/emf-logo.png" alt="EMF" className="h-8 w-8" onError={(e) => e.target.style.display = 'none'} />
-                ⚙️ Settings
-              </h1>
-              {isSuperuser && (
-                <p className="text-sm text-green-400 mt-1">🔑 Superuser Account</p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition"
-          >
-            Logout
-          </button>
+      <header className="bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-4">
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-2xl font-bold text-slate-100">⚙️ Settings</h1>
+          {isSuperuser && (
+            <p className="text-sm text-green-400 mt-1">🔑 Superuser Account</p>
+          )}
         </div>
       </header>
 
@@ -361,5 +344,6 @@ export default function SettingsPage() {
 
       </div>
     </div>
+    </AppShell>
   );
 }

@@ -3,1410 +3,762 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import GlobalWOSearch from '../components/GlobalWOSearch';
+import AppShell from '@/components/AppShell';
 
-export default function InvoicingPage() {
-  const [acknowledgedWOs, setAcknowledgedWOs] = useState([]);
-  const [filteredAcknowledgedWOs, setFilteredAcknowledgedWOs] = useState([]);
-  const [woTotals, setWoTotals] = useState({}); // Store calculated totals for each WO
-  const [invoices, setInvoices] = useState([]);
-  const [filteredInvoices, setFilteredInvoices] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [lineItems, setLineItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('ready');
-  const [generatingInvoice, setGeneratingInvoice] = useState(false);
-  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
-  const [previewWO, setPreviewWO] = useState(null);
-  const [previewLineItems, setPreviewLineItems] = useState([]);
-  const [workPerformedText, setWorkPerformedText] = useState('');
-  const [customLineItem, setCustomLineItem] = useState({
-    description: '',
-    quantity: 1,
-    unit_price: 0
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
+
+// ── Status helpers ──────────────────────────────────────────────────────────
+const STATUS_CONFIG = {
+  draft:    { label: 'Draft',                          color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
+  approved: { label: 'Uploaded to CBRE',               color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+  accepted: { label: 'Accepted – Submitted to AP',     color: 'bg-green-500/15 text-green-400 border-green-500/30' },
+  synced:   { label: 'Accepted – Submitted to AP',     color: 'bg-green-500/15 text-green-400 border-green-500/30' },
+  paid:     { label: 'Paid',                           color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
+  rejected: { label: 'Rejected',                       color: 'bg-red-500/15 text-red-400 border-red-500/30' },
+};
+const statusBadge = (status) => {
+  const cfg = STATUS_CONFIG[status] || { label: status?.toUpperCase(), color: 'bg-slate-500/15 text-slate-400 border-slate-500/30' };
+  return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.color}`}>{cfg.label}</span>;
+};
+
+// ── Filter check-in/out lines from comments ─────────────────────────────────
+const filterWorkComments = (comments) => {
+  if (!comments) return '';
+  const lines = comments.split('\n').filter(line => {
+    const t = line.trim();
+    if (!t) return true;
+    if (/- ✓ CHECKED IN$/i.test(t))       return false;
+    if (/- ✓ ENTRADA$/i.test(t))           return false;
+    if (/- ⏸ CHECKED OUT$/i.test(t))       return false;
+    if (/- ⏸ SALIDA$/i.test(t))            return false;
+    if (/- ✅ MARKED COMPLETE$/i.test(t))  return false;
+    if (/- ✅ MARCADO COMPLETO$/i.test(t)) return false;
+    return true;
   });
-  
-  // Search states
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
-  const [readySearchTerm, setReadySearchTerm] = useState('');
-  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+};
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  );
+// ── Obsidian UI primitives ───────────────────────────────────────────────────
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-[#0d0d14] border border-[#1e1e2e] rounded-xl ${className}`}>{children}</div>
+);
+const CardHeader = ({ children, className = '' }) => (
+  <div className={`px-6 py-4 border-b border-[#1e1e2e] ${className}`}>{children}</div>
+);
+const CardBody = ({ children, className = '' }) => (
+  <div className={`px-6 py-4 ${className}`}>{children}</div>
+);
 
-  // Filter out check-in/check-out entries from comments for invoice "Work Performed"
-  const filterWorkComments = (comments) => {
-    if (!comments) return '';
-    
-    // Split into lines and filter out check-in/out patterns
-    const lines = comments.split('\n');
-    const filteredLines = lines.filter(line => {
-      const trimmedLine = line.trim();
-      
-      // Skip empty lines that would be left after filtering
-      if (!trimmedLine) return true;
-      
-      // Filter out check-in patterns (English and Spanish)
-      // Format: [date, time] Name - ✓ CHECKED IN or ✓ ENTRADA
-      if (/- ✓ CHECKED IN$/i.test(trimmedLine)) return false;
-      if (/- ✓ ENTRADA$/i.test(trimmedLine)) return false;
-      
-      // Filter out check-out patterns (English and Spanish)
-      // Format: [date, time] Name - ⏸ CHECKED OUT or ⏸ SALIDA
-      if (/- ⏸ CHECKED OUT$/i.test(trimmedLine)) return false;
-      if (/- ⏸ SALIDA$/i.test(trimmedLine)) return false;
-      
-      // Filter out completion patterns (English and Spanish)
-      // Format: [date, time] Name - ✅ MARKED COMPLETE or ✅ MARCADO COMPLETO
-      if (/- ✅ MARKED COMPLETE$/i.test(trimmedLine)) return false;
-      if (/- ✅ MARCADO COMPLETO$/i.test(trimmedLine)) return false;
-      
-      return true;
-    });
-    
-    // Clean up multiple consecutive blank lines
-    let result = filteredLines.join('\n');
-    result = result.replace(/\n{3,}/g, '\n\n'); // Replace 3+ newlines with 2
-    result = result.trim();
-    
-    return result;
+const Btn = ({ children, onClick, disabled, variant = 'default', size = 'md', className = '' }) => {
+  const variants = {
+    default:   'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:text-slate-100 hover:bg-[#2d2d44]',
+    primary:   'bg-blue-600 hover:bg-blue-500 text-white',
+    success:   'bg-emerald-600 hover:bg-emerald-500 text-white',
+    warning:   'bg-yellow-600 hover:bg-yellow-500 text-white',
+    danger:    'bg-red-600 hover:bg-red-500 text-white',
+    orange:    'bg-orange-600 hover:bg-orange-500 text-white',
+    ghost:     'text-slate-400 hover:text-slate-200 hover:bg-[#1e1e2e]',
   };
+  const sizes = {
+    sm: 'px-3 py-1.5 text-xs',
+    md: 'px-4 py-2 text-sm',
+    lg: 'px-5 py-3 text-base',
+    xl: 'px-6 py-4 text-lg',
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-150
+        disabled:opacity-40 disabled:cursor-not-allowed
+        ${variants[variant]} ${sizes[size]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+// ── Modal wrapper ────────────────────────────────────────────────────────────
+const Modal = ({ children, onClose }) => (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-2xl max-w-4xl w-full my-8 shadow-2xl">
+      {children}
+    </div>
+  </div>
+);
+const ModalHeader = ({ title, subtitle, onClose }) => (
+  <div className="sticky top-0 bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-5 flex justify-between items-start rounded-t-2xl z-10">
+    <div>
+      <h2 className="text-xl font-bold text-slate-100">{title}</h2>
+      {subtitle && <p className="text-slate-500 text-sm mt-0.5">{subtitle}</p>}
+    </div>
+    <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition text-2xl leading-none mt-0.5">×</button>
+  </div>
+);
+const ModalBody = ({ children }) => (
+  <div className="p-6 space-y-5 max-h-[calc(100vh-180px)] overflow-y-auto">{children}</div>
+);
 
-  // Filter Ready for Invoice WOs based on search
+// ── Input ────────────────────────────────────────────────────────────────────
+const Input = ({ className = '', ...props }) => (
+  <input
+    className={`bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600
+      rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/60 transition ${className}`}
+    {...props}
+  />
+);
+const Textarea = ({ className = '', ...props }) => (
+  <textarea
+    className={`bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600
+      rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/60 transition resize-none ${className}`}
+    {...props}
+  />
+);
+
+// ── Label / value pair ───────────────────────────────────────────────────────
+const Field = ({ label, children }) => (
+  <div>
+    <span className="text-slate-500 text-xs uppercase tracking-wider">{label}</span>
+    <div className="text-slate-200 text-sm mt-0.5 font-medium">{children}</div>
+  </div>
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+export default function InvoicingPage() {
+  const [acknowledgedWOs, setAcknowledgedWOs]           = useState([]);
+  const [filteredAcknowledgedWOs, setFilteredAcknowledgedWOs] = useState([]);
+  const [woTotals, setWoTotals]                         = useState({});
+  const [invoices, setInvoices]                         = useState([]);
+  const [filteredInvoices, setFilteredInvoices]         = useState([]);
+  const [selectedItem, setSelectedItem]                 = useState(null);
+  const [lineItems, setLineItems]                       = useState([]);
+  const [loading, setLoading]                           = useState(true);
+  const [activeTab, setActiveTab]                       = useState('ready');
+  const [generatingInvoice, setGeneratingInvoice]       = useState(false);
+  const [showInvoicePreview, setShowInvoicePreview]     = useState(false);
+  const [previewWO, setPreviewWO]                       = useState(null);
+  const [previewLineItems, setPreviewLineItems]         = useState([]);
+  const [workPerformedText, setWorkPerformedText]       = useState('');
+  const [customLineItem, setCustomLineItem]             = useState({ description: '', quantity: 1, unit_price: 0 });
+  const [showGlobalSearch, setShowGlobalSearch]         = useState(false);
+  const [readySearchTerm, setReadySearchTerm]           = useState('');
+  const [invoiceSearchTerm, setInvoiceSearchTerm]       = useState('');
+
+  // ── Filter effects ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!readySearchTerm.trim()) {
-      setFilteredAcknowledgedWOs(acknowledgedWOs);
-    } else {
-      const search = readySearchTerm.toLowerCase();
-      setFilteredAcknowledgedWOs(
-        acknowledgedWOs.filter(wo =>
-          wo.wo_number?.toLowerCase().includes(search) ||
-          wo.building?.toLowerCase().includes(search) ||
-          (wo.lead_tech && `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`.toLowerCase().includes(search))
-        )
-      );
-    }
+    if (!readySearchTerm.trim()) { setFilteredAcknowledgedWOs(acknowledgedWOs); return; }
+    const s = readySearchTerm.toLowerCase();
+    setFilteredAcknowledgedWOs(acknowledgedWOs.filter(wo =>
+      wo.wo_number?.toLowerCase().includes(s) ||
+      wo.building?.toLowerCase().includes(s) ||
+      (wo.lead_tech && `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}`.toLowerCase().includes(s))
+    ));
   }, [readySearchTerm, acknowledgedWOs]);
 
-  // Filter Invoices based on search
   useEffect(() => {
-    if (!invoiceSearchTerm.trim()) {
-      setFilteredInvoices(invoices);
-    } else {
-      const search = invoiceSearchTerm.toLowerCase();
-      setFilteredInvoices(
-        invoices.filter(inv =>
-          inv.invoice_number?.toLowerCase().includes(search) ||
-          inv.work_order?.wo_number?.toLowerCase().includes(search) ||
-          inv.work_order?.building?.toLowerCase().includes(search)
-        )
-      );
-    }
+    if (!invoiceSearchTerm.trim()) { setFilteredInvoices(invoices); return; }
+    const s = invoiceSearchTerm.toLowerCase();
+    setFilteredInvoices(invoices.filter(inv =>
+      inv.invoice_number?.toLowerCase().includes(s) ||
+      inv.work_order?.wo_number?.toLowerCase().includes(s) ||
+      inv.work_order?.building?.toLowerCase().includes(s)
+    ));
   }, [invoiceSearchTerm, invoices]);
 
+  useEffect(() => { fetchData(); }, []);
+
+  // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([
-      fetchAcknowledgedWorkOrders(),
-      fetchInvoices()
-    ]);
+    await Promise.all([fetchAcknowledgedWorkOrders(), fetchInvoices()]);
     setLoading(false);
   };
 
   const fetchAcknowledgedWorkOrders = async () => {
-    console.log('Fetching acknowledged work orders...');
-    
-    const { data, error } = await supabase
-      .from('work_orders')
-      .select(`
-        *,
-        lead_tech:users!lead_tech_id(first_name, last_name, email)
-      `)
-      .eq('acknowledged', true)
-      .eq('is_locked', false)
+    const { data, error } = await supabase.from('work_orders')
+      .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
+      .eq('acknowledged', true).eq('is_locked', false)
       .order('acknowledged_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching acknowledged work orders:', error);
-    } else {
+    if (!error) {
       setAcknowledgedWOs(data || []);
-      
-      // Calculate totals for each work order
-      if (data && data.length > 0) {
-        calculateAllTotals(data);
-      }
+      if (data?.length) calculateAllTotals(data);
     }
   };
 
-  // Calculate totals for all work orders
   const calculateAllTotals = async (workOrders) => {
     const totals = {};
-    
     for (const wo of workOrders) {
       try {
-        // 1. Legacy totals from work_orders table
-        const primaryRT = parseFloat(wo.hours_regular) || 0;
-        const primaryOT = parseFloat(wo.hours_overtime) || 0;
-        const primaryMiles = parseFloat(wo.miles) || 0;
+        const pRT = parseFloat(wo.hours_regular) || 0;
+        const pOT = parseFloat(wo.hours_overtime) || 0;
+        const pMi = parseFloat(wo.miles) || 0;
 
-        // 2. Team member legacy totals from work_order_assignments
-        const { data: teamAssignments } = await supabase
-          .from('work_order_assignments')
-          .select('hours_regular, hours_overtime, miles')
-          .eq('wo_id', wo.wo_id);
+        const { data: teams } = await supabase.from('work_order_assignments')
+          .select('hours_regular, hours_overtime, miles').eq('wo_id', wo.wo_id);
+        let tRT = 0, tOT = 0, tMi = 0;
+        teams?.forEach(m => { tRT += parseFloat(m.hours_regular)||0; tOT += parseFloat(m.hours_overtime)||0; tMi += parseFloat(m.miles)||0; });
 
-        let teamRT = 0, teamOT = 0, teamMiles = 0;
-        if (teamAssignments) {
-          teamAssignments.forEach(member => {
-            teamRT += parseFloat(member.hours_regular) || 0;
-            teamOT += parseFloat(member.hours_overtime) || 0;
-            teamMiles += parseFloat(member.miles) || 0;
-          });
-        }
+        const { data: daily } = await supabase.from('daily_hours_log')
+          .select('hours_regular, hours_overtime, miles').eq('wo_id', wo.wo_id);
+        let dRT = 0, dOT = 0, dMi = 0;
+        daily?.forEach(l => { dRT += parseFloat(l.hours_regular)||0; dOT += parseFloat(l.hours_overtime)||0; dMi += parseFloat(l.miles)||0; });
 
-        // 3. Daily hours log totals
-        const { data: dailyData } = await supabase
-          .from('daily_hours_log')
-          .select('hours_regular, hours_overtime, miles')
-          .eq('wo_id', wo.wo_id);
-
-        let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
-        if (dailyData) {
-          dailyData.forEach(log => {
-            dailyRT += parseFloat(log.hours_regular) || 0;
-            dailyOT += parseFloat(log.hours_overtime) || 0;
-            dailyMiles += parseFloat(log.miles) || 0;
-          });
-        }
-
-        // Combined totals
-        const totalRT = primaryRT + teamRT + dailyRT;
-        const totalOT = primaryOT + teamOT + dailyOT;
-        const totalMiles = primaryMiles + teamMiles + dailyMiles;
-
-        // Calculate costs
-        const laborCost = (totalRT * 64) + (totalOT * 96) + 128; // +128 for admin hours
-        const mileageCost = totalMiles * 1.00;
-        const materialWithMarkup = (parseFloat(wo.material_cost) || 0) * 1.25;
-        const equipmentWithMarkup = (parseFloat(wo.emf_equipment_cost) || 0) * 1.25;
-        const trailerWithMarkup = (parseFloat(wo.trailer_cost) || 0) * 1.25;
-        const rentalWithMarkup = (parseFloat(wo.rental_cost) || 0) * 1.25;
-
-        totals[wo.wo_id] = laborCost + mileageCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
-      } catch (error) {
-        console.error('Error calculating total for WO:', wo.wo_id, error);
-        totals[wo.wo_id] = 128; // Default to admin hours only
-      }
+        const totalRT = pRT+tRT+dRT, totalOT = pOT+tOT+dOT, totalMi = pMi+tMi+dMi;
+        totals[wo.wo_id] =
+          (totalRT*64) + (totalOT*96) + 128 +
+          (totalMi*1) +
+          ((parseFloat(wo.material_cost)||0)*1.25) +
+          ((parseFloat(wo.emf_equipment_cost)||0)*1.25) +
+          ((parseFloat(wo.trailer_cost)||0)*1.25) +
+          ((parseFloat(wo.rental_cost)||0)*1.25);
+      } catch { totals[wo.wo_id] = 128; }
     }
-    
     setWoTotals(totals);
   };
 
   const fetchInvoices = async () => {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select(`
-        *,
-        work_order:work_orders(
-          wo_number,
-          building,
-          work_order_description,
-          comments,
-          lead_tech:users!lead_tech_id(first_name, last_name)
-        )
-      `)
+    const { data } = await supabase.from('invoices')
+      .select('*, work_order:work_orders(wo_number, building, work_order_description, comments, lead_tech:users!lead_tech_id(first_name, last_name))')
       .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching invoices:', error);
-    } else {
-      setInvoices(data || []);
-    }
+    setInvoices(data || []);
   };
 
-  const selectWorkOrder = async (wo) => {
-    setSelectedItem({ type: 'work_order', data: wo });
-  };
+  // ── Actions ──────────────────────────────────────────────────────────────
+  const selectWorkOrder = (wo) => setSelectedItem({ type: 'work_order', data: wo });
 
   const selectInvoice = async (invoice) => {
-    const { data, error } = await supabase
-      .from('invoice_line_items')
-      .select('*')
-      .eq('invoice_id', invoice.invoice_id)
-      .order('line_item_id', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching line items:', error);
-    } else {
-      setLineItems(data || []);
-    }
-    
+    const { data } = await supabase.from('invoice_line_items')
+      .select('*').eq('invoice_id', invoice.invoice_id).order('line_item_id', { ascending: true });
+    setLineItems(data || []);
     setSelectedItem({ type: 'invoice', data: invoice });
   };
 
   const generateInvoicePreview = async (woId) => {
     const wo = acknowledgedWOs.find(w => w.wo_id === woId);
     if (!wo) return;
-
     setGeneratingInvoice(true);
-
     try {
-      console.log('=== INVOICE PREVIEW DEBUG ===');
-      console.log('Work Order ID:', woId);
+      const pRT = parseFloat(wo.hours_regular)||0, pOT = parseFloat(wo.hours_overtime)||0, pMi = parseFloat(wo.miles)||0;
+      const { data: teams } = await supabase.from('work_order_assignments')
+        .select('*, user:users(first_name, last_name)').eq('wo_id', woId);
+      let tRT=0, tOT=0, tMi=0;
+      teams?.forEach(m => { tRT+=parseFloat(m.hours_regular)||0; tOT+=parseFloat(m.hours_overtime)||0; tMi+=parseFloat(m.miles)||0; });
+      const { data: daily } = await supabase.from('daily_hours_log').select('*').eq('wo_id', woId);
+      let dRT=0, dOT=0, dMi=0;
+      daily?.forEach(l => { dRT+=parseFloat(l.hours_regular)||0; dOT+=parseFloat(l.hours_overtime)||0; dMi+=parseFloat(l.miles)||0; });
+      const totalRT=pRT+tRT+dRT, totalOT=pOT+tOT+dOT, totalMi=pMi+tMi+dMi;
 
-      // 1. Get legacy totals from work_orders table
-      const primaryRT = parseFloat(wo.hours_regular) || 0;
-      const primaryOT = parseFloat(wo.hours_overtime) || 0;
-      const primaryMiles = parseFloat(wo.miles) || 0;
-      console.log('Legacy WO data - RT:', primaryRT, 'OT:', primaryOT, 'Miles:', primaryMiles);
-
-      // 2. Get team member data from work_order_assignments
-      const { data: teamAssignments, error: teamError } = await supabase
-        .from('work_order_assignments')
-        .select(`
-          *,
-          user:users(first_name, last_name, hourly_rate_regular, hourly_rate_overtime)
-        `)
-        .eq('wo_id', woId);
-
-      console.log('Team Assignments:', teamAssignments);
-      if (teamError) console.error('Team fetch error:', teamError);
-
-      let teamRT = 0, teamOT = 0, teamMiles = 0;
-      if (teamAssignments) {
-        teamAssignments.forEach(member => {
-          teamRT += parseFloat(member.hours_regular) || 0;
-          teamOT += parseFloat(member.hours_overtime) || 0;
-          teamMiles += parseFloat(member.miles) || 0;
-        });
-      }
-      console.log('Team legacy totals - RT:', teamRT, 'OT:', teamOT, 'Miles:', teamMiles);
-
-      // 3. Get daily hours log data (THIS IS WHERE THE HOURS ACTUALLY ARE!)
-      const { data: dailyHoursData, error: dailyError } = await supabase
-        .from('daily_hours_log')
-        .select('*')
-        .eq('wo_id', woId);
-
-      console.log('Daily Hours Log Data:', dailyHoursData);
-      if (dailyError) console.error('Daily hours fetch error:', dailyError);
-
-      let dailyRT = 0, dailyOT = 0, dailyMiles = 0;
-      if (dailyHoursData) {
-        dailyHoursData.forEach(log => {
-          dailyRT += parseFloat(log.hours_regular) || 0;
-          dailyOT += parseFloat(log.hours_overtime) || 0;
-          dailyMiles += parseFloat(log.miles) || 0;
-        });
-      }
-      console.log('Daily log totals - RT:', dailyRT, 'OT:', dailyOT, 'Miles:', dailyMiles);
-
-      // 4. Combined totals (legacy + daily hours)
-      const totalRT = primaryRT + teamRT + dailyRT;
-      const totalOT = primaryOT + teamOT + dailyOT;
-      const totalMiles = primaryMiles + teamMiles + dailyMiles;
-      console.log('=== COMBINED TOTALS ===');
-      console.log('Total RT:', totalRT, '| Total OT:', totalOT, '| Total Miles:', totalMiles);
-
-      // Build line items
       const items = [];
+      if (totalRT>0) items.push({ description:`Labor – Regular Time (${totalRT} hrs @ $64/hr)`, quantity:totalRT, unit_price:64, amount:totalRT*64, line_type:'labor', editable:true });
+      if (totalOT>0) items.push({ description:`Labor – Overtime (${totalOT} hrs @ $96/hr)`, quantity:totalOT, unit_price:96, amount:totalOT*96, line_type:'labor', editable:true });
+      items.push({ description:'Administrative Hours (2 hrs @ $64/hr)', quantity:2, unit_price:64, amount:128, line_type:'labor', editable:true });
+      if (totalMi>0) items.push({ description:`Mileage (${totalMi} miles @ $1.00/mile)`, quantity:totalMi, unit_price:1, amount:totalMi, line_type:'mileage', editable:true });
+      const mat = parseFloat(wo.material_cost)||0;       if (mat>0)  items.push({ description:'Materials',  quantity:1, unit_price:mat*1.25,  amount:mat*1.25,  line_type:'material',  editable:true });
+      const eqp = parseFloat(wo.emf_equipment_cost)||0;  if (eqp>0)  items.push({ description:'Equipment',  quantity:1, unit_price:eqp*1.25,  amount:eqp*1.25,  line_type:'equipment', editable:true });
+      const trl = parseFloat(wo.trailer_cost)||0;        if (trl>0)  items.push({ description:'Trailer',    quantity:1, unit_price:trl*1.25,  amount:trl*1.25,  line_type:'equipment', editable:true });
+      const ren = parseFloat(wo.rental_cost)||0;         if (ren>0)  items.push({ description:'Rental',     quantity:1, unit_price:ren*1.25,  amount:ren*1.25,  line_type:'rental',    editable:true });
 
-      // Labor - Combined hours
-      if (totalRT > 0) {
-        items.push({
-          description: `Labor - Regular Time (${totalRT} hrs @ $64/hr)`,
-          quantity: totalRT,
-          unit_price: 64,
-          amount: totalRT * 64,
-          line_type: 'labor',
-          editable: true
-        });
-        console.log('Added RT Labor:', totalRT * 64);
-      }
-
-      if (totalOT > 0) {
-        items.push({
-          description: `Labor - Overtime (${totalOT} hrs @ $96/hr)`,
-          quantity: totalOT,
-          unit_price: 96,
-          amount: totalOT * 96,
-          line_type: 'labor',
-          editable: true
-        });
-        console.log('Added OT Labor:', totalOT * 96);
-      }
-
-      // Admin Hours - ALWAYS ADD
-      items.push({
-        description: 'Administrative Hours (2 hrs @ $64/hr)',
-        quantity: 2,
-        unit_price: 64,
-        amount: 128,
-        line_type: 'labor',
-        editable: true
-      });
-      console.log('Added Admin Hours: 128');
-
-      // Mileage
-      if (totalMiles > 0) {
-        items.push({
-          description: `Mileage (${totalMiles} miles @ $1.00/mile)`,
-          quantity: totalMiles,
-          unit_price: 1.00,
-          amount: totalMiles * 1.00,
-          line_type: 'mileage',
-          editable: true
-        });
-        console.log('Added Mileage:', totalMiles);
-      }
-
-      // Materials WITH 25% MARKUP
-      const materialCost = parseFloat(wo.material_cost) || 0;
-      if (materialCost > 0) {
-        const markedUpMaterials = materialCost * 1.25;
-        items.push({
-          description: 'Materials',
-          quantity: 1,
-          unit_price: markedUpMaterials,
-          amount: markedUpMaterials,
-          line_type: 'material',
-          editable: true
-        });
-        console.log('Added Materials (with 25% markup):', markedUpMaterials);
-      }
-
-      // Equipment WITH 25% MARKUP
-      const equipmentCost = parseFloat(wo.emf_equipment_cost) || 0;
-      if (equipmentCost > 0) {
-        const markedUpEquipment = equipmentCost * 1.25;
-        items.push({
-          description: 'Equipment',
-          quantity: 1,
-          unit_price: markedUpEquipment,
-          amount: markedUpEquipment,
-          line_type: 'equipment',
-          editable: true
-        });
-        console.log('Added Equipment (with 25% markup):', markedUpEquipment);
-      }
-
-      // Trailer WITH 25% MARKUP
-      const trailerCost = parseFloat(wo.trailer_cost) || 0;
-      if (trailerCost > 0) {
-        const markedUpTrailer = trailerCost * 1.25;
-        items.push({
-          description: 'Trailer',
-          quantity: 1,
-          unit_price: markedUpTrailer,
-          amount: markedUpTrailer,
-          line_type: 'equipment',
-          editable: true
-        });
-        console.log('Added Trailer (with 25% markup):', markedUpTrailer);
-      }
-
-      // Rental WITH 25% MARKUP
-      const rentalCost = parseFloat(wo.rental_cost) || 0;
-      if (rentalCost > 0) {
-        const markedUpRental = rentalCost * 1.25;
-        items.push({
-          description: 'Rental',
-          quantity: 1,
-          unit_price: markedUpRental,
-          amount: markedUpRental,
-          line_type: 'rental',
-          editable: true
-        });
-        console.log('Added Rental (with 25% markup):', markedUpRental);
-      }
-
-      // Calculate and log total
-      const previewTotal = items.reduce((sum, item) => sum + item.amount, 0);
-      console.log('=== PREVIEW TOTAL ===', previewTotal);
-      console.log('Number of line items:', items.length);
-
-      // Work Performed - Use tech's comments field, but filter out check-in/out entries
-      let workPerformed = '';
-      if (wo.comments && wo.comments.trim()) {
-        workPerformed = filterWorkComments(wo.comments);
-      } else if (wo.comments_english && wo.comments_english.trim()) {
-        workPerformed = filterWorkComments(wo.comments_english);
-      }
-      
-      // If nothing left after filtering, use description
-      if (!workPerformed.trim()) {
-        workPerformed = wo.work_order_description || 'Work completed as requested.';
-      }
-
-      setWorkPerformedText(workPerformed);
+      let wp = filterWorkComments(wo.comments) || filterWorkComments(wo.comments_english) || wo.work_order_description || 'Work completed as requested.';
+      setWorkPerformedText(wp);
       setPreviewWO(wo);
       setPreviewLineItems(items);
       setShowInvoicePreview(true);
       setSelectedItem(null);
-      
-      console.log('=== PREVIEW COMPLETE ===');
-    } catch (error) {
-      console.error('Error generating preview:', error);
-      alert('❌ Failed to generate preview: ' + error.message);
-    } finally {
-      setGeneratingInvoice(false);
-    }
+    } catch (err) { alert('❌ Failed to generate preview: ' + err.message); }
+    finally { setGeneratingInvoice(false); }
   };
 
   const finalizeInvoice = async () => {
-    if (!previewWO) return;
-
-    if (!confirm('Finalize and generate this invoice?\n\nThis will lock the work order.')) {
-      return;
-    }
-
+    if (!previewWO || !confirm('Finalize and generate this invoice?\n\nThis will lock the work order.')) return;
     setGeneratingInvoice(true);
-
     try {
-      const costItems = previewLineItems.filter(item => item.line_type !== 'description');
-      const subtotal = costItems.reduce((sum, item) => sum + item.amount, 0);
-      const tax = 0;
-      const total = subtotal + tax;
-
+      const subtotal = previewLineItems.reduce((s,i) => s+i.amount, 0);
       const year = new Date().getFullYear();
-      const { data: lastInvoice } = await supabase
-        .from('invoices')
-        .select('invoice_number')
-        .like('invoice_number', `INV-${year}-%`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const { data: last } = await supabase.from('invoices').select('invoice_number')
+        .like('invoice_number', `INV-${year}-%`).order('created_at', { ascending: false }).limit(1).single();
+      const num = last ? parseInt(last.invoice_number.split('-')[2])+1 : 1;
+      const invoiceNumber = `INV-${year}-${String(num).padStart(5,'0')}`;
 
-      let invoiceNumber;
-      if (lastInvoice) {
-        const lastNumber = parseInt(lastInvoice.invoice_number.split('-')[2]);
-        invoiceNumber = `INV-${year}-${String(lastNumber + 1).padStart(5, '0')}`;
-      } else {
-        invoiceNumber = `INV-${year}-00001`;
-      }
+      const { data: invoice, error: ie } = await supabase.from('invoices').insert({
+        invoice_number: invoiceNumber, wo_id: previewWO.wo_id,
+        invoice_date: new Date().toISOString(),
+        due_date: new Date(Date.now()+30*24*60*60*1000).toISOString(),
+        subtotal, tax:0, total:subtotal, status:'draft', notes:'Invoice generated from preview'
+      }).select().single();
+      if (ie) throw ie;
 
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert({
-          invoice_number: invoiceNumber,
-          wo_id: previewWO.wo_id,
-          invoice_date: new Date().toISOString(),
-          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          subtotal: subtotal,
-          tax: tax,
-          total: total,
-          status: 'draft',
-          notes: 'Invoice generated from preview'
-        })
-        .select()
-        .single();
+      const { error: lie } = await supabase.from('invoice_line_items').insert([
+        ...previewLineItems.map(item => ({ invoice_id:invoice.invoice_id, description:item.description, quantity:item.quantity, unit_price:item.unit_price, amount:item.amount, line_type:item.line_type })),
+        { invoice_id:invoice.invoice_id, description:workPerformedText, quantity:1, unit_price:0, amount:0, line_type:'description' }
+      ]);
+      if (lie) throw lie;
 
-      if (invoiceError) throw invoiceError;
+      const { error: we } = await supabase.from('work_orders').update({ is_locked:true, locked_at:new Date().toISOString(), locked_by:null }).eq('wo_id', previewWO.wo_id);
+      if (we) throw we;
 
-      const lineItemsToInsert = [
-        ...previewLineItems.map(item => ({
-          invoice_id: invoice.invoice_id,
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          amount: item.amount,
-          line_type: item.line_type
-        })),
-        {
-          invoice_id: invoice.invoice_id,
-          description: workPerformedText,
-          quantity: 1,
-          unit_price: 0,
-          amount: 0,
-          line_type: 'description'
-        }
-      ];
-
-      const { error: lineItemsError } = await supabase
-        .from('invoice_line_items')
-        .insert(lineItemsToInsert);
-
-      if (lineItemsError) throw lineItemsError;
-
-      const { error: lockError } = await supabase
-        .from('work_orders')
-        .update({
-          is_locked: true,
-          locked_at: new Date().toISOString(),
-          locked_by: null
-        })
-        .eq('wo_id', previewWO.wo_id);
-
-      if (lockError) throw lockError;
-
-      alert('✅ Invoice generated successfully!\n\nInvoice Total: $' + total.toFixed(2));
-      
-      setShowInvoicePreview(false);
-      setPreviewWO(null);
-      setPreviewLineItems([]);
-      setWorkPerformedText('');
-      setAcknowledgedWOs(prev => prev.filter(wo => wo.wo_id !== previewWO.wo_id));
-      await fetchData();
-      setActiveTab('invoiced');
-    } catch (error) {
-      console.error('Error finalizing invoice:', error);
-      alert('❌ Failed to generate invoice: ' + error.message);
-    } finally {
-      setGeneratingInvoice(false);
-    }
+      alert(`✅ Invoice generated!\n\nTotal: $${subtotal.toFixed(2)}`);
+      setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText('');
+      setAcknowledgedWOs(prev => prev.filter(w => w.wo_id !== previewWO.wo_id));
+      await fetchData(); setActiveTab('invoiced');
+    } catch (err) { alert('❌ ' + err.message); }
+    finally { setGeneratingInvoice(false); }
   };
 
   const returnToTech = async (woId, invoiceId) => {
     const reason = prompt('Enter reason for returning to tech (REQUIRED):');
-    
-    // Require a reason
-    if (!reason || !reason.trim()) {
-      alert('❌ A reason is required to return the work order to the tech.');
-      return;
-    }
-    
-    if (!confirm('Return this work order to the lead tech for review?\n\nThis will:\n- Delete the draft invoice\n- Unlock the work order\n- Remove acknowledgment\n- Change status to "Tech Review"\n- Add reason to comments\n\nThe tech can make changes and mark as completed again.')) {
-      return;
-    }
-
+    if (!reason?.trim()) { alert('❌ A reason is required.'); return; }
+    if (!confirm('Return this work order to tech for review?')) return;
     try {
-      // Get current comments from work order
-      const { data: woData, error: fetchError } = await supabase
-        .from('work_orders')
-        .select('comments')
-        .eq('wo_id', woId)
-        .single();
-
-      if (fetchError) {
-        alert('Error fetching work order: ' + fetchError.message);
-        return;
-      }
-
-      const { error: lineItemsError } = await supabase
-        .from('invoice_line_items')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (lineItemsError) {
-        alert('Error deleting invoice line items: ' + lineItemsError.message);
-        return;
-      }
-
-      const { error: invoiceError } = await supabase
-        .from('invoices')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (invoiceError) {
-        alert('Error deleting invoice: ' + invoiceError.message);
-        return;
-      }
-
-      // Add reason to comments with timestamp
-      const timestamp = new Date().toLocaleString('en-US', { 
-        timeZone: 'America/New_York',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      const reviewNote = `[${timestamp}] 🔄 RETURNED FROM INVOICING FOR TECH REVIEW:\n${reason}`;
-      const updatedComments = woData.comments 
-        ? `${woData.comments}\n\n${reviewNote}`
-        : reviewNote;
-
-      const { error: updateError } = await supabase
-        .from('work_orders')
-        .update({
-          is_locked: false,
-          locked_at: null,
-          locked_by: null,
-          acknowledged: false,
-          acknowledged_at: null,
-          status: 'tech_review',
-          comments: updatedComments
-        })
-        .eq('wo_id', woId);
-
-      if (updateError) {
-        alert('Error updating work order: ' + updateError.message);
-        return;
-      }
-
-      alert('✅ Work order returned to tech for review\n\nThe reason has been added to the comments.');
-      setSelectedItem(null);
-      await fetchData();
-    } catch (error) {
-      alert('❌ Error: ' + error.message);
-    }
+      const { data: woData } = await supabase.from('work_orders').select('comments').eq('wo_id', woId).single();
+      await supabase.from('invoice_line_items').delete().eq('invoice_id', invoiceId);
+      await supabase.from('invoices').delete().eq('invoice_id', invoiceId);
+      const ts = new Date().toLocaleString('en-US', { timeZone:'America/New_York', month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true });
+      const note = `[${ts}] 🔄 RETURNED FROM INVOICING FOR TECH REVIEW:\n${reason}`;
+      await supabase.from('work_orders').update({
+        is_locked:false, locked_at:null, locked_by:null, acknowledged:false, acknowledged_at:null,
+        status:'tech_review', comments: woData.comments ? `${woData.comments}\n\n${note}` : note
+      }).eq('wo_id', woId);
+      alert('✅ Work order returned to tech.'); setSelectedItem(null); await fetchData();
+    } catch (err) { alert('❌ ' + err.message); }
   };
 
   const updateInvoiceStatus = async (invoiceId, newStatus) => {
-    const { error } = await supabase
-      .from('invoices')
-      .update({ status: newStatus })
-      .eq('invoice_id', invoiceId);
-
-    if (error) {
-      alert('Error updating status: ' + error.message);
-    } else {
-      alert(`✅ Invoice marked as ${newStatus}`);
-      await fetchData();
-      setSelectedItem(null);
-    }
+    const { error } = await supabase.from('invoices').update({ status: newStatus }).eq('invoice_id', invoiceId);
+    if (error) { alert('Error: ' + error.message); return; }
+    alert(`✅ Invoice marked as ${newStatus}`); await fetchData(); setSelectedItem(null);
   };
 
   const deleteInvoice = async (invoiceId, woId) => {
-    const adminPassword = prompt('Enter admin password to delete this invoice:');
-    
-    if (adminPassword !== 'EMF2024!') {
-      alert('❌ Invalid admin password');
-      return;
-    }
-
-    if (!confirm('Are you absolutely sure you want to delete this invoice?\n\nThis will:\n- Delete the invoice and all line items\n- Unlock the work order\n- Remove acknowledgment\n\nThis action CANNOT be undone.')) {
-      return;
-    }
-
+    if (prompt('Enter admin password:') !== 'EMF2024!') { alert('❌ Invalid password'); return; }
+    if (!confirm('Delete this invoice? This CANNOT be undone.')) return;
     try {
-      const { error: lineItemsError } = await supabase
-        .from('invoice_line_items')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (lineItemsError) throw lineItemsError;
-
-      const { error: invoiceError } = await supabase
-        .from('invoices')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (invoiceError) throw invoiceError;
-
-      const { error: updateError } = await supabase
-        .from('work_orders')
-        .update({
-          is_locked: false,
-          locked_at: null,
-          locked_by: null,
-          acknowledged: false,
-          acknowledged_at: null
-        })
-        .eq('wo_id', woId);
-
-      if (updateError) throw updateError;
-
-      alert('✅ Invoice deleted successfully');
-      setSelectedItem(null);
-      await fetchData();
-    } catch (error) {
-      alert('❌ Error deleting invoice: ' + error.message);
-    }
+      await supabase.from('invoice_line_items').delete().eq('invoice_id', invoiceId);
+      await supabase.from('invoices').delete().eq('invoice_id', invoiceId);
+      await supabase.from('work_orders').update({ is_locked:false, locked_at:null, locked_by:null, acknowledged:false, acknowledged_at:null }).eq('wo_id', woId);
+      alert('✅ Invoice deleted.'); setSelectedItem(null); await fetchData();
+    } catch (err) { alert('❌ ' + err.message); }
   };
 
-  const printInvoice = (invoice) => {
-    window.open(`/invoices/${invoice.invoice_id}/print`, '_blank');
+  const printInvoice  = (inv) => window.open(`/invoices/${inv.invoice_id}/print`, '_blank');
+  const shareInvoice  = async (inv) => {
+    const url = `${window.location.origin}/invoices/${inv.invoice_id}/print`;
+    if (navigator.share) { try { await navigator.share({ title:`Invoice ${inv.invoice_number}`, url }); } catch {} }
+    else { navigator.clipboard.writeText(url); alert('📋 Link copied!'); }
   };
 
-  const shareInvoice = async (invoice) => {
-    const shareUrl = `${window.location.origin}/invoices/${invoice.invoice_id}/print`;
-    
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Invoice ${invoice.invoice_number}`,
-          text: `Invoice for Work Order - Total: $${invoice.total.toFixed(2)}`,
-          url: shareUrl
-        });
-      } catch (err) {
-        console.log('Share cancelled');
-      }
-    } else {
-      navigator.clipboard.writeText(shareUrl);
-      alert('📋 Invoice link copied to clipboard!');
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'draft': return 'bg-yellow-600';
-      case 'approved': return 'bg-blue-600';
-      case 'accepted': return 'bg-green-600';
-      case 'synced': return 'bg-green-600'; // Legacy support
-      case 'paid': return 'bg-green-600';
-      case 'rejected': return 'bg-red-600';
-      default: return 'bg-gray-600';
-    }
-  };
-
-  // Get display name for status
-  const getStatusDisplayName = (status) => {
-    switch (status) {
-      case 'draft': return 'DRAFT';
-      case 'approved': return 'UPLOADED TO CBRE';
-      case 'accepted': return 'ACCEPTED CBRE - SUBMITTED TO AP';
-      case 'synced': return 'ACCEPTED CBRE - SUBMITTED TO AP'; // Legacy support
-      case 'paid': return 'PAID';
-      case 'rejected': return 'REJECTED';
-      default: return status?.toUpperCase() || 'UNKNOWN';
-    }
-  };
-
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-xl">Loading invoices...</div>
-      </div>
+      <AppShell activeLink="/invoices">
+        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+            <p className="text-slate-500 text-sm">Loading invoices…</p>
+          </div>
+        </div>
+      </AppShell>
     );
   }
 
+  const previewTotal = previewLineItems.reduce((s,i) => s+i.amount, 0);
+
+  // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">💰 Invoicing</h1>
-            <p className="text-gray-400 mt-1">Generate and manage invoices for completed work orders</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowGlobalSearch(true)}
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold"
-            >
-              🔍 Search All WOs
-            </button>
-            <a
-              href="/invoices/cbre"
-              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold"
-            >
-              🏢 CBRE Workflow
-            </a>
-            <button
-              onClick={() => window.location.href = '/dashboard'}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
-            >
-              ← Back to Dashboard
-            </button>
+    <AppShell activeLink="/invoices">
+      <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
+
+        {/* ── Page Header ── */}
+        <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6 py-5">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-100">Invoicing</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Generate and manage invoices for completed work orders</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Btn onClick={() => setShowGlobalSearch(true)} variant="default" size="sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Search WOs
+              </Btn>
+              <Btn onClick={() => window.location.href='/invoices/cbre'} variant="primary" size="sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                CBRE Workflow
+              </Btn>
+            </div>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('ready')}
-            className={`px-6 py-3 font-semibold transition ${
-              activeTab === 'ready'
-                ? 'text-green-400 border-b-2 border-green-400'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Ready to Invoice ({acknowledgedWOs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('invoiced')}
-            className={`px-6 py-3 font-semibold transition ${
-              activeTab === 'invoiced'
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Invoices ({invoices.length})
-          </button>
-        </div>
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
-        {/* Content */}
-        {activeTab === 'ready' && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Acknowledged Work Orders - Ready for Invoice</h2>
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={readySearchTerm}
-                  onChange={(e) => setReadySearchTerm(e.target.value)}
-                  placeholder="🔍 Search WO#, Building, Tech..."
-                  className="bg-gray-700 text-white px-4 py-2 rounded-lg w-64"
-                />
-                {readySearchTerm && (
-                  <button
-                    onClick={() => setReadySearchTerm('')}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    ✕ Clear
-                  </button>
-                )}
-              </div>
-            </div>
-            
-            {filteredAcknowledgedWOs.length === 0 ? (
-              <div className="text-gray-400 text-center py-8">
-                {readySearchTerm ? (
-                  <>
-                    No work orders found matching "{readySearchTerm}"
-                    <br />
-                    <button
-                      onClick={() => setReadySearchTerm('')}
-                      className="text-blue-400 hover:underline mt-2"
-                    >
-                      Clear search
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    No work orders ready for invoicing.
-                    <br />
-                    <span className="text-sm">Work orders must be completed and acknowledged first.</span>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">WO #</th>
-                      <th className="px-4 py-3 text-left">Building</th>
-                      <th className="px-4 py-3 text-left">Lead Tech</th>
-                      <th className="px-4 py-3 text-left">Acknowledged</th>
-                      <th className="px-4 py-3 text-right">Est. Total</th>
-                      <th className="px-4 py-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAcknowledgedWOs.map(wo => (
-                      <tr
-                        key={wo.wo_id}
-                        className="border-t border-gray-700 hover:bg-gray-700 transition"
-                      >
-                        <td className="px-4 py-3 font-semibold">{wo.wo_number}</td>
-                        <td className="px-4 py-3">{wo.building}</td>
-                        <td className="px-4 py-3">
-                          {wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-green-400">
-                          {woTotals[wo.wo_id] !== undefined 
-                            ? `$${woTotals[wo.wo_id].toFixed(2)}`
-                            : <span className="text-gray-500">calculating...</span>
-                          }
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => selectWorkOrder(wo)}
-                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
-                          >
-                            Generate Invoice
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'invoiced' && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Generated Invoices</h2>
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={invoiceSearchTerm}
-                  onChange={(e) => setInvoiceSearchTerm(e.target.value)}
-                  placeholder="🔍 Search Invoice#, WO#, Building..."
-                  className="bg-gray-700 text-white px-4 py-2 rounded-lg w-64"
-                />
-                {invoiceSearchTerm && (
-                  <button
-                    onClick={() => setInvoiceSearchTerm('')}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    ✕ Clear
-                  </button>
-                )}
-              </div>
-            </div>
-            
-            {filteredInvoices.length === 0 ? (
-              <div className="text-gray-400 text-center py-8">
-                {invoiceSearchTerm ? (
-                  <>
-                    No invoices found matching "{invoiceSearchTerm}"
-                    <br />
-                    <button
-                      onClick={() => setInvoiceSearchTerm('')}
-                      className="text-blue-400 hover:underline mt-2"
-                    >
-                      Clear search
-                    </button>
-                  </>
-                ) : (
-                  'No invoices generated yet.'
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Invoice #</th>
-                      <th className="px-4 py-3 text-left">Work Order</th>
-                      <th className="px-4 py-3 text-left">Building</th>
-                      <th className="px-4 py-3 text-left">Invoice Date</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-center">View</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInvoices.map(invoice => (
-                      <tr
-                        key={invoice.invoice_id}
-                        onClick={() => selectInvoice(invoice)}
-                        className="border-t border-gray-700 hover:bg-gray-700 transition cursor-pointer"
-                      >
-                        <td className="px-4 py-3 font-semibold">{invoice.invoice_number}</td>
-                        <td className="px-4 py-3">{invoice.work_order?.wo_number}</td>
-                        <td className="px-4 py-3">{invoice.work_order?.building}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {new Date(invoice.invoice_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold text-green-400">
-                          ${invoice.total.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                            {getStatusDisplayName(invoice.status)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center text-gray-400">
-                          →
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {selectedItem?.type === 'work_order' && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
-              <div>
-                <h2 className="text-2xl font-bold">Work Order #{selectedItem.data.wo_number}</h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  {selectedItem.data.building} - Ready for Invoice
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
+          {/* ── Tabs ── */}
+          <div className="flex gap-1 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-1 w-fit">
+            {[
+              { id:'ready',    label:`Ready to Invoice`, count: acknowledgedWOs.length },
+              { id:'invoiced', label:'Invoices',         count: invoices.length },
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition
+                  ${activeTab === tab.id
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                    : 'text-slate-500 hover:text-slate-300'}`}>
+                {tab.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold
+                  ${activeTab === tab.id ? 'bg-blue-500/20 text-blue-400' : 'bg-[#1e1e2e] text-slate-500'}`}>
+                  {tab.count}
+                </span>
               </button>
-            </div>
+            ))}
+          </div>
 
-            <div className="p-6 space-y-6">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold mb-3">Work Order Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-400">Description:</span>
-                    <div className="mt-1">{selectedItem.data.work_order_description}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Lead Tech:</span>
-                    <span className="ml-2 font-semibold">
-                      {selectedItem.data.lead_tech 
-                        ? `${selectedItem.data.lead_tech.first_name} ${selectedItem.data.lead_tech.last_name}`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Acknowledged:</span>
-                    <span className="ml-2">{new Date(selectedItem.data.acknowledged_at).toLocaleString()}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <div>
-                      <span className="text-gray-400">NTE Budget:</span>
-                      <span className="ml-2 font-bold text-yellow-400">${(selectedItem.data.nte || 0).toFixed(2)}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Est. Invoice Total:</span>
-                      <span className="ml-2 font-bold text-green-400">
-                        {woTotals[selectedItem.data.wo_id] !== undefined 
-                          ? `$${woTotals[selectedItem.data.wo_id].toFixed(2)}`
-                          : 'calculating...'
-                        }
-                      </span>
-                    </div>
-                  </div>
-
-                  {selectedItem.data.comments && (
-                    <div className="mt-4 pt-4 border-t border-gray-600">
-                      <span className="text-gray-400">Tech's Work Notes (Work Performed):</span>
-                      <div className="mt-2 bg-gray-800 rounded p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-                        {selectedItem.data.comments}
-                      </div>
-                    </div>
+          {/* ── Ready Tab ── */}
+          {activeTab === 'ready' && (
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h2 className="text-base font-semibold text-slate-200">Acknowledged Work Orders</h2>
+                <div className="flex items-center gap-2">
+                  <Input value={readySearchTerm} onChange={e => setReadySearchTerm(e.target.value)}
+                    placeholder="Search WO#, building, tech…" className="w-56" />
+                  {readySearchTerm && (
+                    <Btn onClick={() => setReadySearchTerm('')} variant="ghost" size="sm">Clear</Btn>
                   )}
                 </div>
+              </CardHeader>
+
+              {filteredAcknowledgedWOs.length === 0 ? (
+                <CardBody>
+                  <div className="text-center py-12 text-slate-600">
+                    {readySearchTerm
+                      ? <><p>No work orders matching <span className="text-slate-400">"{readySearchTerm}"</span></p><Btn onClick={() => setReadySearchTerm('')} variant="ghost" size="sm" className="mt-3">Clear search</Btn></>
+                      : <><p className="text-lg font-medium text-slate-500 mb-1">No work orders ready</p><p className="text-sm">Work orders must be completed and acknowledged first.</p></>
+                    }
+                  </div>
+                </CardBody>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#1e1e2e]">
+                        {['WO #', 'Building', 'Lead Tech', 'Acknowledged', 'Est. Total', ''].map(h => (
+                          <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h === 'Est. Total' ? 'text-right' : h === '' ? 'text-center' : 'text-left'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAcknowledgedWOs.map((wo, i) => (
+                        <tr key={wo.wo_id}
+                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}`}>
+                          <td className="px-4 py-3 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                          <td className="px-4 py-3 text-slate-300">{wo.building}</td>
+                          <td className="px-4 py-3 text-slate-400">{wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : '—'}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : '—'}</td>
+                          <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">
+                            {woTotals[wo.wo_id] !== undefined
+                              ? `$${woTotals[wo.wo_id].toFixed(2)}`
+                              : <span className="text-slate-600 text-xs animate-pulse">calculating…</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Btn onClick={() => selectWorkOrder(wo)} variant="success" size="sm">Generate</Btn>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── Invoiced Tab ── */}
+          {activeTab === 'invoiced' && (
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
+                <div className="flex items-center gap-2">
+                  <Input value={invoiceSearchTerm} onChange={e => setInvoiceSearchTerm(e.target.value)}
+                    placeholder="Search Invoice#, WO#, building…" className="w-64" />
+                  {invoiceSearchTerm && (
+                    <Btn onClick={() => setInvoiceSearchTerm('')} variant="ghost" size="sm">Clear</Btn>
+                  )}
+                </div>
+              </CardHeader>
+
+              {filteredInvoices.length === 0 ? (
+                <CardBody>
+                  <div className="text-center py-12 text-slate-600">
+                    {invoiceSearchTerm
+                      ? <><p>No invoices matching <span className="text-slate-400">"{invoiceSearchTerm}"</span></p><Btn onClick={() => setInvoiceSearchTerm('')} variant="ghost" size="sm" className="mt-3">Clear</Btn></>
+                      : <p>No invoices generated yet.</p>}
+                  </div>
+                </CardBody>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#1e1e2e]">
+                        {['Invoice #', 'Work Order', 'Building', 'Date', 'Total', 'Status', ''].map(h => (
+                          <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h === 'Total' ? 'text-right' : h === '' ? 'text-center' : 'text-left'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredInvoices.map((inv, i) => (
+                        <tr key={inv.invoice_id} onClick={() => selectInvoice(inv)}
+                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}`}>
+                          <td className="px-4 py-3 font-mono font-semibold text-slate-200">{inv.invoice_number}</td>
+                          <td className="px-4 py-3 font-mono text-blue-400 text-xs">{inv.work_order?.wo_number}</td>
+                          <td className="px-4 py-3 text-slate-400">{inv.work_order?.building}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">${inv.total.toFixed(2)}</td>
+                          <td className="px-4 py-3">{statusBadge(inv.status)}</td>
+                          <td className="px-4 py-3 text-center text-slate-600">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline"><polyline points="9 18 15 12 9 6"/></svg>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════
+            MODAL: Work Order detail
+        ══════════════════════════════════════════════════════════════════ */}
+        {selectedItem?.type === 'work_order' && (
+          <Modal onClose={() => setSelectedItem(null)}>
+            <ModalHeader
+              title={`WO #${selectedItem.data.wo_number}`}
+              subtitle={`${selectedItem.data.building} — Ready for Invoice`}
+              onClose={() => setSelectedItem(null)} />
+            <ModalBody>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Lead Tech">
+                  {selectedItem.data.lead_tech
+                    ? `${selectedItem.data.lead_tech.first_name} ${selectedItem.data.lead_tech.last_name}`
+                    : '—'}
+                </Field>
+                <Field label="Acknowledged">{selectedItem.data.acknowledged_at ? new Date(selectedItem.data.acknowledged_at).toLocaleString() : '—'}</Field>
+                <Field label="NTE Budget"><span className="text-yellow-400 font-mono">${(selectedItem.data.nte || 0).toFixed(2)}</span></Field>
+                <Field label="Est. Invoice Total">
+                  <span className="text-emerald-400 font-mono">
+                    {woTotals[selectedItem.data.wo_id] !== undefined ? `$${woTotals[selectedItem.data.wo_id].toFixed(2)}` : '…'}
+                  </span>
+                </Field>
               </div>
 
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
-                <div className="font-bold mb-2">✓ Ready to Generate Invoice</div>
-                <div className="text-sm">
-                  Click below to generate an invoice preview. The system will pull all hours from the daily hours log, team assignments, materials, and equipment costs.
-                  <ul className="list-disc list-inside mt-2 text-xs">
-                    <li>Labor hours from daily_hours_log table will be included</li>
-                    <li>Materials, Equipment, Trailer, Rental with 25% markup</li>
-                    <li>You can edit line items before finalizing</li>
-                  </ul>
+              {selectedItem.data.work_order_description && (
+                <Field label="Description">{selectedItem.data.work_order_description}</Field>
+              )}
+
+              {selectedItem.data.comments && (
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Tech's Work Notes</p>
+                  <div className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-3 text-sm text-slate-300 whitespace-pre-wrap max-h-36 overflow-y-auto font-mono leading-relaxed">
+                    {selectedItem.data.comments}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-sm text-blue-300">
+                <p className="font-semibold mb-1">Ready to generate invoice</p>
+                <p className="text-blue-400/70 text-xs leading-relaxed">Hours from daily_hours_log will be included. Materials, equipment, trailer and rental are marked up 25%. You can edit line items before finalizing.</p>
+              </div>
+
+              <Btn onClick={() => generateInvoicePreview(selectedItem.data.wo_id)}
+                disabled={generatingInvoice} variant="success" size="xl" className="w-full">
+                {generatingInvoice ? 'Loading Preview…' : 'Preview & Generate Invoice'}
+              </Btn>
+            </ModalBody>
+          </Modal>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            MODAL: Invoice Preview
+        ══════════════════════════════════════════════════════════════════ */}
+        {showInvoicePreview && previewWO && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-2xl max-w-5xl w-full my-8 shadow-2xl">
+              <div className="sticky top-0 bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-5 flex justify-between items-start rounded-t-2xl z-10">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-100">Invoice Preview</h2>
+                  <p className="text-slate-500 text-sm mt-0.5">WO #{previewWO.wo_number} — {previewWO.building}</p>
+                </div>
+                <button onClick={() => { setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText(''); }}
+                  className="text-slate-500 hover:text-slate-300 text-2xl leading-none">×</button>
+              </div>
+
+              <div className="p-6 space-y-5 max-h-[calc(100vh-180px)] overflow-y-auto">
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-sm text-blue-300">
+                  Review and edit line items below before finalizing. Changes won't be saved until you click Finalize.
+                </div>
+
+                {/* Line Items */}
+                <Card>
+                  <CardHeader>
+                    <h3 className="text-sm font-semibold text-slate-300">Line Items</h3>
+                    <p className="text-slate-600 text-xs mt-0.5">Edit description, quantity or price inline</p>
+                  </CardHeader>
+                  <CardBody className="space-y-2">
+                    {/* Column headers */}
+                    <div className="grid grid-cols-12 gap-2 text-xs text-slate-600 uppercase tracking-wider px-1 pb-1">
+                      <div className="col-span-5">Description</div>
+                      <div className="col-span-2 text-right">Qty</div>
+                      <div className="col-span-2 text-right">Unit $</div>
+                      <div className="col-span-2 text-right">Amount</div>
+                      <div className="col-span-1" />
+                    </div>
+                    {previewLineItems.map((item, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-[#0a0a0f] border border-[#2d2d44]/60 rounded-lg p-2">
+                        <div className="col-span-5">
+                          <Input value={item.description}
+                            onChange={e => { const u=[...previewLineItems]; u[idx].description=e.target.value; setPreviewLineItems(u); }}
+                            className="w-full text-xs" />
+                        </div>
+                        <div className="col-span-2">
+                          <Input type="number" step="0.01" value={item.quantity}
+                            onChange={e => { const u=[...previewLineItems]; u[idx].quantity=parseFloat(e.target.value)||0; u[idx].amount=u[idx].quantity*u[idx].unit_price; setPreviewLineItems(u); }}
+                            className="w-full text-right text-xs" />
+                        </div>
+                        <div className="col-span-2">
+                          <Input type="number" step="0.01" value={item.unit_price}
+                            onChange={e => { const u=[...previewLineItems]; u[idx].unit_price=parseFloat(e.target.value)||0; u[idx].amount=u[idx].quantity*u[idx].unit_price; setPreviewLineItems(u); }}
+                            className="w-full text-right text-xs" />
+                        </div>
+                        <div className="col-span-2 text-right font-mono font-bold text-emerald-400 text-sm">${item.amount.toFixed(2)}</div>
+                        <div className="col-span-1 text-center">
+                          <button onClick={() => setPreviewLineItems(previewLineItems.filter((_,i)=>i!==idx))}
+                            className="text-red-500/50 hover:text-red-400 transition text-lg leading-none">×</button>
+                        </div>
+                      </div>
+                    ))}
+                  </CardBody>
+                </Card>
+
+                {/* Add custom line item */}
+                <Card>
+                  <CardHeader><h3 className="text-sm font-semibold text-slate-300">Add Custom Line Item</h3></CardHeader>
+                  <CardBody>
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-6">
+                        <label className="block text-xs text-slate-500 mb-1">Description</label>
+                        <Input value={customLineItem.description} onChange={e => setCustomLineItem({...customLineItem, description:e.target.value})}
+                          placeholder="e.g., Additional Service" className="w-full" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-slate-500 mb-1">Qty</label>
+                        <Input type="number" step="0.01" value={customLineItem.quantity}
+                          onChange={e => setCustomLineItem({...customLineItem, quantity:parseFloat(e.target.value)||0})}
+                          className="w-full text-right" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-slate-500 mb-1">Unit $</label>
+                        <Input type="number" step="0.01" value={customLineItem.unit_price}
+                          onChange={e => setCustomLineItem({...customLineItem, unit_price:parseFloat(e.target.value)||0})}
+                          className="w-full text-right" />
+                      </div>
+                      <div className="col-span-2">
+                        <Btn onClick={() => {
+                          if (!customLineItem.description.trim()) { alert('Description required'); return; }
+                          setPreviewLineItems([...previewLineItems, { description:customLineItem.description, quantity:customLineItem.quantity, unit_price:customLineItem.unit_price, amount:customLineItem.quantity*customLineItem.unit_price, line_type:'custom', editable:true }]);
+                          setCustomLineItem({ description:'', quantity:1, unit_price:0 });
+                        }} variant="success" size="sm" className="w-full">Add</Btn>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+
+                {/* Work Performed */}
+                <Card>
+                  <CardHeader>
+                    <h3 className="text-sm font-semibold text-slate-300">Work Performed</h3>
+                    <p className="text-slate-600 text-xs mt-0.5">This text appears on the invoice. Edit as needed.</p>
+                  </CardHeader>
+                  <CardBody>
+                    <Textarea value={workPerformedText} onChange={e => setWorkPerformedText(e.target.value)}
+                      rows={7} placeholder="Describe work performed…" className="w-full" />
+                  </CardBody>
+                </Card>
+
+                {/* Totals */}
+                <Card>
+                  <CardBody>
+                    <div className="flex justify-end">
+                      <div className="w-72 space-y-2">
+                        <div className="flex justify-between text-sm text-slate-400">
+                          <span>Subtotal</span><span className="font-mono">${previewTotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-slate-600">
+                          <span>Tax</span><span className="font-mono">$0.00</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-[#2d2d44] text-xl font-bold">
+                          <span className="text-slate-200">Total</span>
+                          <span className="text-emerald-400 font-mono">${previewTotal.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2 border-t border-[#1e1e2e]">
+                  <Btn onClick={finalizeInvoice} disabled={generatingInvoice} variant="success" size="xl" className="flex-1">
+                    {generatingInvoice ? 'Generating…' : '✅ Finalize & Generate Invoice'}
+                  </Btn>
+                  <Btn onClick={() => { setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText(''); }}
+                    variant="default" size="xl">Cancel</Btn>
                 </div>
               </div>
-
-              <button
-                onClick={() => generateInvoicePreview(selectedItem.data.wo_id)}
-                disabled={generatingInvoice}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
-              >
-                {generatingInvoice ? '⏳ Loading Preview...' : '📄 Preview & Generate Invoice'}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Invoice Preview Modal */}
-      {showInvoicePreview && previewWO && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-lg max-w-5xl w-full my-8">
-            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
-              <div>
-                <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  WO #{previewWO.wo_number} - {previewWO.building}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowInvoicePreview(false);
-                  setPreviewWO(null);
-                  setPreviewLineItems([]);
-                  setWorkPerformedText('');
-                }}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-              
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg">
-                <div className="font-bold mb-2">Review & Edit Line Items</div>
-                <div className="text-sm">
-                  Review the line items below. You can edit quantities and prices, or add custom line items before finalizing the invoice.
-                </div>
+        {/* ══════════════════════════════════════════════════════════════════
+            MODAL: Invoice detail
+        ══════════════════════════════════════════════════════════════════ */}
+        {selectedItem?.type === 'invoice' && (
+          <Modal onClose={() => setSelectedItem(null)}>
+            <ModalHeader
+              title={`Invoice #${selectedItem.data.invoice_number}`}
+              subtitle={`WO #${selectedItem.data.work_order?.wo_number} — ${selectedItem.data.work_order?.building}`}
+              onClose={() => setSelectedItem(null)} />
+            <ModalBody>
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Status">{statusBadge(selectedItem.data.status)}</Field>
+                <Field label="Lead Tech">
+                  {selectedItem.data.work_order?.lead_tech
+                    ? `${selectedItem.data.work_order.lead_tech.first_name} ${selectedItem.data.work_order.lead_tech.last_name}` : '—'}
+                </Field>
+                <Field label="Invoice Date">{new Date(selectedItem.data.invoice_date).toLocaleDateString()}</Field>
+                <Field label="Due Date">{new Date(selectedItem.data.due_date).toLocaleDateString()}</Field>
               </div>
 
               {/* Line Items */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold text-lg mb-4">Line Items</h3>
-                
-                <div className="space-y-3">
-                  {previewLineItems.map((item, index) => (
-                    <div 
-                      key={index}
-                      className="p-4 rounded-lg bg-gray-600"
-                    >
-                      <div className="grid grid-cols-12 gap-3 items-center">
-                        <div className="col-span-5">
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => {
-                              const updated = [...previewLineItems];
-                              updated[index].description = e.target.value;
-                              setPreviewLineItems(updated);
-                            }}
-                            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const updated = [...previewLineItems];
-                              updated[index].quantity = parseFloat(e.target.value) || 0;
-                              updated[index].amount = updated[index].quantity * updated[index].unit_price;
-                              setPreviewLineItems(updated);
-                            }}
-                            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.unit_price}
-                            onChange={(e) => {
-                              const updated = [...previewLineItems];
-                              updated[index].unit_price = parseFloat(e.target.value) || 0;
-                              updated[index].amount = updated[index].quantity * updated[index].unit_price;
-                              setPreviewLineItems(updated);
-                            }}
-                            className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm text-right"
-                          />
-                        </div>
-                        <div className="col-span-2 text-right font-bold">
-                          ${item.amount.toFixed(2)}
-                        </div>
-                        <div className="col-span-1 text-center">
-                          <button
-                            onClick={() => {
-                              setPreviewLineItems(previewLineItems.filter((_, i) => i !== index));
-                            }}
-                            className="text-red-400 hover:text-red-300 text-lg"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Add Custom Line Item */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold mb-3">➕ Add Custom Line Item</h3>
-                
-                <div className="grid grid-cols-12 gap-3 items-end">
-                  <div className="col-span-6">
-                    <label className="block text-xs text-gray-400 mb-1">Description</label>
-                    <input
-                      type="text"
-                      value={customLineItem.description}
-                      onChange={(e) => setCustomLineItem({ ...customLineItem, description: e.target.value })}
-                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
-                      placeholder="e.g., Additional Service"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-gray-400 mb-1">Quantity</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={customLineItem.quantity}
-                      onChange={(e) => setCustomLineItem({ ...customLineItem, quantity: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-gray-400 mb-1">Unit Price</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={customLineItem.unit_price}
-                      onChange={(e) => setCustomLineItem({ ...customLineItem, unit_price: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm text-right"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <button
-                      onClick={() => {
-                        if (!customLineItem.description.trim()) {
-                          alert('Please enter a description');
-                          return;
-                        }
-                        
-                        const newItem = {
-                          description: customLineItem.description,
-                          quantity: customLineItem.quantity,
-                          unit_price: customLineItem.unit_price,
-                          amount: customLineItem.quantity * customLineItem.unit_price,
-                          line_type: 'custom',
-                          editable: true
-                        };
-                        
-                        setPreviewLineItems([...previewLineItems, newItem]);
-                        setCustomLineItem({ description: '', quantity: 1, unit_price: 0 });
-                      }}
-                      className="w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded font-bold"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Editable Work Performed Section */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold text-lg mb-2">📝 Work Performed</h3>
-                <p className="text-gray-400 text-sm mb-3">
-                  This text (from tech's comments) will appear on the invoice as "Work Performed". Edit as needed.
-                </p>
-                <textarea
-                  value={workPerformedText}
-                  onChange={(e) => setWorkPerformedText(e.target.value)}
-                  className="w-full bg-gray-600 text-white px-4 py-3 rounded-lg text-sm"
-                  rows={8}
-                  placeholder="Enter work performed description..."
-                />
-              </div>
-
-              {/* Totals */}
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="flex justify-end">
-                  <div className="w-80">
-                    <div className="flex justify-between py-2 text-lg">
-                      <span className="font-semibold">Subtotal:</span>
-                      <span>
-                        ${previewLineItems
-                          .reduce((sum, item) => sum + item.amount, 0)
-                          .toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2 text-sm text-gray-400">
-                      <span>Tax:</span>
-                      <span>$0.00</span>
-                    </div>
-                    <div className="flex justify-between py-3 bg-green-900 px-4 font-bold text-xl border-2 border-green-500 mt-2 rounded">
-                      <span>TOTAL:</span>
-                      <span className="text-green-400">
-                        ${previewLineItems
-                          .reduce((sum, item) => sum + item.amount, 0)
-                          .toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-gray-700">
-                <button
-                  onClick={finalizeInvoice}
-                  disabled={generatingInvoice}
-                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-4 rounded-lg font-bold text-lg transition"
-                >
-                  {generatingInvoice ? '⏳ Generating...' : '✅ Finalize & Generate Invoice'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowInvoicePreview(false);
-                    setPreviewWO(null);
-                    setPreviewLineItems([]);
-                    setWorkPerformedText('');
-                  }}
-                  className="bg-gray-600 hover:bg-gray-700 px-6 py-4 rounded-lg font-semibold transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedItem?.type === 'invoice' && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
-            <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
               <div>
-                <h2 className="text-2xl font-bold">Invoice #{selectedItem.data.invoice_number}</h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  WO #{selectedItem.data.work_order?.wo_number} - {selectedItem.data.work_order?.building}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="text-gray-400 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Status:</span>
-                    <span className={`ml-2 px-3 py-1 rounded-lg text-xs font-semibold ${getStatusColor(selectedItem.data.status)}`}>
-                      {getStatusDisplayName(selectedItem.data.status)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Invoice Date:</span>
-                    <span className="ml-2 font-semibold">
-                      {new Date(selectedItem.data.invoice_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Due Date:</span>
-                    <span className="ml-2 font-semibold">
-                      {new Date(selectedItem.data.due_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Lead Tech:</span>
-                    <span className="ml-2 font-semibold">
-                      {selectedItem.data.work_order?.lead_tech 
-                        ? `${selectedItem.data.work_order.lead_tech.first_name} ${selectedItem.data.work_order.lead_tech.last_name}`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="font-bold text-lg mb-4">Line Items</h3>
-                <div className="space-y-2">
+                <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Line Items</p>
+                <div className="space-y-1.5">
                   {lineItems.map(item => (
-                    <div 
-                      key={item.line_item_id} 
-                      className={`p-3 rounded ${item.line_type === 'description' ? 'bg-gray-800' : 'bg-gray-600'}`}
-                    >
+                    <div key={item.line_item_id}
+                      className={`rounded-lg p-3 ${item.line_type === 'description' ? 'bg-[#0a0a0f] border border-[#1e1e2e]' : 'bg-[#1e1e2e]/50'}`}>
                       {item.line_type === 'description' ? (
                         <div>
-                          <div className="font-bold mb-2">Work Performed:</div>
-                          <div className="text-sm whitespace-pre-wrap">{item.description}</div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Work Performed</p>
+                          <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{item.description}</p>
                         </div>
                       ) : (
                         <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="font-semibold">{item.description}</div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {item.line_type?.toUpperCase()}
-                            </div>
+                          <div>
+                            <p className="text-sm text-slate-200 font-medium">{item.description}</p>
+                            <p className="text-xs text-slate-600 mt-0.5">{item.line_type?.toUpperCase()}</p>
                           </div>
-                          <div className="text-right ml-4">
-                            <div className="font-bold">${item.amount.toFixed(2)}</div>
-                            {item.quantity > 0 && item.unit_price > 0 && (
-                              <div className="text-xs text-gray-400">
-                                {item.quantity} × ${item.unit_price.toFixed(2)}
-                              </div>
+                          <div className="text-right ml-4 flex-shrink-0">
+                            <p className="font-mono font-bold text-emerald-400">${item.amount.toFixed(2)}</p>
+                            {item.quantity>0 && item.unit_price>0 && (
+                              <p className="text-xs text-slate-600">{item.quantity} × ${item.unit_price.toFixed(2)}</p>
                             )}
                           </div>
                         </div>
@@ -1416,146 +768,70 @@ export default function InvoicingPage() {
                 </div>
               </div>
 
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-400">Subtotal:</span>
-                    <span className="font-semibold">${selectedItem.data.subtotal.toFixed(2)}</span>
-                  </div>
-                  {selectedItem.data.tax > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Tax:</span>
-                      <span className="font-semibold">${selectedItem.data.tax.toFixed(2)}</span>
+              {/* Totals */}
+              <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl p-4">
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-1.5 text-sm">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Subtotal</span><span className="font-mono">${selectedItem.data.subtotal.toFixed(2)}</span>
                     </div>
-                  )}
-                  <div className="border-t border-gray-600 pt-2 flex justify-between text-2xl">
-                    <span className="font-bold">Total:</span>
-                    <span className="font-bold text-green-400">${selectedItem.data.total.toFixed(2)}</span>
+                    {selectedItem.data.tax>0 && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Tax</span><span className="font-mono">${selectedItem.data.tax.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-1.5 border-t border-[#2d2d44] text-lg font-bold">
+                      <span className="text-slate-200">Total</span>
+                      <span className="text-emerald-400 font-mono">${selectedItem.data.total.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => printInvoice(selectedItem.data)}
-                    className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition"
-                  >
-                    🖨️ Print
-                  </button>
-                  <button
-                    onClick={() => shareInvoice(selectedItem.data)}
-                    className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition"
-                  >
-                    📤 Share
-                  </button>
-                </div>
-                
-                {/* Status-specific action buttons */}
-                {selectedItem.data.status === 'draft' && (
-                  <>
-                    <button
-                      onClick={() => returnToTech(selectedItem.data.wo_id, selectedItem.data.invoice_id)}
-                      className="w-full bg-orange-600 hover:bg-orange-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      🔄 Return to Tech for Review
-                    </button>
-                    
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'approved')}
-                      className="w-full bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      📤 Uploaded to CBRE
-                    </button>
-                  </>
-                )}
-
-                {selectedItem.data.status === 'approved' && (
-                  <>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
-                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      ↩️ Return to Draft
-                    </button>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'accepted')}
-                      className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      ✅ Accepted CBRE - Submitted to AP
-                    </button>
-                  </>
-                )}
-
-                {(selectedItem.data.status === 'accepted' || selectedItem.data.status === 'synced') && (
-                  <>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
-                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      ↩️ Return to Draft
-                    </button>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'paid')}
-                      className="w-full bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      💰 Mark as Paid
-                    </button>
-                  </>
-                )}
-
-                {selectedItem.data.status === 'paid' && (
-                  <button
-                    onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
-                    className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                  >
-                    ↩️ Return to Draft
-                  </button>
-                )}
-
-                {selectedItem.data.status === 'rejected' && (
-                  <>
-                    <div className="bg-red-900 text-red-200 p-4 rounded-lg text-center">
-                      <div className="font-bold">❌ Invoice Rejected by CBRE</div>
-                      <p className="text-sm mt-1">Return to draft to make changes and resubmit.</p>
-                    </div>
-                    <button
-                      onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')}
-                      className="w-full bg-yellow-600 hover:bg-yellow-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                    >
-                      ↩️ Return to Draft (Edit & Resubmit)
-                    </button>
-                  </>
-                )}
-
-                <div className="border-t border-gray-600 pt-3 mt-2">
-                  <button
-                    onClick={() => deleteInvoice(selectedItem.data.invoice_id, selectedItem.data.wo_id)}
-                    className="w-full bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-bold text-lg transition"
-                  >
-                    🗑️ Delete Invoice (Admin)
-                  </button>
-                  <p className="text-xs text-gray-400 text-center mt-2">
-                    ⚠️ Requires admin password. This action cannot be undone.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  className="w-full bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition"
-                >
-                  Close
-                </button>
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-2">
+                <Btn onClick={() => printInvoice(selectedItem.data)} variant="default">🖨️ Print</Btn>
+                <Btn onClick={() => shareInvoice(selectedItem.data)} variant="default">📤 Share</Btn>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Global WO Search Modal */}
-      {showGlobalSearch && (
-        <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />
-      )}
-    </div>
+              <div className="space-y-2">
+                {selectedItem.data.status === 'draft' && (<>
+                  <Btn onClick={() => returnToTech(selectedItem.data.wo_id, selectedItem.data.invoice_id)} variant="orange" size="lg" className="w-full">🔄 Return to Tech for Review</Btn>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'approved')} variant="primary" size="lg" className="w-full">📤 Uploaded to CBRE</Btn>
+                </>)}
+                {selectedItem.data.status === 'approved' && (<>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')} variant="warning" size="lg" className="w-full">↩️ Return to Draft</Btn>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'accepted')} variant="success" size="lg" className="w-full">✅ Accepted – Submitted to AP</Btn>
+                </>)}
+                {(selectedItem.data.status==='accepted'||selectedItem.data.status==='synced') && (<>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')} variant="warning" size="lg" className="w-full">↩️ Return to Draft</Btn>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'paid')} variant="success" size="lg" className="w-full">💰 Mark as Paid</Btn>
+                </>)}
+                {selectedItem.data.status==='paid' && (
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')} variant="warning" size="lg" className="w-full">↩️ Return to Draft</Btn>
+                )}
+                {selectedItem.data.status==='rejected' && (<>
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+                    <p className="text-red-400 font-semibold text-sm">❌ Invoice Rejected by CBRE</p>
+                    <p className="text-red-400/60 text-xs mt-0.5">Return to draft to make changes and resubmit.</p>
+                  </div>
+                  <Btn onClick={() => updateInvoiceStatus(selectedItem.data.invoice_id, 'draft')} variant="warning" size="lg" className="w-full">↩️ Return to Draft</Btn>
+                </>)}
+
+                <div className="pt-2 border-t border-[#1e1e2e] space-y-1.5">
+                  <Btn onClick={() => deleteInvoice(selectedItem.data.invoice_id, selectedItem.data.wo_id)} variant="danger" size="lg" className="w-full">🗑️ Delete Invoice (Admin)</Btn>
+                  <p className="text-xs text-slate-600 text-center">⚠️ Requires admin password. Cannot be undone.</p>
+                </div>
+
+                <Btn onClick={() => setSelectedItem(null)} variant="default" size="lg" className="w-full">Close</Btn>
+              </div>
+            </ModalBody>
+          </Modal>
+        )}
+
+        {/* Global Search */}
+        {showGlobalSearch && <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />}
+      </div>
+    </AppShell>
   );
 }

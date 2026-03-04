@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import AppShell from '@/app/components/AppShell';
 
 const SEVERITY_COLORS = {
   'Extreme': 'bg-red-600 border-red-500',
@@ -121,7 +122,8 @@ export default function WeatherPage() {
   const hasHazards = weather?.hazardous_conditions?.length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
       {/* Header */}
       <header className={`border-b px-6 py-4 ${
         hasSevereAlerts 
@@ -134,7 +136,7 @@ export default function WeatherPage() {
           <div className="flex items-center gap-4">
             <Link 
               href="/dashboard"
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+              className="px-4 py-2 bg-[#1e1e2e] hover:bg-[#2d2d44] border border-[#2d2d44] rounded-lg text-sm text-slate-300"
             >
               ← Dashboard
             </Link>
@@ -407,5 +409,6 @@ export default function WeatherPage() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

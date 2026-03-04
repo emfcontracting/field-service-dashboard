@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AppShell from '@/app/components/AppShell';
 
 export default function ApprovalAnalysisPage() {
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,8 @@ export default function ApprovalAnalysisPage() {
   const byTech = data?.by_tech || [];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
         <div className="max-w-7xl mx-auto">
@@ -410,5 +412,6 @@ export default function ApprovalAnalysisPage() {
 
       </div>
     </div>
+    </AppShell>
   );
 }

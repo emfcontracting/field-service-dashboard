@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import AppShell from '@/app/components/AppShell';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -318,23 +319,14 @@ export default function AutomationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <div className="bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/settings" 
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex items-center gap-2"
-            >
-              ← Back to Settings
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                🤖 Automated Messages
-              </h1>
-              <p className="text-gray-400 text-sm">Configure automatic SMS and email notifications</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">🤖 Automated Messages</h1>
+            <p className="text-slate-500 text-sm">Configure automatic SMS and email notifications</p>
           </div>
           <button
             onClick={() => setShowAddNew(true)}
@@ -756,5 +748,6 @@ export default function AutomationsPage() {
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

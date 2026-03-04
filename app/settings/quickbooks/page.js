@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams } from 'next/navigation';
+import AppShell from '@/app/components/AppShell';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -70,15 +71,16 @@ function SettingsContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200 p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">⚙️ Settings</h1>
           <button
-            onClick={() => window.location.href = '/'}
-            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition"
+            onClick={() => window.location.href = '/dashboard'}
+            className="bg-[#1e1e2e] hover:bg-[#2d2d44] border border-[#2d2d44] px-4 py-2 rounded-lg font-semibold transition text-slate-300"
           >
-            ← Back to Dashboard
+            ← Dashboard
           </button>
         </div>
 
@@ -159,6 +161,7 @@ function SettingsContent() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }
 

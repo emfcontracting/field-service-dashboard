@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import AppShell from '@/app/components/AppShell';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -141,20 +142,13 @@ export default function SubcontractorManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <AppShell>
+    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
-          <Link
-            href="/settings"
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
-          >
-            ← Back to Settings
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">🧾 Subcontractor Management</h1>
-            <p className="text-sm text-gray-400">Enable/disable subcontractor portal access</p>
-          </div>
+      <header className="bg-[#0d0d14] border-b border-[#1e1e2e] px-6 py-4">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold text-slate-100">🧾 Subcontractor Management</h1>
+          <p className="text-sm text-slate-500">Enable/disable subcontractor portal access</p>
         </div>
       </header>
 
@@ -258,5 +252,6 @@ export default function SubcontractorManagement() {
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

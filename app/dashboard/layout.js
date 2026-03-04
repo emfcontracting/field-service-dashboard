@@ -207,15 +207,39 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
   return (
     <aside className={`flex flex-col bg-[#0d0d14] border-r border-[#1e1e2e] transition-all duration-200 flex-shrink-0 ${sidebarCollapsed ? 'w-[52px]' : 'w-[200px]'}`}>
 
-      {/* Logo */}
-      <div className={`flex items-center border-b border-[#1e1e2e] h-[52px] px-3 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P</div>
-        {!sidebarCollapsed && (
-          <div className="overflow-hidden">
-            <div className="text-slate-200 font-semibold text-sm leading-tight whitespace-nowrap">PCS FieldService</div>
-            <div className="text-slate-600 text-xs whitespace-nowrap">EMF Contracting</div>
+      {/* Logo + User + Collapse */}
+      <div className={`border-b border-[#1e1e2e] flex flex-col gap-1.5 ${sidebarCollapsed ? 'items-center py-3 px-1' : 'px-3 pt-3 pb-2'}`}>
+
+        {/* EMF Logo row */}
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5'}`}>
+          <img src="/emf-logo.png" alt="EMF" className={`object-contain flex-shrink-0 ${sidebarCollapsed ? 'h-8 w-8' : 'h-9 w-auto max-w-[36px]'}`} />
+          {!sidebarCollapsed && (
+            <div className="overflow-hidden">
+              <div className="text-slate-200 font-semibold text-sm leading-tight whitespace-nowrap">EMF Contracting</div>
+              <div className="text-slate-600 text-[10px] whitespace-nowrap">PCS FieldService</div>
+            </div>
+          )}
+        </div>
+
+        {/* Username */}
+        {!sidebarCollapsed && userInfo && (
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-blue-400 text-[9px] font-bold">{userInfo.first_name?.charAt(0)}</span>
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-slate-400 text-xs truncate">{userInfo.first_name} {userInfo.last_name}</div>
+              <div className="text-slate-700 text-[9px] truncate capitalize">{userInfo.role?.replace(/_/g, ' ')}</div>
+            </div>
           </div>
         )}
+
+        {/* Collapse toggle */}
+        <button onClick={onCollapse} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={`flex items-center gap-2 rounded-md py-1 transition text-slate-600 hover:text-slate-400 hover:bg-[#1e1e2e]
+            ${sidebarCollapsed ? 'justify-center w-8 h-7 px-0' : 'px-1.5 w-full text-xs'}`}>
+          {sidebarCollapsed ? <Icons.expand /> : <><Icons.collapse /><span>Collapse</span></>}
+        </button>
       </div>
 
       {/* Scrollable nav area */}
@@ -273,27 +297,14 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-[#1e1e2e] p-1.5 flex flex-col gap-0.5">
-        {!sidebarCollapsed && userInfo && (
-          <div className="px-3 py-2">
-            <div className="text-slate-300 text-xs font-medium truncate">{userInfo.first_name} {userInfo.last_name}</div>
-            <div className="text-slate-600 text-[10px] truncate">{userInfo.role?.replace(/_/g, ' ')}</div>
-          </div>
-        )}
-        <div className={`flex ${sidebarCollapsed ? 'flex-col' : 'flex-row'} gap-0.5`}>
-          <button onClick={onLogout} title="Logout"
-            className={`flex items-center gap-2.5 rounded-lg py-2 transition text-red-500/50 hover:text-red-400 hover:bg-red-950/20
-              ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-3 text-xs w-auto'}`}>
-            <Icons.logout />
-            {!sidebarCollapsed && <span>Logout</span>}
-          </button>
-          <button onClick={onCollapse} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className={`flex items-center gap-2.5 rounded-lg py-2 transition text-slate-600 hover:text-slate-400 hover:bg-[#1e1e2e]
-              ${sidebarCollapsed ? 'justify-center px-0 w-full' : 'px-3 text-xs ml-auto'}`}>
-            {sidebarCollapsed ? <Icons.expand /> : <><Icons.collapse /><span>Collapse</span></>}
-          </button>
-        </div>
+      {/* Footer — logout only */}
+      <div className="border-t border-[#1e1e2e] p-1.5">
+        <button onClick={onLogout} title="Logout"
+          className={`w-full flex items-center gap-2.5 rounded-lg py-2 transition text-red-500/50 hover:text-red-400 hover:bg-red-950/20
+            ${sidebarCollapsed ? 'justify-center px-0' : 'px-3 text-xs'}`}>
+          <Icons.logout />
+          {!sidebarCollapsed && <span>Logout</span>}
+        </button>
       </div>
     </aside>
   );

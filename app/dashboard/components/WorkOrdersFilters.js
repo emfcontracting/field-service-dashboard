@@ -17,7 +17,10 @@ export default function WorkOrdersFilters({
   users,
   onNewWorkOrder,
   onImport,     
-  exportDropdown
+  exportDropdown,
+  nteFilter,
+  setNteFilter,
+  pendingNTECount = 0
 }) {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
@@ -162,10 +165,12 @@ export default function WorkOrdersFilters({
     setSelectedPriorities([]);
     setSelectedCbreStatuses([]);
     setSearchTerm('');
+    if (setNteFilter) setNteFilter(false);
   };
 
   const hasActiveFilters = selectedStatuses.length > 0 || selectedTechs.length > 0 || 
-                          selectedPriorities.length > 0 || selectedCbreStatuses.length > 0 || searchTerm;
+                          selectedPriorities.length > 0 || selectedCbreStatuses.length > 0 || 
+                          searchTerm || nteFilter;
 
   // Get display text for dropdown buttons
   const getStatusButtonText = () => {
@@ -382,6 +387,24 @@ export default function WorkOrdersFilters({
             </div>
           )}
         </div>
+
+        {/* NTE Pending Filter Toggle */}
+        <button
+          onClick={() => setNteFilter && setNteFilter(!nteFilter)}
+          className={`w-full md:w-auto px-3 py-2 rounded-lg flex items-center justify-between md:justify-start gap-2 text-sm font-semibold transition ${
+            nteFilter
+              ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+              : 'bg-gray-700 text-white hover:bg-gray-600'
+          }`}
+          title="Show only work orders with a pending NTE increase request from a tech"
+        >
+          <span>💰 NTE Requests</span>
+          {pendingNTECount > 0 && (
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${nteFilter ? 'bg-white text-orange-600' : 'bg-orange-500 text-white'}`}>
+              {pendingNTECount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Action Buttons - Grid on mobile */}
@@ -406,6 +429,12 @@ export default function WorkOrdersFilters({
       {/* Active Filter Tags - Scrollable on mobile */}
       {hasActiveFilters && (
         <div className="mt-3 flex flex-wrap gap-2 max-h-[80px] overflow-y-auto">
+          {nteFilter && (
+            <span className="bg-orange-500 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+              💰 NTE Requests
+              <button onClick={() => setNteFilter && setNteFilter(false)} className="hover:text-red-200">✕</button>
+            </span>
+          )}
           {selectedStatuses.map(status => {
             const opt = statusOptions.find(o => o.value === status);
             return opt ? (

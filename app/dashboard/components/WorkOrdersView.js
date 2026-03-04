@@ -28,6 +28,7 @@ export default function WorkOrdersView({
   const [cbreStatusFilter, setCbreStatusFilter] = useState('all');
   const [techFilter, setTechFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [nteFilter, setNteFilter] = useState(false); // true = show only WOs with pending NTE
   
   // Multi-select state
   const [selectedWOs, setSelectedWOs] = useState(new Set());
@@ -41,15 +42,20 @@ export default function WorkOrdersView({
   // Apply filters whenever workOrders or filters change
   useEffect(() => {
     applyFilters();
-  }, [workOrders, statusFilter, priorityFilter, cbreStatusFilter, techFilter, searchTerm]);
+  }, [workOrders, statusFilter, priorityFilter, cbreStatusFilter, techFilter, searchTerm, nteFilter]);
 
   // Clear selection when filters change
   useEffect(() => {
     setSelectedWOs(new Set());
-  }, [statusFilter, priorityFilter, cbreStatusFilter, techFilter, searchTerm]);
+  }, [statusFilter, priorityFilter, cbreStatusFilter, techFilter, searchTerm, nteFilter]);
 
   const applyFilters = () => {
     let filtered = [...workOrders];
+
+    // NTE pending filter
+    if (nteFilter) {
+      filtered = filtered.filter(wo => wo.nte_quotes?.some(q => q.nte_status === 'pending'));
+    }
 
     // Work status filter - handle both single value and array
     if (statusFilter !== 'all') {
@@ -162,7 +168,6 @@ export default function WorkOrdersView({
   // Toggle checkbox mode
   const toggleCheckboxMode = () => {
     if (showCheckboxes) {
-      // Turning off - clear selections
       setSelectedWOs(new Set());
       setShowCheckboxes(false);
     } else {
@@ -179,7 +184,6 @@ export default function WorkOrdersView({
 
     setIsExportingCombined(true);
     try {
-      // Get the selected WO objects from the filtered list
       const selectedWorkOrders = filteredWorkOrders.filter(wo => selectedWOs.has(wo.wo_id));
       await exportCostDetailCSV(supabase, selectedWorkOrders);
     } catch (err) {
@@ -236,6 +240,9 @@ export default function WorkOrdersView({
       .join(', ');
   };
 
+  // Count WOs with pending NTE for badge
+  const pendingNTECount = workOrders.filter(wo => wo.nte_quotes?.some(q => q.nte_status === 'pending')).length;
+
   return (
     <>
       <StatsCards 
@@ -259,6 +266,9 @@ export default function WorkOrdersView({
         users={users}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
+        nteFilter={nteFilter}
+        setNteFilter={setNteFilter}
+        pendingNTECount={pendingNTECount}
         exportDropdown={<ExportDropdown workOrders={workOrders} supabase={supabase} />}
       />
 
@@ -278,7 +288,6 @@ export default function WorkOrdersView({
               </button>
             </div>
             <div className="flex items-center gap-2">
-              {/* Combined Cost CSV Download */}
               <button
                 onClick={handleDownloadCombinedCSV}
                 disabled={isExportingCombined}
@@ -293,7 +302,6 @@ export default function WorkOrdersView({
                 )}
               </button>
 
-              {/* Bulk Delete - Superuser Only */}
               {isSuperuser && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -304,7 +312,6 @@ export default function WorkOrdersView({
               )}
             </div>
           </div>
-          {/* Show selected WO numbers */}
           <div className="mt-2 text-xs text-purple-300 truncate">
             Selected: {getSelectedWONumbers()}
           </div>
@@ -352,6 +359,7 @@ export default function WorkOrdersView({
       <div className="mb-2 flex justify-between items-center">
         <span className="text-sm text-gray-400">
           Showing {filteredWorkOrders.length} of {workOrders.length} work orders
+          {nteFilter && <span className="ml-2 text-orange-400 font-semibold">· NTE filter active</span>}
         </span>
         <button
           onClick={toggleCheckboxMode}

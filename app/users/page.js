@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
-import AppShell from '@/components/AppShell';
+import AppShell from '@/app/components/AppShell';
 
 const supabase = getSupabase();
 

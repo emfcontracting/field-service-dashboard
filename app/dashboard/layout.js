@@ -1,7 +1,7 @@
 // app/dashboard/layout.js
 'use client';
 
-import AppShell from '@/components/AppShell';
+import AppShell from '@/app/components/AppShell';
 
 export default function DashboardLayout({ children }) {
   return (

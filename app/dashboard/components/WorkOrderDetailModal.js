@@ -1,4 +1,4 @@
-// app/dashboard/components/WorkOrderDetailModal.js
+﻿// app/dashboard/components/WorkOrderDetailModal.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -1188,10 +1188,10 @@ const sendAssignmentNotifications = async () => {
   const costSummary = calculateCostSummaryWithDailyHours();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-gray-800 rounded-lg max-w-6xl w-full my-8">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-2xl max-w-6xl w-full my-8 shadow-2xl">
         {/* Header */}
-        <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-start z-10 rounded-t-lg">
+        <div className="sticky top-0 bg-[#0d0d14] border-b border-[#2d2d44] p-6 flex justify-between items-start z-10 rounded-t-2xl">
           <div>
             <h2 className="text-2xl font-bold">{selectedWO.wo_number}</h2>
             <div className="flex gap-2 mt-2 flex-wrap">
@@ -1228,7 +1228,7 @@ const sendAssignmentNotifications = async () => {
             </button>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white text-3xl leading-none"
+              className="text-slate-500 hover:text-slate-200 text-3xl leading-none w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#2d2d44] transition"
             >
               ×
             </button>
@@ -1236,13 +1236,13 @@ const sendAssignmentNotifications = async () => {
         </div>
 
         {/* ── Tabs (admin only gets Profitability tab) ── */}
-        <div className="flex border-b border-gray-700 px-6">
+        <div className="flex border-b border-[#2d2d44] px-6 bg-[#0a0a0f]">
           <button
             onClick={() => setActiveTab('details')}
             className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
               activeTab === 'details'
                 ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
             }`}>
             📋 Details
           </button>
@@ -1252,7 +1252,7 @@ const sendAssignmentNotifications = async () => {
               className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
                 activeTab === 'profitability'
                   ? 'border-emerald-500 text-emerald-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
               }`}>
               💰 Profitability
             </button>
@@ -1260,7 +1260,7 @@ const sendAssignmentNotifications = async () => {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 max-h-[calc(100vh-240px)] overflow-y-auto">
+        <div className="p-6 space-y-5 max-h-[calc(100vh-240px)] overflow-y-auto bg-[#0a0a0f] rounded-b-2xl">
 
           {/* ── Profitability Tab ── */}
           {activeTab === 'profitability' && isAdmin && (
@@ -1276,17 +1276,17 @@ const sendAssignmentNotifications = async () => {
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Work Order #</label>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Work Order #</label>
               <input
                 type="text"
                 value={selectedWO.wo_number}
                 onChange={(e) => setSelectedWO({ ...selectedWO, wo_number: e.target.value })}
                 onBlur={() => handleUpdateField('wo_number', selectedWO.wo_number)}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Date & Time Entered</label>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Date & Time Entered</label>
               <input
                 type="datetime-local"
                 value={(() => {
@@ -1297,48 +1297,48 @@ const sendAssignmentNotifications = async () => {
                 })()}
                 onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: new Date(e.target.value).toISOString() })}
                 onBlur={() => handleUpdateField('date_entered', selectedWO.date_entered)}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Building</label>
+            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Building</label>
             <input
               type="text"
               value={selectedWO.building}
               onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
               onBlur={() => handleUpdateField('building', selectedWO.building)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Description</label>
+            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Description</label>
             <textarea
               value={selectedWO.work_order_description}
               onChange={(e) => setSelectedWO({ ...selectedWO, work_order_description: e.target.value })}
               onBlur={() => handleUpdateField('work_order_description', selectedWO.work_order_description)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               rows="3"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Requestor</label>
             <input
               type="text"
               value={selectedWO.requestor || ''}
               onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
               onBlur={() => handleUpdateField('requestor', selectedWO.requestor)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
             />
           </div>
 
           {/* Status, Priority, Lead Tech */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Work Status</label>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Work Status</label>
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
@@ -1356,7 +1356,7 @@ const sendAssignmentNotifications = async () => {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Priority</label>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Priority</label>
               <select
                 value={selectedWO.priority}
                 onChange={(e) => handleUpdateField('priority', e.target.value)}
@@ -1370,11 +1370,11 @@ const sendAssignmentNotifications = async () => {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Lead Tech</label>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Lead Tech</label>
               <select
                 value={selectedWO.lead_tech_id || ''}
                 onChange={(e) => handleUpdateField('lead_tech_id', e.target.value || null)}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               >
                 <option value="">Unassigned</option>
                 {users.filter(u => u.role === 'lead_tech' || u.role === 'admin').map(user => (
@@ -1387,11 +1387,11 @@ const sendAssignmentNotifications = async () => {
           </div>
 
           {/* CBRE Status - Synced from Gmail Labels */}
-          <div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+          <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
             <div className="flex justify-between items-center">
               <div>
-                <label className="block text-sm text-gray-300 font-semibold mb-1">📧 CBRE Status</label>
-                <p className="text-xs text-gray-400">Status from Gmail labels (auto-synced or manual)</p>
+                <label className="block text-sm text-slate-300 font-semibold mb-1">📧 CBRE Status</label>
+                <p className="text-xs text-slate-400">Status from Gmail labels (auto-synced or manual)</p>
               </div>
               <select
                 value={selectedWO.cbre_status || ''}
@@ -1400,12 +1400,12 @@ const sendAssignmentNotifications = async () => {
                   selectedWO.cbre_status === 'escalation' ? 'bg-red-600 text-white' :
                   selectedWO.cbre_status === 'quote_rejected' ? 'bg-red-700 text-white' :
                   selectedWO.cbre_status === 'invoice_rejected' ? 'bg-red-800 text-white' :
-                  selectedWO.cbre_status === 'cancelled' ? 'bg-gray-600 text-white' :
+                  selectedWO.cbre_status === 'cancelled' ? 'bg-[#2d2d44] text-white' :
                   selectedWO.cbre_status === 'pending_quote' ? 'bg-orange-600 text-white' :
                   selectedWO.cbre_status === 'quote_submitted' ? 'bg-blue-600 text-white' :
                   selectedWO.cbre_status === 'quote_approved' ? 'bg-green-600 text-white' :
                   selectedWO.cbre_status === 'reassigned' ? 'bg-purple-600 text-white' :
-                  'bg-gray-600 text-white'
+                  'bg-[#2d2d44] text-white'
                 }`}
               >
                 <option value="">— No CBRE Status —</option>
@@ -1420,32 +1420,32 @@ const sendAssignmentNotifications = async () => {
               </select>
             </div>
             {selectedWO.cbre_status === 'escalation' && (
-              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200 animate-pulse">
+              <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300 animate-pulse">
                 🚨 ESCALATION - This ticket requires immediate attention!
               </div>
             )}
             {selectedWO.cbre_status === 'quote_rejected' && (
-              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200">
+              <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300">
                 ❌ Quote was rejected by CBRE. Review and resubmit if needed.
               </div>
             )}
             {selectedWO.cbre_status === 'pending_quote' && (
-              <div className="mt-3 bg-orange-800/50 rounded p-2 text-sm text-orange-200">
+              <div className="mt-3 bg-orange-500/10 border border-orange-500/30 rounded-lg p-2 text-sm text-orange-300">
                 📋 This ticket requires a CBRE quote submission.
               </div>
             )}
             {selectedWO.cbre_status === 'invoice_rejected' && (
-              <div className="mt-3 bg-red-800/50 rounded p-2 text-sm text-red-200">
+              <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300">
                 ❌ Invoice was rejected by CBRE. Review the invoice and resubmit.
               </div>
             )}
             {selectedWO.cbre_status === 'cancelled' && (
-              <div className="mt-3 bg-gray-700/50 rounded p-2 text-sm text-gray-200">
+              <div className="mt-3 bg-[#1e1e2e]/50 rounded p-2 text-sm text-slate-200">
                 🚫 This work order has been cancelled by CBRE.
               </div>
             )}
             {selectedWO.cbre_status_updated_at && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-slate-500">
                 Last updated: {new Date(selectedWO.cbre_status_updated_at).toLocaleString()}
               </div>
             )}
@@ -1453,9 +1453,9 @@ const sendAssignmentNotifications = async () => {
 
           {/* Customer Signature Section */}
           {selectedWO.customer_signature && (
-            <div className="bg-green-900 rounded-lg p-4">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-lg text-green-300">✍️ Customer Signature</h3>
+                <h3 className="font-bold text-lg text-emerald-300">✍️ Customer Signature</h3>
                 <button
                   onClick={handleDeleteSignature}
                   className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm font-semibold"
@@ -1465,7 +1465,7 @@ const sendAssignmentNotifications = async () => {
                 </button>
               </div>
               <div className="flex gap-4 items-start">
-                <div className="bg-white rounded-lg p-3 flex-shrink-0">
+                <div className="bg-white/95 rounded-xl p-3 flex-shrink-0 shadow-lg">
                   <img 
                     src={selectedWO.customer_signature} 
                     alt="Customer Signature" 
@@ -1474,16 +1474,16 @@ const sendAssignmentNotifications = async () => {
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <span className="text-gray-400 text-sm">Signed By:</span>
+                    <span className="text-slate-400 text-sm">Signed By:</span>
                     <p className="font-semibold text-white">{selectedWO.customer_name || 'N/A'}</p>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-sm">Signed On:</span>
+                    <span className="text-slate-400 text-sm">Signed On:</span>
                     <p className="font-semibold text-white">{formatDateTime(selectedWO.signature_date)}</p>
                   </div>
                   {selectedWO.signature_location && (
                     <div>
-                      <span className="text-gray-400 text-sm">Location (GPS):</span>
+                      <span className="text-slate-400 text-sm">Location (GPS):</span>
                       <p className="font-semibold text-white">
                         <a 
                           href={`https://www.google.com/maps?q=${selectedWO.signature_location}`}
@@ -1496,8 +1496,8 @@ const sendAssignmentNotifications = async () => {
                       </p>
                     </div>
                   )}
-                  <div className="bg-green-800 rounded-lg p-2 mt-2">
-                    <p className="text-green-200 text-sm">✓ Work verified and signed by customer</p>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 mt-2">
+                    <p className="text-emerald-200 text-sm">✓ Work verified and signed by customer</p>
                   </div>
                 </div>
               </div>
@@ -1505,12 +1505,12 @@ const sendAssignmentNotifications = async () => {
           )}
 
           {/* Daily Hours Log Section - EDITABLE - Compact */}
-          <div className="bg-gray-700 rounded-lg p-2 md:p-4">
+          <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-3 md:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <h3 className="font-bold text-sm md:text-base">📅 Daily Hours Log <span className="text-xs text-gray-400 font-normal hidden md:inline">(Admin Editable)</span></h3>
+              <h3 className="font-bold text-sm text-slate-200">📅 Daily Hours Log <span className="text-xs text-slate-400 font-normal hidden md:inline">(Admin Editable)</span></h3>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-green-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
-                <span className="text-gray-500">|</span>
+                <span className="text-xs text-emerald-400 font-bold">{dailyTotals.totalRT.toFixed(1)} RT</span>
+                <span className="text-slate-500">|</span>
                 <span className="text-xs text-orange-400 font-bold">{dailyTotals.totalOT.toFixed(1)} OT</span>
                 <button
                   onClick={() => setShowAddHoursForm(!showAddHoursForm)}
@@ -1523,15 +1523,15 @@ const sendAssignmentNotifications = async () => {
 
             {/* Add New Hours Form */}
             {showAddHoursForm && (
-              <div className="bg-gray-600 rounded-lg p-4 mb-4">
+              <div className="bg-[#0a0a0f] border border-[#2d2d44] rounded-xl p-4 mb-4">
                 <h4 className="font-semibold mb-3 text-yellow-400">➕ Add New Hours Entry</h4>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="text-xs text-gray-400">Team Member</label>
+                    <label className="text-xs text-slate-400">Team Member</label>
                     <select
                       value={newHoursEntry.user_id}
                       onChange={(e) => setNewHoursEntry({ ...newHoursEntry, user_id: e.target.value })}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                     >
                       <option value="">Select Worker...</option>
                       {getAvailableWorkers().map(worker => (
@@ -1542,57 +1542,57 @@ const sendAssignmentNotifications = async () => {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">Work Date</label>
+                    <label className="text-xs text-slate-400">Work Date</label>
                     <input
                       type="date"
                       value={newHoursEntry.work_date}
                       onChange={(e) => setNewHoursEntry({ ...newHoursEntry, work_date: e.target.value })}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
-                    <label className="text-xs text-gray-400">RT Hours</label>
+                    <label className="text-xs text-slate-400">RT Hours</label>
                     <input
                       type="number"
                       step="0.5"
                       value={newHoursEntry.hours_regular}
                       onChange={(e) => setNewHoursEntry({ ...newHoursEntry, hours_regular: e.target.value })}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                       placeholder="0"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">OT Hours</label>
+                    <label className="text-xs text-slate-400">OT Hours</label>
                     <input
                       type="number"
                       step="0.5"
                       value={newHoursEntry.hours_overtime}
                       onChange={(e) => setNewHoursEntry({ ...newHoursEntry, hours_overtime: e.target.value })}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                       placeholder="0"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400">Miles</label>
+                    <label className="text-xs text-slate-400">Miles</label>
                     <input
                       type="number"
                       step="0.1"
                       value={newHoursEntry.miles}
                       onChange={(e) => setNewHoursEntry({ ...newHoursEntry, miles: e.target.value })}
-                      className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                      className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                       placeholder="0"
                     />
                   </div>
                 </div>
                 <div className="mb-3">
-                  <label className="text-xs text-gray-400">Notes (optional)</label>
+                  <label className="text-xs text-slate-400">Notes (optional)</label>
                   <input
                     type="text"
                     value={newHoursEntry.notes}
                     onChange={(e) => setNewHoursEntry({ ...newHoursEntry, notes: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded mt-1"
+                    className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg mt-1 focus:outline-none focus:border-blue-500/60"
                     placeholder="Add notes..."
                   />
                 </div>
@@ -1600,13 +1600,13 @@ const sendAssignmentNotifications = async () => {
                   <button
                     onClick={handleAddHoursEntry}
                     disabled={savingHours}
-                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold disabled:bg-gray-500"
+                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold disabled:bg-[#3d3d5c]"
                   >
                     {savingHours ? 'Saving...' : '✓ Add Entry'}
                   </button>
                   <button
                     onClick={() => setShowAddHoursForm(false)}
-                    className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded font-semibold"
+                    className="bg-[#3d3d5c] hover:bg-[#2d2d44] px-4 py-2 rounded font-semibold"
                   >
                     Cancel
                   </button>
@@ -1615,25 +1615,25 @@ const sendAssignmentNotifications = async () => {
             )}
 
             {loadingHours ? (
-              <div className="text-center py-2 text-gray-400 text-xs">Loading...</div>
+              <div className="text-center py-4 text-slate-600 text-xs">Loading...</div>
             ) : dailyHoursLog.length === 0 ? (
-              <div className="text-center py-2 text-gray-500 text-xs">
+              <div className="text-center py-4 text-slate-600 text-xs">
                 No hours logged yet
               </div>
             ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto">
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {dailyHoursLog.map((entry) => {
                   // FIXED: Use log_id as the unique identifier
                   const entryId = entry.log_id || entry.id;
                   
                   return (
-                    <div key={entryId} className="bg-gray-600 rounded-lg p-3">
+                    <div key={entryId} className="bg-[#1e1e2e] border border-[#2d2d44] rounded-lg p-3">
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <span className="font-semibold text-white">
                             {entry.user?.first_name} {entry.user?.last_name}
                           </span>
-                          <span className="text-gray-400 text-sm ml-2">
+                          <span className="text-slate-400 text-sm ml-2">
                             {/* FIXED: Use parseLocalDate to prevent timezone shift */}
                             {parseLocalDate(entry.work_date).toLocaleDateString('en-US', { 
                               weekday: 'short', 
@@ -1660,7 +1660,7 @@ const sendAssignmentNotifications = async () => {
                       {/* Editable Fields - FIXED: Each entry uses its own log_id for state */}
                       <div className="grid grid-cols-3 gap-3">
                         <div>
-                          <label className="text-xs text-gray-400">RT Hours</label>
+                          <label className="text-xs text-slate-400">RT Hours</label>
                           <input
                             type="number"
                             step="0.5"
@@ -1668,11 +1668,11 @@ const sendAssignmentNotifications = async () => {
                             onChange={(e) => handleHoursFieldChange(entryId, 'hours_regular', e.target.value)}
                             onBlur={(e) => handleUpdateDailyHours(entryId, 'hours_regular', parseFloat(e.target.value) || 0)}
                             disabled={savingHours}
-                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-2 py-1 rounded-lg mt-1 text-sm focus:outline-none focus:border-blue-500/60"
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-400">OT Hours</label>
+                          <label className="text-xs text-slate-400">OT Hours</label>
                           <input
                             type="number"
                             step="0.5"
@@ -1680,11 +1680,11 @@ const sendAssignmentNotifications = async () => {
                             onChange={(e) => handleHoursFieldChange(entryId, 'hours_overtime', e.target.value)}
                             onBlur={(e) => handleUpdateDailyHours(entryId, 'hours_overtime', parseFloat(e.target.value) || 0)}
                             disabled={savingHours}
-                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-2 py-1 rounded-lg mt-1 text-sm focus:outline-none focus:border-blue-500/60"
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-gray-400">Miles</label>
+                          <label className="text-xs text-slate-400">Miles</label>
                           <input
                             type="number"
                             step="0.1"
@@ -1692,18 +1692,18 @@ const sendAssignmentNotifications = async () => {
                             onChange={(e) => handleHoursFieldChange(entryId, 'miles', e.target.value)}
                             onBlur={(e) => handleUpdateDailyHours(entryId, 'miles', parseFloat(e.target.value) || 0)}
                             disabled={savingHours}
-                            className="w-full bg-gray-700 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-2 py-1 rounded-lg mt-1 text-sm focus:outline-none focus:border-blue-500/60"
                           />
                         </div>
                       </div>
 
                       {/* Labor Cost Display */}
                       <div className="mt-2 flex justify-between text-xs">
-                        <span className="text-gray-400">
+                        <span className="text-slate-400">
                           Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
                         </span>
                         {entry.notes && !entry.notes.includes('[MIGRATED]') && !entry.notes.includes('[Added by Admin]') && (
-                          <span className="text-gray-400">📝 {entry.notes}</span>
+                          <span className="text-slate-400">📝 {entry.notes}</span>
                         )}
                       </div>
                     </div>
@@ -1714,9 +1714,9 @@ const sendAssignmentNotifications = async () => {
           </div>
 
           {/* NTE INCREASES SECTION - Compact */}
-          <div className="bg-yellow-900 rounded-lg p-2 md:p-4">
+          <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 md:p-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-sm md:text-base text-yellow-300">💰 NTE Increase Requests</h3>
+              <h3 className="font-bold text-sm text-yellow-300">💰 NTE Increase Requests</h3>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowNTEModal(true)}
@@ -1734,15 +1734,15 @@ const sendAssignmentNotifications = async () => {
             </div>
 
             {loadingNteIncreases ? (
-              <div className="text-center py-2 text-gray-400 text-xs">Loading...</div>
+              <div className="text-center py-4 text-slate-600 text-xs">Loading...</div>
             ) : nteIncreases.length === 0 ? (
-              <div className="text-center py-2 text-gray-400 text-xs">
+              <div className="text-center py-4 text-slate-600 text-xs">
                 No NTE increase requests
               </div>
             ) : (
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {nteIncreases.map((quote) => (
-                  <div key={quote.quote_id} className="bg-gray-700 rounded-lg p-4">
+                  <div key={quote.quote_id} className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
                     {/* Header */}
                     <div className="flex justify-between items-start mb-3">
                       <div>
@@ -1753,7 +1753,7 @@ const sendAssignmentNotifications = async () => {
                         }`}>
                           {quote.is_verbal_nte ? '📞 Verbal NTE' : '📄 Written NTE'}
                         </span>
-                        <span className="text-gray-400 text-sm">
+                        <span className="text-slate-400 text-sm">
                           {new Date(quote.created_at).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -1790,7 +1790,7 @@ const sendAssignmentNotifications = async () => {
                     {/* Verbal Approval Info */}
                     {quote.is_verbal_nte && (
                       <div className="mb-3">
-                        <label className="text-xs text-gray-400">Approved By:</label>
+                        <label className="text-xs text-slate-400">Approved By:</label>
                         {editingNTE === quote.quote_id ? (
                           <input
                             type="text"
@@ -1802,7 +1802,7 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { verbal_approved_by: e.target.value })}
-                            className="w-full bg-gray-600 text-white px-3 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-3 py-1 rounded mt-1 text-sm"
                           />
                         ) : (
                           <p className="text-yellow-300">{quote.verbal_approved_by || 'Not specified'}</p>
@@ -1813,7 +1813,7 @@ const sendAssignmentNotifications = async () => {
                     {/* Description */}
                     {(quote.description || editingNTE === quote.quote_id) && (
                       <div className="mb-3">
-                        <label className="text-xs text-gray-400">Description:</label>
+                        <label className="text-xs text-slate-400">Description:</label>
                         {editingNTE === quote.quote_id ? (
                           <textarea
                             value={quote.description || ''}
@@ -1824,11 +1824,11 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { description: e.target.value })}
-                            className="w-full bg-gray-600 text-white px-3 py-2 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded mt-1 text-sm"
                             rows="2"
                           />
                         ) : (
-                          <p className="text-gray-300 text-sm">{quote.description}</p>
+                          <p className="text-slate-300 text-sm">{quote.description}</p>
                         )}
                       </div>
                     )}
@@ -1836,7 +1836,7 @@ const sendAssignmentNotifications = async () => {
                     {/* Cost Fields */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                       <div>
-                        <label className="text-xs text-gray-400">Labor Total</label>
+                        <label className="text-xs text-slate-400">Labor Total</label>
                         {editingNTE === quote.quote_id ? (
                           <input
                             type="number"
@@ -1849,14 +1849,14 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { labor_total: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-2 py-1 rounded mt-1 text-sm"
                           />
                         ) : (
                           <p className="text-white font-semibold">${(quote.labor_total || 0).toFixed(2)}</p>
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Materials (w/ markup)</label>
+                        <label className="text-xs text-slate-400">Materials (w/ markup)</label>
                         {editingNTE === quote.quote_id ? (
                           <input
                             type="number"
@@ -1869,14 +1869,14 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { materials_with_markup: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-2 py-1 rounded mt-1 text-sm"
                           />
                         ) : (
                           <p className="text-white font-semibold">${(quote.materials_with_markup || 0).toFixed(2)}</p>
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Equipment (w/ markup)</label>
+                        <label className="text-xs text-slate-400">Equipment (w/ markup)</label>
                         {editingNTE === quote.quote_id ? (
                           <input
                             type="number"
@@ -1889,14 +1889,14 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { equipment_with_markup: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-2 py-1 rounded mt-1 text-sm"
                           />
                         ) : (
                           <p className="text-white font-semibold">${(quote.equipment_with_markup || 0).toFixed(2)}</p>
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Mileage</label>
+                        <label className="text-xs text-slate-400">Mileage</label>
                         {editingNTE === quote.quote_id ? (
                           <input
                             type="number"
@@ -1909,7 +1909,7 @@ const sendAssignmentNotifications = async () => {
                               setNteIncreases(updated);
                             }}
                             onBlur={(e) => handleUpdateNTEIncrease(quote.quote_id, { mileage_total: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-gray-600 text-white px-2 py-1 rounded mt-1 text-sm"
+                            className="w-full bg-[#2d2d44] text-white px-2 py-1 rounded mt-1 text-sm"
                           />
                         ) : (
                           <p className="text-white font-semibold">${(quote.mileage_total || 0).toFixed(2)}</p>
@@ -1976,10 +1976,10 @@ const sendAssignmentNotifications = async () => {
                       }
                       
                       return (
-                        <div className="border-t border-gray-600 pt-3 mt-3 space-y-2">
+                        <div className="border-t border-[#2d2d44] pt-3 mt-3 space-y-2">
                           {/* Snapshot indicator */}
                           {hasSnapshot && (
-                            <div className="text-xs text-gray-500 text-center mb-2">
+                            <div className="text-xs text-slate-500 text-center mb-2">
                               📸 Snapshot from {new Date(quote.created_at).toLocaleDateString()}
                             </div>
                           )}
@@ -1999,16 +1999,16 @@ const sendAssignmentNotifications = async () => {
                           </div>
                           
                           {/* Divider */}
-                          <div className="border-t border-gray-500 my-2"></div>
+                          <div className="border-t border-[#3d3d5c] my-2"></div>
                           
                           {/* New NTE Needed */}
                           <div className="flex justify-between items-center text-lg">
-                            <span className="text-green-400 font-bold">NEW NTE:</span>
-                            <span className="text-green-400 font-bold">${newNTENeeded.toFixed(2)}</span>
+                            <span className="text-emerald-400 font-bold">NEW NTE:</span>
+                            <span className="text-emerald-400 font-bold">${newNTENeeded.toFixed(2)}</span>
                           </div>
                           
                           {/* Work Order's Current NTE for reference */}
-                          <div className="flex justify-between items-center text-xs text-gray-500">
+                          <div className="flex justify-between items-center text-xs text-slate-500">
                             <span>Work Order NTE:</span>
                             <span>${(selectedWO.nte || 0).toFixed(2)}</span>
                           </div>
@@ -2019,7 +2019,7 @@ const sendAssignmentNotifications = async () => {
 
 
                     {/* Creator Info */}
-                    <div className="text-xs text-gray-400 mt-3">
+                    <div className="text-xs text-slate-400 mt-3">
                       Created by: {quote.creator?.first_name} {quote.creator?.last_name}
                     </div>
                   </div>
@@ -2029,9 +2029,9 @@ const sendAssignmentNotifications = async () => {
           </div>
 
           {/* Team Members - Compact */}
-          <div className="bg-gray-700 rounded-lg p-2 md:p-4">
+          <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-3 md:p-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-sm md:text-base">👥 Team Members</h3>
+              <h3 className="font-bold text-sm text-slate-200">👥 Team Members</h3>
               <button
                 onClick={() => setShowTeamModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 px-2 py-0.5 rounded text-xs font-semibold"
@@ -2042,18 +2042,18 @@ const sendAssignmentNotifications = async () => {
 
             <div className="space-y-2">
               {(!selectedWO.teamMembers || selectedWO.teamMembers.length === 0) ? (
-                <div className="text-center text-gray-500 py-2 text-xs">
+                <div className="text-center text-slate-500 py-2 text-xs">
                   No team members assigned
                 </div>
               ) : (
                 selectedWO.teamMembers.map(member => (
-                  <div key={member.assignment_id} className="bg-gray-600 rounded-lg p-3">
+                  <div key={member.assignment_id} className="bg-[#1e1e2e] border border-[#2d2d44] rounded-lg p-3">
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-bold">
                           {member.user?.first_name} {member.user?.last_name}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-slate-400">
                           {member.user?.email} • {member.user?.role?.replace('_', ' ').toUpperCase()}
                         </div>
                       </div>
@@ -2071,96 +2071,96 @@ const sendAssignmentNotifications = async () => {
           </div>
 
           {/* Materials & Equipment */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-lg">🛠️ Materials & Equipment</h3>
+          <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
+            <h3 className="font-bold mb-3 text-slate-200">🛠️ Materials & Equipment</h3>
             
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Material Cost ($)</label>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Material Cost ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.material_cost || 0}
                   onChange={(e) => setSelectedWO({ ...selectedWO, material_cost: parseFloat(e.target.value) || 0 })}
                   onBlur={() => handleUpdateField('material_cost', selectedWO.material_cost)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Equipment Cost ($)</label>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Equipment Cost ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.emf_equipment_cost || 0}
                   onChange={(e) => setSelectedWO({ ...selectedWO, emf_equipment_cost: parseFloat(e.target.value) || 0 })}
                   onBlur={() => handleUpdateField('emf_equipment_cost', selectedWO.emf_equipment_cost)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Trailer Cost ($)</label>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Trailer Cost ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.trailer_cost || 0}
                   onChange={(e) => setSelectedWO({ ...selectedWO, trailer_cost: parseFloat(e.target.value) || 0 })}
                   onBlur={() => handleUpdateField('trailer_cost', selectedWO.trailer_cost)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Rental Cost ($)</label>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Rental Cost ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.rental_cost || 0}
                   onChange={(e) => setSelectedWO({ ...selectedWO, rental_cost: parseFloat(e.target.value) || 0 })}
                   onBlur={() => handleUpdateField('rental_cost', selectedWO.rental_cost)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
             </div>
           </div>
 
           {/* Budget & Cost Summary */}
-          <div className="bg-gray-700 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-lg">💰 Budget & Cost Summary</h3>
+          <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
+            <h3 className="font-bold mb-3 text-slate-200">💰 Budget & Cost Summary</h3>
 
             {(costSummary.hasLegacy && costSummary.hasDaily) && (
-              <div className="bg-blue-900 text-blue-200 rounded-lg p-2 mb-3 text-sm text-center">
+              <div className="bg-blue-500/10 border border-blue-500/20 text-blue-200 rounded-lg p-2 mb-3 text-sm text-center">
                 ℹ️ Includes legacy hours + daily log entries
               </div>
             )}
             
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">NTE (Not To Exceed)</label>
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">NTE (Not To Exceed)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={selectedWO.nte || ''}
                   onChange={(e) => setSelectedWO({ ...selectedWO, nte: parseFloat(e.target.value) || 0 })}
                   onBlur={() => handleUpdateField('nte', selectedWO.nte)}
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Estimated Invoice Total</label>
-                <div className="bg-gray-600 px-4 py-2 rounded-lg font-bold text-2xl text-green-400">
+                <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Estimated Invoice Total</label>
+                <div className="bg-[#0a0a0f] border border-emerald-500/30 px-4 py-2 rounded-lg font-bold text-2xl text-emerald-400">
                   ${costSummary.grandTotal.toFixed(2)}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-slate-400 mt-1">
                   Includes all markups & admin hours
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-900 text-blue-100 rounded-lg p-3 mb-3">
+            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-100 rounded-xl p-3 mb-3">
               <div className="font-bold mb-2">LABOR (with 2 Admin Hours)</div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
@@ -2175,7 +2175,7 @@ const sendAssignmentNotifications = async () => {
                   <span>+ Admin Hours</span>
                   <span>2 hrs × $64 = $128.00</span>
                 </div>
-                <div className="border-t border-blue-700 pt-1 mt-1 flex justify-between font-bold">
+                <div className="border-t border-blue-500/30 pt-1 mt-1 flex justify-between font-bold">
                   <span>Total Labor:</span>
                   <span>${costSummary.laborCost.toFixed(2)}</span>
                 </div>
@@ -2184,17 +2184,17 @@ const sendAssignmentNotifications = async () => {
 
             {/* Materials Section - Split EMF and Tech */}
             <div className="mb-3">
-              <div className="text-sm font-semibold text-gray-300 mb-2">📦 Materials</div>
+              <div className="text-sm font-semibold text-slate-300 mb-2">📦 Materials</div>
               
               {/* EMF Material */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-400 ml-2">EMF Material (company):</span>
+                  <span className="text-slate-400 ml-2">EMF Material (company):</span>
                   <span>${costSummary.emfMaterialBase.toFixed(2)}</span>
                 </div>
                 {costSummary.emfMaterialBase > 0 && (
                   <div className="flex justify-between text-yellow-300">
-                    <span className="text-gray-400">+ 25% Markup:</span>
+                    <span className="text-slate-400">+ 25% Markup:</span>
                     <span>= ${costSummary.emfMaterialWithMarkup.toFixed(2)}</span>
                   </div>
                 )}
@@ -2208,7 +2208,7 @@ const sendAssignmentNotifications = async () => {
                 </div>
                 {costSummary.techMaterialBase > 0 && (
                   <div className="flex justify-between text-yellow-300">
-                    <span className="text-gray-400">+ 25% Markup:</span>
+                    <span className="text-slate-400">+ 25% Markup:</span>
                     <span>= ${costSummary.techMaterialWithMarkup.toFixed(2)}</span>
                   </div>
                 )}
@@ -2216,9 +2216,9 @@ const sendAssignmentNotifications = async () => {
               
               {/* Total Material */}
               {(costSummary.emfMaterialBase > 0 || costSummary.techMaterialBase > 0) && (
-                <div className="grid grid-cols-2 gap-3 text-sm border-t border-gray-600 pt-1 mt-1">
+                <div className="grid grid-cols-2 gap-3 text-sm border-t border-[#2d2d44] pt-1 mt-1">
                   <div className="flex justify-between font-semibold">
-                    <span className="text-gray-300 ml-2">Total Material (w/ markup):</span>
+                    <span className="text-slate-300 ml-2">Total Material (w/ markup):</span>
                     <span>${costSummary.totalMaterialWithMarkup.toFixed(2)}</span>
                   </div>
                   <div></div>
@@ -2228,53 +2228,53 @@ const sendAssignmentNotifications = async () => {
 
             <div className="grid grid-cols-2 gap-3 text-sm mb-3">
               <div className="flex justify-between">
-                <span className="text-gray-400">Equipment:</span>
+                <span className="text-slate-400">Equipment:</span>
                 <span>${costSummary.equipmentBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-yellow-300">
-                <span className="text-gray-400">+ 25% Markup:</span>
+                <span className="text-slate-400">+ 25% Markup:</span>
                 <span>= ${costSummary.equipmentWithMarkup.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between">
-                <span className="text-gray-400">Trailer:</span>
+                <span className="text-slate-400">Trailer:</span>
                 <span>${costSummary.trailerBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-yellow-300">
-                <span className="text-gray-400">+ 25% Markup:</span>
+                <span className="text-slate-400">+ 25% Markup:</span>
                 <span>= ${costSummary.trailerWithMarkup.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between">
-                <span className="text-gray-400">Rental:</span>
+                <span className="text-slate-400">Rental:</span>
                 <span>${costSummary.rentalBase.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-yellow-300">
-                <span className="text-gray-400">+ 25% Markup:</span>
+                <span className="text-slate-400">+ 25% Markup:</span>
                 <span>= ${costSummary.rentalWithMarkup.toFixed(2)}</span>
               </div>
               
               <div className="flex justify-between col-span-2">
-                <span className="text-gray-400">Total Mileage:</span>
+                <span className="text-slate-400">Total Mileage:</span>
                 <span>{costSummary.totalMiles.toFixed(1)} mi × $1.00 = ${costSummary.mileageCost.toFixed(2)}</span>
               </div>
             </div>
 
-            <div className="border-t border-gray-600 pt-3 mt-3">
+            <div className="border-t border-[#2d2d44]/60 pt-3 mt-3">
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-400">NTE Budget:</span>
+                <span className="text-slate-400">NTE Budget:</span>
                 <span>${(selectedWO.nte || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Remaining:</span>
-                <span className={costSummary.isOverBudget ? 'text-red-400 font-bold' : 'text-green-400'}>
+                <span className="text-slate-400">Remaining:</span>
+                <span className={costSummary.isOverBudget ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                   ${costSummary.remaining.toFixed(2)}
                 </span>
               </div>
             </div>
 
             {costSummary.isOverBudget && (
-              <div className="bg-red-900 text-red-200 p-3 rounded-lg mt-3 text-sm">
+              <div className="bg-red-500/10 border border-red-500/20 text-red-300 p-3 rounded-lg mt-3 text-sm">
                 ⚠️ Over budget by ${Math.abs(costSummary.remaining).toFixed(2)}
               </div>
             )}
@@ -2282,19 +2282,19 @@ const sendAssignmentNotifications = async () => {
 
           {/* Comments */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Comments / Notes</label>
+            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Comments / Notes</label>
             <textarea
               value={selectedWO.comments || ''}
               onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
               onBlur={() => handleUpdateField('comments', selectedWO.comments)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               rows="4"
               placeholder="Add any notes or comments..."
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-col gap-3 pt-4 border-t border-gray-700">
+          <div className="flex flex-col gap-3 pt-4 border-t border-[#2d2d44]">
             {selectedWO.status === 'completed' && !selectedWO.acknowledged && !selectedWO.is_locked && (
               <button
                 onClick={handleAcknowledge}
@@ -2305,7 +2305,7 @@ const sendAssignmentNotifications = async () => {
             )}
 
             {selectedWO.acknowledged && !selectedWO.is_locked && (
-              <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
+              <div className="bg-blue-500/10 border border-blue-500/20 text-blue-200 p-4 rounded-xl text-center">
                 <div className="font-bold">✅ Acknowledged - Ready for Invoice</div>
                 <div className="text-sm mt-1">
                   Acknowledged on {new Date(selectedWO.acknowledged_at).toLocaleString()}
@@ -2324,7 +2324,7 @@ const sendAssignmentNotifications = async () => {
 
             {selectedWO.assigned_to_field && (
               <div className="space-y-2">
-                <div className="bg-blue-900 text-blue-200 p-4 rounded-lg text-center">
+                <div className="bg-blue-500/10 border border-blue-500/20 text-blue-200 p-4 rounded-xl text-center">
                   <div className="font-bold">📱 Assigned to Field Workers</div>
                   <div className="text-sm mt-1">
                     {selectedWO.assigned_to_field_at && (
@@ -2345,14 +2345,14 @@ const sendAssignmentNotifications = async () => {
               <button
                 onClick={handleGenerateInvoice}
                 disabled={generatingInvoice}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-[#2d2d44] disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
               >
                 {generatingInvoice ? '⏳ Generating...' : '📄 Generate Invoice'}
               </button>
             )}
 
             {selectedWO.is_locked && selectedWO.acknowledged && (
-              <div className="bg-purple-900 text-purple-200 p-4 rounded-lg text-center">
+              <div className="bg-purple-500/10 border border-purple-500/20 text-purple-200 p-4 rounded-xl text-center">
                 <div className="font-bold">🔒 Invoice Generated</div>
                 <div className="text-sm mt-1">
                   <button 

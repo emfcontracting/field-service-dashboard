@@ -1,55 +1,83 @@
 // app/api/admin/wages/route.js
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Admin-only API: GET and POST/PUT user wages
-// Triple security: Supabase RLS + server-side role check + anon key isolation
-// ─────────────────────────────────────────────────────────────────────────────
+// Uses the user's own JWT so RLS handles auth (no service role key needed)
+// -----------------------------------------------------------------------------
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// Use service role for server-side ops — never exposed to client
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-async function verifyAdmin(request) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) return null;
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  const { data: userData } = await supabaseAdmin
-    .from('users')
-    .select('role, is_active')
-    .eq('auth_id', user.id)
-    .single();
-  if (!userData || !userData.is_active || userData.role !== 'admin') return null;
-  return user;
+function getSupabaseForUser(token) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth:   { persistSession: false },
+    }
+  );
 }
 
-// GET /api/admin/wages — fetch all wages (or ?user_id=X for one)
+async function verifyAdmin(request) {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) return { user: null, supabase: null, error: 'No auth header' };
+
+    const token = authHeader.replace('Bearer ', '');
+    const supabase = getSupabaseForUser(token);
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { user: null, supabase: null, error: authError?.message || 'No user' };
+
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, is_active')
+      .eq('auth_id', user.id)
+      .single();
+
+    if (userError || !userData) return { user: null, supabase: null, error: userError?.message || 'User not found' };
+    if (!userData.is_active)    return { user: null, supabase: null, error: 'User inactive' };
+    if (userData.role !== 'admin') return { user: null, supabase: null, error: 'Not admin' };
+
+    return { user, supabase, error: null };
+  } catch (err) {
+    return { user: null, supabase: null, error: err.message };
+  }
+}
+
+// GET /api/admin/wages
 export async function GET(request) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { user, supabase, error } = await verifyAdmin(request);
+  if (!user) {
+    console.error('[wages GET] Auth failed:', error);
+    return NextResponse.json({ error: `Forbidden: ${error}` }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('user_id');
 
-  let query = supabaseAdmin
+  let query = supabase
     .from('user_wages')
-    .select(`*, user:users(user_id, first_name, last_name, role, email)`);
+    .select('*, user:users(user_id, first_name, last_name, role, email)');
 
   if (userId) query = query.eq('user_id', userId);
 
-  const { data, error } = await query.order('created_at', { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data });
+  const { data, error: dbError } = await query.order('created_at', { ascending: false });
+
+  if (dbError) {
+    console.error('[wages GET] DB error:', dbError);
+    return NextResponse.json({ error: dbError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ data: data || [] });
 }
 
 // POST /api/admin/wages — upsert wage for a user
 export async function POST(request) {
-  const admin = await verifyAdmin(request);
-  if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { user, supabase, error } = await verifyAdmin(request);
+  if (!user) {
+    console.error('[wages POST] Auth failed:', error);
+    return NextResponse.json({ error: `Forbidden: ${error}` }, { status: 403 });
+  }
 
   const body = await request.json();
   const { user_id, hourly_rate_regular, hourly_rate_overtime, mileage_rate, notes } = body;
@@ -58,19 +86,23 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error: dbError } = await supabase
     .from('user_wages')
     .upsert({
       user_id,
-      hourly_rate_regular: parseFloat(hourly_rate_regular),
+      hourly_rate_regular:  parseFloat(hourly_rate_regular),
       hourly_rate_overtime: parseFloat(hourly_rate_overtime),
-      mileage_rate: parseFloat(mileage_rate ?? 0.55),
-      notes: notes || null,
-      effective_date: new Date().toISOString().split('T')[0],
+      mileage_rate:         parseFloat(mileage_rate ?? 0.55),
+      notes:                notes || null,
+      effective_date:       new Date().toISOString().split('T')[0],
     }, { onConflict: 'user_id' })
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (dbError) {
+    console.error('[wages POST] DB error:', dbError);
+    return NextResponse.json({ error: dbError.message }, { status: 500 });
+  }
+
   return NextResponse.json({ data });
 }

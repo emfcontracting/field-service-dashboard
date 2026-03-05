@@ -46,7 +46,7 @@ function calcProfit(wo, wages, hoursMap) {
   const totalOT    = legacyOT + legacyTeamOT + hours.ot;
   const totalMiles = legacyMiles + hours.miles;
 
-  // Revenue (VK)
+  // Sell Price
   const laborRevenue    = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
   const materialBase    = (parseFloat(wo.material_cost) || 0) + hours.techMaterial;
   const materialRevenue = materialBase * MARKUP;
@@ -56,7 +56,7 @@ function calcProfit(wo, wages, hoursMap) {
   const mileageRevenue   = totalMiles * 1.0;
   const totalRevenue     = laborRevenue + materialRevenue + equipmentRevenue + trailerRevenue + rentalRevenue + mileageRevenue;
 
-  // Cost (EK)
+  // Cost Price
   let totalLaborCost = 0;
   Object.entries(hours.byUser).forEach(([userId, h]) => {
     const wage = wages[userId] || { rt: 0, ot: 0 };
@@ -207,7 +207,7 @@ export default function ProfitabilityView({ currentUser }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-100">💰 Profitability Report</h1>
-          <p className="text-slate-500 text-sm mt-0.5">EK vs VK — Admin view only</p>
+          <p className="text-slate-500 text-sm mt-0.5">Cost vs Sell Price — Admin view only</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {RANGES.map(r => (
@@ -225,8 +225,8 @@ export default function ProfitabilityView({ currentUser }) {
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total Revenue (VK)', value: fmt(totals.revenue), color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20'    },
-          { label: 'Total Cost (EK)',     value: fmt(totals.cost),    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/20'  },
+          { label: 'Total Sell Price', value: fmt(totals.revenue), color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20'    },
+          { label: 'Total Cost Price',     value: fmt(totals.cost),    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/20'  },
           { label: 'Total Profit',        value: fmt(totals.profit),  color: totals.profit >= 0 ? 'text-emerald-400' : 'text-red-400',
             bg: totals.profit >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20' },
           { label: 'Avg Margin',          value: pct(totals.profit, totals.revenue),
@@ -277,7 +277,7 @@ export default function ProfitabilityView({ currentUser }) {
             <button onClick={() => toggleSort('revenue')} className="text-right hover:text-slate-300 flex items-center justify-end">
               Revenue <SortIcon col="revenue" />
             </button>
-            <span className="text-right">Cost (EK)</span>
+            <span className="text-right">Cost Price</span>
             <button onClick={() => toggleSort('profit')} className="text-right hover:text-slate-300 flex items-center justify-end">
               Profit <SortIcon col="profit" />
             </button>
@@ -337,10 +337,11 @@ export default function ProfitabilityView({ currentUser }) {
 
       {/* ── Legend ── */}
       <div className="text-xs text-slate-600 px-1 space-y-0.5">
-        <div>• <strong className="text-slate-500">Revenue (VK)</strong> = CBRE billing: $64/h RT · $96/h OT · materials+25% · equipment+25%</div>
-        <div>• <strong className="text-slate-500">Cost (EK)</strong> = Real wages (from Users page) + material purchase price</div>
+        <div>• <strong className="text-slate-500">Sell Price</strong> = CBRE billing: $64/h RT · $96/h OT · materials+25% · equipment+25%</div>
+        <div>• <strong className="text-slate-500">Cost Price</strong> = Real wages (from Users page) + material purchase price</div>
         <div>• Labor cost shows $0 if wage not set for that tech — go to Users to set wages</div>
       </div>
     </div>
   );
 }
+

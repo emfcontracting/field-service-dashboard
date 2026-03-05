@@ -381,7 +381,7 @@ export default function UserManagement() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#1e1e2e]">
-                      {['Name', 'Email', 'Phone / Carrier', 'Role', isAdmin ? 'EK Lohn (RT/OT)' : 'Rates (RT/OT)', 'Status', ''].map(h => (
+                      {['Name', 'Email', 'Phone / Carrier', 'Role', isAdmin ? 'Actual Wage (RT/OT)' : 'Rates (RT/OT)', 'Status', ''].map(h => (
                         <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h === '' ? 'text-center' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
@@ -454,7 +454,7 @@ export default function UserManagement() {
                                 {savingWage === user.user_id ? '…' : '💾'}
                               </button>
                               {!wages[user.user_id] && (
-                                <span className="text-yellow-500/70 text-[10px]">⚠ nicht gesetzt</span>
+                                <span className="text-yellow-500/70 text-[10px]">⚠ not set</span>
                               )}
                             </div>
                           ) : (

@@ -118,6 +118,8 @@ export default function UserManagement() {
   const [resetTarget, setResetTarget] = useState(null);   // user being reset inline
   const [resetPw, setResetPw] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState(null);     // error from last attempt
+  const [isPinOnly, setIsPinOnly] = useState(false);      // true when no auth account exists
   const [lookingUpCarrier, setLookingUpCarrier] = useState(false);
   const [carrierLookupResult, setCarrierLookupResult] = useState(null);
 
@@ -254,18 +256,48 @@ export default function UserManagement() {
   }
 
   async function handleInlinePasswordReset() {
-    if (!resetPw || resetPw.length < 6) { alert('Minimum 6 characters'); return; }
-    setResetting(true);
+    if (!resetPw || resetPw.length < 6) { setResetError('Minimum 6 characters'); return; }
+    setResetting(true); setResetError(null); setIsPinOnly(false);
     try {
       const res = await fetch('/api/users/reset-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: resetTarget.user_id, newPassword: resetPw, requestorEmail: currentUser.email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        // Detect PIN-only error specifically
+        if (data.error?.includes('PIN-only') || data.error?.includes('auth account')) {
+          setIsPinOnly(true);
+          setResetError(null);
+        } else {
+          setResetError(data.error);
+        }
+        return;
+      }
+      setResetTarget(null); setResetPw(''); setResetError(null); setIsPinOnly(false);
       alert(`✅ Password reset for ${resetTarget.first_name} ${resetTarget.last_name}`);
-      setResetTarget(null); setResetPw('');
-    } catch (err) { alert('Error: ' + err.message); }
+    } catch (err) { setResetError(err.message); }
+    finally { setResetting(false); }
+  }
+
+  async function handleCreateAuthAccount() {
+    if (!resetPw || resetPw.length < 6) { setResetError('Minimum 6 characters'); return; }
+    setResetting(true); setResetError(null);
+    try {
+      const res = await fetch('/api/users/create-auth-account', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: resetTarget.user_id,
+          email: resetTarget.email,
+          newPassword: resetPw,
+          requestorEmail: currentUser.email,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setResetError(data.error); return; }
+      setResetTarget(null); setResetPw(''); setResetError(null); setIsPinOnly(false);
+      alert(`✅ Auth account created for ${resetTarget.first_name} ${resetTarget.last_name}!\nPassword: ${resetPw}\nThey can now log in with email + password.`);
+    } catch (err) { setResetError(err.message); }
     finally { setResetting(false); }
   }
 
@@ -536,33 +568,89 @@ export default function UserManagement() {
         {resetTarget && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-2xl w-full max-w-md shadow-2xl">
+
+              {/* Header */}
               <div className="border-b border-[#2d2d44] px-6 py-5 flex justify-between items-center">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-100">🔑 Reset Password</h2>
-                  <p className="text-slate-500 text-sm mt-0.5">{resetTarget.first_name} {resetTarget.last_name} &middot; <span className="text-slate-600">{resetTarget.email}</span></p>
+                  <h2 className="text-lg font-bold text-slate-100">
+                    {isPinOnly ? '🔓 PIN-Only User Detected' : '🔑 Reset Password'}
+                  </h2>
+                  <p className="text-slate-500 text-sm mt-0.5">
+                    {resetTarget.first_name} {resetTarget.last_name}
+                    <span className="text-slate-600"> &middot; {resetTarget.email}</span>
+                  </p>
                 </div>
-                <button onClick={() => { setResetTarget(null); setResetPw(''); }}
+                <button onClick={() => { setResetTarget(null); setResetPw(''); setResetError(null); setIsPinOnly(false); }}
                   className="text-slate-500 hover:text-slate-300 text-2xl leading-none transition">×</button>
               </div>
+
               <div className="p-6 space-y-4">
+
+                {/* PIN-only explanation banner */}
+                {isPinOnly && (
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 space-y-1">
+                    <p className="text-orange-300 font-semibold text-sm">⚠️ No email/password account found</p>
+                    <p className="text-slate-400 text-xs">
+                      {resetTarget.first_name} currently logs in with a PIN only.
+                      Click <strong className="text-orange-300">Create Auth Account</strong> below to set up
+                      email + password login for them.
+                    </p>
+                  </div>
+                )}
+
+                {/* Password input */}
                 <div>
-                  <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">New Password</label>
+                  <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">
+                    {isPinOnly ? 'Set Initial Password' : 'New Password'}
+                  </label>
                   <input
                     type="text"
                     value={resetPw}
-                    onChange={e => setResetPw(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleInlinePasswordReset()}
+                    onChange={e => { setResetPw(e.target.value); setResetError(null); }}
+                    onKeyDown={e => e.key === 'Enter' && (isPinOnly ? handleCreateAuthAccount() : handleInlinePasswordReset())}
                     placeholder="Min. 6 characters"
                     className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500/60 transition font-mono"
                     autoFocus
                   />
-                  <p className="text-slate-600 text-xs mt-1.5">The user will use this password to log in.</p>
+                  <p className="text-slate-600 text-xs mt-1.5">
+                    {isPinOnly
+                      ? 'They will use this password + their email to log in.'
+                      : 'The user will use this password to log in.'}
+                  </p>
                 </div>
+
+                {/* Error display */}
+                {resetError && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-300 text-sm">
+                    {resetError}
+                  </div>
+                )}
+
+                {/* Action buttons */}
                 <div className="flex gap-3 pt-1">
-                  <Btn onClick={() => { setResetTarget(null); setResetPw(''); }} variant="default" size="lg" className="flex-1">Cancel</Btn>
-                  <Btn onClick={handleInlinePasswordReset} disabled={resetting || resetPw.length < 6} variant="warning" size="lg" className="flex-1">
-                    {resetting ? 'Resetting…' : 'Set Password'}
+                  <Btn
+                    onClick={() => { setResetTarget(null); setResetPw(''); setResetError(null); setIsPinOnly(false); }}
+                    variant="default" size="lg" className="flex-1"
+                  >
+                    Cancel
                   </Btn>
+                  {isPinOnly ? (
+                    <Btn
+                      onClick={handleCreateAuthAccount}
+                      disabled={resetting || resetPw.length < 6}
+                      variant="primary" size="lg" className="flex-1"
+                    >
+                      {resetting ? 'Creating…' : '✨ Create Auth Account'}
+                    </Btn>
+                  ) : (
+                    <Btn
+                      onClick={handleInlinePasswordReset}
+                      disabled={resetting || resetPw.length < 6}
+                      variant="warning" size="lg" className="flex-1"
+                    >
+                      {resetting ? 'Resetting…' : 'Set Password'}
+                    </Btn>
+                  )}
                 </div>
               </div>
             </div>

@@ -123,11 +123,17 @@ export const Icons = {
 
 // ── Nav config ────────────────────────────────────────────────────────────────
 export const NAV_ITEMS = [
-  { id: 'workorders',    label: 'Work Orders',   Icon: Icons.workorders },
-  { id: 'calendar',      label: 'Calendar',       Icon: Icons.calendar },
-  { id: 'aging',         label: 'Aging',          Icon: Icons.aging },
-  { id: 'missing-hours', label: 'Missing Hours',  Icon: Icons.missingHours, alert: true },
-  { id: 'availability',  label: 'Availability',   Icon: Icons.availability },
+  { id: 'workorders',      label: 'Work Orders',   Icon: Icons.workorders },
+  { id: 'calendar',        label: 'Calendar',       Icon: Icons.calendar },
+  { id: 'aging',           label: 'Aging',          Icon: Icons.aging },
+  { id: 'missing-hours',   label: 'Missing Hours',  Icon: Icons.missingHours, alert: true },
+  { id: 'availability',    label: 'Availability',   Icon: Icons.availability },
+  { id: 'profitability',   label: 'Profitability',  Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  ), adminOnly: true },
 ];
 
 export const QUICK_LINKS = [
@@ -178,7 +184,7 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         {/* Mobile dropdown nav */}
         {mobileNavOpen && (
           <div className="bg-[#0d0d14] border-b border-[#1e1e2e] py-1.5">
-            {NAV_ITEMS.map(({ id, label, Icon, alert }) => {
+            {NAV_ITEMS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ id, label, Icon, alert }) => {
               const isActive = activeView === id;
               return (
                 <button key={id} onClick={() => setActiveView(id)}
@@ -261,7 +267,7 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         {sidebarCollapsed && <div className="h-2" />}
 
         {/* Dashboard nav items */}
-        {NAV_ITEMS.map(({ id, label, Icon, alert }) => {
+        {NAV_ITEMS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ id, label, Icon, alert }) => {
           const isActive = !activeLink && activeView === id;
           const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
             : id === 'aging' ? 'bg-red-500/10 text-red-400'

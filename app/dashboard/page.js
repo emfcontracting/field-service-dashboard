@@ -13,6 +13,7 @@ import ImportModal from '../components/ImportModal';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import { CalendarView } from './components/calendar';
 import { AgingView } from './components/aging';
+import ProfitabilityView from './components/ProfitabilityView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -138,6 +139,8 @@ function DashboardContent() {
         return <MissingHoursView workOrders={workOrders} users={users} supabase={supabase} onSelectWorkOrder={setSelectedWO} refreshWorkOrders={refreshWorkOrders} />;
       case 'availability':
         return <AvailabilityView supabase={supabase} users={users} />;
+      case 'profitability':
+        return <ProfitabilityView currentUser={currentUser} />;
       case 'workorders':
       default:
         return (
@@ -178,7 +181,7 @@ function DashboardContent() {
 
       {/* Modals */}
       {selectedWO && (
-        <WorkOrderDetailModal workOrder={selectedWO} users={users} supabase={supabase} onClose={() => setSelectedWO(null)} refreshWorkOrders={refreshWorkOrders} />
+        <WorkOrderDetailModal workOrder={selectedWO} users={users} supabase={supabase} currentUser={currentUser} onClose={() => setSelectedWO(null)} refreshWorkOrders={refreshWorkOrders} />
       )}
       {showNewWOModal && (
         <NewWorkOrderModal users={users} supabase={supabase} onClose={() => setShowNewWOModal(false)} refreshWorkOrders={refreshWorkOrders} />

@@ -119,6 +119,12 @@ export default function UserManagement() {
   const [carrierLookupResult, setCarrierLookupResult] = useState(null);
 
   const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
+  const isAdmin = currentUser?.role === 'admin';
+
+  // ── Wages state (admin-only) ──────────────────────────────────────────────
+  const [wages, setWages] = useState({});       // { user_id: { rt, ot } }
+  const [savingWage, setSavingWage] = useState(null); // user_id being saved
+  const [wageForm, setWageForm] = useState({});  // { user_id: { rt, ot } } edit buffer
 
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', email: '', phone: '', sms_carrier: '',
@@ -126,6 +132,7 @@ export default function UserManagement() {
   });
 
   useEffect(() => { checkAuth(); fetchUsers(); }, []);
+  useEffect(() => { if (isAdmin) fetchWages(); }, [isAdmin]);
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -141,6 +148,43 @@ export default function UserManagement() {
       setUsers(data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  }
+
+  async function fetchWages() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/admin/wages', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const lookup = {};
+      const formBuf = {};
+      (json.data || []).forEach(w => {
+        lookup[w.user_id]  = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0 };
+        formBuf[w.user_id] = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0 };
+      });
+      setWages(lookup);
+      setWageForm(formBuf);
+    } catch (err) { console.error('Wage fetch error:', err); }
+  }
+
+  async function saveWage(userId) {
+    try {
+      setSavingWage(userId);
+      const { data: { session } } = await supabase.auth.getSession();
+      const form = wageForm[userId] || { rt: 0, ot: 0 };
+      const res = await fetch('/api/admin/wages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ user_id: userId, hourly_rate_regular: form.rt, hourly_rate_overtime: form.ot }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setWages(prev => ({ ...prev, [userId]: { rt: form.rt, ot: form.ot } }));
+      alert('✅ Wage saved!');
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setSavingWage(null); }
   }
 
   const baseForm = { first_name:'', last_name:'', email:'', phone:'', sms_carrier:'', role:'lead_tech', regular_rate:64, overtime_rate:96, is_active:true };
@@ -337,7 +381,7 @@ export default function UserManagement() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#1e1e2e]">
-                      {['Name', 'Email', 'Phone / Carrier', 'Role', 'Rates (RT/OT)', 'Status', ''].map(h => (
+                      {['Name', 'Email', 'Phone / Carrier', 'Role', isAdmin ? 'EK Lohn (RT/OT)' : 'Rates (RT/OT)', 'Status', ''].map(h => (
                         <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h === '' ? 'text-center' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
@@ -383,9 +427,40 @@ export default function UserManagement() {
                         {/* Role */}
                         <td className="px-4 py-3"><RoleBadge role={user.role} /></td>
 
-                        {/* Rates */}
+                        {/* Rates / Wages */}
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs text-slate-400">${user.regular_rate||64} / ${user.overtime_rate||96}</span>
+                          {isAdmin ? (
+                            // Admin: show EK wage (actual) with inline edit
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number" step="0.50" placeholder="RT"
+                                value={wageForm[user.user_id]?.rt ?? ''}
+                                onChange={e => setWageForm(prev => ({ ...prev, [user.user_id]: { ...prev[user.user_id], rt: parseFloat(e.target.value) || 0 } }))}
+                                className="w-16 bg-[#0a0a0f] border border-[#2d2d44] text-emerald-400 rounded px-1.5 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500/60"
+                              />
+                              <span className="text-slate-600 text-xs">/</span>
+                              <input
+                                type="number" step="0.50" placeholder="OT"
+                                value={wageForm[user.user_id]?.ot ?? ''}
+                                onChange={e => setWageForm(prev => ({ ...prev, [user.user_id]: { ...prev[user.user_id], ot: parseFloat(e.target.value) || 0 } }))}
+                                className="w-16 bg-[#0a0a0f] border border-[#2d2d44] text-emerald-400 rounded px-1.5 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500/60"
+                              />
+                              <button
+                                onClick={() => saveWage(user.user_id)}
+                                disabled={savingWage === user.user_id}
+                                className="text-emerald-500 hover:text-emerald-400 disabled:opacity-40 text-xs px-1.5 py-1 rounded hover:bg-emerald-500/10 transition"
+                                title="Save wages"
+                              >
+                                {savingWage === user.user_id ? '…' : '💾'}
+                              </button>
+                              {!wages[user.user_id] && (
+                                <span className="text-yellow-500/70 text-[10px]">⚠ nicht gesetzt</span>
+                              )}
+                            </div>
+                          ) : (
+                            // Non-admin: billing rates only
+                            <span className="font-mono text-xs text-slate-400">${user.regular_rate||64} / ${user.overtime_rate||96}</span>
+                          )}
                         </td>
 
                         {/* Status */}

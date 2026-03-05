@@ -14,6 +14,7 @@ import {
   updateTeamMember
 } from '../utils/dataFetchers';
 import { calculateInvoiceTotal } from '../utils/calculations';
+import ProfitabilityTab from './ProfitabilityTab';
 import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { 
@@ -28,7 +29,8 @@ import {
 export default function WorkOrderDetailModal({ 
   workOrder, 
   users, 
-  supabase, 
+  supabase,
+  currentUser,
   onClose, 
   refreshWorkOrders 
 }) {
@@ -57,7 +59,9 @@ export default function WorkOrderDetailModal({
   const [editingNTE, setEditingNTE] = useState(null); // Track which NTE is being edited
   const [savingNTE, setSavingNTE] = useState(false);
   const [showNTEModal, setShowNTEModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
   const adminPassword = 'admin123';
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     checkCanGenerateInvoice();
@@ -1231,8 +1235,44 @@ const sendAssignmentNotifications = async () => {
           </div>
         </div>
 
+        {/* ── Tabs (admin only gets Profitability tab) ── */}
+        <div className="flex border-b border-gray-700 px-6">
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
+              activeTab === 'details'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}>
+            📋 Details
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('profitability')}
+              className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
+                activeTab === 'profitability'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}>
+              💰 Profitability
+            </button>
+          )}
+        </div>
+
         {/* Content */}
-        <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div className="p-6 space-y-6 max-h-[calc(100vh-240px)] overflow-y-auto">
+
+          {/* ── Profitability Tab ── */}
+          {activeTab === 'profitability' && isAdmin && (
+            <ProfitabilityTab
+              workOrder={selectedWO}
+              dailyHoursLog={dailyHoursLog}
+              dailyTotals={dailyTotals}
+            />
+          )}
+
+          {/* ── Details Tab ── */}
+          {activeTab !== 'profitability' && (<>
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -2332,6 +2372,7 @@ const sendAssignmentNotifications = async () => {
               🗑️ Delete
             </button>
           </div>
+          </>)}
         </div>
       </div>
 

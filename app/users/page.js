@@ -162,8 +162,8 @@ export default function UserManagement() {
       const lookup = {};
       const formBuf = {};
       (json.data || []).forEach(w => {
-        lookup[w.user_id]  = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0 };
-        formBuf[w.user_id] = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0 };
+        lookup[w.user_id]  = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0, mi: parseFloat(w.mileage_rate) || 0.55 };
+        formBuf[w.user_id] = { rt: parseFloat(w.hourly_rate_regular) || 0, ot: parseFloat(w.hourly_rate_overtime) || 0, mi: parseFloat(w.mileage_rate) || 0.55 };
       });
       setWages(lookup);
       setWageForm(formBuf);
@@ -178,10 +178,10 @@ export default function UserManagement() {
       const res = await fetch('/api/admin/wages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ user_id: userId, hourly_rate_regular: form.rt, hourly_rate_overtime: form.ot }),
+        body: JSON.stringify({ user_id: userId, hourly_rate_regular: form.rt, hourly_rate_overtime: form.ot, mileage_rate: form.mi }),
       });
       if (!res.ok) throw new Error('Save failed');
-      setWages(prev => ({ ...prev, [userId]: { rt: form.rt, ot: form.ot } }));
+      setWages(prev => ({ ...prev, [userId]: { rt: form.rt, ot: form.ot, mi: form.mi } }));
       alert('✅ Wage saved!');
     } catch (err) { alert('Error: ' + err.message); }
     finally { setSavingWage(null); }
@@ -444,6 +444,14 @@ export default function UserManagement() {
                                 value={wageForm[user.user_id]?.ot ?? ''}
                                 onChange={e => setWageForm(prev => ({ ...prev, [user.user_id]: { ...prev[user.user_id], ot: parseFloat(e.target.value) || 0 } }))}
                                 className="w-16 bg-[#0a0a0f] border border-[#2d2d44] text-emerald-400 rounded px-1.5 py-1 text-xs font-mono focus:outline-none focus:border-emerald-500/60"
+                              />
+                              <span className="text-slate-600 text-xs">/</span>
+                              <input
+                                type="number" step="0.05" placeholder="mi"
+                                value={wageForm[user.user_id]?.mi ?? ''}
+                                onChange={e => setWageForm(prev => ({ ...prev, [user.user_id]: { ...prev[user.user_id], mi: parseFloat(e.target.value) || 0 } }))}
+                                className="w-14 bg-[#0a0a0f] border border-[#2d2d44] text-sky-400 rounded px-1.5 py-1 text-xs font-mono focus:outline-none focus:border-sky-500/60"
+                                title="Mileage reimbursement rate ($/mi)"
                               />
                               <button
                                 onClick={() => saveWage(user.user_id)}

@@ -57,12 +57,14 @@ function calcProfit(wo, wages, hoursMap) {
   const totalRevenue     = laborRevenue + materialRevenue + equipmentRevenue + trailerRevenue + rentalRevenue + mileageRevenue;
 
   // Cost Price
-  let totalLaborCost = 0;
+  let totalLaborCost   = 0;
+  let totalMileageCost = 0;
   Object.entries(hours.byUser).forEach(([userId, h]) => {
-    const wage = wages[userId] || { rt: 0, ot: 0 };
-    totalLaborCost += (h.rt * wage.rt) + (h.ot * wage.ot);
+    const wage = wages[userId] || { rt: 0, ot: 0, mi: 0.55 };
+    totalLaborCost   += (h.rt * wage.rt) + (h.ot * wage.ot);
+    totalMileageCost += (h.miles || 0) * (wage.mi || 0.55);
   });
-  const totalCost   = totalLaborCost + materialBase + (parseFloat(wo.emf_equipment_cost) || 0) + (parseFloat(wo.trailer_cost) || 0) + (parseFloat(wo.rental_cost) || 0);
+  const totalCost   = totalLaborCost + totalMileageCost + materialBase + (parseFloat(wo.emf_equipment_cost) || 0) + (parseFloat(wo.trailer_cost) || 0) + (parseFloat(wo.rental_cost) || 0);
   const totalProfit = totalRevenue - totalCost;
 
   return { totalRevenue, totalCost, totalProfit, totalRT, totalOT };
@@ -99,8 +101,9 @@ export default function ProfitabilityView({ currentUser }) {
       const wagesLookup = {};
       (wagesJson.data || []).forEach(w => {
         wagesLookup[w.user_id] = {
-          rt: parseFloat(w.hourly_rate_regular) || 0,
-          ot: parseFloat(w.hourly_rate_overtime) || 0,
+          rt: parseFloat(w.hourly_rate_regular)  || 0,
+          ot: parseFloat(w.hourly_rate_overtime)  || 0,
+          mi: parseFloat(w.mileage_rate)          || 0.55,
         };
       });
       setWages(wagesLookup);
@@ -139,9 +142,10 @@ export default function ProfitabilityView({ currentUser }) {
           map[h.wo_id].ot          += parseFloat(h.hours_overtime) || 0;
           map[h.wo_id].miles       += parseFloat(h.miles) || 0;
           map[h.wo_id].techMaterial+= parseFloat(h.tech_material_cost) || 0;
-          if (!map[h.wo_id].byUser[h.user_id]) map[h.wo_id].byUser[h.user_id] = { rt: 0, ot: 0 };
-          map[h.wo_id].byUser[h.user_id].rt += parseFloat(h.hours_regular) || 0;
-          map[h.wo_id].byUser[h.user_id].ot += parseFloat(h.hours_overtime) || 0;
+          if (!map[h.wo_id].byUser[h.user_id]) map[h.wo_id].byUser[h.user_id] = { rt: 0, ot: 0, miles: 0 };
+          map[h.wo_id].byUser[h.user_id].rt    += parseFloat(h.hours_regular) || 0;
+          map[h.wo_id].byUser[h.user_id].ot    += parseFloat(h.hours_overtime) || 0;
+          map[h.wo_id].byUser[h.user_id].miles += parseFloat(h.miles) || 0;
         });
         setHoursMap(map);
       }

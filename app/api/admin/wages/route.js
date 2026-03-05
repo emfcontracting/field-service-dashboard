@@ -52,7 +52,7 @@ export async function POST(request) {
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await request.json();
-  const { user_id, hourly_rate_regular, hourly_rate_overtime, notes } = body;
+  const { user_id, hourly_rate_regular, hourly_rate_overtime, mileage_rate, notes } = body;
 
   if (!user_id || hourly_rate_regular == null || hourly_rate_overtime == null) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -64,6 +64,7 @@ export async function POST(request) {
       user_id,
       hourly_rate_regular: parseFloat(hourly_rate_regular),
       hourly_rate_overtime: parseFloat(hourly_rate_overtime),
+      mileage_rate: parseFloat(mileage_rate ?? 0.55),
       notes: notes || null,
       effective_date: new Date().toISOString().split('T')[0],
     }, { onConflict: 'user_id' })

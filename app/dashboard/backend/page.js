@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AnalyticsTab from '@/app/components/AnalyticsTab';
 import BulkOperationsTab from '@/app/components/BulkOperationsTab';
@@ -363,6 +364,7 @@ const TABS = [
 ];
 
 export default function BackendDashboard() {
+  const router = useRouter();
   const [activeTab, setActiveTab]   = useState('health');
   const [healthData, setHealthData] = useState(null);
   const [logs, setLogs]             = useState([]);
@@ -372,6 +374,16 @@ export default function BackendDashboard() {
   const [logType, setLogType]       = useState('all');
   const [logStatus, setLogStatus]   = useState('');
   const [logLimit, setLogLimit]     = useState(100);
+
+  // ── Role guard ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const supabase = createClientComponentClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { router.push('/login'); return; }
+      const { data } = await supabase.from('users').select('role').eq('auth_id', user.id).single();
+      if (data?.role !== 'admin') router.push('/dashboard');
+    });
+  }, []);
 
   useEffect(() => { fetchHealthData(); }, []);
 

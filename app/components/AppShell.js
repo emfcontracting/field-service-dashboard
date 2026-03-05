@@ -138,11 +138,11 @@ export const NAV_ITEMS = [
 
 export const QUICK_LINKS = [
   { href: '/',                  label: 'Home',      Icon: Icons.home },
-  { href: '/dashboard/backend', label: 'Backend',   Icon: Icons.backend },
+  { href: '/dashboard/backend', label: 'Backend',   Icon: Icons.backend,   adminOnly: true },
   { href: '/weather',           label: 'Weather',   Icon: Icons.weather },
   { href: '/messages',          label: 'Messages',  Icon: Icons.messages },
   { href: '/invoices',          label: 'Invoicing', Icon: Icons.invoices },
-  { href: '/users',             label: 'Users',     Icon: Icons.users },
+  { href: '/users',             label: 'Users',     Icon: Icons.users,     adminOnly: true },
   { href: '/settings',          label: 'Settings',  Icon: Icons.settings },
   { href: '/mobile',            label: 'Mobile',    Icon: Icons.mobile },
 ];
@@ -200,7 +200,7 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
               );
             })}
             <div className="mx-4 my-1.5 border-t border-[#1e1e2e]" />
-            {QUICK_LINKS.map(({ href, label, Icon }) => (
+            {QUICK_LINKS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ href, label, Icon }) => (
               <a key={href} href={href}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition border-l-2
                   ${isLinkActive(href) ? 'bg-blue-600/10 text-blue-400 border-blue-500' : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e] border-transparent'}`}>
@@ -300,7 +300,7 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         {!sidebarCollapsed && <div className="text-slate-700 text-[10px] px-2 pb-1 tracking-widest font-semibold uppercase">Links</div>}
 
         {/* Quick links */}
-        {QUICK_LINKS.map(({ href, label, Icon }) => {
+        {QUICK_LINKS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ href, label, Icon }) => {
           const isActive = isLinkActive(href);
           return (
             <a key={href} href={href} title={sidebarCollapsed ? label : undefined}

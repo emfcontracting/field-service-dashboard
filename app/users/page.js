@@ -143,6 +143,7 @@ export default function UserManagement() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
     const { data } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
+    if (data?.role === 'office_staff') { router.push('/dashboard'); return; }
     setCurrentUser(data);
   }
 

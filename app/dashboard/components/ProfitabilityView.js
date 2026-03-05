@@ -1,4 +1,4 @@
-// app/dashboard/components/ProfitabilityView.js
+﻿// app/dashboard/components/ProfitabilityView.js
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN-ONLY: Profitability report overview across all work orders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ const supabaseClient = createClient(
 );
 
 const fmt  = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const pct  = (profit, revenue) => revenue > 0 ? ((profit / revenue) * 100).toFixed(1) + '%' : '—';
+const pct  = (profit, Billable) => Billable > 0 ? ((profit / Billable) * 100).toFixed(1) + '%' : '—';
 const BILLING_RT  = 64;
 const BILLING_OT  = 96;
 const MARKUP      = 1.25;
@@ -46,15 +46,15 @@ function calcProfit(wo, wages, hoursMap) {
   const totalOT    = legacyOT + legacyTeamOT + hours.ot;
   const totalMiles = legacyMiles + hours.miles;
 
-  // Sell Price
-  const laborRevenue    = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
+  // Billable
+  const laborBillable    = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
   const materialBase    = (parseFloat(wo.material_cost) || 0) + hours.techMaterial;
-  const materialRevenue = materialBase * MARKUP;
-  const equipmentRevenue = (parseFloat(wo.emf_equipment_cost) || 0) * MARKUP;
-  const trailerRevenue   = (parseFloat(wo.trailer_cost) || 0) * MARKUP;
-  const rentalRevenue    = (parseFloat(wo.rental_cost) || 0) * MARKUP;
-  const mileageRevenue   = totalMiles * 1.0;
-  const totalRevenue     = laborRevenue + materialRevenue + equipmentRevenue + trailerRevenue + rentalRevenue + mileageRevenue;
+  const materialBillable = materialBase * MARKUP;
+  const equipmentBillable = (parseFloat(wo.emf_equipment_cost) || 0) * MARKUP;
+  const trailerBillable   = (parseFloat(wo.trailer_cost) || 0) * MARKUP;
+  const rentalBillable    = (parseFloat(wo.rental_cost) || 0) * MARKUP;
+  const mileageBillable   = totalMiles * 1.0;
+  const totalBillable     = laborBillable + materialBillable + equipmentBillable + trailerBillable + rentalBillable + mileageBillable;
 
   // Cost Price
   let totalLaborCost   = 0;
@@ -65,9 +65,9 @@ function calcProfit(wo, wages, hoursMap) {
     totalMileageCost += (h.miles || 0) * (wage.mi || 0.55);
   });
   const totalCost   = totalLaborCost + totalMileageCost + materialBase + (parseFloat(wo.emf_equipment_cost) || 0) + (parseFloat(wo.trailer_cost) || 0) + (parseFloat(wo.rental_cost) || 0);
-  const totalProfit = totalRevenue - totalCost;
+  const totalProfit = totalBillable - totalCost;
 
-  return { totalRevenue, totalCost, totalProfit, totalRT, totalOT };
+  return { totalBillable, totalCost, totalProfit, totalRT, totalOT };
 }
 
 export default function ProfitabilityView({ currentUser }) {
@@ -168,7 +168,7 @@ export default function ProfitabilityView({ currentUser }) {
     .sort((a, b) => {
       const v = sortDir === 'desc' ? -1 : 1;
       if (sortBy === 'profit')  return (a.totalProfit  - b.totalProfit)  * v;
-      if (sortBy === 'revenue') return (a.totalRevenue - b.totalRevenue) * v;
+      if (sortBy === 'billable') return (a.totalBillable - b.totalBillable) * v;
       if (sortBy === 'date')    return new Date(a.wo.date_entered) - new Date(b.wo.date_entered) !== 0
         ? (new Date(a.wo.date_entered) - new Date(b.wo.date_entered)) * v : 0;
       return 0;
@@ -176,10 +176,10 @@ export default function ProfitabilityView({ currentUser }) {
 
   // ── Summary totals ────────────────────────────────────────────────────────
   const totals = rows.reduce((acc, r) => ({
-    revenue: acc.revenue + r.totalRevenue,
+    Billable: acc.Billable + r.totalBillable,
     cost:    acc.cost    + r.totalCost,
     profit:  acc.profit  + r.totalProfit,
-  }), { revenue: 0, cost: 0, profit: 0 });
+  }), { Billable: 0, cost: 0, profit: 0 });
 
   const toggleSort = (col) => {
     if (sortBy === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -190,9 +190,9 @@ export default function ProfitabilityView({ currentUser }) {
     ? <span className="ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>
     : <span className="ml-1 opacity-30">↕</span>;
 
-  const marginColor = (profit, revenue) => {
-    if (revenue <= 0) return 'text-slate-500';
-    const m = (profit / revenue) * 100;
+  const marginColor = (profit, Billable) => {
+    if (Billable <= 0) return 'text-slate-500';
+    const m = (profit / Billable) * 100;
     if (m >= 40) return 'text-emerald-400';
     if (m >= 20) return 'text-yellow-400';
     return 'text-red-400';
@@ -211,7 +211,7 @@ export default function ProfitabilityView({ currentUser }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-100">💰 Profitability Report</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Cost vs Sell Price — Admin view only</p>
+          <p className="text-slate-500 text-sm mt-0.5">Cost vs Billable — Admin view only</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {RANGES.map(r => (
@@ -229,11 +229,11 @@ export default function ProfitabilityView({ currentUser }) {
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total Sell Price', value: fmt(totals.revenue), color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20'    },
+          { label: 'Total Billable', value: fmt(totals.Billable), color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20'    },
           { label: 'Total Cost Price',     value: fmt(totals.cost),    color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/20'  },
           { label: 'Total Profit',        value: fmt(totals.profit),  color: totals.profit >= 0 ? 'text-emerald-400' : 'text-red-400',
             bg: totals.profit >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20' },
-          { label: 'Avg Margin',          value: pct(totals.profit, totals.revenue),
+          { label: 'Avg Margin',          value: pct(totals.profit, totals.Billable),
             color: 'text-slate-200', bg: 'bg-[#1e1e2e] border-[#2d2d44]',
             sub: `${rows.length} work orders` },
         ].map((card, i) => (
@@ -278,8 +278,8 @@ export default function ProfitabilityView({ currentUser }) {
             </button>
             <span className="text-center">Status</span>
             <span className="text-center">Lead Tech</span>
-            <button onClick={() => toggleSort('revenue')} className="text-right hover:text-slate-300 flex items-center justify-end">
-              Revenue <SortIcon col="revenue" />
+            <button onClick={() => toggleSort('billable')} className="text-right hover:text-slate-300 flex items-center justify-end">
+              Billable <SortIcon col="Billable" />
             </button>
             <span className="text-right">Cost Price</span>
             <button onClick={() => toggleSort('profit')} className="text-right hover:text-slate-300 flex items-center justify-end">
@@ -291,7 +291,7 @@ export default function ProfitabilityView({ currentUser }) {
             <div className="text-center py-12 text-slate-600">No work orders found</div>
           ) : (
             <div className="divide-y divide-[#1e1e2e]">
-              {rows.map(({ wo, totalRevenue, totalCost, totalProfit }) => (
+              {rows.map(({ wo, totalBillable, totalCost, totalProfit }) => (
                 <div key={wo.wo_id} className="grid grid-cols-7 gap-2 px-4 py-3 hover:bg-[#1e1e2e]/50 transition items-center">
                   <div className="col-span-2">
                     <div className="text-blue-400 font-semibold text-sm">{wo.wo_number}</div>
@@ -309,14 +309,14 @@ export default function ProfitabilityView({ currentUser }) {
                   <div className="text-slate-400 text-xs text-center truncate">
                     {wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : '—'}
                   </div>
-                  <div className="text-right text-blue-400 font-semibold text-sm">{fmt(totalRevenue)}</div>
+                  <div className="text-right text-blue-400 font-semibold text-sm">{fmt(totalBillable)}</div>
                   <div className="text-right text-orange-400 text-sm">{fmt(totalCost)}</div>
                   <div className="text-right">
                     <div className={`font-bold text-sm ${totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {fmt(totalProfit)}
                     </div>
-                    <div className={`text-xs ${marginColor(totalProfit, totalRevenue)}`}>
-                      {pct(totalProfit, totalRevenue)}
+                    <div className={`text-xs ${marginColor(totalProfit, totalBillable)}`}>
+                      {pct(totalProfit, totalBillable)}
                     </div>
                   </div>
                 </div>
@@ -329,11 +329,11 @@ export default function ProfitabilityView({ currentUser }) {
             <span className="col-span-2 text-slate-300">TOTAL ({rows.length} WOs)</span>
             <span></span>
             <span></span>
-            <span className="text-right text-blue-400">{fmt(totals.revenue)}</span>
+            <span className="text-right text-blue-400">{fmt(totals.Billable)}</span>
             <span className="text-right text-orange-400">{fmt(totals.cost)}</span>
             <span className={`text-right ${totals.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {fmt(totals.profit)}
-              <div className="text-xs font-normal">{pct(totals.profit, totals.revenue)}</div>
+              <div className="text-xs font-normal">{pct(totals.profit, totals.Billable)}</div>
             </span>
           </div>
         </div>
@@ -341,7 +341,7 @@ export default function ProfitabilityView({ currentUser }) {
 
       {/* ── Legend ── */}
       <div className="text-xs text-slate-600 px-1 space-y-0.5">
-        <div>• <strong className="text-slate-500">Sell Price</strong> = CBRE billing: $64/h RT · $96/h OT · materials+25% · equipment+25%</div>
+        <div>• <strong className="text-slate-500">Billable</strong> = CBRE billing: $64/h RT · $96/h OT · materials+25% · equipment+25%</div>
         <div>• <strong className="text-slate-500">Cost Price</strong> = Real wages (from Users page) + material purchase price</div>
         <div>• Labor cost shows $0 if wage not set for that tech — go to Users to set wages</div>
       </div>

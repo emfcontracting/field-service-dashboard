@@ -115,6 +115,9 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [newPassword, setNewPassword] = useState('');
   const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null);   // user being reset inline
+  const [resetPw, setResetPw] = useState('');
+  const [resetting, setResetting] = useState(false);
   const [lookingUpCarrier, setLookingUpCarrier] = useState(false);
   const [carrierLookupResult, setCarrierLookupResult] = useState(null);
 
@@ -248,6 +251,22 @@ export default function UserManagement() {
       if (!res.ok) throw new Error(data.error);
       alert('Password reset!'); setNewPassword(''); setShowPasswordReset(false);
     } catch (err) { alert('Error: ' + err.message); }
+  }
+
+  async function handleInlinePasswordReset() {
+    if (!resetPw || resetPw.length < 6) { alert('Minimum 6 characters'); return; }
+    setResetting(true);
+    try {
+      const res = await fetch('/api/users/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: resetTarget.user_id, newPassword: resetPw, requestorEmail: currentUser.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert(`✅ Password reset for ${resetTarget.first_name} ${resetTarget.last_name}`);
+      setResetTarget(null); setResetPw('');
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setResetting(false); }
   }
 
   async function handleDeleteUser(user) {
@@ -485,6 +504,11 @@ export default function UserManagement() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
                             <Btn onClick={() => openEditModal(user)} variant="ghost" size="sm">Edit</Btn>
+                            {isAdmin && (
+                              <Btn onClick={() => { setResetTarget(user); setResetPw(''); }} variant="ghost" size="sm" className="text-yellow-400 hover:text-yellow-300">
+                                🔑
+                              </Btn>
+                            )}
                             <Btn onClick={() => toggleUserStatus(user)}
                               variant="ghost" size="sm"
                               className={user.is_active ? 'text-orange-400 hover:text-orange-300' : 'text-emerald-400 hover:text-emerald-300'}>
@@ -505,6 +529,45 @@ export default function UserManagement() {
             )}
           </Card>
         </div>
+
+        {/* ══════════════════════════════════════════════════════════════════
+            MODAL: Password Reset
+        ══════════════════════════════════════════════════════════════════ */}
+        {resetTarget && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-2xl w-full max-w-md shadow-2xl">
+              <div className="border-b border-[#2d2d44] px-6 py-5 flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-100">🔑 Reset Password</h2>
+                  <p className="text-slate-500 text-sm mt-0.5">{resetTarget.first_name} {resetTarget.last_name} &middot; <span className="text-slate-600">{resetTarget.email}</span></p>
+                </div>
+                <button onClick={() => { setResetTarget(null); setResetPw(''); }}
+                  className="text-slate-500 hover:text-slate-300 text-2xl leading-none transition">×</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">New Password</label>
+                  <input
+                    type="text"
+                    value={resetPw}
+                    onChange={e => setResetPw(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleInlinePasswordReset()}
+                    placeholder="Min. 6 characters"
+                    className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-500/60 transition font-mono"
+                    autoFocus
+                  />
+                  <p className="text-slate-600 text-xs mt-1.5">The user will use this password to log in.</p>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <Btn onClick={() => { setResetTarget(null); setResetPw(''); }} variant="default" size="lg" className="flex-1">Cancel</Btn>
+                  <Btn onClick={handleInlinePasswordReset} disabled={resetting || resetPw.length < 6} variant="warning" size="lg" className="flex-1">
+                    {resetting ? 'Resetting…' : 'Set Password'}
+                  </Btn>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             MODAL: Add / Edit User

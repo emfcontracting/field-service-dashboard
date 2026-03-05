@@ -1,9 +1,9 @@
-// app/dashboard/components/ProfitabilityTab.js
+﻿// app/dashboard/components/ProfitabilityTab.js
 // -----------------------------------------------------------------------------
 // ADMIN-ONLY: Shows real profit breakdown for a single work order
-// Sell Price = CBRE billing rates ($64/$96 + markups + $1.00/mi)
+// Billable = billing rates ($64/$96 + markups + $1.00/mi)
 // Cost Price = actual tech wages + material purchase price + tech mileage rate
-// Profit     = Sell Price - Cost Price
+// Profit     = Billable - Cost Price
 // -----------------------------------------------------------------------------
 'use client';
 
@@ -13,7 +13,7 @@ import { getSupabase } from '@/lib/supabase';
 const supabase = getSupabase();
 
 const fmt = (n) => `$${(n || 0).toFixed(2)}`;
-const pct = (profit, revenue) => revenue > 0 ? ((profit / revenue) * 100).toFixed(1) + '%' : '-';
+const pct = (profit, Billable) => Billable > 0 ? ((profit / Billable) * 100).toFixed(1) + '%' : '-';
 
 const Row = ({ label, costPrice, sellPrice, profit, highlight }) => (
   <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg text-sm ${highlight ? 'bg-[#1e1e2e]' : ''}`}>
@@ -98,18 +98,18 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
   const totalMiles = legacyMiles + legacyTeamMiles + (dailyTotals?.totalMiles || 0);
   const techMaterialBase = dailyTotals?.totalTechMaterial || 0;
 
-  // Sell Price (what CBRE pays)
-  const laborSellPrice     = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
+  // Billable (what CBRE pays)
+  const laborBillable     = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
   const materialBase       = (parseFloat(workOrder.material_cost) || 0) + techMaterialBase;
-  const materialSellPrice  = materialBase * MARKUP;
+  const materialBillable  = materialBase * MARKUP;
   const equipmentBase      = parseFloat(workOrder.emf_equipment_cost) || 0;
-  const equipmentSellPrice = equipmentBase * MARKUP;
+  const equipmentBillable = equipmentBase * MARKUP;
   const trailerBase        = parseFloat(workOrder.trailer_cost) || 0;
-  const trailerSellPrice   = trailerBase * MARKUP;
+  const trailerBillable   = trailerBase * MARKUP;
   const rentalBase         = parseFloat(workOrder.rental_cost) || 0;
-  const rentalSellPrice    = rentalBase * MARKUP;
-  const mileageSellPrice   = totalMiles * BILLING_MILES;
-  const totalSellPrice     = laborSellPrice + materialSellPrice + equipmentSellPrice + trailerSellPrice + rentalSellPrice + mileageSellPrice;
+  const rentalBillable    = rentalBase * MARKUP;
+  const mileageBillable   = totalMiles * BILLING_MILES;
+  const totalBillable     = laborBillable + materialBillable + equipmentBillable + trailerBillable + rentalBillable + mileageBillable;
 
   // Per-user aggregation (hours + miles from daily log)
   const hoursByUser = {};
@@ -167,14 +167,14 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
   const legacyMileageCost = legacyMilesTotal * 0.55; // default rate for legacy
   if (legacyMilesTotal > 0) totalMileageCost += legacyMileageCost;
 
-  const mileageProfitTotal = mileageSellPrice - totalMileageCost;
+  const mileageProfitTotal = mileageBillable - totalMileageCost;
 
   const hasDetailedData = laborCostDetailed.length > 0;
   const missingWages    = laborCostDetailed.filter(t => !t.hasWage);
 
   const totalCostPrice = totalLaborCost + totalMileageCost + materialBase + equipmentBase + trailerBase + rentalBase;
-  const totalProfit    = totalSellPrice - totalCostPrice;
-  const margin         = pct(totalProfit, totalSellPrice);
+  const totalProfit    = totalBillable - totalCostPrice;
+  const margin         = pct(totalProfit, totalBillable);
 
   if (loading) return (
     <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
@@ -196,7 +196,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Sell Price"  value={fmt(totalSellPrice)}  sub="Billed to CBRE"   color="blue" />
+        <StatCard label="Billable"  value={fmt(totalBillable)}  sub="Billable to CBRE"   color="blue" />
         <StatCard label="Cost Price"  value={fmt(totalCostPrice)}  sub="What EMF pays"    color="orange" />
         <StatCard
           label="Profit"
@@ -207,9 +207,9 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
         <StatCard
           label="NTE Budget"
           value={fmt(workOrder.nte)}
-          sub={totalSellPrice > (workOrder.nte || 0)
+          sub={totalBillable > (workOrder.nte || 0)
             ? 'Exceeds NTE'
-            : `${fmt((workOrder.nte || 0) - totalSellPrice)} remaining`}
+            : `${fmt((workOrder.nte || 0) - totalBillable)} remaining`}
           color="blue"
         />
       </div>
@@ -228,14 +228,14 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
         </div>
       )}
 
-      {/* Cost vs Sell Price Table */}
+      {/* Cost vs Billable Table */}
       <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl overflow-hidden">
 
         {/* Table Header */}
         <div className="grid grid-cols-4 gap-2 py-2 px-3 bg-[#1e1e2e] text-xs uppercase tracking-wider text-slate-500 font-semibold">
           <span>Category</span>
           <span className="text-right">Cost Price</span>
-          <span className="text-right">Sell Price</span>
+          <span className="text-right">Billable</span>
           <span className="text-right">Profit</span>
         </div>
 
@@ -243,8 +243,8 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
         <Row
           label={`Labor (${totalRT.toFixed(1)}h RT + ${totalOT.toFixed(1)}h OT + 2h Admin)`}
           costPrice={totalLaborCost}
-          sellPrice={laborSellPrice}
-          profit={laborSellPrice - totalLaborCost}
+          sellPrice={laborBillable}
+          profit={laborBillable - totalLaborCost}
           highlight
         />
 
@@ -272,7 +272,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
             <Row
               label={`Mileage (${totalMiles.toFixed(1)} mi — sell: $1.00/mi)`}
               costPrice={totalMileageCost}
-              sellPrice={mileageSellPrice}
+              sellPrice={mileageBillable}
               profit={mileageProfitTotal}
             />
             {/* Per-tech mileage breakdown */}
@@ -294,24 +294,24 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
         <Row
           label={`Materials (cost: ${fmt(materialBase)} / sell: +25%)`}
           costPrice={materialBase}
-          sellPrice={materialSellPrice}
-          profit={materialSellPrice - materialBase}
+          sellPrice={materialBillable}
+          profit={materialBillable - materialBase}
           highlight
         />
         {equipmentBase > 0 && (
           <Row
             label={`Equipment (cost: ${fmt(equipmentBase)} / sell: +25%)`}
             costPrice={equipmentBase}
-            sellPrice={equipmentSellPrice}
-            profit={equipmentSellPrice - equipmentBase}
+            sellPrice={equipmentBillable}
+            profit={equipmentBillable - equipmentBase}
           />
         )}
         {trailerBase > 0 && (
           <Row
             label={`Trailer (cost: ${fmt(trailerBase)} / sell: +25%)`}
             costPrice={trailerBase}
-            sellPrice={trailerSellPrice}
-            profit={trailerSellPrice - trailerBase}
+            sellPrice={trailerBillable}
+            profit={trailerBillable - trailerBase}
             highlight
           />
         )}
@@ -319,8 +319,8 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
           <Row
             label={`Rental (cost: ${fmt(rentalBase)} / sell: +25%)`}
             costPrice={rentalBase}
-            sellPrice={rentalSellPrice}
-            profit={rentalSellPrice - rentalBase}
+            sellPrice={rentalBillable}
+            profit={rentalBillable - rentalBase}
           />
         )}
 
@@ -328,7 +328,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
         <div className="grid grid-cols-4 gap-2 py-3 px-3 border-t-2 border-[#2d2d44] bg-[#1e1e2e] font-bold text-sm">
           <span className="text-slate-200">TOTAL</span>
           <span className="text-right text-orange-400">{fmt(totalCostPrice)}</span>
-          <span className="text-right text-blue-400">{fmt(totalSellPrice)}</span>
+          <span className="text-right text-blue-400">{fmt(totalBillable)}</span>
           <span className={`text-right text-lg ${totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(totalProfit)}</span>
         </div>
 
@@ -341,7 +341,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
           <div className="w-full bg-[#1e1e2e] rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all ${totalProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
-              style={{ width: `${Math.min(Math.max(totalSellPrice > 0 ? (totalProfit / totalSellPrice) * 100 : 0, 0), 100)}%` }}
+              style={{ width: `${Math.min(Math.max(totalBillable > 0 ? (totalProfit / totalBillable) * 100 : 0, 0), 100)}%` }}
             />
           </div>
         </div>
@@ -350,8 +350,8 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
       {/* Legend */}
       <div className="text-xs text-slate-600 space-y-0.5 px-1">
         <div><strong className="text-slate-500">Cost Price</strong> = What EMF pays: actual wages + mileage reimbursement ($0.55 or $0.75/mi) + purchase price of materials</div>
-        <div><strong className="text-slate-500">Sell Price</strong> = What CBRE pays: $64/h RT, $96/h OT, $1.00/mi, materials/equipment + 25% markup</div>
-        <div><strong className="text-slate-500">Profit</strong> = Sell Price minus Cost Price per category</div>
+        <div><strong className="text-slate-500">Billable</strong> = What CBRE pays: $64/h RT, $96/h OT, $1.00/mi, materials/equipment + 25% markup</div>
+        <div><strong className="text-slate-500">Profit</strong> = Billable minus Cost Price per category</div>
       </div>
     </div>
   );

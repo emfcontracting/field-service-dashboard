@@ -378,9 +378,30 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     if (!authenticated) return;
     (async () => {
       try {
-        const { data } = await supabase.from('work_orders').select('wo_id')
-          .in('status', ['in_progress', 'return_trip', 'tech_review', 'completed']).eq('acknowledged', false);
-        setMissingHoursCount(data?.length || 0);
+        // Match MissingHoursView logic: WOs with a tech assigned but 0 hours logged
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+
+        const { data: eligibleWOs } = await supabase
+          .from('work_orders')
+          .select('wo_id')
+          .not('lead_tech_id', 'is', null)
+          .in('status', ['assigned', 'in_progress', 'completed'])
+          .gte('date_entered', cutoff.toISOString());
+
+        if (!eligibleWOs?.length) { setMissingHoursCount(0); return; }
+
+        const woIds = eligibleWOs.map(w => w.wo_id);
+
+        // Find which WOs have at least some hours logged
+        const { data: withHours } = await supabase
+          .from('daily_hours_log')
+          .select('wo_id')
+          .in('wo_id', woIds);
+
+        const withHoursSet = new Set(withHours?.map(h => h.wo_id) || []);
+        const missingCount = woIds.filter(id => !withHoursSet.has(id)).length;
+        setMissingHoursCount(missingCount);
       } catch {}
     })();
   }, [authenticated]);

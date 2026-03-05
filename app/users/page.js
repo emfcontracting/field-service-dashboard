@@ -142,8 +142,9 @@ export default function UserManagement() {
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
-    const { data } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
-    if (data?.role === 'office_staff') { router.push('/dashboard'); return; }
+    const { data, error } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
+    // Only block if we explicitly confirmed office_staff — never on error/null
+    if (!error && data?.role === 'office_staff') { router.push('/dashboard'); return; }
     setCurrentUser(data);
   }
 

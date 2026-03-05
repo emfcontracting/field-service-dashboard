@@ -147,3 +147,114 @@ body {
 [data-theme="light"] ::-webkit-scrollbar-track { background: #f1f5f9; }
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Semi-transparent colored backgrounds → solid in light mode ── */
+/* Blue */
+[data-theme="light"] .bg-blue-500\/10,
+[data-theme="light"] .bg-blue-500\/15,
+[data-theme="light"] .bg-blue-500\/20 { background-color: #dbeafe !important; }
+[data-theme="light"] .bg-blue-600\/10,
+[data-theme="light"] .bg-blue-600\/15,
+[data-theme="light"] .bg-blue-600\/20 { background-color: #dbeafe !important; }
+[data-theme="light"] .bg-blue-600\/30,
+[data-theme="light"] .bg-blue-600\/40 { background-color: #bfdbfe !important; }
+[data-theme="light"] .border-blue-500\/20 { border-color: #93c5fd !important; }
+[data-theme="light"] .border-blue-500\/30 { border-color: #60a5fa !important; }
+[data-theme="light"] .border-blue-500\/40 { border-color: #3b82f6 !important; }
+[data-theme="light"] .text-blue-400 { color: #1d4ed8 !important; }
+
+/* Red / Rose */
+[data-theme="light"] .bg-red-500\/5,
+[data-theme="light"] .bg-red-500\/10,
+[data-theme="light"] .bg-red-500\/15,
+[data-theme="light"] .bg-red-500\/20 { background-color: #fee2e2 !important; }
+[data-theme="light"] .bg-red-900\/20,
+[data-theme="light"] .bg-red-900\/30,
+[data-theme="light"] .bg-red-900\/50 { background-color: #fee2e2 !important; }
+[data-theme="light"] .border-red-500\/20 { border-color: #fca5a5 !important; }
+[data-theme="light"] .border-red-500\/25 { border-color: #f87171 !important; }
+[data-theme="light"] .border-red-500\/30 { border-color: #ef4444 !important; }
+[data-theme="light"] .border-red-500\/40 { border-color: #dc2626 !important; }
+[data-theme="light"] .text-red-400 { color: #b91c1c !important; }
+[data-theme="light"] .text-red-300 { color: #dc2626 !important; }
+[data-theme="light"] .hover\:bg-red-950\/20:hover { background-color: #fee2e2 !important; }
+
+/* Orange */
+[data-theme="light"] .bg-orange-500\/10,
+[data-theme="light"] .bg-orange-500\/15,
+[data-theme="light"] .bg-orange-500\/20 { background-color: #ffedd5 !important; }
+[data-theme="light"] .bg-orange-900\/10,
+[data-theme="light"] .bg-orange-900\/30 { background-color: #ffedd5 !important; }
+[data-theme="light"] .border-orange-500\/20 { border-color: #fdba74 !important; }
+[data-theme="light"] .border-orange-500\/25 { border-color: #fb923c !important; }
+[data-theme="light"] .border-orange-500\/30 { border-color: #f97316 !important; }
+[data-theme="light"] .text-orange-400 { color: #c2410c !important; }
+[data-theme="light"] .text-orange-300 { color: #ea580c !important; }
+
+/* Yellow */
+[data-theme="light"] .bg-yellow-500\/10,
+[data-theme="light"] .bg-yellow-500\/15,
+[data-theme="light"] .bg-yellow-500\/20 { background-color: #fef9c3 !important; }
+[data-theme="light"] .bg-yellow-900\/30,
+[data-theme="light"] .bg-yellow-900\/50 { background-color: #fef9c3 !important; }
+[data-theme="light"] .border-yellow-500\/15 { border-color: #fde047 !important; }
+[data-theme="light"] .border-yellow-500\/20 { border-color: #facc15 !important; }
+[data-theme="light"] .border-yellow-500\/25 { border-color: #eab308 !important; }
+[data-theme="light"] .border-yellow-500\/30 { border-color: #ca8a04 !important; }
+[data-theme="light"] .text-yellow-400 { color: #854d0e !important; }
+[data-theme="light"] .text-yellow-300 { color: #92400e !important; }
+
+/* Emerald / Green */
+[data-theme="light"] .bg-emerald-500\/5,
+[data-theme="light"] .bg-emerald-500\/10,
+[data-theme="light"] .bg-emerald-500\/15,
+[data-theme="light"] .bg-emerald-500\/20 { background-color: #d1fae5 !important; }
+[data-theme="light"] .bg-emerald-600\/20,
+[data-theme="light"] .bg-emerald-600\/30 { background-color: #a7f3d0 !important; }
+[data-theme="light"] .border-emerald-500\/15 { border-color: #6ee7b7 !important; }
+[data-theme="light"] .border-emerald-500\/20 { border-color: #34d399 !important; }
+[data-theme="light"] .border-emerald-500\/25 { border-color: #10b981 !important; }
+[data-theme="light"] .border-emerald-500\/30 { border-color: #059669 !important; }
+[data-theme="light"] .text-emerald-400 { color: #065f46 !important; }
+[data-theme="light"] .text-emerald-300 { color: #047857 !important; }
+
+/* Purple */
+[data-theme="light"] .bg-purple-500\/10,
+[data-theme="light"] .bg-purple-500\/15,
+[data-theme="light"] .bg-purple-500\/20 { background-color: #ede9fe !important; }
+[data-theme="light"] .bg-purple-900\/10,
+[data-theme="light"] .bg-purple-900\/30 { background-color: #ede9fe !important; }
+[data-theme="light"] .border-purple-500\/20 { border-color: #c4b5fd !important; }
+[data-theme="light"] .border-purple-500\/30 { border-color: #a78bfa !important; }
+[data-theme="light"] .text-purple-400 { color: #5b21b6 !important; }
+
+/* Slate accents */
+[data-theme="light"] .bg-slate-500\/10,
+[data-theme="light"] .bg-slate-500\/15,
+[data-theme="light"] .bg-slate-500\/20 { background-color: #f1f5f9 !important; }
+[data-theme="light"] .border-slate-500\/20 { border-color: #94a3b8 !important; }
+[data-theme="light"] .border-slate-500\/30 { border-color: #64748b !important; }
+
+/* ── Active/selected nav item ── */
+[data-theme="light"] .bg-blue-600\/15 { background-color: #dbeafe !important; }
+[data-theme="light"] .bg-blue-500\/5  { background-color: #eff6ff !important; }
+[data-theme="light"] .bg-red-500\/5   { background-color: #fef2f2 !important; }
+[data-theme="light"] .bg-orange-500\/10 { background-color: #fff7ed !important; }
+
+/* ── Solid colored buttons — keep them vivid ── */
+[data-theme="light"] .bg-blue-600  { background-color: #2563eb !important; }
+[data-theme="light"] .bg-red-600   { background-color: #dc2626 !important; }
+[data-theme="light"] .bg-emerald-600 { background-color: #059669 !important; }
+[data-theme="light"] .text-white   { color: #ffffff !important; }
+
+/* ── Table rows ── */
+[data-theme="light"] tr:hover td { background-color: #f8fafc; }
+
+/* ── Focus ring on active nav ── */
+[data-theme="light"] .bg-blue-500\/10.text-blue-400 { color: #1d4ed8 !important; }
+
+/* ── Info/warning banners ── */
+[data-theme="light"] .bg-blue-500\/5 { background-color: #eff6ff !important; }
+[data-theme="light"] .border-blue-500\/15 { border-color: #93c5fd !important; }
+[data-theme="light"] .bg-yellow-500\/5 { background-color: #fefce8 !important; }
+[data-theme="light"] .border-yellow-500\/15 { border-color: #fde047 !important; }

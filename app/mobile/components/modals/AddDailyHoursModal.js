@@ -22,6 +22,7 @@ export default function AddDailyHoursModal({
   const [miles, setMiles] = useState('');
   const [techMaterialCost, setTechMaterialCost] = useState('');
   const [notes, setNotes] = useState('');
+  const [materialOnly, setMaterialOnly] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Helper function to get local date string in YYYY-MM-DD format
@@ -64,41 +65,56 @@ export default function AddDailyHoursModal({
 
     const rt = parseFloat(hoursRegular);
     const ot = parseFloat(hoursOvertime);
-    
-    // Check if both are NaN or 0
-    if (isNaN(rt) && isNaN(ot)) {
-      alert(t('enterAtLeastOneHour') || 'Please enter at least one hour (regular or overtime)');
-      return;
-    }
-    
     const rtValue = isNaN(rt) ? 0 : rt;
     const otValue = isNaN(ot) ? 0 : ot;
     const totalHours = rtValue + otValue;
+    const milesValue = parseFloat(miles) || 0;
+    const materialValue = parseFloat(techMaterialCost) || 0;
 
-    if (totalHours === 0) {
-      alert(t('enterAtLeastOneHour') || 'Please enter at least one hour (regular or overtime)');
-      return;
-    }
+    if (materialOnly) {
+      // Material-only mode: no hours required, but material or miles must be > 0
+      if (materialValue <= 0 && milesValue <= 0) {
+        alert(
+          language === 'en'
+            ? 'Please enter material cost or miles for a material-only entry'
+            : 'Por favor ingrese costo de material o millas para una entrada solo de material'
+        );
+        return;
+      }
+    } else {
+      // Normal mode: at least one hour required
+      if (isNaN(rt) && isNaN(ot)) {
+        alert(t('enterAtLeastOneHour') || 'Please enter at least one hour (regular or overtime)');
+        return;
+      }
 
-    if (totalHours > 24) {
-      alert(t('hoursCannotExceed24') || 'Total hours cannot exceed 24 hours per day');
-      return;
-    }
+      if (totalHours === 0) {
+        alert(t('enterAtLeastOneHour') || 'Please enter at least one hour (regular or overtime)');
+        return;
+      }
 
-    if (rtValue < 0 || otValue < 0) {
-      alert(t('hoursCannotBeNegative') || 'Hours cannot be negative');
-      return;
+      if (totalHours > 24) {
+        alert(t('hoursCannotExceed24') || 'Total hours cannot exceed 24 hours per day');
+        return;
+      }
+
+      if (rtValue < 0 || otValue < 0) {
+        alert(t('hoursCannotBeNegative') || 'Hours cannot be negative');
+        return;
+      }
     }
 
     // Prepare data - workDate is already in YYYY-MM-DD format
+    // In material-only mode, force hours to 0
     const hoursData = {
       userId,
       workDate: workDate.trim(),
-      hoursRegular: rtValue,
-      hoursOvertime: otValue,
-      miles: parseFloat(miles) || 0,
-      techMaterialCost: parseFloat(techMaterialCost) || 0,
-      notes: notes.trim() || null
+      hoursRegular: materialOnly ? 0 : rtValue,
+      hoursOvertime: materialOnly ? 0 : otValue,
+      miles: milesValue,
+      techMaterialCost: materialValue,
+      notes: notes.trim() || null,
+      materialOnly
     };
 
     console.log('Submitting hours data:', hoursData);
@@ -114,6 +130,7 @@ export default function AddDailyHoursModal({
     setMiles('');
     setTechMaterialCost('');
     setNotes('');
+    setMaterialOnly(false);
     setIsInitialized(false);
     onClose();
   }
@@ -143,6 +160,44 @@ export default function AddDailyHoursModal({
           </p>
         </div>
 
+        {/* Material-Only Toggle */}
+        <div className={`rounded-lg p-3 mb-4 border-2 transition-colors ${
+          materialOnly
+            ? 'bg-orange-900 border-orange-500'
+            : 'bg-gray-700 border-gray-600'
+        }`}>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div className="flex-1">
+              <p className="font-semibold text-white">
+                📦 {language === 'en' ? 'Material Only (No Hours)' : 'Solo Material (Sin Horas)'}
+              </p>
+              <p className="text-xs text-gray-300 mt-1">
+                {language === 'en'
+                  ? 'Log material cost or miles without labor hours'
+                  : 'Registrar costo de material o millas sin horas de trabajo'}
+              </p>
+            </div>
+            <div className="relative inline-block w-12 h-6 ml-3">
+              <input
+                type="checkbox"
+                checked={materialOnly}
+                onChange={(e) => {
+                  setMaterialOnly(e.target.checked);
+                  if (e.target.checked) {
+                    setHoursRegular('');
+                    setHoursOvertime('');
+                  }
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-12 h-6 bg-gray-600 rounded-full peer-checked:bg-orange-500 transition-colors"></div>
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                materialOnly ? 'translate-x-6' : ''
+              }`}></div>
+            </div>
+          </label>
+        </div>
+
         <div className="space-y-4">
           {/* Work Date */}
           <div>
@@ -166,7 +221,7 @@ export default function AddDailyHoursModal({
           </div>
 
           {/* Regular Hours */}
-          <div>
+          <div className={materialOnly ? 'opacity-50' : ''}>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
               {t('regularHours') || 'Regular Hours (RT)'}
             </label>
@@ -175,13 +230,14 @@ export default function AddDailyHoursModal({
               step="0.5"
               min="0"
               max="24"
-              value={hoursRegular}
+              value={materialOnly ? '' : hoursRegular}
+              disabled={materialOnly}
               onChange={(e) => {
                 console.log('Regular hours changed to:', e.target.value);
                 setHoursRegular(e.target.value);
               }}
-              placeholder="0.0"
-              className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder={materialOnly ? '—' : '0.0'}
+              className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-400 mt-1">
               @ $64/{t('hrs') || 'hr'}
@@ -189,7 +245,7 @@ export default function AddDailyHoursModal({
           </div>
 
           {/* Overtime Hours */}
-          <div>
+          <div className={materialOnly ? 'opacity-50' : ''}>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
               {t('overtimeHours') || 'Overtime Hours (OT)'}
             </label>
@@ -198,13 +254,14 @@ export default function AddDailyHoursModal({
               step="0.5"
               min="0"
               max="24"
-              value={hoursOvertime}
+              value={materialOnly ? '' : hoursOvertime}
+              disabled={materialOnly}
               onChange={(e) => {
                 console.log('Overtime hours changed to:', e.target.value);
                 setHoursOvertime(e.target.value);
               }}
-              placeholder="0.0"
-              className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+              placeholder={materialOnly ? '—' : '0.0'}
+              className="w-full px-4 py-3 text-lg text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-400 mt-1">
               @ $96/{t('hrs') || 'hr'}
@@ -255,7 +312,7 @@ export default function AddDailyHoursModal({
           </div>
 
           {/* Total Hours Display */}
-          {(hoursRegular || hoursOvertime) && (
+          {!materialOnly && (hoursRegular || hoursOvertime) && (
             <div className="bg-gray-700 rounded-lg p-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-300">{t('totalHours') || 'Total Hours'}:</span>

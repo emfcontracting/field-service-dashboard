@@ -41,6 +41,8 @@ export default function WorkOrderDetail({
   // DAILY HOURS PROPS
   dailyLogs = [],
   onAddDailyHours,
+  onUpdateDailyHours,
+  onDeleteDailyHours,
   onDownloadLogs,
   // NTE INCREASE PROPS
   quotes = [],
@@ -595,6 +597,8 @@ export default function WorkOrderDetail({
             status={status}
             saving={saving}
             onAddDailyHours={onAddDailyHours}
+            onUpdateDailyHours={onUpdateDailyHours}
+            onDeleteDailyHours={onDeleteDailyHours}
             onDownloadLogs={onDownloadLogs}
           />
 
@@ -607,6 +611,8 @@ export default function WorkOrderDetail({
             saving={saving}
             onLoadTeamMembers={onLoadTeamMembers}
             onAddDailyHours={onAddDailyHours}
+            onUpdateDailyHours={onUpdateDailyHours}
+            onDeleteDailyHours={onDeleteDailyHours}
             onDownloadLogs={onDownloadLogs}
           />
 

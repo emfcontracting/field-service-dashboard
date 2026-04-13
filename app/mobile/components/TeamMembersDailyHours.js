@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { parseLocalDate, formatDateEST } from '../utils/dateUtils';
 import AddDailyHoursModal from './modals/AddDailyHoursModal';
+import EditDailyHoursModal from './modals/EditDailyHoursModal';
 
 export default function TeamMembersDailyHours({
   currentTeamList,
@@ -14,6 +15,8 @@ export default function TeamMembersDailyHours({
   saving,
   onLoadTeamMembers,
   onAddDailyHours,
+  onUpdateDailyHours,
+  onDeleteDailyHours,
   onDownloadLogs
 }) {
   const { language } = useLanguage();
@@ -21,6 +24,8 @@ export default function TeamMembersDailyHours({
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [editingLog, setEditingLog] = useState(null);
+  const [editingMemberName, setEditingMemberName] = useState('');
 
   // Check if current user is in the team list
   // Use string comparison to handle potential type mismatches
@@ -70,6 +75,40 @@ export default function TeamMembersDailyHours({
     } catch (err) {
       // Error is handled in parent
       console.error('Error saving daily hours:', err);
+    }
+  }
+
+  function handleOpenEditModal(log, member) {
+    if (!isCurrentUserMember(member)) {
+      alert(language === 'en'
+        ? 'You can only edit your own hours'
+        : 'Solo puede editar sus propias horas');
+      return;
+    }
+    setEditingLog(log);
+    setEditingMemberName(`${member.user?.first_name || ''} ${member.user?.last_name || ''}`.trim());
+  }
+
+  async function handleUpdateDailyHours(updatedData) {
+    if (!onUpdateDailyHours) return;
+    try {
+      const { logId, ...updates } = updatedData;
+      await onUpdateDailyHours(logId, updates);
+      setEditingLog(null);
+      setEditingMemberName('');
+    } catch (err) {
+      console.error('Error updating daily hours:', err);
+    }
+  }
+
+  async function handleDeleteDailyHours(logId) {
+    if (!onDeleteDailyHours) return;
+    try {
+      await onDeleteDailyHours(logId);
+      setEditingLog(null);
+      setEditingMemberName('');
+    } catch (err) {
+      console.error('Error deleting daily hours:', err);
     }
   }
 
@@ -213,7 +252,7 @@ export default function TeamMembersDailyHours({
                                   day: 'numeric'
                                 })}
                               </span>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 items-center">
                                 {log.hours_regular > 0 && (
                                   <span className="text-green-400">RT:{log.hours_regular}</span>
                                 )}
@@ -222,6 +261,18 @@ export default function TeamMembersDailyHours({
                                 )}
                                 {log.miles > 0 && (
                                   <span className="text-blue-400">{log.miles}mi</span>
+                                )}
+                                {log.tech_material_cost > 0 && (
+                                  <span className="text-orange-400">${parseFloat(log.tech_material_cost).toFixed(2)}</span>
+                                )}
+                                {isCurrentUser && status !== 'completed' && onUpdateDailyHours && (
+                                  <button
+                                    onClick={() => handleOpenEditModal(log, member)}
+                                    className="ml-1 bg-gray-700 hover:bg-gray-600 text-white px-1.5 py-0.5 rounded text-xs"
+                                    title={language === 'en' ? 'Edit' : 'Editar'}
+                                  >
+                                    ✏️
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -275,6 +326,22 @@ export default function TeamMembersDailyHours({
           userId={selectedMember.user_id}
           userName={`${selectedMember.user?.first_name || ''} ${selectedMember.user?.last_name || ''}`}
           isTeamMember={true}
+        />
+      )}
+
+      {/* Edit Daily Hours Modal - Only for current user's own entries */}
+      {editingLog && (
+        <EditDailyHoursModal
+          show={!!editingLog}
+          onClose={() => {
+            setEditingLog(null);
+            setEditingMemberName('');
+          }}
+          onSave={handleUpdateDailyHours}
+          onDelete={handleDeleteDailyHours}
+          saving={saving}
+          log={editingLog}
+          userName={editingMemberName}
         />
       )}
     </>

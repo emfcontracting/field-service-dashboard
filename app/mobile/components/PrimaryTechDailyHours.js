@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { parseLocalDate, formatDateEST } from '../utils/dateUtils';
 import AddDailyHoursModal from './modals/AddDailyHoursModal';
+import EditDailyHoursModal from './modals/EditDailyHoursModal';
 
 export default function PrimaryTechDailyHours({
   workOrder,
@@ -13,12 +14,15 @@ export default function PrimaryTechDailyHours({
   status,
   saving,
   onAddDailyHours,
+  onUpdateDailyHours,
+  onDeleteDailyHours,
   onDownloadLogs
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
   
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingLog, setEditingLog] = useState(null);
   const wo = workOrder || {};
   
   // Get the PRIMARY TECH (lead tech) from the work order - NOT the current user
@@ -58,6 +62,27 @@ export default function PrimaryTechDailyHours({
     } catch (err) {
       // Error handling is done in parent
       console.error('Error saving daily hours:', err);
+    }
+  }
+
+  async function handleUpdateDailyHours(updatedData) {
+    if (!onUpdateDailyHours) return;
+    try {
+      const { logId, ...updates } = updatedData;
+      await onUpdateDailyHours(logId, updates);
+      setEditingLog(null);
+    } catch (err) {
+      console.error('Error updating daily hours:', err);
+    }
+  }
+
+  async function handleDeleteDailyHours(logId) {
+    if (!onDeleteDailyHours) return;
+    try {
+      await onDeleteDailyHours(logId);
+      setEditingLog(null);
+    } catch (err) {
+      console.error('Error deleting daily hours:', err);
     }
   }
 
@@ -161,7 +186,7 @@ export default function PrimaryTechDailyHours({
                       </p>
                     </div>
                     <div className="text-right text-sm">
-                      <div className="flex gap-3">
+                      <div className="flex gap-3 items-center">
                         {log.hours_regular > 0 && (
                           <span className="text-green-400">RT: {log.hours_regular}</span>
                         )}
@@ -170,6 +195,18 @@ export default function PrimaryTechDailyHours({
                         )}
                         {log.miles > 0 && (
                           <span className="text-blue-400">{log.miles} mi</span>
+                        )}
+                        {log.tech_material_cost > 0 && (
+                          <span className="text-orange-400">${parseFloat(log.tech_material_cost).toFixed(2)}</span>
+                        )}
+                        {isCurrentUserPrimaryTech && status !== 'completed' && onUpdateDailyHours && (
+                          <button
+                            onClick={() => setEditingLog(log)}
+                            className="ml-2 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs"
+                            title={language === 'en' ? 'Edit' : 'Editar'}
+                          >
+                            ✏️
+                          </button>
                         )}
                       </div>
                     </div>
@@ -201,6 +238,19 @@ export default function PrimaryTechDailyHours({
           userId={leadTechId}
           userName={leadTechName}
           isTeamMember={false}
+        />
+      )}
+
+      {/* Edit Daily Hours Modal - only for primary tech's own entries */}
+      {isCurrentUserPrimaryTech && editingLog && (
+        <EditDailyHoursModal
+          show={!!editingLog}
+          onClose={() => setEditingLog(null)}
+          onSave={handleUpdateDailyHours}
+          onDelete={handleDeleteDailyHours}
+          saving={saving}
+          log={editingLog}
+          userName={leadTechName}
         />
       )}
     </>

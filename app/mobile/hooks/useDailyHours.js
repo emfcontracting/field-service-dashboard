@@ -53,6 +53,7 @@ export function useDailyHours(selectedWO, currentUser) {
         hoursRegular: parseFloat(hoursData.hoursRegular) || 0,
         hoursOvertime: parseFloat(hoursData.hoursOvertime) || 0,
         miles: parseFloat(hoursData.miles) || 0,
+        techMaterialCost: parseFloat(hoursData.techMaterialCost) || 0,
         notes: hoursData.notes || null
       };
 
@@ -89,12 +90,27 @@ export function useDailyHours(selectedWO, currentUser) {
     try {
       setSaving(true);
 
-      await dailyHoursService.updateDailyHours(supabase, logId, updates);
+      const normalizedUpdates = {
+        hoursRegular: parseFloat(updates.hoursRegular) || 0,
+        hoursOvertime: parseFloat(updates.hoursOvertime) || 0,
+        miles: parseFloat(updates.miles) || 0,
+        techMaterialCost: parseFloat(updates.techMaterialCost) || 0,
+        notes: updates.notes || null
+      };
 
-      // Update local state
-      setDailyLogs(dailyLogs.map(log => 
-        log.log_id === logId 
-          ? { ...log, ...updates }
+      await dailyHoursService.updateDailyHours(supabase, logId, normalizedUpdates);
+
+      // Update local state with DB column names
+      setDailyLogs(dailyLogs.map(log =>
+        log.log_id === logId
+          ? {
+              ...log,
+              hours_regular: normalizedUpdates.hoursRegular,
+              hours_overtime: normalizedUpdates.hoursOvertime,
+              miles: normalizedUpdates.miles,
+              tech_material_cost: normalizedUpdates.techMaterialCost,
+              notes: normalizedUpdates.notes
+            }
           : log
       ));
 

@@ -355,11 +355,12 @@ export function validateHoursEntry(hoursData) {
   const rt = parseFloat(hoursData.hoursRegular) || 0;
   const ot = parseFloat(hoursData.hoursOvertime) || 0;
   const miles = parseFloat(hoursData.miles) || 0;
+  const techMaterial = parseFloat(hoursData.techMaterialCost) || 0;
   const totalHours = rt + ot;
 
-  // Must enter at least hours OR miles
-  if (totalHours === 0 && miles === 0) {
-    errors.push('Must enter at least hours or miles');
+  // Must enter at least hours, miles, OR material cost (material-only entries allowed)
+  if (totalHours === 0 && miles === 0 && techMaterial === 0) {
+    errors.push('Must enter at least hours, miles, or material cost');
   }
 
   if (totalHours > 24) {
@@ -373,6 +374,11 @@ export function validateHoursEntry(hoursData) {
   // Check miles
   if (miles < 0) {
     errors.push('Miles cannot be negative');
+  }
+
+  // Check material
+  if (techMaterial < 0) {
+    errors.push('Material cost cannot be negative');
   }
 
   return {

@@ -81,6 +81,8 @@ export default function MobilePage() {
     dailyLogs,
     loadingLogs,
     addDailyHours,
+    updateDailyHours,
+    deleteDailyHours,
     downloadLogs
   } = useWorkOrders(currentUser);
 
@@ -267,6 +269,8 @@ export default function MobilePage() {
         // DAILY HOURS PROPS
         dailyLogs={dailyLogs}
         addDailyHours={addDailyHours}
+        updateDailyHours={updateDailyHours}
+        deleteDailyHours={deleteDailyHours}
         downloadLogs={downloadLogs}
         // NTE INCREASE PROPS
         quotes={quotes}
@@ -351,6 +355,8 @@ function MobileAppContent({
   // DAILY HOURS PROPS
   dailyLogs,
   addDailyHours,
+  updateDailyHours,
+  deleteDailyHours,
   downloadLogs,
   // NTE INCREASE PROPS
   quotes,
@@ -517,6 +523,8 @@ function MobileAppContent({
           // DAILY HOURS PROPS
           dailyLogs={dailyLogs}
           onAddDailyHours={addDailyHours}
+          onUpdateDailyHours={updateDailyHours}
+          onDeleteDailyHours={deleteDailyHours}
           onDownloadLogs={downloadLogs}
           // NTE INCREASE PROPS
           quotes={quotes}

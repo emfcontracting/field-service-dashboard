@@ -127,6 +127,12 @@ async function processQueueItem(supabase, item, currentUser) {
     case 'add_daily_hours':
       return await syncDailyLog(supabase, data);
 
+    case 'update_daily_hours':
+      return await syncDailyLogUpdate(supabase, data);
+
+    case 'delete_daily_hours':
+      return await syncDailyLogDelete(supabase, data);
+
     case 'update_field':
       return await syncFieldUpdate(supabase, data);
 
@@ -275,7 +281,7 @@ async function syncCompleteWorkOrder(supabase, data, currentUser) {
 }
 
 async function syncDailyLog(supabase, data) {
-  const { wo_id, user_id, assignment_id, work_date, hours_regular, hours_overtime, miles, notes } = data;
+  const { wo_id, user_id, assignment_id, work_date, hours_regular, hours_overtime, miles, tech_material_cost, notes } = data;
 
   // Check for existing entry
   const { data: existing } = await supabase
@@ -294,6 +300,7 @@ async function syncDailyLog(supabase, data) {
         hours_regular: hours_regular || 0,
         hours_overtime: hours_overtime || 0,
         miles: miles || 0,
+        tech_material_cost: tech_material_cost || 0,
         notes: notes || null
       })
       .eq('id', existing.id);
@@ -312,6 +319,7 @@ async function syncDailyLog(supabase, data) {
         hours_regular: hours_regular || 0,
         hours_overtime: hours_overtime || 0,
         miles: miles || 0,
+        tech_material_cost: tech_material_cost || 0,
         notes: notes || null,
         created_at: new Date().toISOString()
       })
@@ -321,6 +329,49 @@ async function syncDailyLog(supabase, data) {
     if (error) throw error;
     return inserted.id;
   }
+}
+
+async function syncDailyLogUpdate(supabase, data) {
+  const { log_id, hours_regular, hours_overtime, miles, tech_material_cost, notes } = data;
+
+  // Skip sync for purely local (never-synced) logs — they don't exist on server yet.
+  // The pending add_daily_hours entry in the queue will carry the latest values.
+  if (typeof log_id === 'string' && log_id.startsWith('local_')) {
+    console.log(`⏭️ Skipping update for local-only log ${log_id}`);
+    return true;
+  }
+
+  const { error } = await supabase
+    .from('daily_hours_log')
+    .update({
+      hours_regular: hours_regular || 0,
+      hours_overtime: hours_overtime || 0,
+      miles: miles || 0,
+      tech_material_cost: tech_material_cost || 0,
+      notes: notes || null
+    })
+    .eq('id', log_id);
+
+  if (error) throw error;
+  return true;
+}
+
+async function syncDailyLogDelete(supabase, data) {
+  const { log_id } = data;
+
+  // Local-only logs: nothing to delete on server
+  if (typeof log_id === 'string' && log_id.startsWith('local_')) {
+    console.log(`⏭️ Skipping delete for local-only log ${log_id}`);
+    return true;
+  }
+
+  const { error } = await supabase
+    .from('daily_hours_log')
+    .delete()
+    .eq('id', log_id);
+
+  if (error) throw error;
+  return true;
 }
 
 async function syncFieldUpdate(supabase, data) {

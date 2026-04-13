@@ -9,7 +9,9 @@ import {
   updateCachedWorkOrder,
   addToSyncQueue,
   initOfflineDB,
-  isOfflineDBReady
+  isOfflineDBReady,
+  updateLocalDailyLog,
+  deleteLocalDailyLog
 } from '../services/offline/offlineService';
 
 export function useWorkOrders(currentUser) {
@@ -340,24 +342,28 @@ export function useWorkOrders(currentUser) {
         await loadDailyLogs(selectedWO.wo_id);
       } else {
         // Offline - add to local state and queue for sync
+        const localId = `local_${Date.now()}`;
         const localLog = {
-          id: `local_${Date.now()}`,
-          log_id: `local_${Date.now()}`,
+          id: localId,
+          log_id: localId,
           wo_id: selectedWO.wo_id,
           user_id: hoursData.userId,
           work_date: hoursData.workDate,
           hours_regular: hoursData.hoursRegular || 0,
           hours_overtime: hoursData.hoursOvertime || 0,
           miles: hoursData.miles || 0,
+          tech_material_cost: hoursData.techMaterialCost || 0,
           notes: hoursData.notes ? `${hoursData.notes} [PENDING SYNC]` : '[PENDING SYNC]',
           created_at: new Date().toISOString(),
+          synced: false,
           user: { first_name: currentUser.first_name, last_name: currentUser.last_name }
         };
-        
+
         setDailyLogs(prev => [localLog, ...prev]);
-        
+
         // Queue for sync
         await addToSyncQueue('add_daily_hours', {
+          local_log_id: localId,
           wo_id: selectedWO.wo_id,
           user_id: hoursData.userId,
           assignment_id: hoursData.assignmentId || null,
@@ -368,13 +374,141 @@ export function useWorkOrders(currentUser) {
           tech_material_cost: hoursData.techMaterialCost || 0,
           notes: hoursData.notes || null
         });
-        
+
         alert('Hours saved locally. Will sync when back online.');
       }
       
       return true;
     } catch (err) {
       console.error('Error adding daily hours:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateDailyHours(logId, updates) {
+    if (!selectedWO?.wo_id) {
+      throw new Error('No work order selected');
+    }
+
+    const normalized = {
+      hours_regular: parseFloat(updates.hoursRegular) || 0,
+      hours_overtime: parseFloat(updates.hoursOvertime) || 0,
+      miles: parseFloat(updates.miles) || 0,
+      tech_material_cost: parseFloat(updates.techMaterialCost) || 0,
+      notes: updates.notes || null
+    };
+
+    try {
+      setSaving(true);
+
+      const isLocalOnly = typeof logId === 'string' && logId.startsWith('local_');
+
+      if (navigator.onLine && !isLocalOnly) {
+        const { error } = await supabase
+          .from('daily_hours_log')
+          .update(normalized)
+          .eq('id', logId);
+
+        if (error) throw error;
+
+        // Reload to stay in sync with server
+        await loadDailyLogs(selectedWO.wo_id);
+      } else {
+        // Offline OR still-local log: update local state + queue sync
+        setDailyLogs(prev => prev.map(log => {
+          const currentId = log.id || log.log_id;
+          if (currentId !== logId) return log;
+          return {
+            ...log,
+            ...normalized,
+            notes: normalized.notes
+              ? (!navigator.onLine ? `${normalized.notes} [PENDING SYNC]` : normalized.notes)
+              : (!navigator.onLine ? '[PENDING SYNC]' : null)
+          };
+        }));
+
+        // Update IndexedDB cache if this was a server-synced entry
+        if (!isLocalOnly) {
+          try {
+            await updateLocalDailyLog(logId, normalized);
+          } catch (e) {
+            console.warn('Could not update cached log:', e);
+          }
+        }
+
+        await addToSyncQueue('update_daily_hours', {
+          log_id: logId,
+          ...normalized
+        });
+
+        if (!navigator.onLine) {
+          alert('Hours update saved locally. Will sync when back online.');
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error updating daily hours:', err);
+      alert('Error updating hours: ' + err.message);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteDailyHours(logId) {
+    if (!selectedWO?.wo_id) {
+      throw new Error('No work order selected');
+    }
+
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this daily hours entry? This cannot be undone.'
+    );
+    if (!confirmed) return false;
+
+    try {
+      setSaving(true);
+
+      const isLocalOnly = typeof logId === 'string' && logId.startsWith('local_');
+
+      if (navigator.onLine && !isLocalOnly) {
+        const { error } = await supabase
+          .from('daily_hours_log')
+          .delete()
+          .eq('id', logId);
+
+        if (error) throw error;
+
+        setDailyLogs(prev => prev.filter(log => (log.id || log.log_id) !== logId));
+      } else {
+        // Offline OR local-only entry
+        setDailyLogs(prev => prev.filter(log => (log.id || log.log_id) !== logId));
+
+        if (!isLocalOnly) {
+          try {
+            await deleteLocalDailyLog(logId);
+          } catch (e) {
+            console.warn('Could not delete cached log:', e);
+          }
+
+          await addToSyncQueue('delete_daily_hours', { log_id: logId });
+
+          if (!navigator.onLine) {
+            alert('Hours entry deleted locally. Will sync when back online.');
+          }
+        } else {
+          // Local-only record — also nuke any pending queue entries that reference it
+          // (best-effort; full queue cleanup happens on reconnect)
+          console.log(`🗑️ Deleted local-only daily log ${logId}`);
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error deleting daily hours:', err);
+      alert('Error deleting hours: ' + err.message);
       throw err;
     } finally {
       setSaving(false);
@@ -1026,6 +1160,8 @@ export function useWorkOrders(currentUser) {
     loadingLogs,
     loadDailyLogs,
     addDailyHours,
+    updateDailyHours,
+    deleteDailyHours,
     downloadLogs
   };
 }

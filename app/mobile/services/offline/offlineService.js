@@ -303,6 +303,44 @@ export async function addLocalDailyLog(logData) {
   });
 }
 
+export async function updateLocalDailyLog(logId, updates) {
+  const database = getDB();
+  const tx = database.transaction(STORES.DAILY_LOGS, 'readwrite');
+  const store = tx.objectStore(STORES.DAILY_LOGS);
+
+  return new Promise((resolve, reject) => {
+    const getRequest = store.get(logId);
+
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result;
+      if (existing) {
+        const updated = {
+          ...existing,
+          ...updates,
+          locally_modified: true,
+          cached_at: new Date().toISOString()
+        };
+        store.put(updated);
+      }
+    };
+
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteLocalDailyLog(logId) {
+  const database = getDB();
+  const tx = database.transaction(STORES.DAILY_LOGS, 'readwrite');
+  const store = tx.objectStore(STORES.DAILY_LOGS);
+
+  return new Promise((resolve, reject) => {
+    const request = store.delete(logId);
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export async function getUnsyncedDailyLogs() {
   const database = getDB();
   const tx = database.transaction(STORES.DAILY_LOGS, 'readonly');

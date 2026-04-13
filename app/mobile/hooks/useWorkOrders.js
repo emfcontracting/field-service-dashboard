@@ -409,7 +409,7 @@ export function useWorkOrders(currentUser) {
         const { error } = await supabase
           .from('daily_hours_log')
           .update(normalized)
-          .eq('id', logId);
+          .eq('log_id', logId);
 
         if (error) throw error;
 
@@ -477,7 +477,7 @@ export function useWorkOrders(currentUser) {
         const { error } = await supabase
           .from('daily_hours_log')
           .delete()
-          .eq('id', logId);
+          .eq('log_id', logId);
 
         if (error) throw error;
 

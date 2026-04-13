@@ -350,7 +350,7 @@ async function syncDailyLogUpdate(supabase, data) {
       tech_material_cost: tech_material_cost || 0,
       notes: notes || null
     })
-    .eq('id', log_id);
+    .eq('log_id', log_id);
 
   if (error) throw error;
   return true;
@@ -368,7 +368,7 @@ async function syncDailyLogDelete(supabase, data) {
   const { error } = await supabase
     .from('daily_hours_log')
     .delete()
-    .eq('id', log_id);
+    .eq('log_id', log_id);
 
   if (error) throw error;
   return true;

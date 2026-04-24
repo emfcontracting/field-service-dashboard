@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AnalyticsTab from '@/app/components/AnalyticsTab';
 import BulkOperationsTab from '@/app/components/BulkOperationsTab';
+import BackendTriggerResultModal from '@/app/dashboard/components/BackendTriggerResultModal';
 
 // ── UI primitives ────────────────────────────────────────────────────────────
 const Card = ({ children, className = '' }) => (
@@ -372,6 +373,7 @@ export default function BackendDashboard() {
   const [logType, setLogType]       = useState('all');
   const [logStatus, setLogStatus]   = useState('');
   const [logLimit, setLogLimit]     = useState(100);
+  const [triggerResult, setTriggerResult] = useState(null);
 
   useEffect(() => { fetchHealthData(); }, []);
 
@@ -413,13 +415,18 @@ export default function BackendDashboard() {
         body: JSON.stringify({ action, params }),
       });
       const data = await res.json();
-      if (data.success) {
-        alert(`✓ ${data.message}\n\n${JSON.stringify(data.details, null, 2)}`);
-        fetchHealthData(); fetchLogs();
-      } else {
-        alert(`✗ ${data.message || data.error}\n\n${data.details ? JSON.stringify(data.details, null, 2) : ''}`);
-      }
-    } catch (err) { alert(`✗ Failed: ${err.message}`); }
+      // Show structured result modal instead of alert(JSON.stringify(...))
+      setTriggerResult({ ...data, action: data.action || action });
+      fetchHealthData(); fetchLogs();
+    } catch (err) {
+      setTriggerResult({
+        success: false,
+        action,
+        message: `Failed: ${err.message}`,
+        details: null,
+        timestamp: new Date().toISOString(),
+      });
+    }
     finally { setTriggering(null); }
   }
 
@@ -458,6 +465,14 @@ export default function BackendDashboard() {
           {activeTab === 'logs'      && <LogsTab logs={logs} stats={logStats} logType={logType} setLogType={setLogType} logStatus={logStatus} setLogStatus={setLogStatus} logLimit={logLimit} setLogLimit={setLogLimit} onRefresh={fetchLogs} />}
           {activeTab === 'database'  && <DatabaseTab />}
         </div>
+
+        {/* ── Trigger result modal ── */}
+        {triggerResult && (
+          <BackendTriggerResultModal
+            result={triggerResult}
+            onClose={() => setTriggerResult(null)}
+          />
+        )}
     </div>
   );
 }

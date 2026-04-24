@@ -69,6 +69,16 @@ const isNewWorkOrder = (wo) => {
   return hours <= 24;
 };
 
+// Returns true if this WO has a CBRE status change that hasn't been acknowledged yet.
+// Compares cbre_status_updated_at against cbre_status_acknowledged_at.
+const hasUnackCbreUpdate = (wo) => {
+  if (!wo.cbre_status_updated_at) return false;
+  if (!wo.cbre_status_acknowledged_at) return true;
+  return new Date(wo.cbre_status_updated_at) > new Date(wo.cbre_status_acknowledged_at);
+};
+
+export { hasUnackCbreUpdate };
+
 export default function WorkOrdersTable({
   workOrders,
   loading,
@@ -81,7 +91,8 @@ export default function WorkOrdersTable({
   onToggleSelect,
   onSelectAll,
   onClearSelection,
-  showCheckboxes = false
+  showCheckboxes = false,
+  onAcknowledgeCbre  // (woId) => void — called when user clicks the 🔔 NEW badge to acknowledge a CBRE status change
 }) {
   const allSelected = workOrders.length > 0 && workOrders.every(wo => selectedWOs.has(wo.wo_id));
   const someSelected = workOrders.some(wo => selectedWOs.has(wo.wo_id));
@@ -158,9 +169,11 @@ export default function WorkOrdersTable({
               const priorityBadge = getPriorityBadge(wo.priority);
               const priorityStyle = getPriorityStyle(priorityBadge);
               const hasPendingNTE = wo.nte_quotes?.some(q => q.nte_status === 'pending');
+              const isUnackCbre = hasUnackCbreUpdate(wo);
 
               const rowBg = isSelected
                 ? 'bg-blue-600/10 border-l-2 border-l-blue-500'
+                : isUnackCbre ? 'bg-amber-500/10 border-l-4 border-l-amber-500'
                 : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
                 : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'
                 : '';
@@ -186,6 +199,18 @@ export default function WorkOrdersTable({
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
+                      {isUnackCbre && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onAcknowledgeCbre) onAcknowledgeCbre(wo.wo_id);
+                          }}
+                          title={`CBRE status changed to ${(wo.cbre_status || '').replace(/_/g, ' ')} — click to acknowledge`}
+                          className="bg-amber-500/30 hover:bg-amber-500/60 text-amber-200 hover:text-white border border-amber-400/70 hover:border-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse cursor-pointer transition shadow-md shadow-amber-500/30"
+                        >
+                          🔔 NEW
+                        </button>
+                      )}
                       {isNew && (
                         <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
                           NEW

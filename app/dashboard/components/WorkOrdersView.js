@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import WorkOrdersTable from './WorkOrdersTable';
+import WorkOrdersTable, { hasUnackCbreUpdate } from './WorkOrdersTable';
 import StatsCards from './StatsCards';
 import WorkOrdersFilters from './WorkOrdersFilters';
 import ExportDropdown from './ExportDropdown';
@@ -243,8 +243,90 @@ export default function WorkOrdersView({
   // Count WOs with pending NTE for badge
   const pendingNTECount = workOrders.filter(wo => wo.nte_quotes?.some(q => q.nte_status === 'pending')).length;
 
+  // CBRE acknowledgment: WOs with status changes the office hasn't acknowledged yet
+  const unackCbreWOs = workOrders.filter(hasUnackCbreUpdate);
+
+  const handleAcknowledgeCbre = async (woId) => {
+    try {
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ cbre_status_acknowledged_at: new Date().toISOString() })
+        .eq('wo_id', woId);
+      if (error) throw error;
+      await refreshWorkOrders();
+    } catch (err) {
+      console.error('Failed to acknowledge CBRE update:', err);
+      alert('Failed to acknowledge: ' + err.message);
+    }
+  };
+
+  const handleAcknowledgeAllCbre = async () => {
+    if (unackCbreWOs.length === 0) return;
+    try {
+      const woIds = unackCbreWOs.map(wo => wo.wo_id);
+      const { error } = await supabase
+        .from('work_orders')
+        .update({ cbre_status_acknowledged_at: new Date().toISOString() })
+        .in('wo_id', woIds);
+      if (error) throw error;
+      await refreshWorkOrders();
+    } catch (err) {
+      console.error('Failed to acknowledge all CBRE updates:', err);
+      alert('Failed to acknowledge all: ' + err.message);
+    }
+  };
+
   return (
     <>
+      {/* ── CBRE Status Update Banner ── Sticky, persistent until acknowledged ── */}
+      {unackCbreWOs.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-900/40 via-amber-800/30 to-amber-900/20 border-2 border-amber-500/60 rounded-lg p-4 mb-4 shadow-lg shadow-amber-500/10">
+          <div className="flex flex-wrap justify-between items-center gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl animate-pulse">🔔</span>
+              <div>
+                <div className="text-amber-100 font-bold text-base">
+                  {unackCbreWOs.length} {unackCbreWOs.length === 1 ? 'work order has' : 'work orders have'} new CBRE status updates
+                </div>
+                <div className="text-amber-300/70 text-xs mt-0.5">
+                  Click a WO# below or the 🔔 NEW badge in the table to acknowledge — markers stay until you do.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleAcknowledgeAllCbre}
+              className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition shadow-lg shadow-amber-600/30 whitespace-nowrap"
+            >
+              ✓ Acknowledge All ({unackCbreWOs.length})
+            </button>
+          </div>
+
+          {/* Quick chips: WO numbers — click to acknowledge individually */}
+          <div className="mt-3 pt-3 border-t border-amber-500/30 flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+            {unackCbreWOs.slice(0, 50).map(wo => {
+              const cbreLabel = (wo.cbre_status || '').replace(/_/g, ' ');
+              return (
+                <button
+                  key={wo.wo_id}
+                  onClick={() => handleAcknowledgeCbre(wo.wo_id)}
+                  className="bg-amber-950/60 hover:bg-amber-700/60 border border-amber-500/40 hover:border-amber-300 text-amber-200 hover:text-white text-[10px] font-mono px-2 py-1 rounded transition flex items-center gap-1"
+                  title={`${wo.building || ''} — ${cbreLabel} — click to acknowledge`}
+                >
+                  <span className="font-bold">{wo.wo_number}</span>
+                  <span className="text-amber-400/70">·</span>
+                  <span className="opacity-80">{cbreLabel}</span>
+                </button>
+              );
+            })}
+            {unackCbreWOs.length > 50 && (
+              <span className="text-amber-400/60 text-[10px] italic px-2 py-1">
+                + {unackCbreWOs.length - 50} more…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <StatsCards 
         stats={stats} 
         onFilterByCbreStatus={handleFilterByCbreStatus}
@@ -386,6 +468,7 @@ export default function WorkOrdersView({
         onSelectAll={selectAllWOs}
         onClearSelection={clearSelection}
         showCheckboxes={showCheckboxes}
+        onAcknowledgeCbre={handleAcknowledgeCbre}
       />
     </>
   );

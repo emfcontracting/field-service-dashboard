@@ -449,7 +449,8 @@ export async function GET(request) {
         // Build update
         const updateData = {
           cbre_status: labelConfig.cbre_status,
-          cbre_status_updated_at: new Date().toISOString()
+          cbre_status_updated_at: new Date().toISOString(),
+          cbre_status_acknowledged_at: null  // mark as unacknowledged so dashboard shows the marker
         };
 
         if (labelConfig.billing_status) {

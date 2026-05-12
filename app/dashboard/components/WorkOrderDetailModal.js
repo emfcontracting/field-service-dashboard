@@ -60,7 +60,7 @@ export default function WorkOrderDetailModal({
   const [savingNTE, setSavingNTE] = useState(false);
   const [showNTEModal, setShowNTEModal] = useState(false);
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
-  const adminPassword = 'admin123';
+  const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
@@ -2394,7 +2394,7 @@ const sendAssignmentNotifications = async () => {
       {showNTEModal && (
         <NTEIncreaseModal
           workOrder={selectedWO}
-          currentUser={users.find(u => u.role === 'admin' || u.role === 'office_staff')}
+          currentUser={currentUser || users.find(u => u.role === 'admin' || u.role === 'office_staff')}
           supabase={supabase}
           onClose={() => setShowNTEModal(false)}
           onSave={(newNTE) => {

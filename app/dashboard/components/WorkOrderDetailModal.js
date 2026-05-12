@@ -134,16 +134,40 @@ export default function WorkOrderDetailModal({
       const quote = nteIncreases.find(q => q.quote_id === quoteId);
       const updatedQuote = { ...quote, ...updates };
       
-      // Calculate grand total including ALL components: labor + materials + equipment + rental + trailer + mileage
+      // Calculate grand total from all components: labor + materials + equipment + rental + trailer + mileage
       const laborTotal = parseFloat(updatedQuote.labor_total) || 0;
       const materialsWithMarkup = parseFloat(updatedQuote.materials_with_markup) || 0;
       const equipmentWithMarkup = parseFloat(updatedQuote.equipment_with_markup) || 0;
       const rentalWithMarkup = parseFloat(updatedQuote.rental_with_markup) || 0;
       const trailerWithMarkup = parseFloat(updatedQuote.trailer_with_markup) || 0;
       const mileageTotal = parseFloat(updatedQuote.mileage_total) || 0;
-      const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
-      
-      const finalUpdates = { ...updates, grand_total: grandTotal };
+      const lineItemsTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
+
+      // For estimate mode: new_nte = snapshot + line items total
+      // For reconciliation mode: grand_total IS the overage, new_nte stays as actual_final_total
+      const isReconciliation = updatedQuote.request_type === 'reconciliation';
+      const currentCostsSnapshot = parseFloat(updatedQuote.current_costs_snapshot) || 0;
+
+      let finalUpdates;
+      if (isReconciliation) {
+        // In reconciliation: line items represent the actual final breakdown,
+        // so lineItemsTotal IS the actual final total. grand_total = overage.
+        const originalNTE = parseFloat(updatedQuote.original_nte) || 0;
+        const overage = Math.max(0, lineItemsTotal - originalNTE);
+        finalUpdates = {
+          ...updates,
+          grand_total: overage,
+          new_nte_amount: lineItemsTotal,
+          actual_final_total: lineItemsTotal,
+        };
+      } else {
+        // In estimate: grand_total = additional work total, new_nte = snapshot + additional
+        finalUpdates = {
+          ...updates,
+          grand_total: lineItemsTotal,
+          new_nte_amount: currentCostsSnapshot + lineItemsTotal,
+        };
+      }
       
       const { error } = await supabase
         .from('work_order_quotes')
@@ -280,10 +304,9 @@ export default function WorkOrderDetailModal({
       ? Math.max(0, finalActualTotal - originalNTE)
       : 0;
 
-    // For estimate mode
-    const projectedTotal = hasSnapshot && quote.new_nte_amount 
-      ? parseFloat(quote.new_nte_amount) 
-      : existingCostsTotal + additionalTotal;
+    // For estimate mode: always recompute fresh from snapshot + line items
+    // (don't trust stored new_nte_amount — it may be stale after line item edits)
+    const projectedTotal = existingCostsTotal + additionalTotal;
     
     const newNTENeeded = isReconciliation ? finalActualTotal : projectedTotal;
     
@@ -2033,7 +2056,9 @@ const sendAssignmentNotifications = async () => {
                       
                       if (hasSnapshot) {
                         currentCosts = parseFloat(quote.current_costs_snapshot) || 0;
-                        newNTENeeded = parseFloat(quote.new_nte_amount) || (currentCosts + additionalTotal);
+                        // Always recompute newNTENeeded fresh from line items
+                        // (don't trust stored new_nte_amount — it may be stale after edits)
+                        newNTENeeded = currentCosts + additionalTotal;
                       } else {
                         let laborRT = 0;
                         let laborOT = 0;

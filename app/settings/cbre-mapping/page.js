@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
-import AppShell from '@/components/AppShell';
+import AppShell from '@/app/components/AppShell';
 import { DEFAULT_CBRE_MAPPING, buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 
 const supabase = getSupabase();

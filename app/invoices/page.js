@@ -175,6 +175,17 @@ export default function InvoicingPage() {
   const [readySearchTerm, setReadySearchTerm]           = useState('');
   const [invoiceSearchTerm, setInvoiceSearchTerm]       = useState('');
 
+  // ── Status filter + bulk-select for the Invoices tab ────────────────────────────
+  // 'awaiting' = not paid, not rejected (default for the daily workflow)
+  // 'paid'     = historical record
+  // 'all'      = everything (incl. rejected)
+  const [statusFilter, setStatusFilter]                 = useState('awaiting');
+  const [selectedInvoiceIds, setSelectedInvoiceIds]     = useState(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex]       = useState(null);
+  const [bulkMarking, setBulkMarking]                   = useState(false);
+
+  const AWAITING_STATUSES = ['draft', 'approved', 'accepted', 'synced'];
+
   // ── Filter effects ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!readySearchTerm.trim()) { setFilteredAcknowledgedWOs(acknowledgedWOs); return; }
@@ -187,14 +198,36 @@ export default function InvoicingPage() {
   }, [readySearchTerm, acknowledgedWOs]);
 
   useEffect(() => {
-    if (!invoiceSearchTerm.trim()) { setFilteredInvoices(invoices); return; }
-    const s = invoiceSearchTerm.toLowerCase();
-    setFilteredInvoices(invoices.filter(inv =>
-      inv.invoice_number?.toLowerCase().includes(s) ||
-      inv.work_order?.wo_number?.toLowerCase().includes(s) ||
-      inv.work_order?.building?.toLowerCase().includes(s)
-    ));
-  }, [invoiceSearchTerm, invoices]);
+    let list = invoices;
+
+    // Status filter
+    if (statusFilter === 'awaiting') {
+      list = list.filter(inv => AWAITING_STATUSES.includes(inv.status));
+    } else if (statusFilter === 'paid') {
+      list = list.filter(inv => inv.status === 'paid');
+    }
+    // 'all' = no status filter
+
+    // Search filter
+    if (invoiceSearchTerm.trim()) {
+      const s = invoiceSearchTerm.toLowerCase();
+      list = list.filter(inv =>
+        inv.invoice_number?.toLowerCase().includes(s) ||
+        inv.work_order?.wo_number?.toLowerCase().includes(s) ||
+        inv.work_order?.building?.toLowerCase().includes(s)
+      );
+    }
+
+    setFilteredInvoices(list);
+
+    // Drop any selections that are no longer visible
+    setSelectedInvoiceIds(prev => {
+      if (prev.size === 0) return prev;
+      const visibleIds = new Set(list.map(i => i.invoice_id));
+      const next = new Set([...prev].filter(id => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [invoiceSearchTerm, invoices, statusFilter]);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -372,10 +405,84 @@ export default function InvoicingPage() {
   };
 
   const updateInvoiceStatus = async (invoiceId, newStatus) => {
-    const { error } = await supabase.from('invoices').update({ status: newStatus }).eq('invoice_id', invoiceId);
+    const update = { status: newStatus };
+    if (newStatus === 'paid') {
+      update.paid_at = new Date().toISOString();
+    }
+    const { error } = await supabase.from('invoices').update(update).eq('invoice_id', invoiceId);
     if (error) { alert('Error: ' + error.message); return; }
     alert(`✅ Invoice marked as ${newStatus}`); await fetchData(); setSelectedItem(null);
   };
+
+  // ── Bulk mark-as-paid ─────────────────────────────────────────────────────────────
+  const bulkMarkAsPaid = async () => {
+    const ids = Array.from(selectedInvoiceIds);
+    if (!ids.length) return;
+    if (!confirm(`Mark ${ids.length} invoice${ids.length !== 1 ? 's' : ''} as paid?`)) return;
+
+    setBulkMarking(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: 'paid', paid_at: now })
+        .in('invoice_id', ids);
+      if (error) throw error;
+
+      // Optimistic update
+      setInvoices(prev => prev.map(inv =>
+        ids.includes(inv.invoice_id) ? { ...inv, status: 'paid', paid_at: now } : inv
+      ));
+      setSelectedInvoiceIds(new Set());
+      setLastSelectedIndex(null);
+      alert(`✅ Marked ${ids.length} invoice${ids.length !== 1 ? 's' : ''} as paid`);
+    } catch (err) {
+      alert('❌ ' + err.message);
+    } finally {
+      setBulkMarking(false);
+    }
+  };
+
+  // ── Checkbox click handler with shift+click range select ─────────────────────────────────────────────
+  const handleCheckboxClick = (invoiceId, index, e) => {
+    e.stopPropagation();
+    const newSelected = new Set(selectedInvoiceIds);
+
+    if (e.shiftKey && lastSelectedIndex !== null && lastSelectedIndex !== index) {
+      // Range select from last selected to current
+      const start = Math.min(lastSelectedIndex, index);
+      const end   = Math.max(lastSelectedIndex, index);
+      const shouldSelect = !newSelected.has(invoiceId); // mirror the action of the clicked row
+      for (let i = start; i <= end; i++) {
+        const id = filteredInvoices[i]?.invoice_id;
+        if (!id) continue;
+        if (shouldSelect) newSelected.add(id);
+        else              newSelected.delete(id);
+      }
+    } else {
+      // Toggle single
+      if (newSelected.has(invoiceId)) newSelected.delete(invoiceId);
+      else                            newSelected.add(invoiceId);
+    }
+    setSelectedInvoiceIds(newSelected);
+    setLastSelectedIndex(index);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedInvoiceIds.size === filteredInvoices.length && filteredInvoices.length > 0) {
+      setSelectedInvoiceIds(new Set());
+    } else {
+      setSelectedInvoiceIds(new Set(filteredInvoices.map(i => i.invoice_id)));
+    }
+    setLastSelectedIndex(null);
+  };
+
+  // ── Filter counts (for the filter pills) ──────────────────────────────────────────────────────
+  const awaitingCount = invoices.filter(i => AWAITING_STATUSES.includes(i.status)).length;
+  const paidCount     = invoices.filter(i => i.status === 'paid').length;
+  const selectedTotal = filteredInvoices
+    .filter(i => selectedInvoiceIds.has(i.invoice_id))
+    .reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
 
   const deleteInvoice = async (invoiceId, woId) => {
     if (prompt('Enter admin password:') !== 'EMF2024!') { alert('❌ Invalid password'); return; }
@@ -520,7 +627,30 @@ export default function InvoicingPage() {
           {activeTab === 'invoiced' && (
             <Card>
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
+                  {/* Status filter pills */}
+                  <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1 ml-2">
+                    <button onClick={() => setStatusFilter('awaiting')}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                        statusFilter === 'awaiting' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}>
+                      💰 Awaiting Payment <span className="opacity-70">({awaitingCount})</span>
+                    </button>
+                    <button onClick={() => setStatusFilter('paid')}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                        statusFilter === 'paid' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}>
+                      ✅ Paid <span className="opacity-70">({paidCount})</span>
+                    </button>
+                    <button onClick={() => setStatusFilter('all')}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                        statusFilter === 'all' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}>
+                      📋 All <span className="opacity-70">({invoices.length})</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <Input value={invoiceSearchTerm} onChange={e => setInvoiceSearchTerm(e.target.value)}
                     placeholder="Search Invoice#, WO#, building…" className="w-64" />
@@ -535,25 +665,72 @@ export default function InvoicingPage() {
                   <div className="text-center py-12 text-slate-600">
                     {invoiceSearchTerm
                       ? <><p>No invoices matching <span className="text-slate-400">"{invoiceSearchTerm}"</span></p><Btn onClick={() => setInvoiceSearchTerm('')} variant="ghost" size="sm" className="mt-3">Clear</Btn></>
-                      : <p>No invoices generated yet.</p>}
+                      : statusFilter === 'awaiting'
+                        ? <p>🎉 No invoices awaiting payment — everything's collected!</p>
+                        : statusFilter === 'paid'
+                          ? <p>No paid invoices yet</p>
+                          : <p>No invoices generated yet.</p>}
                   </div>
                 </CardBody>
               ) : (
+                <>
+                {/* Bulk action bar (only when items selected) */}
+                {selectedInvoiceIds.size > 0 && (
+                  <div className="sticky top-0 z-10 bg-blue-600/20 border-y border-blue-500/40 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
+                    <div className="text-sm text-slate-200">
+                      <strong className="text-blue-300">{selectedInvoiceIds.size}</strong> selected
+                      <span className="text-slate-500 ml-2">· Total: 
+                        <span className="text-emerald-400 font-mono font-bold">${selectedTotal.toFixed(2)}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Btn onClick={() => { setSelectedInvoiceIds(new Set()); setLastSelectedIndex(null); }}
+                        variant="ghost" size="sm">Clear</Btn>
+                      <Btn onClick={bulkMarkAsPaid} disabled={bulkMarking} variant="success" size="sm">
+                        {bulkMarking ? 'Marking…' : `💰 Mark ${selectedInvoiceIds.size} as Paid`}
+                      </Btn>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[#1e1e2e]">
+                        <th className="px-3 py-3 w-10">
+                          <input type="checkbox"
+                            checked={selectedInvoiceIds.size === filteredInvoices.length && filteredInvoices.length > 0}
+                            ref={el => {
+                              if (el) el.indeterminate = selectedInvoiceIds.size > 0 && selectedInvoiceIds.size < filteredInvoices.length;
+                            }}
+                            onChange={toggleSelectAll}
+                            onClick={e => e.stopPropagation()}
+                            className="w-4 h-4 accent-blue-500 cursor-pointer" />
+                        </th>
                         {['Invoice #', 'Work Order', 'Building', 'Date', 'Total', 'Status', ''].map(h => (
                           <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h === 'Total' ? 'text-right' : h === '' ? 'text-center' : 'text-left'}`}>{h}</th>
                         ))}
+                        {statusFilter === 'paid' && (
+                          <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Paid On</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
                       {filteredInvoices.map((inv, i) => {
                         const unack = isUnacknowledged(inv);
+                        const isSelected = selectedInvoiceIds.has(inv.invoice_id);
                         return (
                         <tr key={inv.invoice_id} onClick={() => selectInvoice(inv)}
-                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'} ${unack ? 'ring-1 ring-yellow-500/20' : ''}`}>
+                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer
+                            ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}
+                            ${unack ? 'ring-1 ring-yellow-500/20' : ''}
+                            ${isSelected ? 'bg-blue-500/10' : ''}`}>
+                          <td className="px-3 py-3 w-10" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox"
+                              checked={isSelected}
+                              onClick={e => handleCheckboxClick(inv.invoice_id, i, e)}
+                              onChange={() => {}}
+                              className="w-4 h-4 accent-blue-500 cursor-pointer" />
+                          </td>
                           <td className="px-4 py-3 font-mono font-semibold text-slate-200">
                             <div className="flex items-center gap-2">
                               {unack && <span title="New CBRE update — click to acknowledge" className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />}
@@ -580,12 +757,24 @@ export default function InvoicingPage() {
                           <td className="px-4 py-3 text-center text-slate-600">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline"><polyline points="9 18 15 12 9 6"/></svg>
                           </td>
+                          {statusFilter === 'paid' && (
+                            <td className="px-4 py-3 text-slate-500 text-xs">
+                              {inv.paid_at ? new Date(inv.paid_at).toLocaleDateString() : '—'}
+                            </td>
+                          )}
                         </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
+                {/* Tip hint below the table */}
+                {filteredInvoices.length > 1 && selectedInvoiceIds.size === 0 && statusFilter !== 'paid' && (
+                  <div className="px-6 py-2 text-xs text-slate-600 border-t border-[#1e1e2e]">
+                    💡 Tip: Click checkboxes to select. Hold <kbd className="px-1 py-0.5 bg-[#1e1e2e] border border-[#2d2d44] rounded text-[10px] font-mono">Shift</kbd> + click for range select.
+                  </div>
+                )}
+                </>
               )}
             </Card>
           )}

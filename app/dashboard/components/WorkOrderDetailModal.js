@@ -188,9 +188,11 @@ export default function WorkOrderDetailModal({
   };
 
   // Print NTE Increase - USES SNAPSHOT VALUES
-  // If quote has a saved snapshot, use those frozen values (single source of truth)
-  // Only falls back to recalculation for legacy quotes without snapshots
+  // Handles BOTH request types:
+  //  - 'estimate' (default): forward-looking, shows Current + Additional + Projected
+  //  - 'reconciliation': after-the-fact, shows Original NTE vs Final Actual = Overage
   const printNTEIncrease = async (quote) => {
+    const isReconciliation = quote.request_type === 'reconciliation';
     const hasSnapshot = quote.current_costs_snapshot !== null && quote.current_costs_snapshot !== undefined;
     
     // Additional work estimate from the quote fields
@@ -265,17 +267,25 @@ export default function WorkOrderDetailModal({
       }
     }
     
-    // Use saved new_nte_amount if available, otherwise calculate
-    const projectedTotal = hasSnapshot && quote.new_nte_amount 
-      ? parseFloat(quote.new_nte_amount) 
-      : existingCostsTotal + additionalTotal;
-    
     // Original NTE - use saved original_nte from snapshot if available
     const originalNTE = hasSnapshot && quote.original_nte 
       ? parseFloat(quote.original_nte) 
       : (parseFloat(selectedWO.nte) || 0);
+
+    // Reconciliation-specific values
+    const finalActualTotal = isReconciliation
+      ? (parseFloat(quote.actual_final_total) || parseFloat(quote.new_nte_amount) || existingCostsTotal)
+      : 0;
+    const overageAmount = isReconciliation
+      ? Math.max(0, finalActualTotal - originalNTE)
+      : 0;
+
+    // For estimate mode
+    const projectedTotal = hasSnapshot && quote.new_nte_amount 
+      ? parseFloat(quote.new_nte_amount) 
+      : existingCostsTotal + additionalTotal;
     
-    const newNTENeeded = projectedTotal;
+    const newNTENeeded = isReconciliation ? finalActualTotal : projectedTotal;
     
     const htmlContent = `
       <!DOCTYPE html>
@@ -355,10 +365,89 @@ export default function WorkOrderDetailModal({
 
         ${quote.description ? `
         <div class="section">
-          <div class="section-title">Description of Additional Work</div>
-          <p style="padding: 10px; background: #f9fafb; border-radius: 5px;">${quote.description}</p>
+          <div class="section-title">${isReconciliation ? 'Description of Work Performed' : 'Description of Additional Work'}</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px; white-space: pre-wrap;">${quote.description}</p>
         </div>
         ` : ''}
+
+        ${isReconciliation ? `
+        <!-- ============================================= -->
+        <!-- RECONCILIATION MODE LAYOUT                    -->
+        <!-- ============================================= -->
+        <div class="section" style="background:#f3e8ff;border:2px solid #a855f7;border-radius:8px;padding:12px;margin-bottom:20px;text-align:center;">
+          <strong style="color:#6b21a8;font-size:13px;">🔄 RECONCILIATION REQUEST — Work Already Completed</strong>
+          <p style="color:#7e22ce;font-size:11px;margin-top:4px;">Final actual costs reconciled against original NTE budget.</p>
+        </div>
+
+        <!-- Final Actual Costs (Purple box) -->
+        <div class="cost-box" style="border-color:#a855f7;background:#faf5ff;">
+          <div class="cost-box-title" style="color:#6b21a8;">FINAL ACTUAL COSTS (Work Completed)</div>
+          ${(parseFloat(quote.actual_rt_hours) || parseFloat(quote.actual_ot_hours) || parseFloat(quote.actual_material_cost) || parseFloat(quote.actual_equipment_cost) || parseFloat(quote.actual_rental_cost) || parseFloat(quote.actual_trailer_cost) || parseFloat(quote.actual_miles)) ? `
+          <div class="summary-row">
+            <span>Labor (RT ${(parseFloat(quote.actual_rt_hours) || 0).toFixed(2)} hrs + OT ${(parseFloat(quote.actual_ot_hours) || 0).toFixed(2)} hrs + 2 admin hrs)</span>
+            <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Materials (with 25% markup)</span>
+            <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Equipment (with 25% markup)</span>
+            <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Rental (with 25% markup)</span>
+            <span>${(parseFloat(quote.rental_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Trailer (with 25% markup)</span>
+            <span>${(parseFloat(quote.trailer_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Mileage (${(parseFloat(quote.actual_miles) || 0).toFixed(1)} mi × $1.00)</span>
+            <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+          </div>
+          ` : `
+          <div style="text-align: center; color: #666; font-size: 10px; margin-bottom: 8px;">📸 Final actual snapshot from ${new Date(quote.created_at).toLocaleDateString()}</div>
+          `}
+          <div class="summary-total">
+            <div class="summary-row" style="border: none; color:#6b21a8;">
+              <span>FINAL ACTUAL TOTAL</span>
+              <span>${finalActualTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reconciliation Summary -->
+        <div class="cost-box cost-box-green">
+          <div class="cost-box-title" style="color: #065f46;">NTE RECONCILIATION SUMMARY</div>
+          <div class="summary-row">
+            <span>Original NTE Budget</span>
+            <span>${originalNTE.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Final Actual Total</span>
+            <span>${finalActualTotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-total">
+            <div class="summary-row" style="border: none; font-size: 14px; color:${overageAmount > 0 ? '#b91c1c' : '#065f46'};">
+              <span>${overageAmount > 0 ? 'ADDITIONAL COST NEEDED' : 'WITHIN BUDGET'}</span>
+              <span>${overageAmount > 0 ? overageAmount.toFixed(2) : (originalNTE - finalActualTotal).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- New NTE Needed -->
+        <div class="new-nte-box">
+          <div class="new-nte-label">Original NTE Budget: ${originalNTE.toFixed(2)}</div>
+          <div class="new-nte-label" style="font-size: 14px; margin-top: 10px;">NEW NTE BUDGET NEEDED:</div>
+          <div class="new-nte-value">${newNTENeeded.toFixed(2)}</div>
+          ${overageAmount > 0 ? `<div class="new-nte-label" style="font-size: 11px; margin-top: 8px; opacity:0.85;">(Increase of ${overageAmount.toFixed(2)} over original NTE)</div>` : ''}
+        </div>
+        ` : `
+        <!-- ============================================= -->
+        <!-- ESTIMATE MODE LAYOUT (default, forward-looking) -->
+        <!-- ============================================= -->
 
         <!-- Current Costs Accrued -->
         <div class="cost-box cost-box-blue">
@@ -452,7 +541,7 @@ export default function WorkOrderDetailModal({
           <div class="summary-total">
             <div class="summary-row" style="border: none; font-size: 14px;">
               <span>PROJECTED TOTAL COST</span>
-              <span>${projectedTotal.toFixed(2)}</span>
+              <span>${(existingCostsTotal + additionalTotal).toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -463,6 +552,7 @@ export default function WorkOrderDetailModal({
           <div class="new-nte-label" style="font-size: 14px; margin-top: 10px;">NEW NTE BUDGET NEEDED:</div>
           <div class="new-nte-value">${newNTENeeded.toFixed(2)}</div>
         </div>
+        `}
 
         ${quote.notes ? `
         <div class="section">
@@ -1741,11 +1831,18 @@ const sendAssignmentNotifications = async () => {
               </div>
             ) : (
               <div className="space-y-4 max-h-96 overflow-y-auto">
-                {nteIncreases.map((quote) => (
+                {nteIncreases.map((quote) => {
+                  const isReconciliation = quote.request_type === 'reconciliation';
+                  return (
                   <div key={quote.quote_id} className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
                     {/* Header */}
                     <div className="flex justify-between items-start mb-3">
                       <div>
+                        {isReconciliation && (
+                          <span className="inline-block px-3 py-1 rounded text-xs font-bold mr-2 bg-purple-700 text-purple-100">
+                            🔄 Reconciliation
+                          </span>
+                        )}
                         <span className={`inline-block px-3 py-1 rounded text-xs font-bold mr-2 ${
                           quote.is_verbal_nte 
                             ? 'bg-yellow-600 text-yellow-100' 
@@ -1917,8 +2014,7 @@ const sendAssignmentNotifications = async () => {
                       </div>
                     </div>
 
-                    {/* NTE Summary - Shows STORED SNAPSHOT values (read-only) */}
-                    {/* If snapshot exists, use it. Otherwise fall back to calculation for legacy quotes */}
+                    {/* NTE Summary - Mode-aware (estimate vs reconciliation) */}
                     {(() => {
                       // Check if this quote has stored snapshot values (new system)
                       const hasSnapshot = quote.current_costs_snapshot !== null && quote.current_costs_snapshot !== undefined;
@@ -1936,11 +2032,9 @@ const sendAssignmentNotifications = async () => {
                       let newNTENeeded;
                       
                       if (hasSnapshot) {
-                        // USE STORED SNAPSHOT VALUES (new system - read-only)
                         currentCosts = parseFloat(quote.current_costs_snapshot) || 0;
                         newNTENeeded = parseFloat(quote.new_nte_amount) || (currentCosts + additionalTotal);
                       } else {
-                        // LEGACY: Calculate for old quotes that don't have snapshot
                         let laborRT = 0;
                         let laborOT = 0;
                         let totalMileageFromLogs = 0;
@@ -1973,6 +2067,44 @@ const sendAssignmentNotifications = async () => {
                         
                         currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
                         newNTENeeded = currentCosts + additionalTotal;
+                      }
+
+                      // Reconciliation values
+                      const originalNTE = (hasSnapshot && quote.original_nte) ? parseFloat(quote.original_nte) : (parseFloat(selectedWO.nte) || 0);
+                      const finalActualTotal = isReconciliation
+                        ? (parseFloat(quote.actual_final_total) || parseFloat(quote.new_nte_amount) || currentCosts)
+                        : 0;
+                      const overageAmount = isReconciliation ? Math.max(0, finalActualTotal - originalNTE) : 0;
+
+                      if (isReconciliation) {
+                        return (
+                          <div className="border-t border-purple-500/30 pt-3 mt-3 space-y-2">
+                            <div className="text-xs text-purple-400 text-center mb-2">
+                              🔄 Reconciliation — Final actual costs vs original NTE
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-slate-400">Original NTE Budget:</span>
+                              <span className="text-slate-300 font-semibold">${originalNTE.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-purple-400">Final Actual Total:</span>
+                              <span className="text-purple-400 font-semibold">${finalActualTotal.toFixed(2)}</span>
+                            </div>
+                            <div className="border-t border-[#3d3d5c] my-2"></div>
+                            <div className="flex justify-between items-center text-lg">
+                              <span className={overageAmount > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                {overageAmount > 0 ? 'ADDITIONAL NEEDED:' : 'WITHIN BUDGET:'}
+                              </span>
+                              <span className={overageAmount > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                ${overageAmount > 0 ? overageAmount.toFixed(2) : (originalNTE - finalActualTotal).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm pt-1">
+                              <span className="text-emerald-300">New NTE Required:</span>
+                              <span className="text-emerald-300 font-bold">${finalActualTotal.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        );
                       }
                       
                       return (
@@ -2023,7 +2155,8 @@ const sendAssignmentNotifications = async () => {
                       Created by: {quote.creator?.first_name} {quote.creator?.last_name}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -17,6 +17,7 @@ import {
   buildTransitionUpdate,
   disputeBadgeClasses,
 } from '@/lib/disputeStatus';
+import { exportToExcel, exportToPDF } from '@/lib/upsEscalationExport';
 
 const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -39,6 +40,46 @@ export default function UPSEscalationView({ currentUser }) {
   const [notesDraft, setNotesDraft] = useState('');
   const [recoveredAmount, setRecoveredAmount] = useState({}); // wo_id -> draft amount for resolve transition
   const [transitionFor, setTransitionFor] = useState(null); // wo_id requesting resolved transition
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // ── Data for export (All Active = Open + Escalated by default) ──────────────────────────────────────────
+  const exportableDisputes = useMemo(
+    () => disputes.filter(d => d.dispute_status === 'open' || d.dispute_status === 'escalated'),
+    [disputes]
+  );
+
+  const handleExportExcel = async () => {
+    if (!exportableDisputes.length) {
+      alert('No active disputes to export');
+      return;
+    }
+    setExporting(true);
+    setExportDropdownOpen(false);
+    try {
+      exportToExcel(exportableDisputes);
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!exportableDisputes.length) {
+      alert('No active disputes to export');
+      return;
+    }
+    setExporting(true);
+    setExportDropdownOpen(false);
+    try {
+      await exportToPDF(exportableDisputes);
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // ── Load disputes ──────────────────────────────────────────────────────────
   useEffect(() => { if (isAdmin) loadData(); /* eslint-disable-next-line */ }, [isAdmin]);
@@ -50,6 +91,7 @@ export default function UPSEscalationView({ currentUser }) {
         .from('work_orders')
         .select(`
           wo_id, wo_number, building, status, nte,
+          date_completed, work_order_description,
           dispute_status, dispute_reason, dispute_notes,
           dispute_opened_at, dispute_escalated_at, dispute_resolved_at,
           dispute_amount, dispute_recovered_amount,
@@ -183,6 +225,52 @@ export default function UPSEscalationView({ currentUser }) {
           <p className="text-slate-500 text-sm mt-0.5">
             CBRE-disputed WOs — track follow-up with UPS directly
           </p>
+        </div>
+
+        {/* Export dropdown */}
+        <div className="relative">
+          <button onClick={() => setExportDropdownOpen(o => !o)}
+            disabled={exporting || exportableDisputes.length === 0}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {exporting ? 'Exporting...' : `Export Report (${exportableDisputes.length})`}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`transition-transform ${exportDropdownOpen ? 'rotate-180' : ''}`}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {exportDropdownOpen && (
+            <>
+              {/* backdrop to close on outside click */}
+              <div className="fixed inset-0 z-40" onClick={() => setExportDropdownOpen(false)} />
+              <div className="absolute right-0 mt-2 w-56 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl shadow-2xl z-50 overflow-hidden">
+                <button onClick={handleExportExcel}
+                  className="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-[#1e1e2e] transition flex items-center gap-3 border-b border-[#1e1e2e]">
+                  <span className="text-xl">📊</span>
+                  <div>
+                    <div className="font-semibold">Excel (.xlsx)</div>
+                    <div className="text-xs text-slate-500">Editable, sortable</div>
+                  </div>
+                </button>
+                <button onClick={handleExportPDF}
+                  className="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-[#1e1e2e] transition flex items-center gap-3">
+                  <span className="text-xl">📄</span>
+                  <div>
+                    <div className="font-semibold">PDF (.pdf)</div>
+                    <div className="text-xs text-slate-500">Polished, final report</div>
+                  </div>
+                </button>
+                <div className="px-4 py-2 text-xs text-slate-600 bg-[#0a0a0f] border-t border-[#1e1e2e]">
+                  Includes {exportableDisputes.length} active dispute{exportableDisputes.length !== 1 ? 's' : ''} (Open + Escalated)
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

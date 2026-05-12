@@ -140,6 +140,13 @@ export const NAV_ITEMS = [
       <polyline points="17 6 23 6 23 12"/>
     </svg>
   ), adminOnly: true },
+  { id: 'cbre-sync',       label: 'CBRE Sync',      Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 4 23 10 17 10"/>
+      <polyline points="1 20 1 14 7 14"/>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>
+  ), adminOnly: true },
 ];
 
 export const QUICK_LINKS = [

@@ -15,6 +15,7 @@ import { CalendarView } from './components/calendar';
 import { AgingView } from './components/aging';
 import ProfitabilityView from './components/ProfitabilityView';
 import CashFlowView from './components/CashFlowView';
+import CBRESyncView from './components/CBRESyncView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -144,6 +145,8 @@ function DashboardContent() {
         return <ProfitabilityView currentUser={currentUser} />;
       case 'cash-flow':
         return <CashFlowView currentUser={currentUser} />;
+      case 'cbre-sync':
+        return <CBRESyncView currentUser={currentUser} />;
       case 'workorders':
       default:
         return (

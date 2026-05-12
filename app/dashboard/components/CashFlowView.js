@@ -195,6 +195,7 @@ export default function CashFlowView({ currentUser }) {
       .from('invoices')
       .select(`
         invoice_id, invoice_number, wo_id, invoice_date, total, status, created_at,
+        cbre_status, cbre_status_label, cmp_date,
         work_order:work_orders(wo_number, building,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name))
       `)
@@ -278,9 +279,33 @@ export default function CashFlowView({ currentUser }) {
       })
       .map(inv => {
         const invDate = parseDateLocal(inv.invoice_date);
-        const payoutDate = invDate ? addDays(invDate, payoutDays) : null;
-        const daysUntil = payoutDate ? daysBetween(new Date(), payoutDate) : null;
-        return { ...inv, _invoiceDate: invDate, _payoutDate: payoutDate, _daysUntil: daysUntil };
+        const cmpDate = parseDateLocal(inv.cmp_date);
+
+        // Estimate (invoice + N days) — always present
+        const estimateDate = invDate ? addDays(invDate, payoutDays) : null;
+        const estimateDays = estimateDate ? daysBetween(new Date(), estimateDate) : null;
+
+        // Confirmed (cmp_date + 75 days) — only if CBRE has posted
+        const confirmedDate = cmpDate ? addDays(cmpDate, 75) : null;
+        const confirmedDays = confirmedDate ? daysBetween(new Date(), confirmedDate) : null;
+
+        // "Best" payout date — prefer confirmed if available, else estimate
+        const payoutDate = confirmedDate || estimateDate;
+        const daysUntil  = confirmedDate ? confirmedDays : estimateDays;
+        const payoutSource = confirmedDate ? 'confirmed' : 'estimate';
+
+        return {
+          ...inv,
+          _invoiceDate: invDate,
+          _cmpDate: cmpDate,
+          _estimateDate: estimateDate,
+          _estimateDays: estimateDays,
+          _confirmedDate: confirmedDate,
+          _confirmedDays: confirmedDays,
+          _payoutDate: payoutDate,
+          _daysUntil: daysUntil,
+          _payoutSource: payoutSource,
+        };
       })
       .sort((a, b) => {
         if (!a._payoutDate) return 1;
@@ -545,9 +570,11 @@ export default function CashFlowView({ currentUser }) {
 
       {/* ── Legend ── */}
       <div className="text-xs text-slate-600 px-1 space-y-0.5">
-        <div>• <strong className="text-slate-500">Expected Payouts</strong> = Invoices in flight (draft/uploaded/submitted) — clock starts at invoice date + {payoutDays} days</div>
+        <div>• <strong className="text-slate-500">Estimate</strong> = invoice_date + {payoutDays} days (our rough projection)</div>
+        <div>• <strong className="text-emerald-500">✓ Confirmed</strong> = CMP date + 75 days (CBRE's official posting → payment timeline)</div>
         <div>• <strong className="text-slate-500">Pending Invoicing</strong> = Completed WOs ready to invoice but not yet generated — clock isn't running yet</div>
         <div>• <strong className="text-slate-500">Open Tickets</strong> = WOs still in progress — NTE = ceiling, Running = current logged value</div>
+        <div className="text-slate-700 mt-1">💡 Run CBRE Sync weekly to get more Confirmed dates</div>
       </div>
 
       {/* ── Config Modal ── */}
@@ -653,20 +680,31 @@ function ExpectedPayoutsTab({ groups, groupBy, statusBadge, payoutColorClass }) 
           <div className="divide-y divide-[#1e1e2e]">
             {group.rows.map(row => (
               <div key={row.invoice_id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-[#1e1e2e]/50 transition items-center text-sm">
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <div className="text-blue-400 font-semibold">{row.invoice_number}</div>
                   <div className="text-slate-500 text-xs">WO {row.work_order?.wo_number || '—'}</div>
                 </div>
                 <div className="col-span-3 text-slate-400 text-xs truncate">{row.work_order?.building || '—'}</div>
-                <div className="col-span-2 text-slate-500 text-xs">
-                  <div>Inv: {formatDate(row._invoiceDate)}</div>
-                  <div className={`font-semibold ${payoutColorClass(row._daysUntil)}`}>
-                    Pay: {formatDate(row._payoutDate)}
+                <div className="col-span-3 text-xs">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-slate-600 text-[10px] uppercase tracking-wider">Est:</span>
+                    <span className="text-slate-400">{formatDate(row._estimateDate)}</span>
                   </div>
+                  {row._confirmedDate ? (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-emerald-500 text-[10px] uppercase tracking-wider font-bold">✓ Confirmed:</span>
+                      <span className={`font-semibold ${payoutColorClass(row._confirmedDays)}`}>{formatDate(row._confirmedDate)}</span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-700 italic">No CMP yet</div>
+                  )}
                 </div>
                 <div className="col-span-2 text-center">
                   {statusBadge(row.status)}
-                  <div className={`text-xs mt-0.5 ${payoutColorClass(row._daysUntil)}`}>
+                  {row.cbre_status && (
+                    <div className="text-[9px] mt-0.5 text-slate-500 font-mono">CBRE: {row.cbre_status}</div>
+                  )}
+                  <div className={`text-xs mt-0.5 font-semibold ${payoutColorClass(row._daysUntil)}`}>
                     {row._daysUntil === null ? '—' :
                      row._daysUntil < 0 ? `${Math.abs(row._daysUntil)}d overdue` :
                      row._daysUntil === 0 ? 'Today' :

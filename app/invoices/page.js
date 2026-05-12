@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
+import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -22,6 +23,33 @@ const STATUS_CONFIG = {
 const statusBadge = (status) => {
   const cfg = STATUS_CONFIG[status] || { label: status?.toUpperCase(), color: 'bg-slate-500/15 text-slate-400 border-slate-500/30' };
   return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.color}`}>{cfg.label}</span>;
+};
+
+// ── CBRE status badge ───────────────────────────────────────────────────────
+const CBRE_BADGE_COLOR = {
+  CMP: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  CIR: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  CA1: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  CA2: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  CIS: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  CIC: 'bg-red-500/15 text-red-400 border-red-500/30',
+  CPW: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+};
+const cbreStatusBadge = (code, label) => {
+  if (!code) return null;
+  const color = CBRE_BADGE_COLOR[code] || 'bg-slate-500/15 text-slate-400 border-slate-500/30';
+  return (
+    <span title={label || code} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${color}`}>
+      {code}
+    </span>
+  );
+};
+
+// ── Unacknowledged update check ─────────────────────────────────────────────
+const isUnacknowledged = (item) => {
+  if (!item?.cbre_status_updated_at) return false;
+  if (!item.cbre_status_acknowledged_at) return true;
+  return new Date(item.cbre_status_updated_at) > new Date(item.cbre_status_acknowledged_at);
 };
 
 // ── Filter check-in/out lines from comments ─────────────────────────────────
@@ -224,6 +252,24 @@ export default function InvoicingPage() {
       .select('*, work_order:work_orders(wo_number, building, work_order_description, comments, lead_tech:users!lead_tech_id(first_name, last_name))')
       .order('created_at', { ascending: false });
     setInvoices(data || []);
+  };
+
+  const acknowledgeCbreUpdate = async (invoiceId) => {
+    const { error } = await supabase
+      .from('invoices')
+      .update({ cbre_status_acknowledged_at: new Date().toISOString() })
+      .eq('invoice_id', invoiceId);
+    if (!error) {
+      // Optimistic update
+      setInvoices(prev => prev.map(inv =>
+        inv.invoice_id === invoiceId
+          ? { ...inv, cbre_status_acknowledged_at: new Date().toISOString() }
+          : inv
+      ));
+      if (selectedItem?.type === 'invoice' && selectedItem.data.invoice_id === invoiceId) {
+        setSelectedItem({ ...selectedItem, data: { ...selectedItem.data, cbre_status_acknowledged_at: new Date().toISOString() } });
+      }
+    }
   };
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -503,20 +549,40 @@ export default function InvoicingPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredInvoices.map((inv, i) => (
+                      {filteredInvoices.map((inv, i) => {
+                        const unack = isUnacknowledged(inv);
+                        return (
                         <tr key={inv.invoice_id} onClick={() => selectInvoice(inv)}
-                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}`}>
-                          <td className="px-4 py-3 font-mono font-semibold text-slate-200">{inv.invoice_number}</td>
+                          className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'} ${unack ? 'ring-1 ring-yellow-500/20' : ''}`}>
+                          <td className="px-4 py-3 font-mono font-semibold text-slate-200">
+                            <div className="flex items-center gap-2">
+                              {unack && <span title="New CBRE update — click to acknowledge" className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />}
+                              {inv.invoice_number}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 font-mono text-blue-400 text-xs">{inv.work_order?.wo_number}</td>
                           <td className="px-4 py-3 text-slate-400">{inv.work_order?.building}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{new Date(inv.invoice_date).toLocaleDateString()}</td>
                           <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">${inv.total.toFixed(2)}</td>
-                          <td className="px-4 py-3">{statusBadge(inv.status)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1">
+                              {statusBadge(inv.status)}
+                              {inv.cbre_status && (
+                                <div className="flex items-center gap-1">
+                                  {cbreStatusBadge(inv.cbre_status, inv.cbre_status_label)}
+                                  {inv.cmp_date && (
+                                    <span title={`CMP date: ${new Date(inv.cmp_date).toLocaleDateString()} — paid 75d after`} className="text-[9px] text-emerald-500">✓</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-center text-slate-600">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline"><polyline points="9 18 15 12 9 6"/></svg>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -736,6 +802,44 @@ export default function InvoicingPage() {
                 <Field label="Invoice Date">{new Date(selectedItem.data.invoice_date).toLocaleDateString()}</Field>
                 <Field label="Due Date">{new Date(selectedItem.data.due_date).toLocaleDateString()}</Field>
               </div>
+
+              {/* CBRE Status panel */}
+              {selectedItem.data.cbre_status && (
+                <div className={`rounded-xl p-4 border ${isUnacknowledged(selectedItem.data) ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-[#0a0a0f] border-[#1e1e2e]'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-wider mb-1.5 font-semibold flex items-center gap-2">
+                        <span className="text-slate-500">CBRE Service Insight</span>
+                        {isUnacknowledged(selectedItem.data) && (
+                          <span className="inline-flex items-center gap-1 text-yellow-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                            New update
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {cbreStatusBadge(selectedItem.data.cbre_status, selectedItem.data.cbre_status_label)}
+                        <span className="text-sm text-slate-300">{selectedItem.data.cbre_status_label}</span>
+                      </div>
+                      {selectedItem.data.cmp_date && (
+                        <p className="text-xs text-emerald-400 mt-2">
+                          ✓ Posted on <strong>{new Date(selectedItem.data.cmp_date).toLocaleDateString()}</strong> —
+                          payment expected by <strong>{new Date(new Date(selectedItem.data.cmp_date).getTime() + 75*86400000).toLocaleDateString()}</strong>
+                        </p>
+                      )}
+                      {selectedItem.data.cbre_status_updated_at && (
+                        <p className="text-xs text-slate-600 mt-1">
+                          Last synced: {new Date(selectedItem.data.cbre_status_updated_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    {isUnacknowledged(selectedItem.data) && (
+                      <Btn onClick={() => acknowledgeCbreUpdate(selectedItem.data.invoice_id)}
+                        variant="warning" size="sm">✓ Acknowledge</Btn>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Line Items */}
               <div>

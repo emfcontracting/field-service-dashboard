@@ -196,28 +196,32 @@ export default function CashFlowView({ currentUser }) {
       .select(`
         invoice_id, invoice_number, wo_id, invoice_date, total, status, created_at,
         cbre_status, cbre_status_label, cmp_date,
-        work_order:work_orders(wo_number, building,
+        work_order:work_orders(wo_number, building, dispute_status,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name))
       `)
       .in('status', INFLIGHT_STATUSES)
       .order('invoice_date', { ascending: true });
-    setInvoices(data || []);
+    // Filter out invoices whose WO is disputed — they're not in normal cash flow
+    const filtered = (data || []).filter(inv => !inv.work_order?.dispute_status);
+    setInvoices(filtered);
   };
 
   const loadPendingWOs = async () => {
     // Acknowledged + not locked + completed = ready to invoice but not yet invoiced
+    // Exclude disputed WOs — they go to UPS Escalation tab
     const { data: wos } = await supabaseClient
       .from('work_orders')
       .select(`
         wo_id, wo_number, building, status, nte, date_completed, date_entered,
         hours_regular, hours_overtime, miles,
         material_cost, emf_equipment_cost, trailer_cost, rental_cost,
-        acknowledged, is_locked,
+        acknowledged, is_locked, dispute_status,
         lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
       `)
       .eq('acknowledged', true)
       .eq('is_locked', false)
       .eq('status', 'completed')
+      .is('dispute_status', null)
       .order('date_completed', { ascending: true });
 
     const woList = wos || [];
@@ -232,9 +236,11 @@ export default function CashFlowView({ currentUser }) {
         wo_id, wo_number, building, status, nte, date_entered,
         hours_regular, hours_overtime, miles,
         material_cost, emf_equipment_cost, trailer_cost, rental_cost,
+        dispute_status,
         lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
       `)
       .in('status', ['assigned', 'in_progress', 'pending', 'tech_review'])
+      .is('dispute_status', null)
       .order('date_entered', { ascending: false });
     setOpenWOs(wos || []);
   };

@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
+import MarkDisputedModal from '@/app/components/MarkDisputedModal';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
+import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -174,6 +176,7 @@ export default function InvoicingPage() {
   const [showGlobalSearch, setShowGlobalSearch]         = useState(false);
   const [readySearchTerm, setReadySearchTerm]           = useState('');
   const [invoiceSearchTerm, setInvoiceSearchTerm]       = useState('');
+  const [disputeModalFor, setDisputeModalFor]           = useState(null); // { workOrder, invoice } when open
 
   // ── Status filter + bulk-select for the Invoices tab ────────────────────────────
   // 'awaiting' = not paid, not rejected (default for the daily workflow)
@@ -282,7 +285,7 @@ export default function InvoicingPage() {
 
   const fetchInvoices = async () => {
     const { data } = await supabase.from('invoices')
-      .select('*, work_order:work_orders(wo_number, building, work_order_description, comments, lead_tech:users!lead_tech_id(first_name, last_name))')
+      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, dispute_status, dispute_reason, lead_tech:users!lead_tech_id(first_name, last_name))')
       .order('created_at', { ascending: false });
     setInvoices(data || []);
   };
@@ -752,6 +755,12 @@ export default function InvoicingPage() {
                                   )}
                                 </div>
                               )}
+                              {inv.work_order?.dispute_status && (
+                                <span title={`${DISPUTE_STATUS[inv.work_order.dispute_status]?.label} — see UPS Escalation tab`}
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${disputeBadgeClasses(inv.work_order.dispute_status)}`}>
+                                  {DISPUTE_STATUS[inv.work_order.dispute_status]?.emoji} DISPUTED
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-center text-slate-600">
@@ -1112,6 +1121,30 @@ export default function InvoicingPage() {
                 </>)}
 
                 <div className="pt-2 border-t border-[#1e1e2e] space-y-1.5">
+                  {!selectedItem.data.work_order?.dispute_status && (
+                    <Btn onClick={() => {
+                      setDisputeModalFor({
+                        workOrder: selectedItem.data.work_order,
+                        invoice: selectedItem.data,
+                      });
+                      setSelectedItem(null);
+                    }} variant="orange" size="lg" className="w-full">
+                      🔴 Mark as CBRE Disputed (UPS Escalation)
+                    </Btn>
+                  )}
+                  {selectedItem.data.work_order?.dispute_status && (
+                    <div className={`rounded-xl p-3 border ${DISPUTE_STATUS[selectedItem.data.work_order.dispute_status]?.bg}`}>
+                      <p className={`font-semibold text-sm ${DISPUTE_STATUS[selectedItem.data.work_order.dispute_status]?.color}`}>
+                        {DISPUTE_STATUS[selectedItem.data.work_order.dispute_status]?.emoji} This WO is currently disputed
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Status: {DISPUTE_STATUS[selectedItem.data.work_order.dispute_status]?.label}
+                      </p>
+                      <a href="/dashboard?view=ups-escalation" className="text-xs text-blue-400 hover:underline mt-1 inline-block">
+                        → Manage in UPS Escalation tab
+                      </a>
+                    </div>
+                  )}
                   <Btn onClick={() => deleteInvoice(selectedItem.data.invoice_id, selectedItem.data.wo_id)} variant="danger" size="lg" className="w-full">🗑️ Delete Invoice (Admin)</Btn>
                   <p className="text-xs text-slate-600 text-center">⚠️ Requires admin password. Cannot be undone.</p>
                 </div>
@@ -1124,6 +1157,16 @@ export default function InvoicingPage() {
 
         {/* Global Search */}
         {showGlobalSearch && <GlobalWOSearch onClose={() => setShowGlobalSearch(false)} />}
+
+        {/* Mark Disputed Modal */}
+        {disputeModalFor && (
+          <MarkDisputedModal
+            workOrder={disputeModalFor.workOrder}
+            invoice={disputeModalFor.invoice}
+            onClose={() => setDisputeModalFor(null)}
+            onSaved={() => { fetchInvoices(); }}
+          />
+        )}
       </div>
     </AppShell>
   );

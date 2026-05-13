@@ -15,12 +15,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const supabase = getSupabase();
 
 const fmtDate = (d) => d
   ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -70,6 +67,7 @@ export default function CBREDataEntryView({ currentUser }) {
   useEffect(() => { if (isAuthorized) loadData(); /* eslint-disable-next-line */ }, [isAuthorized, dayWindow, showTransferred]);
 
   const loadData = async () => {
+    console.log('🔍 CBREDataEntryView v2 - using FK constraint syntax');
     setLoading(true);
     try {
       const cutoff = dayWindow > 0
@@ -83,7 +81,7 @@ export default function CBREDataEntryView({ currentUser }) {
           log_id, wo_id, user_id, work_date,
           hours_regular, hours_overtime, miles, tech_material_cost, notes,
           cbre_transferred, cbre_transferred_at, cbre_transferred_by,
-          user:users!user_id(first_name, last_name),
+          user:users!daily_hours_log_user_id_fkey(first_name, last_name),
           work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, status)
         `)
         .order('work_date', { ascending: false });
@@ -115,8 +113,16 @@ export default function CBREDataEntryView({ currentUser }) {
       setDailyEntries(dailyData || []);
       setCompletions(completionData || []);
     } catch (e) {
-      console.error('Error loading CBRE data entry queue:', e);
-      alert('Error loading data: ' + e.message);
+      // Supabase errors have message/details/hint/code — stringify them properly
+      const errInfo = {
+        message: e?.message,
+        details: e?.details,
+        hint:    e?.hint,
+        code:    e?.code,
+        raw:     e,
+      };
+      console.error('Error loading CBRE data entry queue:', errInfo);
+      alert('Error loading data:\n' + (e?.message || e?.details || e?.hint || JSON.stringify(e)));
     } finally {
       setLoading(false);
     }

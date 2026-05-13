@@ -89,6 +89,84 @@ function timeOnly(timestamp) {
   return m ? `${m[1]}:${m[2]} ${m[3].toUpperCase()}` : timestamp;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Calculate actual costs for a completed WO. Mirrors calculateInvoiceTotal /
+// CostSummarySection logic exactly: combines legacy hours from work_orders +
+// work_order_assignments + daily_hours_log, applies markup + admin fee.
+// ──────────────────────────────────────────────────────────────────────────────
+const RT_RATE = 64;
+const OT_RATE = 96;
+const MILE_RATE = 1.00;
+const MARKUP = 1.25;
+const ADMIN_HOURS = 2;
+
+function calculateActualTotal(wo) {
+  let totalRT    = parseFloat(wo.hours_regular)  || 0;
+  let totalOT    = parseFloat(wo.hours_overtime) || 0;
+  let totalMiles = parseFloat(wo.miles)          || 0;
+  let totalTechMaterial = 0;
+
+  // Legacy team assignments
+  (wo.work_order_assignments || []).forEach(a => {
+    totalRT    += parseFloat(a.hours_regular)  || 0;
+    totalOT    += parseFloat(a.hours_overtime) || 0;
+    totalMiles += parseFloat(a.miles)          || 0;
+  });
+
+  // Modern daily hours log
+  (wo.daily_hours_log || []).forEach(d => {
+    totalRT           += parseFloat(d.hours_regular)      || 0;
+    totalOT           += parseFloat(d.hours_overtime)     || 0;
+    totalMiles        += parseFloat(d.miles)              || 0;
+    totalTechMaterial += parseFloat(d.tech_material_cost) || 0;
+  });
+
+  const labor      = (totalRT * RT_RATE) + (totalOT * OT_RATE) + (ADMIN_HOURS * RT_RATE);
+  const materials  = ((parseFloat(wo.material_cost)       || 0) + totalTechMaterial) * MARKUP;
+  const equipment  =  (parseFloat(wo.emf_equipment_cost)  || 0) * MARKUP;
+  const trailer    =  (parseFloat(wo.trailer_cost)        || 0) * MARKUP;
+  const rental     =  (parseFloat(wo.rental_cost)         || 0) * MARKUP;
+  const mileage    = totalMiles * MILE_RATE;
+
+  return labor + materials + equipment + trailer + rental + mileage;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Is this completed WO actually ready to be reported to CBRE?
+// A completed WO is NOT ready if any of the following are true:
+//   1. CBRE-side has a pending state (quote submitted, escalation, rejection,
+//      pending quote, etc.) — only `null` or `quote_approved` are clean enough
+//      to push a completion notification.
+//   2. We have a pending/submitted NTE quote on our side that hasn't been
+//      approved yet — office can't close out the WO with CBRE until that
+//      approval comes back.
+//   3. The actual accrued costs exceed the NTE — if we report completion now,
+//      CBRE will only pay up to the NTE; we need a quote increase first.
+// ──────────────────────────────────────────────────────────────────────────────
+const CBRE_STATUS_READY    = [null, undefined, '', 'quote_approved'];
+const QUOTE_PENDING_STATES = ['pending', 'submitted'];
+
+function completionReadinessCheck(wo) {
+  // 1. CBRE status check
+  if (!CBRE_STATUS_READY.includes(wo.cbre_status)) {
+    return { ready: false, reason: 'cbre_status', detail: wo.cbre_status };
+  }
+  // 2. Pending NTE quote on our side
+  const pendingQuote = (wo.work_order_quotes || []).find(q =>
+    QUOTE_PENDING_STATES.includes(q.nte_status)
+  );
+  if (pendingQuote) {
+    return { ready: false, reason: 'pending_quote', detail: pendingQuote.nte_status };
+  }
+  // 3. Over budget
+  const actual = calculateActualTotal(wo);
+  const nte    = parseFloat(wo.nte) || 0;
+  if (actual > nte) {
+    return { ready: false, reason: 'over_nte', detail: { actual, nte } };
+  }
+  return { ready: true };
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 export default function CBREDataEntryView({ currentUser }) {
   const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'office_staff';
@@ -134,14 +212,21 @@ export default function CBREDataEntryView({ currentUser }) {
 
       // ── Completions pending transfer ──
       // Include `acknowledged` + `is_locked` for the dashboard-visibility filter below.
+      // Also pull all cost components + quotes so we can compute readiness for
+      // CBRE completion notification (see completionReadinessCheck below).
       let completionQuery = supabase
         .from('work_orders')
         .select(`
           wo_id, wo_number, building, work_order_description, comments, nte, status,
-          acknowledged, is_locked,
+          acknowledged, is_locked, cbre_status,
+          hours_regular, hours_overtime, miles,
+          material_cost, emf_equipment_cost, rental_cost, trailer_cost,
           date_completed, acknowledged_at, customer_signature, customer_name,
           completion_transferred, completion_transferred_at, completion_transferred_by,
-          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
+          work_order_assignments(hours_regular, hours_overtime, miles),
+          daily_hours_log(hours_regular, hours_overtime, miles, tech_material_cost),
+          work_order_quotes(quote_id, nte_status, new_nte_amount)
         `)
         .eq('status', 'completed')
         .order('date_completed', { ascending: false });
@@ -160,7 +245,25 @@ export default function CBREDataEntryView({ currentUser }) {
       const isActive = (wo) => wo && !wo.acknowledged && !wo.is_locked;
 
       const activeDailyData = (dailyData || []).filter(e => isActive(e.work_order));
-      const activeCompletionData = (completionData || []).filter(isActive);
+
+      // For completions: also filter on CBRE-readiness. A completed WO is only
+      // "ready" to be reported to CBRE when (a) no pending quote at CBRE, (b)
+      // no pending NTE increase request internally, and (c) NTE covers actuals.
+      // Otherwise we'd be telling Office to update something that can't be
+      // updated yet anyway. We log filtered-out counts for transparency.
+      const activeCompletions = (completionData || []).filter(isActive);
+      const notReadyByReason = { cbre_status: 0, pending_quote: 0, over_nte: 0 };
+      const activeCompletionData = activeCompletions.filter(wo => {
+        const r = completionReadinessCheck(wo);
+        if (!r.ready) notReadyByReason[r.reason]++;
+        return r.ready;
+      });
+      if (activeCompletions.length !== activeCompletionData.length) {
+        console.log(
+          `[CBRE Data Entry] Hiding ${activeCompletions.length - activeCompletionData.length} completion(s) not yet ready for CBRE:`,
+          notReadyByReason
+        );
+      }
 
       setDailyEntries(activeDailyData);
       setCompletions(activeCompletionData);
@@ -356,7 +459,7 @@ export default function CBREDataEntryView({ currentUser }) {
             </h1>
             <p className="text-slate-500 text-sm mt-0.5">
               Manual data transfer queue for the CBRE Web Portal
-              <span className="text-slate-600"> · only active dashboard WOs</span>
+              <span className="text-slate-600"> · only ready-to-report WOs</span>
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

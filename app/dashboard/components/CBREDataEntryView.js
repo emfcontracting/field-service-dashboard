@@ -83,7 +83,7 @@ export default function CBREDataEntryView({ currentUser }) {
           log_id, wo_id, user_id, work_date,
           hours_regular, hours_overtime, miles, tech_material_cost, notes,
           cbre_transferred, cbre_transferred_at, cbre_transferred_by,
-          user:users(first_name, last_name),
+          user:users!user_id(first_name, last_name),
           work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, status)
         `)
         .order('work_date', { ascending: false });

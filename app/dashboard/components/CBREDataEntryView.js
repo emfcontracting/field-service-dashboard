@@ -113,6 +113,8 @@ export default function CBREDataEntryView({ currentUser }) {
         : null;
 
       // ── Daily hours pending transfer ──
+      // Join in `acknowledged` + `is_locked` so we can filter to only WOs
+      // still visible on the dashboard (matches fetchWorkOrders filter).
       let dailyQuery = supabase
         .from('daily_hours_log')
         .select(`
@@ -120,7 +122,7 @@ export default function CBREDataEntryView({ currentUser }) {
           hours_regular, hours_overtime, miles, tech_material_cost, notes,
           cbre_transferred, cbre_transferred_at, cbre_transferred_by,
           user:users!daily_hours_log_user_id_fkey(first_name, last_name),
-          work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, status)
+          work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, status, acknowledged, is_locked)
         `)
         .order('work_date', { ascending: false });
 
@@ -131,10 +133,12 @@ export default function CBREDataEntryView({ currentUser }) {
       if (dailyErr) throw dailyErr;
 
       // ── Completions pending transfer ──
+      // Include `acknowledged` + `is_locked` for the dashboard-visibility filter below.
       let completionQuery = supabase
         .from('work_orders')
         .select(`
           wo_id, wo_number, building, work_order_description, comments, nte, status,
+          acknowledged, is_locked,
           date_completed, acknowledged_at, customer_signature, customer_name,
           completion_transferred, completion_transferred_at, completion_transferred_by,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
@@ -148,8 +152,18 @@ export default function CBREDataEntryView({ currentUser }) {
       const { data: completionData, error: completionErr } = await completionQuery;
       if (completionErr) throw completionErr;
 
-      setDailyEntries(dailyData || []);
-      setCompletions(completionData || []);
+      // ── Filter to only WOs still in the dashboard ──
+      // Mirrors the fetchWorkOrders() filter in dataFetchers.js — once a WO is
+      // acknowledged or locked, it leaves the dashboard and is treated as
+      // "done" from the office's perspective (already invoiced / archived).
+      // We don't want stale check-outs cluttering the CBRE queue for those.
+      const isActive = (wo) => wo && !wo.acknowledged && !wo.is_locked;
+
+      const activeDailyData = (dailyData || []).filter(e => isActive(e.work_order));
+      const activeCompletionData = (completionData || []).filter(isActive);
+
+      setDailyEntries(activeDailyData);
+      setCompletions(activeCompletionData);
     } catch (e) {
       // Supabase errors have message/details/hint/code — stringify them properly
       const errInfo = {
@@ -340,7 +354,10 @@ export default function CBREDataEntryView({ currentUser }) {
             <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
               📤 CBRE Data Entry
             </h1>
-            <p className="text-slate-500 text-sm mt-0.5">Manual data transfer queue for the CBRE Web Portal</p>
+            <p className="text-slate-500 text-sm mt-0.5">
+              Manual data transfer queue for the CBRE Web Portal
+              <span className="text-slate-600"> · only active dashboard WOs</span>
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <select

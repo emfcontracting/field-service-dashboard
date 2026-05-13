@@ -7,7 +7,8 @@ export async function fetchWorkOrders(supabase) {
       *,
       lead_tech:users!lead_tech_id(first_name, last_name, email),
       locked_by_user:users!locked_by(first_name, last_name),
-      nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at)
+      nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at),
+      open_flags:work_order_flags!work_order_flags_wo_id_fkey(flag_id, priority, comment, flagged_at, flagged_by, status)
     `)
     .order('date_entered', { ascending: true });
 
@@ -21,6 +22,11 @@ export async function fetchWorkOrders(supabase) {
     if (wo.acknowledged) return false;
     if (wo.is_locked) return false;
     return true;
+  });
+
+  // Drop resolved flags so callers can rely on open_flags being open-only
+  filteredData.forEach(wo => {
+    wo.open_flags = (wo.open_flags || []).filter(f => f.status === 'open');
   });
 
   // Fetch daily hours totals for all work orders

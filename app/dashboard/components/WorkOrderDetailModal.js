@@ -19,6 +19,7 @@ import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import SubmissionStatusSection from './SubmissionStatusSection';
+import FlagsSection from './FlagsSection';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -1705,6 +1706,12 @@ const sendAssignmentNotifications = async () => {
             workOrder={selectedWO}
             currentUser={currentUser}
             onUpdated={reloadSelectedWO}
+          />
+
+          {/* Flags for Review — admin/office only */}
+          <FlagsSection
+            workOrder={selectedWO}
+            currentUser={currentUser}
           />
 
           {/* Daily Hours Log Section - EDITABLE - Compact */}

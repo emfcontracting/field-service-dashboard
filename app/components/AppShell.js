@@ -159,6 +159,13 @@ export const NAV_ITEMS = [
       <line x1="12" y1="2" x2="12" y2="15"/>
     </svg>
   ), officeOrAdmin: true },
+  { id: 'review-queue',   label: 'Review Queue',   reviewQueue: true, Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 2v20l4-3 4 3 4-3 4 3V2z"/>
+      <line x1="8" y1="8" x2="16" y2="8"/>
+      <line x1="8" y1="12" x2="14" y2="12"/>
+    </svg>
+  ), officeOrAdmin: true },
 ];
 
 export const QUICK_LINKS = [
@@ -173,7 +180,7 @@ export const QUICK_LINKS = [
 ];
 
 // ── SidebarNav (inner component — needs useSearchParams) ──────────────────────
-function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
+function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQueueCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -213,9 +220,12 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, sidebarCo
               if (item.adminOnly && userInfo?.role !== 'admin') return false;
               if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
               return true;
-            }).map(({ id, label, Icon, alert, cbreDataEntry }) => {
+            }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue }) => {
               const isActive = activeView === id;
-              const badgeCount = alert ? missingHoursCount : cbreDataEntry ? cbreDataEntryCount : 0;
+              const badgeCount = alert ? missingHoursCount
+                                : cbreDataEntry ? cbreDataEntryCount
+                                : reviewQueue ? reviewQueueCount
+                                : 0;
               return (
                 <button key={id} onClick={() => setActiveView(id)}
                   className={`w-full flex items-center justify-between px-4 py-3 text-sm transition border-l-2
@@ -225,7 +235,9 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, sidebarCo
                   </div>
                   {badgeCount > 0 && (
                     <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full border ${
-                      cbreDataEntry
+                      reviewQueue
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : cbreDataEntry
                         ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
                         : 'bg-red-500/20 text-red-400 border-red-500/30'
                     }`}>{badgeCount}</span>
@@ -305,15 +317,21 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, sidebarCo
           if (item.adminOnly && userInfo?.role !== 'admin') return false;
           if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
           return true;
-        }).map(({ id, label, Icon, alert, cbreDataEntry }) => {
+        }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue }) => {
           const isActive = !activeLink && activeView === id;
           const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
             : id === 'aging' ? 'bg-red-500/10 text-red-400'
             : id === 'cbre-data-entry' ? 'bg-orange-500/10 text-orange-400'
+            : id === 'review-queue' ? 'bg-amber-500/10 text-amber-400'
             : 'bg-blue-600/15 text-blue-400';
 
-          const badgeCount = alert ? missingHoursCount : cbreDataEntry ? cbreDataEntryCount : 0;
-          const badgeColor = cbreDataEntry
+          const badgeCount = alert ? missingHoursCount
+                            : cbreDataEntry ? cbreDataEntryCount
+                            : reviewQueue ? reviewQueueCount
+                            : 0;
+          const badgeColor = reviewQueue
+            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+            : cbreDataEntry
             ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
             : 'bg-red-500/20 text-red-400 border-red-500/30';
 
@@ -410,6 +428,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [missingHoursCount, setMissingHoursCount] = useState(0);
   const [cbreDataEntryCount, setCbreDataEntryCount] = useState(0);
+  const [reviewQueueCount, setReviewQueueCount] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -481,6 +500,26 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     })();
   }, [authenticated, userInfo]);
 
+  // ── Review Queue open-flag count (admin/office only) ──
+  useEffect(() => {
+    if (!authenticated || !userInfo) return;
+    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const { count } = await supabase
+          .from('work_order_flags')
+          .select('flag_id', { count: 'exact', head: true })
+          .eq('status', 'open');
+        if (!cancelled) setReviewQueueCount(count || 0);
+      } catch {}
+    };
+    load();
+    // Re-poll every 60s so badge stays roughly current without aggressive refresh
+    const interval = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [authenticated, userInfo]);
+
   async function checkAuth() {
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
@@ -534,6 +573,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
           userInfo={userInfo}
           missingHoursCount={missingHoursCount}
           cbreDataEntryCount={cbreDataEntryCount}
+          reviewQueueCount={reviewQueueCount}
           sidebarCollapsed={sidebarCollapsed}
           onCollapse={() => setSidebarCollapsed(p => !p)}
           onLogout={handleLogout}

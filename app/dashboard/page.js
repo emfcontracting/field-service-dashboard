@@ -18,6 +18,7 @@ import CashFlowView from './components/CashFlowView';
 import UPSEscalationView from './components/UPSEscalationView';
 import CBRESyncView from './components/CBRESyncView';
 import CBREDataEntryView from './components/CBREDataEntryView';
+import ReviewQueueView from './components/ReviewQueueView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -153,6 +154,8 @@ function DashboardContent() {
         return <CBRESyncView currentUser={currentUser} />;
       case 'cbre-data-entry':
         return <CBREDataEntryView currentUser={currentUser} />;
+      case 'review-queue':
+        return <ReviewQueueView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} refreshWorkOrders={refreshWorkOrders} />;
       case 'workorders':
       default:
         return (

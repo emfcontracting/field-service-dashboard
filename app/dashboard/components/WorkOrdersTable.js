@@ -7,6 +7,35 @@ import { getPriorityBadge } from '../utils/priorityHelpers';
 import { formatDateEST } from '../utils/dateUtils';
 import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissionStatus';
 
+// Highest-priority open flag for this WO (high > medium > low).
+const getTopFlag = (wo) => {
+  const flags = wo.open_flags || [];
+  if (!flags.length) return null;
+  const rank = { high: 0, medium: 1, low: 2 };
+  return [...flags].sort((a, b) => (rank[a.priority] ?? 9) - (rank[b.priority] ?? 9))[0];
+};
+
+const FLAG_PRIORITY_CLASS = {
+  high:   'bg-red-500/20    text-red-400    border border-red-500/40    animate-pulse',
+  medium: 'bg-orange-500/20 text-orange-400 border border-orange-500/40',
+  low:    'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
+};
+
+const FlagBadge = ({ wo }) => {
+  const flag = getTopFlag(wo);
+  if (!flag) return null;
+  const count = (wo.open_flags || []).length;
+  const cls = FLAG_PRIORITY_CLASS[flag.priority] || FLAG_PRIORITY_CLASS.medium;
+  const tooltip = count === 1
+    ? `Flagged for review (${flag.priority}): ${flag.comment}`
+    : `${count} open flags — highest priority: ${flag.priority}`;
+  return (
+    <span title={tooltip} className={`${cls} text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-help`}>
+      🚩{count > 1 ? ` ${count}` : ''}
+    </span>
+  );
+};
+
 // Icon row shown next to a WO number. Each icon is dimmed when the
 // corresponding submission hasn't been received — so a fully complete WO
 // shows three bright icons and an incomplete one shows whichever are missing.
@@ -237,6 +266,7 @@ export default function WorkOrdersTable({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
                       <SubmissionBadges wo={wo} />
+                      <FlagBadge wo={wo} />
                       {isUnackCbre && (
                         <button
                           onClick={(e) => {

@@ -17,6 +17,7 @@ import ProfitabilityView from './components/ProfitabilityView';
 import CashFlowView from './components/CashFlowView';
 import UPSEscalationView from './components/UPSEscalationView';
 import CBRESyncView from './components/CBRESyncView';
+import CBREDataEntryView from './components/CBREDataEntryView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
@@ -150,6 +151,8 @@ function DashboardContent() {
         return <UPSEscalationView currentUser={currentUser} />;
       case 'cbre-sync':
         return <CBRESyncView currentUser={currentUser} />;
+      case 'cbre-data-entry':
+        return <CBREDataEntryView currentUser={currentUser} />;
       case 'workorders':
       default:
         return (

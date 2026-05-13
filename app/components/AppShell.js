@@ -152,6 +152,13 @@ export const NAV_ITEMS = [
       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
     </svg>
   ), adminOnly: true },
+  { id: 'cbre-data-entry', label: 'CBRE Data Entry', cbreDataEntry: true, Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+      <polyline points="16 6 12 2 8 6"/>
+      <line x1="12" y1="2" x2="12" y2="15"/>
+    </svg>
+  ), officeOrAdmin: true },
 ];
 
 export const QUICK_LINKS = [
@@ -166,7 +173,7 @@ export const QUICK_LINKS = [
 ];
 
 // ── SidebarNav (inner component — needs useSearchParams) ──────────────────────
-function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
+function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -202,8 +209,13 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         {/* Mobile dropdown nav */}
         {mobileNavOpen && (
           <div className="bg-[#0d0d14] border-b border-[#1e1e2e] py-1.5">
-            {NAV_ITEMS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ id, label, Icon, alert }) => {
+            {NAV_ITEMS.filter(item => {
+              if (item.adminOnly && userInfo?.role !== 'admin') return false;
+              if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
+              return true;
+            }).map(({ id, label, Icon, alert, cbreDataEntry }) => {
               const isActive = activeView === id;
+              const badgeCount = alert ? missingHoursCount : cbreDataEntry ? cbreDataEntryCount : 0;
               return (
                 <button key={id} onClick={() => setActiveView(id)}
                   className={`w-full flex items-center justify-between px-4 py-3 text-sm transition border-l-2
@@ -211,8 +223,12 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
                   <div className="flex items-center gap-3">
                     <Icon /><span className="font-medium">{label}</span>
                   </div>
-                  {alert && missingHoursCount > 0 && (
-                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold px-1.5 py-0.5 rounded-full">{missingHoursCount}</span>
+                  {badgeCount > 0 && (
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full border ${
+                      cbreDataEntry
+                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                        : 'bg-red-500/20 text-red-400 border-red-500/30'
+                    }`}>{badgeCount}</span>
                   )}
                 </button>
               );
@@ -285,11 +301,21 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
         {sidebarCollapsed && <div className="h-2" />}
 
         {/* Dashboard nav items */}
-        {NAV_ITEMS.filter(item => !item.adminOnly || userInfo?.role === 'admin').map(({ id, label, Icon, alert }) => {
+        {NAV_ITEMS.filter(item => {
+          if (item.adminOnly && userInfo?.role !== 'admin') return false;
+          if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
+          return true;
+        }).map(({ id, label, Icon, alert, cbreDataEntry }) => {
           const isActive = !activeLink && activeView === id;
           const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
             : id === 'aging' ? 'bg-red-500/10 text-red-400'
+            : id === 'cbre-data-entry' ? 'bg-orange-500/10 text-orange-400'
             : 'bg-blue-600/15 text-blue-400';
+
+          const badgeCount = alert ? missingHoursCount : cbreDataEntry ? cbreDataEntryCount : 0;
+          const badgeColor = cbreDataEntry
+            ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+            : 'bg-red-500/20 text-red-400 border-red-500/30';
 
           return (
             <button key={id} onClick={() => setActiveView(id)} title={sidebarCollapsed ? label : undefined}
@@ -299,12 +325,12 @@ function SidebarNav({ userInfo, missingHoursCount, sidebarCollapsed, onCollapse,
               {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500" />}
               <Icon />
               {!sidebarCollapsed && <span className="truncate">{label}</span>}
-              {alert && missingHoursCount > 0 && (
-                <span className={`bg-red-500/20 text-red-400 border border-red-500/30 font-bold rounded-full leading-none
+              {badgeCount > 0 && (
+                <span className={`${badgeColor} border font-bold rounded-full leading-none
                   ${sidebarCollapsed
                     ? 'absolute top-1 right-1 text-[8px] w-4 h-4 flex items-center justify-center'
                     : 'ml-auto text-[10px] px-1.5 py-0.5'}`}>
-                  {missingHoursCount > 99 ? '99+' : missingHoursCount}
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
               )}
             </button>
@@ -383,6 +409,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   const [isMobile, setIsMobile]           = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [missingHoursCount, setMissingHoursCount] = useState(0);
+  const [cbreDataEntryCount, setCbreDataEntryCount] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -429,6 +456,30 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
       } catch {}
     })();
   }, [authenticated]);
+
+  // ── CBRE Data Entry pending count (admin/office only) ──
+  useEffect(() => {
+    if (!authenticated || !userInfo) return;
+    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
+    (async () => {
+      try {
+        // Pending daily check-out transfers (last 90 days, to keep count meaningful)
+        const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        const { count: dailyCount } = await supabase
+          .from('daily_hours_log')
+          .select('log_id', { count: 'exact', head: true })
+          .eq('cbre_transferred', false)
+          .gte('work_date', cutoff);
+        // Pending completion transfers
+        const { count: completionCount } = await supabase
+          .from('work_orders')
+          .select('wo_id', { count: 'exact', head: true })
+          .eq('completion_transferred', false)
+          .eq('status', 'completed');
+        setCbreDataEntryCount((dailyCount || 0) + (completionCount || 0));
+      } catch {}
+    })();
+  }, [authenticated, userInfo]);
 
   async function checkAuth() {
     try {
@@ -482,6 +533,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
         <SidebarNav
           userInfo={userInfo}
           missingHoursCount={missingHoursCount}
+          cbreDataEntryCount={cbreDataEntryCount}
           sidebarCollapsed={sidebarCollapsed}
           onCollapse={() => setSidebarCollapsed(p => !p)}
           onLogout={handleLogout}

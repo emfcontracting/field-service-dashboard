@@ -191,7 +191,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       .from('daily_hours_log')
       .select(`
         *,
-        user:users(first_name, last_name)
+        user:users!daily_hours_log_user_id_fkey(first_name, last_name)
       `)
       .in('wo_id', woIds)
       .order('work_date', { ascending: true });

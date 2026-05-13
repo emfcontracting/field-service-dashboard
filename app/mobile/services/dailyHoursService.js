@@ -10,7 +10,7 @@ export async function loadDailyHoursForWorkOrder(supabase, woId) {
       .from('daily_hours_log')
       .select(`
         *,
-        user:users(first_name, last_name, role)
+        user:users!daily_hours_log_user_id_fkey(first_name, last_name, role)
       `)
       .eq('wo_id', woId)
       .order('work_date', { ascending: false })
@@ -79,7 +79,7 @@ export async function addDailyHours(supabase, hoursData) {
       }])
       .select(`
         *,
-        user:users(first_name, last_name, role)
+        user:users!daily_hours_log_user_id_fkey(first_name, last_name, role)
       `)
       .single();
 
@@ -145,7 +145,7 @@ export async function loadBulkDailyHours(supabase, filters = {}) {
       .from('daily_hours_log')
       .select(`
         *,
-        user:users(first_name, last_name, role),
+        user:users!daily_hours_log_user_id_fkey(first_name, last_name, role),
         work_order:work_orders(wo_number, building, status)
       `)
       .order('work_date', { ascending: false });

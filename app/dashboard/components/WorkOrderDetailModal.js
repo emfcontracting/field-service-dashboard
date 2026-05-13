@@ -76,7 +76,7 @@ export default function WorkOrderDetailModal({
         .from('daily_hours_log')
         .select(`
           *,
-          user:users(first_name, last_name)
+          user:users!daily_hours_log_user_id_fkey(first_name, last_name)
         `)
         .eq('wo_id', selectedWO.wo_id)
         .order('work_date', { ascending: false });
@@ -702,7 +702,7 @@ export default function WorkOrderDetailModal({
           miles: parseFloat(newHoursEntry.miles) || 0,
           notes: newHoursEntry.notes || '[Added by Admin]'
         })
-        .select(`*, user:users(first_name, last_name)`)
+        .select(`*, user:users!daily_hours_log_user_id_fkey(first_name, last_name)`)
         .single();
 
       if (error) throw error;

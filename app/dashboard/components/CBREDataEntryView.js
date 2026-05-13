@@ -27,14 +27,16 @@ const fmtDateTime = (d) => d
   ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
   : '—';
 
-// Parse the latest check-in / check-out timestamps from comments (best-effort)
+// Parse FIRST check-in and LAST check-out timestamps from comments
 // Comments contain lines like:
 //   [5/11/2026, 10:28:46 AM] Matthew Jordan - ✓ CHECKED IN
 //   [5/11/2026, 4:15:22 PM] Matthew Jordan - ⏸ CHECKED OUT
+// A tech may check in/out multiple times in a day (lunch break, etc.) — we want
+// the EARLIEST check-in and the LATEST check-out as the working window for CBRE.
 function extractCheckInOut(comments, userName, workDate) {
   if (!comments) return { checkIn: null, checkOut: null };
   const lines = comments.split('\n');
-  let checkIn = null, checkOut = null;
+  const checkIns = [], checkOuts = [];
   const dateStr = new Date(workDate).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   // Match: [date, time] userName - ✓ CHECKED IN / ⏸ CHECKED OUT
   for (const line of lines) {
@@ -44,10 +46,25 @@ function extractCheckInOut(comments, userName, workDate) {
     // Filter to this user + this date
     if (userName && !timestamp.includes(dateStr.replace(/^0/, ''))) continue;
     if (userName && !name.trim().toLowerCase().includes(userName.toLowerCase().split(' ')[0])) continue;
-    if (event.includes('CHECKED IN'))  checkIn  = timestamp;
-    if (event.includes('CHECKED OUT')) checkOut = timestamp;
+    if (event.includes('CHECKED IN'))  checkIns.push(timestamp);
+    if (event.includes('CHECKED OUT')) checkOuts.push(timestamp);
   }
-  return { checkIn, checkOut };
+  // Sort by parsed Date — earliest first
+  const byTime = (a, b) => new Date(a) - new Date(b);
+  checkIns.sort(byTime);
+  checkOuts.sort(byTime);
+  return {
+    checkIn:  checkIns[0]                        || null,  // earliest IN
+    checkOut: checkOuts[checkOuts.length - 1]    || null,  // latest OUT
+  };
+}
+
+// Strip date prefix from "5/11/2026, 10:28:46 AM" → "10:28 AM"
+// (seconds dropped for cleaner display)
+function timeOnly(timestamp) {
+  if (!timestamp) return null;
+  const m = timestamp.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
+  return m ? `${m[1]}:${m[2]} ${m[3].toUpperCase()}` : timestamp;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -67,7 +84,6 @@ export default function CBREDataEntryView({ currentUser }) {
   useEffect(() => { if (isAuthorized) loadData(); /* eslint-disable-next-line */ }, [isAuthorized, dayWindow, showTransferred]);
 
   const loadData = async () => {
-    console.log('🔍 CBREDataEntryView v2 - using FK constraint syntax');
     setLoading(true);
     try {
       const cutoff = dayWindow > 0
@@ -221,12 +237,14 @@ export default function CBREDataEntryView({ currentUser }) {
       const techName = `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim();
       const { checkIn, checkOut } = extractCheckInOut(wo.comments, techName, e.work_date);
       lines.push(`--- ${fmtDate(e.work_date)} | ${techName} ---`);
-      if (checkIn)  lines.push(`  Check-In:  ${checkIn}`);
-      if (checkOut) lines.push(`  Check-Out: ${checkOut}`);
-      lines.push(`  Regular Hours: ${parseFloat(e.hours_regular) || 0}`);
+      lines.push(`  First Check-In:  ${timeOnly(checkIn)  || '(not logged)'}`);
+      lines.push(`  Last  Check-Out: ${timeOnly(checkOut) || '(not logged)'}`);
+      lines.push(`  Regular Hours:  ${parseFloat(e.hours_regular) || 0}`);
       lines.push(`  Overtime Hours: ${parseFloat(e.hours_overtime) || 0}`);
       lines.push(`  Miles: ${parseFloat(e.miles) || 0}`);
-      if (parseFloat(e.tech_material_cost) > 0) lines.push(`  Tech Material: $${parseFloat(e.tech_material_cost).toFixed(2)}`);
+      if (parseFloat(e.tech_material_cost) > 0) {
+        lines.push(`  Tech Material: $${parseFloat(e.tech_material_cost).toFixed(2)}`);
+      }
       if (e.notes && !e.notes.includes('[MIGRATED]') && !e.notes.includes('[Added by Admin]')) {
         lines.push(`  Notes: ${e.notes}`);
       }
@@ -428,6 +446,9 @@ export default function CBREDataEntryView({ currentUser }) {
                       const techName = `${entry.user?.first_name || ''} ${entry.user?.last_name || ''}`.trim();
                       const { checkIn, checkOut } = extractCheckInOut(wo.comments, techName, entry.work_date);
 
+                      const inT  = timeOnly(checkIn);
+                      const outT = timeOnly(checkOut);
+
                       return (
                         <div
                           key={entry.log_id}
@@ -436,26 +457,38 @@ export default function CBREDataEntryView({ currentUser }) {
                           }`}
                         >
                           <div className="flex-1 min-w-0">
+                            {/* PRIMARY ROW — name · date · check-in → check-out */}
                             <div className="flex items-center gap-3 flex-wrap text-sm">
                               <span className="font-semibold text-slate-200">{techName || 'Unknown'}</span>
                               <span className="text-slate-500">·</span>
                               <span className="text-slate-400">{fmtDate(entry.work_date)}</span>
                               <span className="text-slate-500">·</span>
-                              <span className="text-emerald-400 font-mono">{(parseFloat(entry.hours_regular) || 0).toFixed(1)} RT</span>
-                              {parseFloat(entry.hours_overtime) > 0 && (
-                                <span className="text-orange-400 font-mono">{(parseFloat(entry.hours_overtime) || 0).toFixed(1)} OT</span>
-                              )}
-                              {parseFloat(entry.miles) > 0 && (
-                                <span className="text-slate-400 font-mono">{(parseFloat(entry.miles) || 0).toFixed(1)} mi</span>
+                              {(inT || outT) ? (
+                                <span className="font-mono text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">
+                                  <span className={inT ? '' : 'text-slate-600 italic'}>
+                                    {inT || 'no IN'}
+                                  </span>
+                                  <span className="text-slate-500 mx-1.5">→</span>
+                                  <span className={outT ? '' : 'text-slate-600 italic'}>
+                                    {outT || 'no OUT'}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-600 italic">no check-in/out logged</span>
                               )}
                             </div>
-                            {(checkIn || checkOut) && (
-                              <div className="text-xs text-slate-500 mt-1">
-                                {checkIn  && <>In: <span className="text-slate-400">{checkIn}</span></>}
-                                {checkIn && checkOut && <span className="mx-2">·</span>}
-                                {checkOut && <>Out: <span className="text-slate-400">{checkOut}</span></>}
-                              </div>
-                            )}
+                            {/* SECONDARY ROW — hours + miles (for cross-reference) */}
+                            <div className="text-xs text-slate-500 mt-1 flex gap-3 flex-wrap">
+                              <span className="font-mono">
+                                <span className="text-emerald-500/80">{(parseFloat(entry.hours_regular) || 0).toFixed(1)} RT</span>
+                                {parseFloat(entry.hours_overtime) > 0 && (
+                                  <span className="text-orange-500/80 ml-2">{(parseFloat(entry.hours_overtime) || 0).toFixed(1)} OT</span>
+                                )}
+                                {parseFloat(entry.miles) > 0 && (
+                                  <span className="text-slate-500 ml-2">{(parseFloat(entry.miles) || 0).toFixed(1)} mi</span>
+                                )}
+                              </span>
+                            </div>
                             {entry.cbre_transferred && entry.cbre_transferred_at && (
                               <div className="text-xs text-emerald-500 mt-1">
                                 ✓ Transferred {fmtDateTime(entry.cbre_transferred_at)}

@@ -5,6 +5,43 @@ import { getStatusColor } from '../utils/styleHelpers';
 import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 import { formatDateEST } from '../utils/dateUtils';
+import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissionStatus';
+
+// Icon row shown next to a WO number. Each icon is dimmed when the
+// corresponding submission hasn't been received — so a fully complete WO
+// shows three bright icons and an incomplete one shows whichever are missing.
+// We deliberately hide 'not_required' types so labour-only or non-PM WOs
+// don't show false-negative reds.
+const SubmissionBadges = ({ wo }) => {
+  const status = getSubmissionStatus(wo);
+  const types = ['photos', 'receipts', 'writeups'];
+  // If every required submission is 'not_required', show nothing at all.
+  const hasAny = types.some(t => status[t] !== 'not_required');
+  if (!hasAny) return null;
+
+  return (
+    <span className="inline-flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+      {types.map(type => {
+        const st = status[type];
+        if (st === 'not_required') return null;
+        const meta = SUBMISSION_META[type];
+        const colour =
+          st === 'received'    ? 'opacity-100' :
+          st === 'missing'     ? 'opacity-50 grayscale' :
+                                 'opacity-30 grayscale';   // not_checked
+        return (
+          <span
+            key={type}
+            title={tooltipFor(type, st, wo)}
+            className={`text-[11px] leading-none ${colour} cursor-help`}
+          >
+            {meta.icon}
+          </span>
+        );
+      })}
+    </span>
+  );
+};
 
 const getCBREStatusBadge = (cbreStatus) => {
   switch (cbreStatus) {
@@ -199,6 +236,7 @@ export default function WorkOrdersTable({
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
+                      <SubmissionBadges wo={wo} />
                       {isUnackCbre && (
                         <button
                           onClick={(e) => {

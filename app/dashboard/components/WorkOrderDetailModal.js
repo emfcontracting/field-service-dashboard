@@ -18,6 +18,7 @@ import ProfitabilityTab from './ProfitabilityTab';
 import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
+import SubmissionStatusSection from './SubmissionStatusSection';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -751,6 +752,24 @@ export default function WorkOrderDetailModal({
       refreshWorkOrders();
     } catch (error) {
       alert('Failed to update field: ' + error.message);
+    }
+  };
+
+  // Re-fetch the current WO from the DB and update local state. Used by the
+  // submission status section after a refresh/override so the icons + badges
+  // update without a full page reload.
+  const reloadSelectedWO = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+      if (error) throw error;
+      if (data) setSelectedWO(prev => ({ ...prev, ...data }));
+      refreshWorkOrders();
+    } catch (e) {
+      console.error('reloadSelectedWO error:', e);
     }
   };
 
@@ -1680,6 +1699,13 @@ const sendAssignmentNotifications = async () => {
               </div>
             </div>
           )}
+
+          {/* Tech Submissions Status (photos / receipts / PMI write-ups) */}
+          <SubmissionStatusSection
+            workOrder={selectedWO}
+            currentUser={currentUser}
+            onUpdated={reloadSelectedWO}
+          />
 
           {/* Daily Hours Log Section - EDITABLE - Compact */}
           <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-3 md:p-4">

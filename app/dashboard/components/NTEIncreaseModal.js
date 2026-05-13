@@ -1,7 +1,7 @@
 // app/dashboard/components/NTEIncreaseModal.js
 // FIXED: Matches CostSummarySection calculation exactly
 // ADDED: Edit mode, Warning banner, Verbal/Written NTE logic, Approve button
-// ADDED: Reconciliation Mode (superuser only) - after-the-fact NTE requests
+// ADDED: Reconciliation Mode (admin + office_staff) - after-the-fact NTE requests
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,9 +15,6 @@ const RATES = {
   ADMIN_HOURS: 2  // 2 hrs × $64 = $128
 };
 
-// Superuser email - matches dashboard/page.js SUPERUSER_EMAIL
-const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
-
 export default function NTEIncreaseModal({ 
   workOrder, 
   currentUser, 
@@ -28,8 +25,9 @@ export default function NTEIncreaseModal({
   existingQuote = null,  // Pass existing quote for edit mode
   editMode = false
 }) {
-  // Superuser check - only Daniel sees the reconciliation toggle
-  const canUseReconciliationMode = currentUser?.email === SUPERUSER_EMAIL;
+  // Reconciliation Mode is available to admins and office staff.
+  // Field techs still only see the standard (forward-looking estimate) mode.
+  const canUseReconciliationMode = ['admin', 'office_staff'].includes(currentUser?.role);
 
   // Request mode: 'estimate' (default, forward-looking) or 'reconciliation' (after-the-fact)
   const [requestMode, setRequestMode] = useState('estimate');

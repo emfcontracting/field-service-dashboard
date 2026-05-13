@@ -253,6 +253,22 @@ export default function NTEIncreaseModal({
   const isOverBudget = projectedTotal > originalNTE;
   const overageAmount = Math.max(0, projectedTotal - originalNTE);
 
+  // Auto-fill description from the work order's comments field. Useful in both
+  // estimate and reconciliation modes — the comments typically contain the
+  // CBRE-imported job description plus tech notes, which is a much better
+  // starting point for the description than a blank textarea.
+  const fillFromComments = () => {
+    const comments = (workOrder.comments || '').trim();
+    if (!comments) {
+      alert('No comments on this work order yet — nothing to copy.');
+      return;
+    }
+    if (formData.description.trim() && !confirm('Replace the current description with the work order comments?')) {
+      return;
+    }
+    setFormData({ ...formData, description: comments });
+  };
+
   // Auto-fill description with a smart breakdown (reconciliation mode helper)
   const generateReconciliationDescription = () => {
     const overage = projectedTotal - originalNTE;
@@ -576,13 +592,14 @@ Final Cost Breakdown:
               <label className="block text-sm text-gray-400">
                 Description of Additional Work <span className="text-red-400">*</span>
               </label>
-              {isReconciliation && (
+              {(workOrder.comments && workOrder.comments.trim()) && (
                 <button
                   type="button"
-                  onClick={generateReconciliationDescription}
+                  onClick={fillFromComments}
                   className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-3 py-1 rounded transition"
+                  title="Copy work order comments into description"
                 >
-                  ✨ Auto-fill from breakdown
+                  ✨ Auto-fill from comments
                 </button>
               )}
             </div>

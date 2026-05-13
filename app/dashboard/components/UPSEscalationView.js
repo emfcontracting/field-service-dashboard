@@ -18,6 +18,7 @@ import {
   disputeBadgeClasses,
 } from '@/lib/disputeStatus';
 import { exportToExcel, exportToPDF } from '@/lib/upsEscalationExport';
+import ActivityLogExportModal from './ActivityLogExportModal';
 
 const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -42,6 +43,7 @@ export default function UPSEscalationView({ currentUser }) {
   const [transitionFor, setTransitionFor] = useState(null); // wo_id requesting resolved transition
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   // ── Data for export (All Active = Open + Escalated by default) ──────────────────────────────────────────
   const exportableDisputes = useMemo(
@@ -227,8 +229,20 @@ export default function UPSEscalationView({ currentUser }) {
           </p>
         </div>
 
-        {/* Export dropdown */}
-        <div className="relative">
+        {/* Action buttons — Activity Log + Export Report */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Activity Log Bulk Export */}
+          <button
+            onClick={() => setShowActivityLog(true)}
+            disabled={exportableDisputes.length === 0}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            title="Export activity logs for all active disputes (check-ins, status changes, submissions, etc)"
+          >
+            📜 Activity Log <span className="opacity-80">({exportableDisputes.length})</span>
+          </button>
+
+          {/* Existing Export dropdown */}
+          <div className="relative">
           <button onClick={() => setExportDropdownOpen(o => !o)}
             disabled={exporting || exportableDisputes.length === 0}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
@@ -271,6 +285,7 @@ export default function UPSEscalationView({ currentUser }) {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
 
@@ -369,6 +384,16 @@ export default function UPSEscalationView({ currentUser }) {
         <div>• <strong className="text-slate-500">Written Off</strong> = Unable to recover, accept the loss</div>
         <div className="text-slate-700 mt-1">💡 Disputed WOs are automatically excluded from Cash Flow forecasts</div>
       </div>
+
+      {/* Activity Log Bulk Export Modal */}
+      {showActivityLog && (
+        <ActivityLogExportModal
+          woIds={exportableDisputes.map(d => d.wo_id)}
+          supabase={supabaseClient}
+          onClose={() => setShowActivityLog(false)}
+          title={`📥 Activity Log Export — ${exportableDisputes.length} active dispute${exportableDisputes.length !== 1 ? 's' : ''}`}
+        />
+      )}
     </div>
   );
 }

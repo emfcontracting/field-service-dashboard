@@ -20,6 +20,7 @@ import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
+import ActivityLogExportModal from './ActivityLogExportModal';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -62,6 +63,7 @@ export default function WorkOrderDetailModal({
   const [editingNTE, setEditingNTE] = useState(null); // Track which NTE is being edited
   const [savingNTE, setSavingNTE] = useState(false);
   const [showNTEModal, setShowNTEModal] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
   const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
@@ -1418,6 +1420,13 @@ const sendAssignmentNotifications = async () => {
               💰 Cost CSV
             </button>
             <button
+              onClick={() => setShowActivityLog(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              title="Export activity log (check-ins, status changes, submissions, etc)"
+            >
+              📜 Activity Log
+            </button>
+            <button
               onClick={downloadCompletionCertificate}
               className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
             >
@@ -2657,6 +2666,15 @@ const sendAssignmentNotifications = async () => {
             setNteIncreases([newNTE, ...nteIncreases]);
             setShowNTEModal(false);
           }}
+        />
+      )}
+
+      {/* Activity Log Export Modal */}
+      {showActivityLog && (
+        <ActivityLogExportModal
+          woIds={[selectedWO.wo_id]}
+          supabase={supabase}
+          onClose={() => setShowActivityLog(false)}
         />
       )}
     </div>

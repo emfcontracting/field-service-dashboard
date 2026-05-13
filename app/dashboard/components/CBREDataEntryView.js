@@ -28,26 +28,27 @@ const fmtDateTime = (d) => d
   : '—';
 
 // Parse FIRST check-in and LAST check-out timestamps from comments
-// Comments contain lines like:
-//   [5/11/2026, 10:28:46 AM] Matthew Jordan - ✓ CHECKED IN
-//   [5/11/2026, 4:15:22 PM] Matthew Jordan - ⏸ CHECKED OUT
-// A tech may check in/out multiple times in a day (lunch break, etc.) — we want
-// the EARLIEST check-in and the LATEST check-out as the working window for CBRE.
+// Comments may have multiple events on the SAME LINE separated by whitespace:
+//   [4/13/2026, 3:34:23 PM] Stephen Jordan - ✓ CHECKED IN       [4/13/2026, 4:38:43 PM] Stephen Jordan - ⏸ CHECKED OUT
+// or on separate lines. We use a global regex (no line-splitting) so we catch ALL events.
+// Supports English (CHECKED IN/OUT) and Spanish (ENTRADA/SALIDA).
+// A tech may check in/out multiple times in a day (lunch break, etc.) — we want the
+// EARLIEST check-in and the LATEST check-out as the working window for CBRE.
 function extractCheckInOut(comments, userName, workDate) {
   if (!comments) return { checkIn: null, checkOut: null };
-  const lines = comments.split('\n');
   const checkIns = [], checkOuts = [];
   const dateStr = new Date(workDate).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
-  // Match: [date, time] userName - ✓ CHECKED IN / ⏸ CHECKED OUT
-  for (const line of lines) {
-    const m = line.match(/^\[([^\]]+)\]\s+(.+?)\s+-\s+(✓ CHECKED IN|⏸ CHECKED OUT)/);
-    if (!m) continue;
+  // Global regex — finds every [timestamp] name - event anywhere in the string
+  // (not anchored to line start, so multiple events on one line all match)
+  const regex = /\[([^\]]+)\]\s+([^[\n]+?)\s+-\s+(✓ CHECKED IN|⏸ CHECKED OUT|✓ ENTRADA|⏸ SALIDA)/g;
+  let m;
+  while ((m = regex.exec(comments)) !== null) {
     const [, timestamp, name, event] = m;
     // Filter to this user + this date
     if (userName && !timestamp.includes(dateStr.replace(/^0/, ''))) continue;
     if (userName && !name.trim().toLowerCase().includes(userName.toLowerCase().split(' ')[0])) continue;
-    if (event.includes('CHECKED IN'))  checkIns.push(timestamp);
-    if (event.includes('CHECKED OUT')) checkOuts.push(timestamp);
+    if (event.includes('CHECKED IN')  || event.includes('ENTRADA')) checkIns.push(timestamp);
+    if (event.includes('CHECKED OUT') || event.includes('SALIDA'))  checkOuts.push(timestamp);
   }
   // Sort by parsed Date — earliest first
   const byTime = (a, b) => new Date(a) - new Date(b);

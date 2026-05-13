@@ -19,17 +19,30 @@ import { getSupabase } from '@/lib/supabase';
 
 const supabase = getSupabase();
 
-const fmtDate = (d) => d
-  ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  : '—';
+// Timezone-safe date parser. JS's `new Date('2026-04-13')` treats date-only strings
+// as UTC midnight, which then displays one day earlier in EST. This helper detects
+// 'YYYY-MM-DD' format and parses as LOCAL date instead. Timestamps with a time
+// component fall through to standard Date parsing.
+function parseLocalDate(d) {
+  if (!d) return null;
+  if (d instanceof Date) return d;
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  return new Date(d);
+}
+
+const fmtDate = (d) => {
+  const date = parseLocalDate(d);
+  return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+};
 
 const fmtDateTime = (d) => d
   ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
   : '—';
 
-// Parse FIRST check-in and LAST check-out timestamps from comments
+// Parse FIRST check-in and LAST check-out timestamps from comments.
 // Comments may have multiple events on the SAME LINE separated by whitespace:
-//   [4/13/2026, 3:34:23 PM] Stephen Jordan - ✓ CHECKED IN       [4/13/2026, 4:38:43 PM] Stephen Jordan - ⏸ CHECKED OUT
+//   [4/13/2026, 3:34:23 PM] Stephen Jordan - ✓ CHECKED IN     [4/13/2026, 4:38:43 PM] Stephen Jordan - ⏸ CHECKED OUT
 // or on separate lines. We use a global regex (no line-splitting) so we catch ALL events.
 // Supports English (CHECKED IN/OUT) and Spanish (ENTRADA/SALIDA).
 // A tech may check in/out multiple times in a day (lunch break, etc.) — we want the
@@ -37,16 +50,24 @@ const fmtDateTime = (d) => d
 function extractCheckInOut(comments, userName, workDate) {
   if (!comments) return { checkIn: null, checkOut: null };
   const checkIns = [], checkOuts = [];
-  const dateStr = new Date(workDate).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+  // Build target date string "M/D/YYYY" using LOCAL parsing (no UTC shift)
+  const date = parseLocalDate(workDate);
+  const dateStr = date ? `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}` : null;
+  const firstName = userName ? userName.toLowerCase().split(' ')[0] : null;
+
   // Global regex — finds every [timestamp] name - event anywhere in the string
   // (not anchored to line start, so multiple events on one line all match)
   const regex = /\[([^\]]+)\]\s+([^[\n]+?)\s+-\s+(✓ CHECKED IN|⏸ CHECKED OUT|✓ ENTRADA|⏸ SALIDA)/g;
   let m;
   while ((m = regex.exec(comments)) !== null) {
     const [, timestamp, name, event] = m;
-    // Filter to this user + this date
-    if (userName && !timestamp.includes(dateStr.replace(/^0/, ''))) continue;
-    if (userName && !name.trim().toLowerCase().includes(userName.toLowerCase().split(' ')[0])) continue;
+    // Filter to this date — normalize both sides to strip leading zeros ("04/13" ≡ "4/13")
+    if (dateStr) {
+      const tsDate = timestamp.split(',')[0].trim().split('/').map(p => parseInt(p, 10)).join('/');
+      if (tsDate !== dateStr) continue;
+    }
+    // Filter to this user (first name match)
+    if (firstName && !name.trim().toLowerCase().includes(firstName)) continue;
     if (event.includes('CHECKED IN')  || event.includes('ENTRADA')) checkIns.push(timestamp);
     if (event.includes('CHECKED OUT') || event.includes('SALIDA'))  checkOuts.push(timestamp);
   }

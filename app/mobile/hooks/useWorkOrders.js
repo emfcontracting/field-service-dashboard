@@ -273,7 +273,7 @@ export function useWorkOrders(currentUser) {
         .from('daily_hours_log')
         .select(`
           *,
-          user:users(first_name, last_name)
+          user:users!daily_hours_log_user_id_fkey(first_name, last_name)
         `)
         .eq('wo_id', woId)
         .order('work_date', { ascending: false });

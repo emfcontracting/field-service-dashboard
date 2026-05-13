@@ -2542,10 +2542,11 @@ const sendAssignmentNotifications = async () => {
               value={selectedWO.comments || ''}
               onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
               onBlur={() => handleUpdateField('comments', selectedWO.comments)}
-              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
+              className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition font-mono text-sm leading-relaxed min-h-[120px] md:min-h-[400px] resize-y"
               rows="4"
               placeholder="Add any notes or comments..."
             />
+            <p className="text-[10px] text-slate-600 mt-1 hidden md:block">Drag the bottom-right corner to resize</p>
           </div>
 
           {/* Action Buttons */}

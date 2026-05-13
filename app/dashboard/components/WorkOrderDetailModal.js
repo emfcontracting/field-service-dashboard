@@ -16,6 +16,7 @@ import {
 import { calculateInvoiceTotal } from '../utils/calculations';
 import ProfitabilityTab from './ProfitabilityTab';
 import { exportSingleWOCostDetail } from '../utils/exportHelpers';
+import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { 
   getLocalDateString, 
@@ -750,6 +751,69 @@ export default function WorkOrderDetailModal({
       refreshWorkOrders();
     } catch (error) {
       alert('Failed to update field: ' + error.message);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dedicated handler for the CBRE Status dropdown.
+  // When status flips to 'quote_approved' we also need to:
+  //   1. Pull the latest pending/submitted quote for this WO
+  //   2. Apply its `new_nte_amount` to work_orders.nte
+  //   3. Mark that quote as approved
+  // All three are handled by the shared `applyQuoteApproval` helper so the
+  // dashboard and the Gmail email-sync stay in lock-step.
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleCBREStatusChange = async (rawValue) => {
+    const newStatus = rawValue || null;
+    const updatedAt = new Date().toISOString();
+
+    try {
+      // 1. Update the status field itself (always — even if NTE update fails)
+      await updateWorkOrder(supabase, selectedWO.wo_id, {
+        cbre_status: newStatus,
+        cbre_status_updated_at: updatedAt,
+      });
+
+      let nextNTE = selectedWO.nte;
+
+      // 2. If approving a quote, run the centralised approval helper
+      if (newStatus === 'quote_approved') {
+        try {
+          const result = await applyQuoteApproval(supabase, selectedWO.wo_id);
+          if (result.applied) {
+            nextNTE = result.newNTE;
+            alert(
+              `✅ Quote approved\n\n` +
+              `NTE updated: ${result.oldNTE.toFixed(2)} → ${result.newNTE.toFixed(2)}\n` +
+              `Source: ${result.source === 'quote' ? 'pending NTE increase request' : 'override'}`
+            );
+            // Reload quotes so the approval status badge refreshes
+            await loadNteIncreases();
+          } else {
+            alert(
+              `⚠️ CBRE status set to Quote Approved, but the NTE was NOT updated.\n\n` +
+              `Reason: ${result.reason}\n\n` +
+              `If this is a verbal approval, you can edit the NTE field manually.`
+            );
+          }
+        } catch (approvalErr) {
+          alert(
+            `Status updated, but auto-NTE update failed:\n${approvalErr.message}\n\n` +
+            `You can update the NTE field manually.`
+          );
+        }
+      }
+
+      // 3. Sync local UI state
+      setSelectedWO({
+        ...selectedWO,
+        cbre_status: newStatus,
+        cbre_status_updated_at: updatedAt,
+        nte: nextNTE,
+      });
+      refreshWorkOrders();
+    } catch (error) {
+      alert('Failed to update CBRE status: ' + error.message);
     }
   };
 
@@ -1508,7 +1572,7 @@ const sendAssignmentNotifications = async () => {
               </div>
               <select
                 value={selectedWO.cbre_status || ''}
-                onChange={(e) => handleUpdateField('cbre_status', e.target.value || null)}
+                onChange={(e) => handleCBREStatusChange(e.target.value)}
                 className={`px-4 py-2 rounded-lg font-semibold ${
                   selectedWO.cbre_status === 'escalation' ? 'bg-red-600 text-white' :
                   selectedWO.cbre_status === 'quote_rejected' ? 'bg-red-700 text-white' :

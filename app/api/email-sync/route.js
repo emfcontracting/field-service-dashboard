@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import { applyQuoteApproval } from '@/lib/quoteApproval';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -457,13 +458,10 @@ export async function GET(request) {
           updateData.billing_status = labelConfig.billing_status;
         }
 
-        // Extract NTE for approvals
+        // Extract NTE for approvals (try email body first; quote fallback applied below)
         let newNTE = null;
         if (labelConfig.extractNTE) {
           newNTE = extractApprovedNTE(winningEmail.subject, winningEmail.body);
-          if (newNTE) {
-            updateData.nte = newNTE;
-          }
         }
 
         // Extract quote amount for tracking
@@ -488,9 +486,34 @@ export async function GET(request) {
         updateData.comments = updatedComments;
 
         let invoiceUpdated = false;
+        let nteApplied      = null;   // tracking object from applyQuoteApproval()
 
         if (!dryRun) {
-          // Update work order
+          // ────────────────────────────────────────────────────────────────
+          // For quote_approved: apply the NTE update via the shared helper.
+          // This auto-falls-back to work_order_quotes.new_nte_amount when the
+          // email body didn't contain a parsable amount, AND it flips the
+          // matching quote to approved. We do this BEFORE the main work_orders
+          // update so the helper's nte write doesn't get clobbered.
+          // ────────────────────────────────────────────────────────────────
+          if (labelConfig.cbre_status === 'quote_approved') {
+            try {
+              nteApplied = await applyQuoteApproval(supabase, workOrder.wo_id, {
+                overrideNTE: newNTE,  // null is fine — helper will try the quote
+              });
+              if (nteApplied.applied) {
+                // Make sure downstream code (comment + notification) uses the
+                // actual amount we just applied, even if it came from the quote.
+                newNTE = nteApplied.newNTE;
+              }
+            } catch (approvalErr) {
+              results.errors.push(`Quote approval failed for ${woNumber}: ${approvalErr.message}`);
+            }
+          }
+
+          // Update work order (status / comments / billing_status)
+          // Note: we intentionally do NOT include `nte` here — applyQuoteApproval
+          // already wrote it. Including it again would just be a redundant write.
           const { error: updateError } = await supabase
             .from('work_orders')
             .update(updateData)
@@ -499,18 +522,6 @@ export async function GET(request) {
           if (updateError) {
             results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
             continue;
-          }
-
-          // Update NTE increase requests if quote approved
-          if (labelConfig.cbre_status === 'quote_approved') {
-            await supabase
-              .from('work_order_quotes')
-              .update({ 
-                nte_status: 'approved',
-                approved_at: new Date().toISOString()
-              })
-              .eq('wo_id', workOrder.wo_id)
-              .in('nte_status', ['pending', 'submitted']);
           }
 
           // Update invoice status if specified
@@ -555,6 +566,8 @@ export async function GET(request) {
           email_date: entry.date.toISOString(),
           new_nte: newNTE,
           old_nte: workOrder.nte,
+          nte_source: nteApplied?.source || (newNTE ? 'email' : null),
+          nte_applied: nteApplied?.applied || false,
           old_status: workOrder.cbre_status,
           submitted_quote: submittedQuoteAmount,
           invoice_updated: invoiceUpdated,

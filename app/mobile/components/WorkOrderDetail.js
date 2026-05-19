@@ -13,6 +13,39 @@ import SignatureModal from './modals/SignatureModal';
 import NTEIncreaseList from './quotes/NTEIncreaseList';
 import JurassicParkError from './JurassicParkError';
 
+// Map missing_data item -> DOM id of the matching section in this view.
+// Used by the clickable badges in the missing-data banner to scroll the tech
+// directly to the section they need to fix.
+const MISSING_DATA_SECTION_IDS = {
+  photos: 'section-photos',
+  writeup: 'section-photos',           // PMI write-ups live alongside photos
+  daily_hours: 'section-daily-hours',
+  material_costs: 'section-material-costs',
+  signature: 'section-signature',
+  checkin_checkout: 'section-checkin-checkout',
+  other: null                          // no specific anchor
+};
+
+const MISSING_DATA_LABELS_EN = {
+  photos: '📷 Photos',
+  writeup: '✍️ Write-up',
+  daily_hours: '⏱️ Daily Hours',
+  material_costs: '💲 Material costs',
+  signature: '✒️ Signature',
+  checkin_checkout: '🚪 Check-in/out',
+  other: '❓ Other'
+};
+
+const MISSING_DATA_LABELS_ES = {
+  photos: '📷 Fotos',
+  writeup: '✍️ Informe',
+  daily_hours: '⏱️ Horas',
+  material_costs: '💲 Materiales',
+  signature: '✒️ Firma',
+  checkin_checkout: '🚪 Entrada/Salida',
+  other: '❓ Otro'
+};
+
 export default function WorkOrderDetail({
   workOrder,
   currentUser,
@@ -62,6 +95,20 @@ export default function WorkOrderDetail({
   
   // 🦖 JURASSIC PARK ERROR STATE
   const [jurassicError, setJurassicError] = useState(null);
+
+  // 🚩 Missing data: jump to the section the badge points to
+  const scrollToSection = (sectionId) => {
+    if (!sectionId) return;
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Brief highlight pulse so the tech immediately sees where they landed
+      el.classList.add('ring-4', 'ring-red-500', 'ring-opacity-75');
+      setTimeout(() => {
+        el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-75');
+      }, 2000);
+    }
+  };
   
   const wo = workOrder || {};
   const woNumber = wo.wo_number || t('unknown');
@@ -437,6 +484,73 @@ export default function WorkOrderDetail({
           </div>
         )}
 
+        {/* 🚩 MISSING DATA ALERT — in-WO banner with clickable item badges */}
+        {status === 'missing_data' && (
+          <div
+            className="bg-red-700 border-4 border-red-400 rounded-xl p-4 mb-4 shadow-lg"
+            style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+          >
+            <div className="text-center mb-3">
+              <div className="text-3xl mb-1">🚩</div>
+              <h2 className="text-lg font-bold text-white">
+                {language === 'en' ? 'MISSING DATA — ACTION REQUIRED' : 'DATOS FALTANTES — ACCIÓN REQUERIDA'}
+              </h2>
+              {wo.missing_data_flagged_at && (
+                <p className="text-xs text-red-200 mt-1">
+                  {language === 'en' ? 'Flagged ' : 'Marcado '}
+                  {new Date(wo.missing_data_flagged_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+
+            {/* Office comment - prominent */}
+            {wo.missing_data_comment && (
+              <div className="bg-black/40 border border-red-300/40 rounded-lg p-3 mb-3 text-white text-sm whitespace-pre-wrap leading-relaxed">
+                {wo.missing_data_comment}
+              </div>
+            )}
+
+            {/* Clickable item badges — tap to scroll */}
+            {Array.isArray(wo.missing_data_items) && wo.missing_data_items.length > 0 && (
+              <>
+                <div className="text-xs text-red-200 mb-1.5 text-center">
+                  {language === 'en' ? 'Tap a badge to jump to the section:' : 'Toca una etiqueta para ir a la sección:'}
+                </div>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {wo.missing_data_items.map(item => {
+                    const labels = language === 'es' ? MISSING_DATA_LABELS_ES : MISSING_DATA_LABELS_EN;
+                    const sectionId = MISSING_DATA_SECTION_IDS[item];
+                    const isClickable = !!sectionId;
+                    return (
+                      <button
+                        key={item}
+                        onClick={() => scrollToSection(sectionId)}
+                        disabled={!isClickable}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition active:scale-95 ${
+                          isClickable
+                            ? 'bg-white text-red-700 border-red-200 hover:bg-red-100 cursor-pointer shadow-md'
+                            : 'bg-red-500/30 text-red-100 border-red-300/30 cursor-default'
+                        }`}
+                      >
+                        {labels[item] || item}
+                        {isClickable && <span className="ml-1">↓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Snooze indicator */}
+            {wo.missing_data_snoozed_until && new Date(wo.missing_data_snoozed_until) > new Date() && (
+              <div className="mt-3 bg-amber-900/60 border border-amber-400/40 rounded-lg p-2 text-center text-amber-200 text-xs">
+                💤 {language === 'en' ? 'Alert snoozed until ' : 'Alerta pospuesta hasta '}
+                {new Date(wo.missing_data_snoozed_until).toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4">
           {/* Work Order Details */}
           <div className="bg-gray-800 rounded-lg p-4">
@@ -512,7 +626,7 @@ export default function WorkOrderDetail({
           {/* Check In/Out */}
           {status !== 'completed' && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div id="section-checkin-checkout" className="grid grid-cols-2 gap-3 rounded-lg transition">
                 <button
                   onClick={() => onCheckIn(wo.wo_id)}
                   disabled={saving}
@@ -555,28 +669,44 @@ export default function WorkOrderDetail({
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('updateStatus')}</h3>
             <select
-              value={status}
+              value={status === 'missing_data' ? 'missing_data' : status}
               onChange={(e) => onUpdateField(wo.wo_id, 'status', e.target.value)}
-              disabled={saving || status === 'completed'}
-              className="w-full px-4 py-3 bg-blue-600 rounded-lg text-white font-semibold text-center"
+              disabled={saving || status === 'completed' || status === 'missing_data'}
+              className={`w-full px-4 py-3 rounded-lg text-white font-semibold text-center ${
+                status === 'missing_data'
+                  ? 'bg-red-600 cursor-not-allowed opacity-90'
+                  : 'bg-blue-600'
+              }`}
             >
               <option value="assigned">{t('assigned')}</option>
               <option value="in_progress">{t('inProgress')}</option>
               <option value="pending">{t('pending')}</option>
               <option value="tech_review">{t('techReview')}</option>
               <option value="return_trip">{t('returnTrip')}</option>
+              {status === 'missing_data' && (
+                <option value="missing_data">🚩 Missing Data</option>
+              )}
             </select>
+            {status === 'missing_data' && (
+              <p className="text-xs text-red-400 mt-2 text-center">
+                {language === 'en'
+                  ? 'Status locked — office must resolve the missing data flag'
+                  : 'Estado bloqueado — la oficina debe resolver la marca'}
+              </p>
+            )}
           </div>
 
           {/* ADDITIONAL COSTS - Materials, Equipment, Trailer, Rental */}
-          <AdditionalCostsSection
-            workOrder={wo}
-            status={status}
-            saving={saving}
-            getFieldValue={getFieldValue}
-            handleFieldChange={handleFieldChange}
-            handleUpdateField={onUpdateField}
-          />
+          <div id="section-material-costs" className="rounded-lg transition">
+            <AdditionalCostsSection
+              workOrder={wo}
+              status={status}
+              saving={saving}
+              getFieldValue={getFieldValue}
+              handleFieldChange={handleFieldChange}
+              handleUpdateField={onUpdateField}
+            />
+          </div>
 
           {/* NTE INCREASES - Quotes for additional work */}
           <NTEIncreaseList
@@ -590,37 +720,41 @@ export default function WorkOrderDetail({
           />
 
           {/* PRIMARY TECH DAILY HOURS SECTION - with CSV download */}
-          <PrimaryTechDailyHours
-            workOrder={wo}
-            currentUser={currentUser}
-            dailyLogs={dailyLogs}
-            status={status}
-            saving={saving}
-            onAddDailyHours={onAddDailyHours}
-            onUpdateDailyHours={onUpdateDailyHours}
-            onDeleteDailyHours={onDeleteDailyHours}
-            onDownloadLogs={onDownloadLogs}
-          />
+          <div id="section-daily-hours" className="rounded-lg transition">
+            <PrimaryTechDailyHours
+              workOrder={wo}
+              currentUser={currentUser}
+              dailyLogs={dailyLogs}
+              status={status}
+              saving={saving}
+              onAddDailyHours={onAddDailyHours}
+              onUpdateDailyHours={onUpdateDailyHours}
+              onDeleteDailyHours={onDeleteDailyHours}
+              onDownloadLogs={onDownloadLogs}
+            />
 
-          {/* TEAM MEMBERS DAILY HOURS SECTION - view all, log own only */}
-          <TeamMembersDailyHours
-            currentTeamList={currentTeamList}
-            currentUser={currentUser}
-            dailyLogs={dailyLogs}
-            status={status}
-            saving={saving}
-            onLoadTeamMembers={onLoadTeamMembers}
-            onAddDailyHours={onAddDailyHours}
-            onUpdateDailyHours={onUpdateDailyHours}
-            onDeleteDailyHours={onDeleteDailyHours}
-            onDownloadLogs={onDownloadLogs}
-          />
+            {/* TEAM MEMBERS DAILY HOURS SECTION - view all, log own only */}
+            <TeamMembersDailyHours
+              currentTeamList={currentTeamList}
+              currentUser={currentUser}
+              dailyLogs={dailyLogs}
+              status={status}
+              saving={saving}
+              onLoadTeamMembers={onLoadTeamMembers}
+              onAddDailyHours={onAddDailyHours}
+              onUpdateDailyHours={onUpdateDailyHours}
+              onDeleteDailyHours={onDeleteDailyHours}
+              onDownloadLogs={onDownloadLogs}
+            />
+          </div>
 
           {/* Email Photos Section */}
-          <EmailPhotosSection
-            workOrder={wo}
-            currentUser={currentUser}
-          />
+          <div id="section-photos" className="rounded-lg transition">
+            <EmailPhotosSection
+              workOrder={wo}
+              currentUser={currentUser}
+            />
+          </div>
 
           {/* Cost Summary Section - includes legacy + daily hours */}
           <CostSummarySection
@@ -629,7 +763,9 @@ export default function WorkOrderDetail({
           />
 
           {/* Signature Display */}
-          <SignatureDisplay workOrder={wo} />
+          <div id="section-signature" className="rounded-lg transition">
+            <SignatureDisplay workOrder={wo} />
+          </div>
 
           {/* Comments */}
           <div className="bg-gray-800 rounded-lg p-4">
@@ -705,13 +841,29 @@ export default function WorkOrderDetail({
 
           {/* Complete Work Order Button - Always visible at bottom */}
           {status !== 'completed' && (
-            <button
-              onClick={handleCompleteWorkOrder}
-              disabled={saving}
-              className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
-            >
-              ✅ {t('completeWorkOrder')}
-            </button>
+            <>
+              <button
+                onClick={handleCompleteWorkOrder}
+                disabled={saving || status === 'missing_data'}
+                className={`w-full py-4 rounded-lg font-bold text-lg transition active:scale-95 ${
+                  status === 'missing_data'
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {status === 'missing_data'
+                  ? (language === 'en' ? '🔒 Resolve Missing Data First' : '🔒 Resolver Datos Faltantes Primero')
+                  : <>✅ {t('completeWorkOrder')}</>
+                }
+              </button>
+              {status === 'missing_data' && (
+                <p className="text-xs text-center text-red-400">
+                  {language === 'en'
+                    ? 'Office must resolve the missing data flag before this WO can be completed.'
+                    : 'La oficina debe resolver la marca de datos faltantes antes de completar.'}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>

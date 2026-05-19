@@ -277,7 +277,7 @@ export default function MissingDataModal({
               placeholder={
                 hasOther
                   ? "Explain exactly what's missing — the tech will see this prominently."
-                  : "e.g. Photos der Pumpe vor Einbau fehlen — brauchen wir für CBRE Rechnung."
+                  : "e.g. Before-install photos of the pump are missing — needed for CBRE invoice."
               }
               className={`w-full bg-[#0a0a0f] border text-slate-200 px-4 py-3 rounded-lg focus:outline-none transition text-sm leading-relaxed ${
                 comment.length === 0

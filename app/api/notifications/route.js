@@ -167,6 +167,153 @@ EMF Contracting LLC
   `.trim();
 };
 
+// ============================================================
+// MISSING DATA FIXED  — tech says they've completed the fix,
+// office should review and click Resolve.
+// ============================================================
+const buildMissingDataFixedEmailHTML = (workOrder, recipientName, actorName, items) => {
+  const itemLabels = {
+    photos: '📷 Photos',
+    writeup: '✍️ Write-up',
+    daily_hours: '⏱️ Daily Hours',
+    material_costs: '💲 Material costs',
+    signature: '✒️ Signature',
+    checkin_checkout: '🚪 Check-in/out',
+    other: '❓ Other'
+  };
+  const itemsList = Array.isArray(items) && items.length
+    ? items.map(i => itemLabels[i] || i).join(', ')
+    : 'See WO for details';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,sans-serif;">
+      <div style="max-width:600px;margin:0 auto;padding:20px;">
+        <div style="background-color:#1f2937;border-radius:8px;overflow:hidden;">
+          <div style="background-color:#059669;padding:20px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:22px;">✅ Tech Fixed Missing Data</h1>
+          </div>
+          <div style="padding:20px;color:white;">
+            <p style="margin:0 0 15px 0;font-size:16px;">Hi ${recipientName},</p>
+            <p style="margin:0 0 20px 0;color:#9ca3af;">
+              <strong>${actorName || 'A tech'}</strong> just marked the missing data on this work order as fixed.
+              Please review and click <strong>✅ Resolve</strong> in the dashboard banner to restore the original status.
+            </p>
+            <div style="background-color:#374151;border-radius:8px;padding:15px;margin-bottom:20px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <tr><td style="padding:6px 0;color:#9ca3af;width:120px;">WO #:</td><td style="padding:6px 0;color:white;font-weight:bold;">${workOrder.wo_number}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;">Building:</td><td style="padding:6px 0;color:white;">${workOrder.building || 'Not specified'}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;vertical-align:top;">Was flagged for:</td><td style="padding:6px 0;color:#d1d5db;">${itemsList}</td></tr>
+              </table>
+            </div>
+            <div style="text-align:center;margin:25px 0;">
+              <a href="https://field-service-dashboard.vercel.app/dashboard"
+                 style="background-color:#059669;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+                📊 Open Dashboard
+              </a>
+            </div>
+          </div>
+          <div style="background-color:#111827;padding:15px;text-align:center;border-top:1px solid #374151;">
+            <p style="margin:0;color:#6b7280;font-size:12px;">EMF Contracting LLC | Field Service Management</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+const buildMissingDataFixedEmailText = (workOrder, recipientName, actorName, items) => {
+  const itemsList = Array.isArray(items) && items.length ? items.join(', ') : 'See WO for details';
+  return `
+✅ Tech Fixed Missing Data
+
+Hi ${recipientName},
+
+${actorName || 'A tech'} just marked the missing data on this work order as fixed.
+Please review and click Resolve in the dashboard banner.
+
+Work Order Details:
+- WO#: ${workOrder.wo_number}
+- Building: ${workOrder.building || 'Not specified'}
+- Was flagged for: ${itemsList}
+
+Open the dashboard:
+https://field-service-dashboard.vercel.app/dashboard
+
+---
+EMF Contracting LLC
+  `.trim();
+};
+
+// ============================================================
+// WORK ORDER COMPLETED  — status changed to 'completed'.
+// ============================================================
+const buildCompletedEmailHTML = (workOrder, recipientName, actorName) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,sans-serif;">
+      <div style="max-width:600px;margin:0 auto;padding:20px;">
+        <div style="background-color:#1f2937;border-radius:8px;overflow:hidden;">
+          <div style="background-color:#16a34a;padding:20px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:22px;">✅ Work Order Completed</h1>
+          </div>
+          <div style="padding:20px;color:white;">
+            <p style="margin:0 0 15px 0;font-size:16px;">Hi ${recipientName},</p>
+            <p style="margin:0 0 20px 0;color:#9ca3af;">
+              <strong>${actorName || 'Someone'}</strong> just marked this work order as completed. It's ready for acknowledgement and invoicing.
+            </p>
+            <div style="background-color:#374151;border-radius:8px;padding:15px;margin-bottom:20px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <tr><td style="padding:6px 0;color:#9ca3af;width:120px;">WO #:</td><td style="padding:6px 0;color:white;font-weight:bold;">${workOrder.wo_number}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;">Building:</td><td style="padding:6px 0;color:white;">${workOrder.building || 'Not specified'}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;">NTE:</td><td style="padding:6px 0;color:white;">${(workOrder.nte || 0).toFixed(2)}</td></tr>
+                ${workOrder.work_order_description ? `<tr><td style="padding:6px 0;color:#9ca3af;vertical-align:top;">Description:</td><td style="padding:6px 0;color:#d1d5db;">${workOrder.work_order_description.substring(0, 200)}${workOrder.work_order_description.length > 200 ? '...' : ''}</td></tr>` : ''}
+              </table>
+            </div>
+            <div style="text-align:center;margin:25px 0;">
+              <a href="https://field-service-dashboard.vercel.app/dashboard"
+                 style="background-color:#16a34a;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+                📊 Open Dashboard
+              </a>
+            </div>
+          </div>
+          <div style="background-color:#111827;padding:15px;text-align:center;border-top:1px solid #374151;">
+            <p style="margin:0;color:#6b7280;font-size:12px;">EMF Contracting LLC | Field Service Management</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+const buildCompletedEmailText = (workOrder, recipientName, actorName) => {
+  return `
+✅ Work Order Completed
+
+Hi ${recipientName},
+
+${actorName || 'Someone'} just marked this work order as completed. It's ready for acknowledgement and invoicing.
+
+Work Order Details:
+- WO#: ${workOrder.wo_number}
+- Building: ${workOrder.building || 'Not specified'}
+- NTE: ${(workOrder.nte || 0).toFixed(2)}
+${workOrder.work_order_description ? `- Description: ${workOrder.work_order_description.substring(0, 200)}...` : ''}
+
+Open the dashboard:
+https://field-service-dashboard.vercel.app/dashboard
+
+---
+EMF Contracting LLC
+  `.trim();
+};
+
 // Send push notification to a user
 const sendPushNotification = async (userId, payload) => {
   try {
@@ -231,7 +378,7 @@ const sendPushNotification = async (userId, payload) => {
 
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email' } = await request.json();
+    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email', actorName, missingDataItems } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -244,9 +391,14 @@ export async function POST(request) {
       push: { sent: [], failed: [] }
     };
 
-    // For work order assignments, always use email (not SMS)
-    const useEmail = deliveryMethod === 'email' || type === 'work_order_assigned' || type === 'emergency_work_order';
-    const useSMS = deliveryMethod === 'sms' && type !== 'work_order_assigned' && type !== 'emergency_work_order';
+    // Type-based flags
+    const isAssignment = type === 'work_order_assigned' || type === 'emergency_work_order';
+    const isMissingDataFixed = type === 'missing_data_fixed';
+    const isCompleted = type === 'work_order_completed';
+
+    // For work order assignments and the new office-bound types, always use email (not SMS)
+    const useEmail = deliveryMethod === 'email' || isAssignment || isMissingDataFixed || isCompleted;
+    const useSMS = deliveryMethod === 'sms' && !isAssignment && !isMissingDataFixed && !isCompleted;
 
     for (const recipient of recipients) {
       const { user_id, email, phone, sms_carrier, first_name, last_name } = recipient;
@@ -258,14 +410,24 @@ export async function POST(request) {
         try {
           let subject, textMessage, htmlMessage;
           
-          if (workOrder) {
-            // Work order email
+          if (isAssignment && workOrder) {
+            // Work order assignment email
             subject = isEmergency 
               ? `🚨 EMERGENCY: WO ${workOrder.wo_number} Assigned` 
               : `📋 New Work Order Assigned: ${workOrder.wo_number}`;
             
             textMessage = buildAssignmentEmailText(workOrder, recipientName, isEmergency);
             htmlMessage = buildAssignmentEmailHTML(workOrder, recipientName, isEmergency);
+          } else if (isMissingDataFixed && workOrder) {
+            // Tech finished fixing missing data — office should review and Resolve
+            subject = `✅ Tech Fixed Missing Data: WO ${workOrder.wo_number}`;
+            textMessage = buildMissingDataFixedEmailText(workOrder, recipientName, actorName, missingDataItems);
+            htmlMessage = buildMissingDataFixedEmailHTML(workOrder, recipientName, actorName, missingDataItems);
+          } else if (isCompleted && workOrder) {
+            // WO was just marked as completed
+            subject = `✅ Work Order Completed: WO ${workOrder.wo_number}`;
+            textMessage = buildCompletedEmailText(workOrder, recipientName, actorName);
+            htmlMessage = buildCompletedEmailHTML(workOrder, recipientName, actorName);
           } else if (customMessage) {
             // Custom message email
             subject = '💬 Message from EMF Contracting';
@@ -363,20 +525,50 @@ export async function POST(request) {
 
       // === SEND PUSH NOTIFICATION (only for work order notifications) ===
       if (user_id && workOrder) {
-        const pushPayload = {
-          title: isEmergency 
-            ? `🚨 EMERGENCY: ${workOrder.wo_number}` 
-            : `📋 New WO: ${workOrder.wo_number}`,
-          body: `${workOrder.building || 'No location'} - ${workOrder.priority?.toUpperCase() || 'NORMAL'} priority`,
-          icon: '/emf-logo.png',
-          badge: '/emf-logo.png',
-          tag: `wo-${workOrder.wo_number}`,
-          data: {
-            url: '/mobile',
-            wo_id: workOrder.wo_id,
-            wo_number: workOrder.wo_number
-          }
-        };
+        let pushPayload;
+
+        if (isMissingDataFixed) {
+          pushPayload = {
+            title: `✅ Missing Data Fixed: ${workOrder.wo_number}`,
+            body: `${actorName || 'Tech'} marked the fix as done. Review and resolve.`,
+            icon: '/emf-logo.png',
+            badge: '/emf-logo.png',
+            tag: `wo-${workOrder.wo_number}-md-fixed`,
+            data: {
+              url: '/dashboard',
+              wo_id: workOrder.wo_id,
+              wo_number: workOrder.wo_number
+            }
+          };
+        } else if (isCompleted) {
+          pushPayload = {
+            title: `✅ WO Completed: ${workOrder.wo_number}`,
+            body: `${workOrder.building || 'No location'} — ready for invoicing`,
+            icon: '/emf-logo.png',
+            badge: '/emf-logo.png',
+            tag: `wo-${workOrder.wo_number}-completed`,
+            data: {
+              url: '/dashboard',
+              wo_id: workOrder.wo_id,
+              wo_number: workOrder.wo_number
+            }
+          };
+        } else {
+          pushPayload = {
+            title: isEmergency 
+              ? `🚨 EMERGENCY: ${workOrder.wo_number}` 
+              : `📋 New WO: ${workOrder.wo_number}`,
+            body: `${workOrder.building || 'No location'} - ${workOrder.priority?.toUpperCase() || 'NORMAL'} priority`,
+            icon: '/emf-logo.png',
+            badge: '/emf-logo.png',
+            tag: `wo-${workOrder.wo_number}`,
+            data: {
+              url: '/mobile',
+              wo_id: workOrder.wo_id,
+              wo_number: workOrder.wo_number
+            }
+          };
+        }
 
         const pushResult = await sendPushNotification(user_id, pushPayload);
         

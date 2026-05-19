@@ -515,6 +515,106 @@ export function useWorkOrders(currentUser) {
     }
   }
 
+  // ==================== MISSING DATA: TECH MARKS AS FIXED ====================
+  // Tech clicks "Done" -> log a comment + notify office (email + push).
+  // Office still has to click Resolve in the dashboard to actually flip the status.
+  async function markMissingDataFixed(woId) {
+    if (!woId) throw new Error('No work order specified');
+
+    const wo = workOrders.find(w => w.wo_id === woId);
+    if (!wo) throw new Error('Work order not found');
+    if (wo.status !== 'missing_data') throw new Error('This WO is not flagged for missing data');
+
+    const timestamp = new Date().toLocaleString();
+    const techName = `${currentUser.first_name} ${currentUser.last_name}`;
+    const fixedNote =
+      `[${timestamp}] ${techName} — ✅ MARKED MISSING DATA AS FIXED\n` +
+      `Awaiting office review and resolution.`;
+
+    try {
+      setSaving(true);
+
+      if (!navigator.onLine) {
+        throw new Error('You need to be online to notify the office.');
+      }
+
+      // 1) Append a log entry to the WO comments (audit trail)
+      const { data: freshWO, error: fetchErr } = await supabase
+        .from('work_orders')
+        .select('comments, missing_data_items')
+        .eq('wo_id', woId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const existing = freshWO?.comments || '';
+      const newComments = existing ? `${existing}\n\n${fixedNote}` : fixedNote;
+
+      const { error: updateErr } = await supabase
+        .from('work_orders')
+        .update({ comments: newComments })
+        .eq('wo_id', woId);
+      if (updateErr) throw updateErr;
+
+      // Update local state with the new comment
+      setWorkOrders(prev => prev.map(w =>
+        w.wo_id === woId ? { ...w, comments: newComments } : w
+      ));
+      if (selectedWO?.wo_id === woId) {
+        setSelectedWO(prev => ({ ...prev, comments: newComments }));
+      }
+
+      // 2) Fetch office/admin recipients
+      const { data: officeUsers, error: recipErr } = await supabase
+        .from('users')
+        .select('user_id, first_name, last_name, email')
+        .in('role', ['admin', 'office_staff', 'operations', 'office'])
+        .eq('is_active', true);
+
+      if (recipErr) {
+        console.warn('Could not fetch office recipients:', recipErr);
+      }
+
+      const recipients = (officeUsers || []).filter(u => u.email);
+
+      // 3) Fire the notification (fire-and-log, don't block UI on email delivery)
+      if (recipients.length > 0) {
+        try {
+          const response = await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'missing_data_fixed',
+              recipients,
+              workOrder: {
+                wo_id: wo.wo_id,
+                wo_number: wo.wo_number,
+                building: wo.building,
+                work_order_description: wo.work_order_description,
+                priority: wo.priority
+              },
+              actorName: techName,
+              missingDataItems: freshWO?.missing_data_items || wo.missing_data_items || []
+            })
+          });
+          const result = await response.json();
+          console.log('Missing data fixed notification sent:', result);
+        } catch (notifyErr) {
+          // Don't fail the action just because notifications failed
+          console.error('Notification dispatch failed (non-fatal):', notifyErr);
+        }
+      } else {
+        console.warn('No office recipients found for notification');
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error marking missing data as fixed:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // ==================== MISSING DATA SNOOZE ====================
   // Tech clicks "Can't fix right now" -> snooze the alert modal for 4 hours.
   // Banner stays visible, only the popup is suppressed.
@@ -997,6 +1097,39 @@ export function useWorkOrders(currentUser) {
         if (error) throw error;
 
         alert('Work order marked as completed! ✅');
+
+        // 📧 Notify office that this WO is ready for invoicing.
+        // Fire-and-log: don't block UI if email/push fails.
+        try {
+          const { data: officeUsers } = await supabase
+            .from('users')
+            .select('user_id, first_name, last_name, email')
+            .in('role', ['admin', 'office_staff', 'operations', 'office'])
+            .eq('is_active', true);
+
+          const recipients = (officeUsers || []).filter(u => u.email);
+          if (recipients.length > 0) {
+            await fetch('/api/notifications', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'work_order_completed',
+                recipients,
+                workOrder: {
+                  wo_id: selectedWO.wo_id,
+                  wo_number: selectedWO.wo_number,
+                  building: selectedWO.building,
+                  work_order_description: selectedWO.work_order_description,
+                  nte: selectedWO.nte,
+                  priority: selectedWO.priority
+                },
+                actorName: `${currentUser.first_name} ${currentUser.last_name}`
+              })
+            });
+          }
+        } catch (notifyErr) {
+          console.error('Completion notification failed (non-fatal):', notifyErr);
+        }
         
         await loadWorkOrders();
         await loadCompletedWorkOrders();
@@ -1236,6 +1369,7 @@ export function useWorkOrders(currentUser) {
     addComment,
     saveSignature,
     snoozeMissingData,
+    markMissingDataFixed,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,

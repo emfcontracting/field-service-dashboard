@@ -79,6 +79,7 @@ export default function MobilePage() {
     loadCompletedWorkOrders,
     saveSignature,
     snoozeMissingData,
+    markMissingDataFixed,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,
@@ -269,6 +270,7 @@ export default function MobilePage() {
         loadWorkOrders={loadWorkOrders}
         saveSignature={saveSignature}
         snoozeMissingData={snoozeMissingData}
+        markMissingDataFixed={markMissingDataFixed}
         // DAILY HOURS PROPS
         dailyLogs={dailyLogs}
         addDailyHours={addDailyHours}
@@ -356,6 +358,7 @@ function MobileAppContent({
   loadWorkOrders,
   saveSignature,
   snoozeMissingData,
+  markMissingDataFixed,
   // DAILY HOURS PROPS
   dailyLogs,
   addDailyHours,
@@ -550,6 +553,7 @@ function MobileAppContent({
           onUpdateDailyHours={updateDailyHours}
           onDeleteDailyHours={deleteDailyHours}
           onDownloadLogs={downloadLogs}
+          onMarkMissingDataFixed={markMissingDataFixed}
           // NTE INCREASE PROPS
           quotes={quotes}
           quotesLoading={quotesLoading}

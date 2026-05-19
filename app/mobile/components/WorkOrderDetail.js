@@ -77,6 +77,7 @@ export default function WorkOrderDetail({
   onUpdateDailyHours,
   onDeleteDailyHours,
   onDownloadLogs,
+  onMarkMissingDataFixed,
   // NTE INCREASE PROPS
   quotes = [],
   quotesLoading = false,
@@ -96,6 +97,10 @@ export default function WorkOrderDetail({
   // 🦖 JURASSIC PARK ERROR STATE
   const [jurassicError, setJurassicError] = useState(null);
 
+  // ✅ Missing-data "Done" button state
+  const [markingFixed, setMarkingFixed] = useState(false);
+  const [markedFixedThisSession, setMarkedFixedThisSession] = useState(false);
+
   // 🚩 Missing data: jump to the section the badge points to
   const scrollToSection = (sectionId) => {
     if (!sectionId) return;
@@ -107,6 +112,29 @@ export default function WorkOrderDetail({
       setTimeout(() => {
         el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-75');
       }, 2000);
+    }
+  };
+
+  // ✅ Tech marks missing data as fixed -> notifies office
+  const handleMarkFixed = async () => {
+    if (!onMarkMissingDataFixed || markingFixed) return;
+    const confirmText = language === 'en'
+      ? 'Mark missing data as fixed and notify the office?\n\nThe office will review and resolve the flag in the dashboard.'
+      : '¿Marcar los datos faltantes como arreglados y notificar a la oficina?\n\nLa oficina revisará y resolverá la marca en el panel.';
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      setMarkingFixed(true);
+      await onMarkMissingDataFixed(wo.wo_id);
+      setMarkedFixedThisSession(true);
+      alert(language === 'en'
+        ? '✅ Office notified. They will resolve the flag once they verify the fix.'
+        : '✅ Oficina notificada. Resolverán la marca una vez que verifiquen el arreglo.'
+      );
+    } catch (err) {
+      alert((language === 'en' ? 'Failed to notify office: ' : 'Error al notificar a la oficina: ') + (err.message || 'unknown'));
+    } finally {
+      setMarkingFixed(false);
     }
   };
   
@@ -548,6 +576,35 @@ export default function WorkOrderDetail({
                 {new Date(wo.missing_data_snoozed_until).toLocaleTimeString()}
               </div>
             )}
+
+            {/* ✅ "I'm done" button — tech tells office they fixed it */}
+            <div className="mt-3">
+              <button
+                onClick={handleMarkFixed}
+                disabled={markingFixed || markedFixedThisSession}
+                className={`w-full py-3 rounded-lg font-bold text-white transition active:scale-95 ${
+                  markedFixedThisSession
+                    ? 'bg-emerald-700 cursor-default'
+                    : markingFixed
+                      ? 'bg-emerald-700 cursor-wait'
+                      : 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
+                }`}
+              >
+                {markingFixed
+                  ? (language === 'en' ? '⏳ Notifying office...' : '⏳ Notificando a la oficina...')
+                  : markedFixedThisSession
+                    ? (language === 'en' ? '✓ Office notified — awaiting their review' : '✓ Oficina notificada — esperando revisión')
+                    : (language === 'en' ? '✅ I fixed it — notify office' : '✅ Lo arreglé — notificar a la oficina')
+                }
+              </button>
+              {!markedFixedThisSession && (
+                <p className="text-xs text-red-200 text-center mt-1.5 opacity-80">
+                  {language === 'en'
+                    ? 'Office will review and resolve the flag. The banner stays until they do.'
+                    : 'La oficina revisará y resolverá la marca. La alerta permanece hasta entonces.'}
+                </p>
+              )}
+            </div>
           </div>
         )}
 

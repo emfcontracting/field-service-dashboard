@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import TeamMemberModal from './TeamMemberModal';
 import NTEIncreaseModal from './NTEIncreaseModal';
+import MissingDataModal from './MissingDataModal';
 import { 
   updateWorkOrder, 
   deleteWorkOrder, 
@@ -64,6 +65,9 @@ export default function WorkOrderDetailModal({
   const [savingNTE, setSavingNTE] = useState(false);
   const [showNTEModal, setShowNTEModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showMissingDataModal, setShowMissingDataModal] = useState(false);
+  const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
+  const [resolvingMissingData, setResolvingMissingData] = useState(false);
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
   const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
@@ -840,9 +844,86 @@ export default function WorkOrderDetailModal({
   };
 
   const handleUpdateStatus = async (newStatus) => {
+    // Special handling for 'missing_data' — don't write directly, open the modal instead.
+    // The dropdown value will visually snap back to the real status because we don't update state.
+    if (newStatus === 'missing_data') {
+      setMissingDataModalMode('create');
+      setShowMissingDataModal(true);
+      return;
+    }
+
     await handleUpdateField('status', newStatus);
     if (newStatus === 'completed' && !selectedWO.is_locked) {
       alert('✅ Work Order marked as Completed! Please acknowledge to lock it.');
+    }
+  };
+
+  // Called by MissingDataModal after a successful save (create or edit).
+  const handleMissingDataSaved = (updatedWO) => {
+    setSelectedWO(prev => ({ ...prev, ...updatedWO }));
+    refreshWorkOrders();
+  };
+
+  // Office/admin clicks "Resolve" — restore previous_status and clear all missing_data_* fields.
+  const handleResolveMissingData = async () => {
+    if (selectedWO.status !== 'missing_data') return;
+
+    const confirmed = window.confirm(
+      'Resolve the Missing Data flag for this work order?\n\n' +
+      'The status will be restored to: ' + (selectedWO.previous_status || 'in_progress') + '\n\n' +
+      'The tech will see the alert disappear on their next sync.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setResolvingMissingData(true);
+
+      const restoredStatus = selectedWO.previous_status || 'in_progress';
+      const resolverName =
+        `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() ||
+        'Office';
+
+      const logEntry =
+        `[${new Date().toLocaleString()}] ${resolverName} — ✅ RESOLVED MISSING DATA FLAG\n` +
+        `Status restored to: ${restoredStatus}`;
+
+      // Pull fresh comments to avoid clobbering
+      const { data: freshWO, error: fetchErr } = await supabase
+        .from('work_orders')
+        .select('comments')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const existingComments = freshWO?.comments || '';
+      const newComments = existingComments ? `${existingComments}\n\n${logEntry}` : logEntry;
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('work_orders')
+        .update({
+          status: restoredStatus,
+          previous_status: null,
+          missing_data_items: null,
+          missing_data_comment: null,
+          missing_data_flagged_by: null,
+          missing_data_flagged_at: null,
+          missing_data_snoozed_until: null,
+          missing_data_snooze_reason: null,
+          comments: newComments
+        })
+        .eq('wo_id', selectedWO.wo_id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      setSelectedWO(prev => ({ ...prev, ...updated }));
+      refreshWorkOrders();
+    } catch (err) {
+      console.error('Error resolving missing data:', err);
+      alert('Failed to resolve: ' + err.message);
+    } finally {
+      setResolvingMissingData(false);
     }
   };
 
@@ -1548,9 +1629,11 @@ const sendAssignmentNotifications = async () => {
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
-                disabled={selectedWO.is_locked || selectedWO.acknowledged}
-                className={`w-full px-4 py-2 rounded-lg font-semibold ${getStatusColor(selectedWO.status)} ${
-                  (selectedWO.is_locked || selectedWO.acknowledged) ? 'opacity-50 cursor-not-allowed' : ''
+                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data'}
+                className={`w-full px-4 py-2 rounded-lg font-semibold ${
+                  selectedWO.status === 'missing_data' ? 'bg-red-600 text-white animate-pulse' : getStatusColor(selectedWO.status)
+                } ${
+                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data') ? 'opacity-90 cursor-not-allowed' : ''
                 }`}
               >
                 <option value="pending">Pending</option>
@@ -1558,7 +1641,18 @@ const sendAssignmentNotifications = async () => {
                 <option value="in_progress">In Progress</option>
                 <option value="needs_return">Needs Return</option>
                 <option value="completed">Completed</option>
+                {selectedWO.status === 'missing_data' && (
+                  <option value="missing_data">🚩 Missing Data</option>
+                )}
+                {selectedWO.status !== 'missing_data' && (
+                  <option value="missing_data">🚩 Flag as Missing Data...</option>
+                )}
               </select>
+              {selectedWO.status === 'missing_data' && (
+                <p className="text-xs text-red-400 mt-1">
+                  Locked — use the banner below to edit or resolve.
+                </p>
+              )}
             </div>
 
             <div>
@@ -1656,6 +1750,86 @@ const sendAssignmentNotifications = async () => {
               </div>
             )}
           </div>
+
+          {/* Missing Data Banner */}
+          {selectedWO.status === 'missing_data' && (
+            <div className="bg-red-500/10 border-2 border-red-500/60 rounded-xl p-4 animate-pulse-slow"
+                 style={{ animation: 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🚩</span>
+                  <div>
+                    <h3 className="font-bold text-lg text-red-300">Missing Data Flag Active</h3>
+                    {selectedWO.missing_data_flagged_at && (
+                      <p className="text-xs text-red-400/80">
+                        Flagged {new Date(selectedWO.missing_data_flagged_at).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setMissingDataModalMode('edit');
+                      setShowMissingDataModal(true);
+                    }}
+                    disabled={resolvingMissingData}
+                    className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={handleResolveMissingData}
+                    disabled={resolvingMissingData}
+                    className="bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {resolvingMissingData ? '⏳ Resolving...' : '✅ Resolve'}
+                  </button>
+                </div>
+              </div>
+
+              {Array.isArray(selectedWO.missing_data_items) && selectedWO.missing_data_items.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {selectedWO.missing_data_items.map(item => {
+                    const labelMap = {
+                      photos: '📷 Photos',
+                      writeup: '✍️ Write-up',
+                      daily_hours: '⏱️ Daily Hours',
+                      material_costs: '💲 Material costs',
+                      signature: '✒️ Signature',
+                      checkin_checkout: '🚪 Check-in/out',
+                      other: '❓ Other'
+                    };
+                    return (
+                      <span
+                        key={item}
+                        className="bg-red-500/20 border border-red-500/40 text-red-200 px-2 py-0.5 rounded text-xs font-semibold"
+                      >
+                        {labelMap[item] || item}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedWO.missing_data_comment && (
+                <div className="bg-[#0a0a0f] border border-red-500/30 rounded-lg p-3 text-sm text-slate-200 whitespace-pre-wrap">
+                  {selectedWO.missing_data_comment}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center mt-3 text-xs text-slate-400">
+                <span>
+                  Will be restored to: <span className="font-semibold text-slate-300">{selectedWO.previous_status || 'in_progress'}</span>
+                </span>
+                {selectedWO.missing_data_snoozed_until && new Date(selectedWO.missing_data_snoozed_until) > new Date() && (
+                  <span className="text-amber-400">
+                    💤 Tech snoozed until {new Date(selectedWO.missing_data_snoozed_until).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Customer Signature Section */}
           {selectedWO.customer_signature && (
@@ -2675,6 +2849,18 @@ const sendAssignmentNotifications = async () => {
           woIds={[selectedWO.wo_id]}
           supabase={supabase}
           onClose={() => setShowActivityLog(false)}
+        />
+      )}
+
+      {/* Missing Data Modal */}
+      {showMissingDataModal && (
+        <MissingDataModal
+          workOrder={selectedWO}
+          currentUser={currentUser}
+          supabase={supabase}
+          mode={missingDataModalMode}
+          onClose={() => setShowMissingDataModal(false)}
+          onSaved={handleMissingDataSaved}
         />
       )}
     </div>

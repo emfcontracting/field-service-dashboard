@@ -7,7 +7,8 @@ export function getStatusColor(status) {
     in_progress: 'bg-yellow-600',
     tech_review: 'bg-purple-600',
     return_trip: 'bg-orange-600',
-    completed: 'bg-green-600'
+    completed: 'bg-green-600',
+    missing_data: 'bg-red-600 animate-pulse'
   };
   return colors[status] || 'bg-gray-600';
 }

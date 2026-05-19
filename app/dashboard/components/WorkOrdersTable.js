@@ -109,6 +109,8 @@ const getStatusBadge = (status) => {
       return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
     case 'completed':
       return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+    case 'missing_data':
+      return 'bg-red-500/30 text-red-300 border border-red-500/60 animate-pulse font-bold';
     default:
       return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
   }
@@ -239,6 +241,7 @@ export default function WorkOrdersTable({
 
               const rowBg = isSelected
                 ? 'bg-blue-600/10 border-l-2 border-l-blue-500'
+                : wo.status === 'missing_data' ? 'bg-red-950/40 border-l-4 border-l-red-500'
                 : isUnackCbre ? 'bg-amber-500/10 border-l-4 border-l-amber-500'
                 : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
                 : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'

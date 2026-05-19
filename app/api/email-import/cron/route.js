@@ -330,18 +330,36 @@ function parseCBREEmail(subject, body) {
   return workOrder;
 }
 
-// Send email notification to office staff
+// Send email notification to subscribed users.
+// Uses notification_subscriptions table (managed in Messages > Notifications tab)
+// rather than a hardcoded role list — so adding new subscribers in the UI
+// automatically affects auto-import notifications.
 async function sendOfficeNotification(importedWOs) {
   try {
-    const { data: officeUsers, error } = await supabase
-      .from('users')
-      .select('user_id, first_name, last_name, email, role')
-      .in('role', ['admin', 'operations'])
-      .eq('is_active', true)
-      .not('email', 'is', null);
+    // Pull all users subscribed to 'work_orders_imported'
+    const { data: subscriptionRows, error } = await supabase
+      .from('notification_subscriptions')
+      .select(`
+        user_id,
+        enabled,
+        user:users!notification_subscriptions_user_id_fkey(
+          user_id, first_name, last_name, email, is_active
+        )
+      `)
+      .eq('notification_type', 'work_orders_imported')
+      .eq('enabled', true);
 
-    if (error || !officeUsers || officeUsers.length === 0) {
-      console.log('No office users configured for email notifications');
+    if (error) {
+      console.error('Failed to query notification_subscriptions:', error);
+      return { sent: 0, error: error.message };
+    }
+
+    const officeUsers = (subscriptionRows || [])
+      .map(row => row.user)
+      .filter(u => u && u.is_active && u.email);
+
+    if (officeUsers.length === 0) {
+      console.log('No subscribers found for work_orders_imported notification');
       return { sent: 0 };
     }
 

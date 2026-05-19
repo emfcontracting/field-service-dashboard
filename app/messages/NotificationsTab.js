@@ -10,6 +10,12 @@ const supabase = getSupabase();
 // Add new event types here and they appear as columns in the matrix.
 const NOTIFICATION_TYPES = [
   {
+    id: 'work_orders_imported',
+    icon: '📥',
+    label: 'Imported',
+    tooltip: 'When new work orders are auto-imported from email'
+  },
+  {
     id: 'missing_data_flagged',
     icon: '🚩',
     label: 'Flagged',

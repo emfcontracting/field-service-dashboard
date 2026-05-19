@@ -49,7 +49,8 @@ CROSS JOIN (
   VALUES 
     ('missing_data_flagged'),
     ('missing_data_fixed'),
-    ('work_order_completed')
+    ('work_order_completed'),
+    ('work_orders_imported')
 ) AS t(notification_type)
 WHERE u.role IN ('admin', 'office_staff', 'operations', 'office')
   AND u.is_active = true

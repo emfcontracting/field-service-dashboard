@@ -114,7 +114,7 @@ export function useWorkOrders(currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .eq('lead_tech_id', currentUser.user_id)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review'])
+        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data'])
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
@@ -137,7 +137,7 @@ export function useWorkOrders(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review']);
+          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data']);
 
         if (helperError) throw helperError;
         helperWOs = helperWOData || [];
@@ -509,6 +509,86 @@ export function useWorkOrders(currentUser) {
     } catch (err) {
       console.error('Error deleting daily hours:', err);
       alert('Error deleting hours: ' + err.message);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ==================== MISSING DATA SNOOZE ====================
+  // Tech clicks "Can't fix right now" -> snooze the alert modal for 4 hours.
+  // Banner stays visible, only the popup is suppressed.
+  async function snoozeMissingData(woId, reason) {
+    if (!woId) throw new Error('No work order specified');
+    if (!reason || reason.trim().length < 10) {
+      throw new Error('Please provide a reason (at least 10 characters)');
+    }
+
+    const fourHoursFromNow = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    const timestamp = new Date().toLocaleString();
+    const snoozeNote =
+      `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} ` +
+      `— 💤 SNOOZED MISSING DATA ALERT (4 hours)\n` +
+      `Reason: ${reason.trim()}`;
+
+    try {
+      setSaving(true);
+
+      if (navigator.onLine) {
+        // Pull fresh comments to avoid clobbering
+        const { data: freshWO, error: fetchErr } = await supabase
+          .from('work_orders')
+          .select('comments')
+          .eq('wo_id', woId)
+          .single();
+        if (fetchErr) throw fetchErr;
+
+        const existing = freshWO?.comments || '';
+        const newComments = existing ? `${existing}\n\n${snoozeNote}` : snoozeNote;
+
+        const { error } = await supabase
+          .from('work_orders')
+          .update({
+            missing_data_snoozed_until: fourHoursFromNow,
+            missing_data_snooze_reason: reason.trim(),
+            comments: newComments
+          })
+          .eq('wo_id', woId);
+        if (error) throw error;
+
+        // Update local state immediately so the modal closes right away
+        setWorkOrders(prev => prev.map(wo =>
+          wo.wo_id === woId
+            ? { ...wo, missing_data_snoozed_until: fourHoursFromNow, missing_data_snooze_reason: reason.trim(), comments: newComments }
+            : wo
+        ));
+      } else {
+        // Offline: update local state + cache + queue
+        setWorkOrders(prev => prev.map(wo =>
+          wo.wo_id === woId
+            ? {
+                ...wo,
+                missing_data_snoozed_until: fourHoursFromNow,
+                missing_data_snooze_reason: reason.trim(),
+                comments: (wo.comments ? `${wo.comments}\n\n` : '') + snoozeNote + ' [PENDING SYNC]'
+              }
+            : wo
+        ));
+        await updateCachedWorkOrder(woId, {
+          missing_data_snoozed_until: fourHoursFromNow,
+          missing_data_snooze_reason: reason.trim()
+        });
+        await addToSyncQueue('snooze_missing_data', {
+          woId,
+          snoozedUntil: fourHoursFromNow,
+          reason: reason.trim(),
+          timestamp
+        });
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error snoozing missing data:', err);
       throw err;
     } finally {
       setSaving(false);
@@ -1155,6 +1235,7 @@ export function useWorkOrders(currentUser) {
     getFieldValue,
     addComment,
     saveSignature,
+    snoozeMissingData,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,

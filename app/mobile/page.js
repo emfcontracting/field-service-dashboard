@@ -25,6 +25,7 @@ import AvailabilityModal from './components/modals/AvailabilityModal';
 import ChangePinModal from './components/modals/ChangePinModal';
 import TeamModal from './components/modals/TeamModal';
 import CarrierSetupModal from './components/modals/CarrierSetupModal';
+import MissingDataAlertModal from './components/MissingDataAlertModal';
 
 // Offline Components
 import { SyncNotification } from './components/ConnectionStatus';
@@ -77,6 +78,7 @@ export default function MobilePage() {
     loadWorkOrders,
     loadCompletedWorkOrders,
     saveSignature,
+    snoozeMissingData,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,
@@ -266,6 +268,7 @@ export default function MobilePage() {
         changePin={changePin}
         loadWorkOrders={loadWorkOrders}
         saveSignature={saveSignature}
+        snoozeMissingData={snoozeMissingData}
         // DAILY HOURS PROPS
         dailyLogs={dailyLogs}
         addDailyHours={addDailyHours}
@@ -352,6 +355,7 @@ function MobileAppContent({
   changePin,
   loadWorkOrders,
   saveSignature,
+  snoozeMissingData,
   // DAILY HOURS PROPS
   dailyLogs,
   addDailyHours,
@@ -392,6 +396,26 @@ function MobileAppContent({
   const [showCarrierModal, setShowCarrierModal] = useState(false);
   const [carrierSkipped, setCarrierSkipped] = useState(false);
   const [localUser, setLocalUser] = useState(currentUser);
+
+  // === Missing-Data Alert Modal: which WOs are currently demanding attention?
+  // A WO triggers the modal if status='missing_data' AND not currently snoozed.
+  // (Banner shows for ALL missing_data WOs regardless of snooze; modal only for non-snoozed.)
+  const activeMissingDataWOs = (workOrders || []).filter(wo => {
+    if (wo.status !== 'missing_data') return false;
+    if (!wo.missing_data_snoozed_until) return true;
+    return new Date(wo.missing_data_snoozed_until) <= new Date();
+  });
+  const showMissingDataAlert = activeMissingDataWOs.length > 0;
+
+  const handleMissingDataFixNow = (wo) => {
+    // Open the WO — modal will auto-hide because parent state changes
+    setSelectedWO(wo);
+  };
+
+  const handleMissingDataSnooze = async (woId, reason) => {
+    await snoozeMissingData(woId, reason);
+    // Local state was updated inside snoozeMissingData; modal will re-evaluate
+  };
 
   // Check if we need to show carrier setup modal
   useEffect(() => {
@@ -591,6 +615,17 @@ function MobileAppContent({
   // Main Work Orders List
   return (
     <>
+      {/* Missing Data Alert Modal — shown over the WO list when there are
+          active (non-snoozed) missing_data WOs. Tech must Fix or Snooze each. */}
+      {showMissingDataAlert && (
+        <MissingDataAlertModal
+          workOrders={activeMissingDataWOs}
+          onFixNow={handleMissingDataFixNow}
+          onSnooze={handleMissingDataSnooze}
+          onClose={() => { /* auto-hides when list is empty */ }}
+        />
+      )}
+
       {/* Push Notification Permission Prompt */}
       <PushNotificationPrompt userId={currentUser?.user_id} />
       

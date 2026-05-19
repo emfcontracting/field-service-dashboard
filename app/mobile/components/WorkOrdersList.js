@@ -76,6 +76,13 @@ export default function WorkOrdersList({
 
     // Sort
     filtered.sort((a, b) => {
+      // *** MISSING_DATA WOs always pinned to top, regardless of user-selected sort ***
+      const aMissing = a.status === 'missing_data';
+      const bMissing = b.status === 'missing_data';
+      if (aMissing && !bMissing) return -1;
+      if (!aMissing && bMissing) return 1;
+      // If both are missing_data, fall through to normal sort below
+
       let valA, valB;
       
       switch (sortBy) {
@@ -114,6 +121,12 @@ export default function WorkOrdersList({
 
     return filtered;
   }, [workOrders, sortBy, sortOrder, filterPriority, filterStatus, searchTerm]);
+
+  // Count of active missing_data WOs (for the sticky banner)
+  const missingDataCount = useMemo(
+    () => workOrders.filter(wo => wo.status === 'missing_data').length,
+    [workOrders]
+  );
 
   // SELECT HANDLERS
   const toggleSelectMode = () => {
@@ -294,6 +307,33 @@ export default function WorkOrdersList({
 
       {/* Content */}
       <div className="p-4">
+        {/* === STICKY MISSING DATA BANNER === */}
+        {missingDataCount > 0 && (
+          <div
+            className="mb-4 bg-red-700 border-2 border-red-400 rounded-xl p-3 text-white shadow-lg"
+            style={{ animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🚩</span>
+                <div>
+                  <div className="font-bold text-sm leading-tight">
+                    {missingDataCount === 1
+                      ? (language === 'es' ? '1 orden con datos faltantes' : '1 work order with missing data')
+                      : (language === 'es'
+                          ? `${missingDataCount} órdenes con datos faltantes`
+                          : `${missingDataCount} work orders with missing data`)
+                    }
+                  </div>
+                  <div className="text-xs text-red-100">
+                    {language === 'es' ? 'Toca arriba para resolver' : 'Tap above to resolve'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Weather Widget */}
         {isOnline && (
           <WeatherWidget 
@@ -615,12 +655,15 @@ export default function WorkOrdersList({
                   }
                 }}
                 className={`rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${cbreBorder} ${
-                  wo.status === 'tech_review' 
+                  wo.status === 'missing_data'
+                    ? 'bg-red-900 border-2 border-red-500'
+                    : wo.status === 'tech_review' 
                     ? 'bg-red-900 border-2 border-red-500 animate-pulse' 
                     : selectedWOs.has(wo.wo_id)
                     ? 'bg-blue-900 border-2 border-blue-500'
                     : 'bg-gray-800 hover:bg-gray-750'
                 }`}
+                style={wo.status === 'missing_data' ? { animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : undefined}
               >
                 {/* SELECT CHECKBOX */}
                 {selectMode && (
@@ -639,6 +682,13 @@ export default function WorkOrdersList({
                 {wo.status === 'tech_review' && (
                   <div className="bg-red-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
                     ⚠️ RETURNED FROM INVOICE - ACTION REQUIRED ⚠️
+                  </div>
+                )}
+
+                {/* MISSING DATA ALERT BANNER (on card) */}
+                {wo.status === 'missing_data' && (
+                  <div className="bg-red-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
+                    🚩 {language === 'es' ? 'DATOS FALTANTES - REQUIERE ACCIÓN' : 'MISSING DATA - ACTION REQUIRED'} 🚩
                   </div>
                 )}
                 

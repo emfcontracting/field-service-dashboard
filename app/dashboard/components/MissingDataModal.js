@@ -32,6 +32,15 @@ const MISSING_DATA_ITEMS = [
 const MIN_COMMENT_LENGTH = 15;
 const MIN_COMMENT_LENGTH_WITH_OTHER = 30;
 
+// UUID v4-ish validation. Returns the value if it looks like a UUID, otherwise null.
+// Prevents 400 errors from PostgREST when currentUser.user_id is missing or in a
+// different shape (e.g. auth ID vs users.user_id mapping).
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function safeUuid(val) {
+  if (typeof val !== 'string') return null;
+  return UUID_REGEX.test(val) ? val : null;
+}
+
 export default function MissingDataModal({
   workOrder,
   currentUser,
@@ -101,7 +110,7 @@ export default function MissingDataModal({
           previous_status: previousStatus,
           missing_data_items: itemsArray,
           missing_data_comment: comment.trim(),
-          missing_data_flagged_by: currentUser?.user_id || null,
+          missing_data_flagged_by: safeUuid(currentUser?.user_id),
           missing_data_flagged_at: nowISO,
           // Clear any leftover snooze from a previous flag cycle
           missing_data_snoozed_until: null,
@@ -154,8 +163,21 @@ export default function MissingDataModal({
       }
       onClose();
     } catch (err) {
-      console.error('Error saving missing data flag:', err);
-      alert('Failed to save: ' + err.message);
+      // Surface Supabase error details so we can actually see what went wrong.
+      // Supabase errors carry message/details/hint/code separately.
+      console.error('Error saving missing data flag:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        raw: err
+      });
+      const detail = err?.details || err?.hint || err?.code || '';
+      alert(
+        'Failed to save missing data flag.\n\n' +
+        (err?.message || 'Unknown error') +
+        (detail ? `\n\nDetails: ${detail}` : '')
+      );
     } finally {
       setSaving(false);
     }

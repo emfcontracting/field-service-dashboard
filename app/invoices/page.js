@@ -242,10 +242,11 @@ export default function InvoicingPage() {
   };
 
   const fetchAcknowledgedWorkOrders = async () => {
+    // Oldest first — work the backlog from the top down
     const { data, error } = await supabase.from('work_orders')
       .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
       .eq('acknowledged', true).eq('is_locked', false)
-      .order('acknowledged_at', { ascending: false });
+      .order('acknowledged_at', { ascending: true });
     if (!error) {
       setAcknowledgedWOs(data || []);
       if (data?.length) calculateAllTotals(data);

@@ -856,37 +856,24 @@ export default function WorkOrderDetailModal({
     if (newStatus === 'completed' && !selectedWO.is_locked) {
       alert('✅ Work Order marked as Completed! Please acknowledge to lock it.');
 
-      // 📧 Notify other office staff that the WO is completed.
-      // Exclude the current user (they don't need to email themselves).
+      // 📧 Notify subscribed office staff that the WO is completed.
+      // Recipients managed in Messages > Notifications tab.
+      // The current user is excluded (they don't need to email themselves).
       try {
-        const { data: officeUsers } = await supabase
-          .from('users')
-          .select('user_id, first_name, last_name, email, role')
-          .in('role', ['admin', 'office_staff', 'operations', 'office'])
-          .eq('is_active', true);
-
-        const recipients = (officeUsers || [])
-          .filter(u => u.email && u.user_id !== currentUser?.user_id);
-
-        if (recipients.length > 0) {
-          await fetch('/api/notifications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'work_order_completed',
-              recipients,
-              workOrder: {
-                wo_id: selectedWO.wo_id,
-                wo_number: selectedWO.wo_number,
-                building: selectedWO.building,
-                work_order_description: selectedWO.work_order_description,
-                nte: selectedWO.nte,
-                priority: selectedWO.priority
-              },
-              actorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'Office'
-            })
-          });
-        }
+        const { sendSubscribedNotification } = await import('@/lib/notificationRecipients');
+        await sendSubscribedNotification(supabase, {
+          type: 'work_order_completed',
+          workOrder: {
+            wo_id: selectedWO.wo_id,
+            wo_number: selectedWO.wo_number,
+            building: selectedWO.building,
+            work_order_description: selectedWO.work_order_description,
+            nte: selectedWO.nte,
+            priority: selectedWO.priority
+          },
+          actorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'Office',
+          excludeUserId: currentUser?.user_id
+        });
       } catch (notifyErr) {
         // Non-fatal — the status change already succeeded
         console.error('Completion notification failed (non-fatal):', notifyErr);

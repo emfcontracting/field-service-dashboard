@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
+import NotificationsTab from './NotificationsTab';
 
 const supabase = getSupabase();
 
@@ -66,6 +67,9 @@ const Btn = ({ children, onClick, disabled, variant = 'default', size = 'md', cl
 
 // ════════════════════════════════════════════════════════════════════════════
 export default function MessagesPage() {
+  // — Tab state — 'compose' (existing UI) or 'notifications' (subscription matrix)
+  const [activeTab, setActiveTab] = useState('compose');
+
   const [users, setUsers]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [sending, setSending]           = useState(false);
@@ -186,6 +190,38 @@ export default function MessagesPage() {
           </div>
         </div>
 
+        {/* ── Tab Switcher ── */}
+        <div className="border-b border-[#1e1e2e] bg-[#0d0d14] px-6">
+          <div className="max-w-7xl mx-auto flex gap-1">
+            <button
+              onClick={() => setActiveTab('compose')}
+              className={`px-4 py-3 text-sm font-semibold border-b-2 transition -mb-px ${
+                activeTab === 'compose'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              💬 Compose
+            </button>
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`px-4 py-3 text-sm font-semibold border-b-2 transition -mb-px ${
+                activeTab === 'notifications'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              🔔 Notifications
+            </button>
+          </div>
+        </div>
+
+        {/* ── Tab content ── */}
+        {activeTab === 'notifications' ? (
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            <NotificationsTab />
+          </div>
+        ) : (
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
@@ -420,6 +456,7 @@ export default function MessagesPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </AppShell>
   );

@@ -563,47 +563,27 @@ export function useWorkOrders(currentUser) {
         setSelectedWO(prev => ({ ...prev, comments: newComments }));
       }
 
-      // 2) Fetch office/admin recipients
-      const { data: officeUsers, error: recipErr } = await supabase
-        .from('users')
-        .select('user_id, first_name, last_name, email')
-        .in('role', ['admin', 'office_staff', 'operations', 'office'])
-        .eq('is_active', true);
-
-      if (recipErr) {
-        console.warn('Could not fetch office recipients:', recipErr);
-      }
-
-      const recipients = (officeUsers || []).filter(u => u.email);
-
-      // 3) Fire the notification (fire-and-log, don't block UI on email delivery)
-      if (recipients.length > 0) {
-        try {
-          const response = await fetch('/api/notifications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'missing_data_fixed',
-              recipients,
-              workOrder: {
-                wo_id: wo.wo_id,
-                wo_number: wo.wo_number,
-                building: wo.building,
-                work_order_description: wo.work_order_description,
-                priority: wo.priority
-              },
-              actorName: techName,
-              missingDataItems: freshWO?.missing_data_items || wo.missing_data_items || []
-            })
-          });
-          const result = await response.json();
-          console.log('Missing data fixed notification sent:', result);
-        } catch (notifyErr) {
-          // Don't fail the action just because notifications failed
-          console.error('Notification dispatch failed (non-fatal):', notifyErr);
-        }
-      } else {
-        console.warn('No office recipients found for notification');
+      // 2) Fire the notification via the subscription system.
+      // Recipients are pulled from notification_subscriptions (managed in
+      // Messages > Notifications tab). Fire-and-log: don't fail the action
+      // just because the email/push step had a hiccup.
+      try {
+        const { sendSubscribedNotification } = await import('@/lib/notificationRecipients');
+        const result = await sendSubscribedNotification(supabase, {
+          type: 'missing_data_fixed',
+          workOrder: {
+            wo_id: wo.wo_id,
+            wo_number: wo.wo_number,
+            building: wo.building,
+            work_order_description: wo.work_order_description,
+            priority: wo.priority
+          },
+          actorName: techName,
+          missingDataItems: freshWO?.missing_data_items || wo.missing_data_items || []
+        });
+        console.log('Missing data fixed notification result:', result);
+      } catch (notifyErr) {
+        console.error('Notification dispatch failed (non-fatal):', notifyErr);
       }
 
       return true;
@@ -1098,35 +1078,24 @@ export function useWorkOrders(currentUser) {
 
         alert('Work order marked as completed! ✅');
 
-        // 📧 Notify office that this WO is ready for invoicing.
+        // 📧 Notify subscribed office staff that this WO is ready for invoicing.
+        // Recipients managed in Messages > Notifications tab.
         // Fire-and-log: don't block UI if email/push fails.
         try {
-          const { data: officeUsers } = await supabase
-            .from('users')
-            .select('user_id, first_name, last_name, email')
-            .in('role', ['admin', 'office_staff', 'operations', 'office'])
-            .eq('is_active', true);
-
-          const recipients = (officeUsers || []).filter(u => u.email);
-          if (recipients.length > 0) {
-            await fetch('/api/notifications', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'work_order_completed',
-                recipients,
-                workOrder: {
-                  wo_id: selectedWO.wo_id,
-                  wo_number: selectedWO.wo_number,
-                  building: selectedWO.building,
-                  work_order_description: selectedWO.work_order_description,
-                  nte: selectedWO.nte,
-                  priority: selectedWO.priority
-                },
-                actorName: `${currentUser.first_name} ${currentUser.last_name}`
-              })
-            });
-          }
+          const { sendSubscribedNotification } = await import('@/lib/notificationRecipients');
+          await sendSubscribedNotification(supabase, {
+            type: 'work_order_completed',
+            workOrder: {
+              wo_id: selectedWO.wo_id,
+              wo_number: selectedWO.wo_number,
+              building: selectedWO.building,
+              work_order_description: selectedWO.work_order_description,
+              nte: selectedWO.nte,
+              priority: selectedWO.priority
+            },
+            actorName: `${currentUser.first_name} ${currentUser.last_name}`,
+            excludeUserId: currentUser.user_id
+          });
         } catch (notifyErr) {
           console.error('Completion notification failed (non-fatal):', notifyErr);
         }

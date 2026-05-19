@@ -46,6 +46,7 @@ export default function WorkOrdersFilters({
   const allUsers = [...techs, ...admins];
 
   const statusOptions = [
+    { value: 'missing_data', label: '🚩 Missing Data', color: 'bg-red-600 animate-pulse' },
     { value: 'pending', label: 'Pending', color: 'bg-slate-600' },
     { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
     { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },

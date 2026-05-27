@@ -41,6 +41,39 @@ export default function WorkOrderDetailModal({
 }) {
   const [selectedWO, setSelectedWO] = useState(workOrder);
   const [showTeamModal, setShowTeamModal] = useState(false);
+
+  // 🛡️ Safety net: callers may pass a partial WO object (e.g. ReviewQueueView
+  // sends flag.work_order which only has wo_id/wo_number/building/status/cbre_status).
+  // If we don't have the full row, fetch it from the DB so the Modal always shows
+  // — and saves — the complete WO. Without this, partial WOs could cause comments
+  // and work_order_description to appear blank in the UI.
+  useEffect(() => {
+    const hasFullWO = workOrder && (
+      'work_order_description' in workOrder &&
+      'comments' in workOrder &&
+      'nte' in workOrder
+    );
+    if (hasFullWO) {
+      setSelectedWO(workOrder);
+      return;
+    }
+    if (!workOrder?.wo_id) return;
+    // Partial WO — fetch the full row
+    (async () => {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          lead_tech:users!lead_tech_id(first_name, last_name, email),
+          locked_by_user:users!locked_by(first_name, last_name)
+        `)
+        .eq('wo_id', workOrder.wo_id)
+        .single();
+      if (!error && data) setSelectedWO(data);
+      else console.error('Failed to hydrate WO:', error);
+    })();
+  }, [workOrder?.wo_id]);
+
   const [showInvoiceButton, setShowInvoiceButton] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [dailyHoursLog, setDailyHoursLog] = useState([]);

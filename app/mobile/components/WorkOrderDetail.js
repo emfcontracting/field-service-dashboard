@@ -738,7 +738,6 @@ export default function WorkOrderDetail({
               <option value="assigned">{t('assigned')}</option>
               <option value="in_progress">{t('inProgress')}</option>
               <option value="pending">{t('pending')}</option>
-              <option value="tech_review">{t('techReview')}</option>
               <option value="return_trip">{t('returnTrip')}</option>
               <option value="needs_return">{t('returnForReview')}</option>
               {status === 'missing_data' && (

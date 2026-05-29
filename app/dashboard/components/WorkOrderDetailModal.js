@@ -1692,19 +1692,18 @@ const sendAssignmentNotifications = async () => {
                   (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data') ? 'opacity-90 cursor-not-allowed' : ''
                 }`}
               >
-                <option value="pending">Pending</option>
-                <option value="assigned">Assigned</option>
-                <option value="in_progress">In Progress</option>
-                <option value="tech_review">Tech Review</option>
-                <option value="return_trip">Return Trip</option>
-                <option value="needs_return">Return for Review</option>
-                <option value="completed">Completed</option>
-                <option value="rejected">❌ Rejected</option>
+                <option value="pending" className="bg-[#0d0d14] text-slate-200">Pending</option>
+                <option value="assigned" className="bg-[#0d0d14] text-slate-200">Assigned</option>
+                <option value="in_progress" className="bg-[#0d0d14] text-slate-200">In Progress</option>
+                <option value="return_trip" className="bg-[#0d0d14] text-slate-200">Return Trip</option>
+                <option value="needs_return" className="bg-[#0d0d14] text-slate-200">Return for Review</option>
+                <option value="completed" className="bg-[#0d0d14] text-slate-200">Completed</option>
+                <option value="rejected" className="bg-[#0d0d14] text-slate-200">❌ Rejected</option>
                 {selectedWO.status === 'missing_data' && (
-                  <option value="missing_data">🚩 Missing Data</option>
+                  <option value="missing_data" className="bg-[#0d0d14] text-slate-200">🚩 Missing Data</option>
                 )}
                 {selectedWO.status !== 'missing_data' && (
-                  <option value="missing_data">🚩 Flag as Missing Data...</option>
+                  <option value="missing_data" className="bg-[#0d0d14] text-slate-200">🚩 Flag as Missing Data...</option>
                 )}
               </select>
               {selectedWO.status === 'missing_data' && (

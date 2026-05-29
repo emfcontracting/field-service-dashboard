@@ -6,7 +6,7 @@ export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHours
     <div className="space-y-3 mb-5">
 
       {/* Work Status Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
 
         <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-3 border-t-2 border-t-slate-600">
           <div className="text-slate-500 text-xs mb-1 font-medium">Total</div>
@@ -28,13 +28,8 @@ export default function StatsCards({ stats, onFilterByCbreStatus, onMissingHours
           <div className="text-2xl font-bold text-slate-200">{stats.in_progress}</div>
         </div>
 
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-3 border-t-2 border-t-purple-500">
-          <div className="text-purple-400 text-xs mb-1 font-medium">Tech Review</div>
-          <div className="text-2xl font-bold text-slate-200">{stats.tech_review}</div>
-        </div>
-
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-3 border-t-2 border-t-orange-500">
-          <div className="text-orange-400 text-xs mb-1 font-medium">Return Trip</div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-lg p-3 border-t-2 border-t-amber-600">
+          <div className="text-amber-400 text-xs mb-1 font-medium">Return Trip</div>
           <div className="text-2xl font-bold text-slate-200">{stats.return_trip}</div>
         </div>
 

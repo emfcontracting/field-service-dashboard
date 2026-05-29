@@ -50,7 +50,6 @@ export default function WorkOrdersFilters({
     { value: 'pending', label: 'Pending', color: 'bg-slate-600' },
     { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
     { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },
-    { value: 'tech_review', label: 'Tech Review', color: 'bg-purple-600' },
     { value: 'return_trip', label: 'Return Trip', color: 'bg-amber-700' },
     { value: 'needs_return', label: 'Return for Review', color: 'bg-orange-600' },
     { value: 'rejected', label: '❌ Rejected', color: 'bg-red-700' },

@@ -477,27 +477,57 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   }, [authenticated]);
 
   // ── CBRE Data Entry pending count (admin/office only) ──
+  // Mirrors the CBREDataEntryView filter logic so the sidebar badge matches
+  // what the user actually sees inside the view:
+  //   1. Only active WOs (acknowledged=false, is_locked=false)
+  //   2. Completions must be 'ready for CBRE' (no pending quote, no escalation,
+  //      no rejection, under NTE) — we approximate by checking cbre_status
+  //   3. Within the 90-day window for daily check-outs
   useEffect(() => {
     if (!authenticated || !userInfo) return;
     if (!['admin', 'office_staff'].includes(userInfo.role)) return;
-    (async () => {
+    let cancelled = false;
+    const load = async () => {
       try {
-        // Pending daily check-out transfers (last 90 days, to keep count meaningful)
         const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-        const { count: dailyCount } = await supabase
+
+        // 1. Pending daily check-outs — join in WO to filter inactive ones.
+        // We need to fetch the actual rows (not just count) because the
+        // acknowledged/is_locked filter happens on the joined work_order.
+        const { data: dailyRows } = await supabase
           .from('daily_hours_log')
-          .select('log_id', { count: 'exact', head: true })
+          .select('log_id, work_order:work_orders!inner(acknowledged, is_locked)')
           .eq('cbre_transferred', false)
-          .gte('work_date', cutoff);
-        // Pending completion transfers
-        const { count: completionCount } = await supabase
+          .gte('work_date', cutoff)
+          .eq('work_order.acknowledged', false)
+          .eq('work_order.is_locked', false);
+
+        // 2. Pending completion transfers — active WOs only, with CBRE status
+        // that's clean enough to actually report (null/empty or quote_approved).
+        // This mirrors CBRE_STATUS_READY in CBREDataEntryView.js.
+        const { data: completionRows } = await supabase
           .from('work_orders')
-          .select('wo_id', { count: 'exact', head: true })
+          .select('wo_id, cbre_status')
           .eq('completion_transferred', false)
-          .eq('status', 'completed');
-        setCbreDataEntryCount((dailyCount || 0) + (completionCount || 0));
-      } catch {}
-    })();
+          .eq('status', 'completed')
+          .eq('acknowledged', false)
+          .eq('is_locked', false);
+
+        const readyCompletions = (completionRows || []).filter(wo =>
+          !wo.cbre_status || wo.cbre_status === 'quote_approved'
+        );
+
+        if (!cancelled) {
+          setCbreDataEntryCount((dailyRows?.length || 0) + readyCompletions.length);
+        }
+      } catch (err) {
+        console.error('Failed to load CBRE data entry count:', err);
+      }
+    };
+    load();
+    // Re-poll every 60s like Review Queue
+    const interval = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [authenticated, userInfo]);
 
   // ── Review Queue open-flag count (admin/office only) ──

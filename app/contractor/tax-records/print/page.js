@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import {
@@ -12,7 +12,16 @@ import {
 
 const supabase = getSupabase();
 
+// Wrapper required by Next.js 15: useSearchParams() needs a Suspense boundary
 export default function TaxRecordsPrintPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading tax report...</div>}>
+      <TaxRecordsPrintContent />
+    </Suspense>
+  );
+}
+
+function TaxRecordsPrintContent() {
   const searchParams = useSearchParams();
   const year = parseInt(searchParams.get('year') || new Date().getFullYear(), 10);
 

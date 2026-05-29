@@ -208,7 +208,7 @@ export default function ContractorDashboard() {
         </div>
 
         {/* Main Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Link
             href="/contractor/invoices/new"
             className="bg-green-600 hover:bg-green-700 rounded-xl p-6 text-center transition"
@@ -232,6 +232,14 @@ export default function ContractorDashboard() {
             <span className="text-4xl block mb-2">📊</span>
             <span className="text-xl font-bold">Tax Report</span>
             <p className="text-purple-200 text-sm mt-1">Year-end income summary</p>
+          </Link>
+          <Link
+            href="/contractor/tax-records"
+            className="bg-yellow-600 hover:bg-yellow-700 rounded-xl p-6 text-center transition"
+          >
+            <span className="text-4xl block mb-2">💰</span>
+            <span className="text-xl font-bold">Tax Records</span>
+            <p className="text-yellow-200 text-sm mt-1">Track expenses & receipts</p>
           </Link>
         </div>
 

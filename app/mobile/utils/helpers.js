@@ -54,9 +54,10 @@ export function getStatusBadge(status) {
     'in_progress': '🔄 In Progress',
     'completed': '✅ Completed',
     'on_hold': '⏸️ On Hold',
-    'needs_return': '🔁 Needs Return',
+    'needs_return': '🔁 Return for Review',
     'return_trip': '🔁 Return Trip',
     'tech_review': '⚠️ REVIEW NEEDED',
+    'rejected': '❌ Rejected',
     'missing_data': '🚩 MISSING DATA'
   };
   return statusMap[status] || status;

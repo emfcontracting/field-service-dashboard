@@ -51,7 +51,9 @@ export default function WorkOrdersFilters({
     { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
     { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },
     { value: 'tech_review', label: 'Tech Review', color: 'bg-purple-600' },
-    { value: 'return_trip', label: 'Return Trip', color: 'bg-orange-600' },
+    { value: 'return_trip', label: 'Return Trip', color: 'bg-amber-700' },
+    { value: 'needs_return', label: 'Return for Review', color: 'bg-orange-600' },
+    { value: 'rejected', label: '❌ Rejected', color: 'bg-red-700' },
     { value: 'completed', label: 'Completed', color: 'bg-emerald-600' }
   ];
 
@@ -71,10 +73,12 @@ export default function WorkOrdersFilters({
   const cbreStatusOptions = [
     { value: 'escalation', label: '🚨 Escalation', color: 'bg-red-600' },
     { value: 'quote_approved', label: '✅ Approved', color: 'bg-emerald-600' },
-    { value: 'quote_rejected', label: '❌ Rejected', color: 'bg-red-700' },
+    { value: 'quote_rejected', label: '❌ Quote Rejected', color: 'bg-red-700' },
+    { value: 'invoice_rejected', label: '❌ Invoice Rejected', color: 'bg-red-800' },
     { value: 'quote_submitted', label: '📤 Submitted', color: 'bg-blue-600' },
     { value: 'reassigned', label: '🔄 Reassigned', color: 'bg-purple-600' },
-    { value: 'pending_quote', label: '📋 Pending', color: 'bg-orange-600' }
+    { value: 'pending_quote', label: '📋 Pending', color: 'bg-orange-600' },
+    { value: 'cancelled', label: '🚫 Cancelled', color: 'bg-slate-600' }
   ];
 
   useEffect(() => {

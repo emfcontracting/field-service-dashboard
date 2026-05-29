@@ -1695,8 +1695,11 @@ const sendAssignmentNotifications = async () => {
                 <option value="pending">Pending</option>
                 <option value="assigned">Assigned</option>
                 <option value="in_progress">In Progress</option>
-                <option value="needs_return">Needs Return</option>
+                <option value="tech_review">Tech Review</option>
+                <option value="return_trip">Return Trip</option>
+                <option value="needs_return">Return for Review</option>
                 <option value="completed">Completed</option>
+                <option value="rejected">❌ Rejected</option>
                 {selectedWO.status === 'missing_data' && (
                   <option value="missing_data">🚩 Missing Data</option>
                 )}

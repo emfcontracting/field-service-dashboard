@@ -56,6 +56,8 @@ export const translations = {
     pending: 'Pending',
     techReview: 'Tech Review',
     returnTrip: 'Return Trip',
+    returnForReview: 'Return for Review',
+    rejected: '❌ Rejected',
     completedStatus: 'Completed',
 
     // Field Data
@@ -266,6 +268,8 @@ export const translations = {
     pending: 'Pendiente',
     techReview: 'Revisión Técnica',
     returnTrip: 'Viaje de Retorno',
+    returnForReview: 'Devuelto para Revisión',
+    rejected: '❌ Rechazado',
     completedStatus: 'Completado',
 
     // Field Data

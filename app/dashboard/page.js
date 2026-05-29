@@ -153,7 +153,7 @@ function DashboardContent() {
       case 'cbre-sync':
         return <CBRESyncView currentUser={currentUser} />;
       case 'cbre-data-entry':
-        return <CBREDataEntryView currentUser={currentUser} />;
+        return <CBREDataEntryView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} />;
       case 'review-queue':
         return <ReviewQueueView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} refreshWorkOrders={refreshWorkOrders} />;
       case 'workorders':

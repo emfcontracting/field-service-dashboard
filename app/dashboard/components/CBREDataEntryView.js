@@ -168,7 +168,7 @@ function completionReadinessCheck(wo) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-export default function CBREDataEntryView({ currentUser }) {
+export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
   const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'office_staff';
 
   const [loading, setLoading]               = useState(true);
@@ -554,7 +554,13 @@ export default function CBREDataEntryView({ currentUser }) {
                   {/* WO header */}
                   <div className="bg-[#1e1e2e]/40 border-b border-[#2d2d44] px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-blue-400 text-lg">{wo.wo_number}</span>
+                      <button
+                        onClick={() => onSelectWorkOrder?.(wo)}
+                        className="font-mono font-bold text-blue-400 hover:text-blue-300 hover:underline text-lg transition cursor-pointer"
+                        title="Open work order"
+                      >
+                        {wo.wo_number}
+                      </button>
                       <span className="text-slate-400 text-sm">{wo.building || '—'}</span>
                       {!allTransferred && (
                         <span className="bg-orange-500/15 text-orange-400 border border-orange-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
@@ -691,7 +697,13 @@ export default function CBREDataEntryView({ currentUser }) {
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                     <div>
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span className="font-mono font-bold text-blue-400 text-lg">{c.wo_number}</span>
+                        <button
+                          onClick={() => onSelectWorkOrder?.(c)}
+                          className="font-mono font-bold text-blue-400 hover:text-blue-300 hover:underline text-lg transition cursor-pointer"
+                          title="Open work order"
+                        >
+                          {c.wo_number}
+                        </button>
                         <span className="text-slate-400 text-sm">{c.building || '—'}</span>
                         {!c.completion_transferred && (
                           <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-2 py-0.5 rounded-full">

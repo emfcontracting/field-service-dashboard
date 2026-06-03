@@ -57,7 +57,8 @@ export function getStatusBadge(status) {
     'needs_return': '🔁 Return for Review',
     'return_trip': '🔁 Return Trip',
     'rejected': '❌ Rejected',
-    'missing_data': '🚩 MISSING DATA'
+    'missing_data': '🚩 MISSING DATA',
+    'update_required': '🔵 UPDATE REQUIRED'
   };
   return statusMap[status] || status;
 }

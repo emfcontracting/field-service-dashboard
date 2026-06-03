@@ -32,6 +32,18 @@ const NOTIFICATION_TYPES = [
     icon: '✅',
     label: 'Completed',
     tooltip: 'When a WO status changes to completed'
+  },
+  {
+    id: 'update_required_flagged',
+    icon: '🔵',
+    label: 'Update Flagged',
+    tooltip: 'When office flags a WO for a status update'
+  },
+  {
+    id: 'update_required_followed_up',
+    icon: '🔵',
+    label: 'Followed Up',
+    tooltip: 'When a tech marks a status update as followed up'
   }
 ];
 

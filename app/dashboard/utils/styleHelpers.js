@@ -9,7 +9,8 @@ export function getStatusColor(status) {
     needs_return: 'bg-orange-600',         // Invoicing sent it back for missing data
     rejected: 'bg-red-700',                // EMF rejected the work
     completed: 'bg-green-600',
-    missing_data: 'bg-red-600 animate-pulse'
+    missing_data: 'bg-red-600 animate-pulse',
+    update_required: 'bg-blue-600 animate-pulse'  // Office needs status update from tech
   };
   return colors[status] || 'bg-gray-600';
 }

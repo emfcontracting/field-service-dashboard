@@ -78,6 +78,7 @@ export default function WorkOrderDetail({
   onDeleteDailyHours,
   onDownloadLogs,
   onMarkMissingDataFixed,
+  onMarkUpdateRequiredFollowedUp,
   // NTE INCREASE PROPS
   quotes = [],
   quotesLoading = false,
@@ -100,6 +101,10 @@ export default function WorkOrderDetail({
   // ✅ Missing-data "Done" button state
   const [markingFixed, setMarkingFixed] = useState(false);
   const [markedFixedThisSession, setMarkedFixedThisSession] = useState(false);
+
+  // ✅ Update-required "Followed up" button state
+  const [markingFollowedUp, setMarkingFollowedUp] = useState(false);
+  const [markedFollowedUpThisSession, setMarkedFollowedUpThisSession] = useState(false);
 
   // 🚩 Missing data: jump to the section the badge points to
   const scrollToSection = (sectionId) => {
@@ -135,6 +140,29 @@ export default function WorkOrderDetail({
       alert((language === 'en' ? 'Failed to notify office: ' : 'Error al notificar a la oficina: ') + (err.message || 'unknown'));
     } finally {
       setMarkingFixed(false);
+    }
+  };
+
+  // ✅ Tech marks update-required as followed up -> notifies office
+  const handleMarkFollowedUp = async () => {
+    if (!onMarkUpdateRequiredFollowedUp || markingFollowedUp) return;
+    const confirmText = language === 'en'
+      ? 'Mark this as followed up and notify the office?\n\nThe office will review and resolve the flag in the dashboard.'
+      : '¿Marcar como seguimiento hecho y notificar a la oficina?\n\nLa oficina revisará y resolverá la marca en el panel.';
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      setMarkingFollowedUp(true);
+      await onMarkUpdateRequiredFollowedUp(wo.wo_id);
+      setMarkedFollowedUpThisSession(true);
+      alert(language === 'en'
+        ? '✅ Office notified. They will resolve the flag once they verify.'
+        : '✅ Oficina notificada. Resolverán la marca una vez que verifiquen.'
+      );
+    } catch (err) {
+      alert((language === 'en' ? 'Failed to notify office: ' : 'Error al notificar a la oficina: ') + (err.message || 'unknown'));
+    } finally {
+      setMarkingFollowedUp(false);
     }
   };
   
@@ -577,13 +605,18 @@ export default function WorkOrderDetail({
               </div>
             )}
 
-            {/* ✅ "I'm done" button — tech tells office they fixed it */}
+            {/* ✅ "I'm done" button — tech tells office they fixed it.
+                ONE-SHOT LOCKOUT: disabled if already marked (from DB or this session). */}
             <div className="mt-3">
+              {(() => {
+                const alreadyMarked = !!wo.missing_data_tech_marked_fixed_at || markedFixedThisSession;
+                return (
+                  <>
               <button
                 onClick={handleMarkFixed}
-                disabled={markingFixed || markedFixedThisSession}
+                disabled={markingFixed || alreadyMarked}
                 className={`w-full py-3 rounded-lg font-bold text-white transition active:scale-95 ${
-                  markedFixedThisSession
+                  alreadyMarked
                     ? 'bg-emerald-700 cursor-default'
                     : markingFixed
                       ? 'bg-emerald-700 cursor-wait'
@@ -592,18 +625,122 @@ export default function WorkOrderDetail({
               >
                 {markingFixed
                   ? (language === 'en' ? '⏳ Notifying office...' : '⏳ Notificando a la oficina...')
-                  : markedFixedThisSession
+                  : alreadyMarked
                     ? (language === 'en' ? '✓ Office notified — awaiting their review' : '✓ Oficina notificada — esperando revisión')
                     : (language === 'en' ? '✅ I fixed it — notify office' : '✅ Lo arreglé — notificar a la oficina')
                 }
               </button>
-              {!markedFixedThisSession && (
+              {!alreadyMarked && (
                 <p className="text-xs text-red-200 text-center mt-1.5 opacity-80">
                   {language === 'en'
-                    ? 'Office will review and resolve the flag. The banner stays until they do.'
-                    : 'La oficina revisará y resolverá la marca. La alerta permanece hasta entonces.'}
+                    ? 'You can notify the office once. The banner stays until they resolve it.'
+                    : 'Puedes notificar a la oficina una vez. La alerta permanece hasta que la resuelvan.'}
                 </p>
               )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* 🔵 UPDATE REQUIRED ALERT — blue in-WO banner, mirrors missing data */}
+        {status === 'update_required' && (
+          <div
+            className="bg-blue-700 border-4 border-blue-400 rounded-xl p-4 mb-4 shadow-lg"
+            style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+          >
+            <div className="text-center mb-3">
+              <div className="text-3xl mb-1">🔵</div>
+              <h2 className="text-lg font-bold text-white">
+                {language === 'en' ? 'STATUS UPDATE REQUIRED' : 'ACTUALIZACIÓN REQUERIDA'}
+              </h2>
+              {wo.update_required_flagged_at && (
+                <p className="text-xs text-blue-200 mt-1">
+                  {language === 'en' ? 'Flagged ' : 'Marcado '}
+                  {new Date(wo.update_required_flagged_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+
+            {/* Office comment */}
+            {wo.update_required_comment && (
+              <div className="bg-black/40 border border-blue-300/40 rounded-lg p-3 mb-3 text-white text-sm whitespace-pre-wrap leading-relaxed">
+                {wo.update_required_comment}
+              </div>
+            )}
+
+            {/* Item badges */}
+            {Array.isArray(wo.update_required_items) && wo.update_required_items.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 justify-center mb-1">
+                {wo.update_required_items.map(item => {
+                  const labelsEN = {
+                    nte_status: '📞 NTE Status',
+                    material_delivery: '📦 Material Delivery',
+                    quote_status: '💰 Quote Status',
+                    other: '❓ Other'
+                  };
+                  const labelsES = {
+                    nte_status: '📞 Estado NTE',
+                    material_delivery: '📦 Entrega Material',
+                    quote_status: '💰 Estado Cotización',
+                    other: '❓ Otro'
+                  };
+                  const labels = language === 'es' ? labelsES : labelsEN;
+                  return (
+                    <span
+                      key={item}
+                      className="bg-blue-500/30 text-blue-100 border border-blue-300/40 px-3 py-1.5 rounded-full text-xs font-bold"
+                    >
+                      {labels[item] || item}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Snooze indicator */}
+            {wo.update_required_snoozed_until && new Date(wo.update_required_snoozed_until) > new Date() && (
+              <div className="mt-3 bg-amber-900/60 border border-amber-400/40 rounded-lg p-2 text-center text-amber-200 text-xs">
+                💤 {language === 'en' ? 'Alert snoozed until ' : 'Alerta pospuesta hasta '}
+                {new Date(wo.update_required_snoozed_until).toLocaleTimeString()}
+              </div>
+            )}
+
+            {/* ✅ "I followed up" button — ONE-SHOT LOCKOUT */}
+            <div className="mt-3">
+              {(() => {
+                const alreadyMarked = !!wo.update_required_tech_marked_done_at || markedFollowedUpThisSession;
+                return (
+                  <>
+                    <button
+                      onClick={handleMarkFollowedUp}
+                      disabled={markingFollowedUp || alreadyMarked}
+                      className={`w-full py-3 rounded-lg font-bold text-white transition active:scale-95 ${
+                        alreadyMarked
+                          ? 'bg-emerald-700 cursor-default'
+                          : markingFollowedUp
+                            ? 'bg-emerald-700 cursor-wait'
+                            : 'bg-emerald-600 hover:bg-emerald-700 shadow-lg'
+                      }`}
+                    >
+                      {markingFollowedUp
+                        ? (language === 'en' ? '⏳ Notifying office...' : '⏳ Notificando a la oficina...')
+                        : alreadyMarked
+                          ? (language === 'en' ? '✓ Office notified — awaiting their review' : '✓ Oficina notificada — esperando revisión')
+                          : (language === 'en' ? '✅ I followed up — notify office' : '✅ Hice seguimiento — notificar a la oficina')
+                      }
+                    </button>
+                    {!alreadyMarked && (
+                      <p className="text-xs text-blue-200 text-center mt-1.5 opacity-80">
+                        {language === 'en'
+                          ? 'You can notify the office once. The banner stays until they resolve it.'
+                          : 'Puedes notificar a la oficina una vez. La alerta permanece hasta que la resuelvan.'}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -726,13 +863,15 @@ export default function WorkOrderDetail({
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('updateStatus')}</h3>
             <select
-              value={status === 'missing_data' ? 'missing_data' : status}
+              value={status === 'missing_data' ? 'missing_data' : status === 'update_required' ? 'update_required' : status}
               onChange={(e) => onUpdateField(wo.wo_id, 'status', e.target.value)}
-              disabled={saving || status === 'completed' || status === 'missing_data'}
+              disabled={saving || status === 'completed' || status === 'missing_data' || status === 'update_required'}
               className={`w-full px-4 py-3 rounded-lg text-white font-semibold text-center ${
                 status === 'missing_data'
                   ? 'bg-red-600 cursor-not-allowed opacity-90'
-                  : 'bg-blue-600'
+                  : status === 'update_required'
+                    ? 'bg-blue-600 cursor-not-allowed opacity-90'
+                    : 'bg-blue-600'
               }`}
             >
               <option value="assigned">{t('assigned')}</option>
@@ -743,11 +882,21 @@ export default function WorkOrderDetail({
               {status === 'missing_data' && (
                 <option value="missing_data">🚩 Missing Data</option>
               )}
+              {status === 'update_required' && (
+                <option value="update_required">🔵 Update Required</option>
+              )}
             </select>
             {status === 'missing_data' && (
               <p className="text-xs text-red-400 mt-2 text-center">
                 {language === 'en'
                   ? 'Status locked — office must resolve the missing data flag'
+                  : 'Estado bloqueado — la oficina debe resolver la marca'}
+              </p>
+            )}
+            {status === 'update_required' && (
+              <p className="text-xs text-blue-400 mt-2 text-center">
+                {language === 'en'
+                  ? 'Status locked — office must resolve the status update flag'
                   : 'Estado bloqueado — la oficina debe resolver la marca'}
               </p>
             )}
@@ -901,16 +1050,18 @@ export default function WorkOrderDetail({
             <>
               <button
                 onClick={handleCompleteWorkOrder}
-                disabled={saving || status === 'missing_data'}
+                disabled={saving || status === 'missing_data' || status === 'update_required'}
                 className={`w-full py-4 rounded-lg font-bold text-lg transition active:scale-95 ${
-                  status === 'missing_data'
+                  status === 'missing_data' || status === 'update_required'
                     ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
                 {status === 'missing_data'
                   ? (language === 'en' ? '🔒 Resolve Missing Data First' : '🔒 Resolver Datos Faltantes Primero')
-                  : <>✅ {t('completeWorkOrder')}</>
+                  : status === 'update_required'
+                    ? (language === 'en' ? '🔒 Follow Up Required First' : '🔒 Seguimiento Requerido Primero')
+                    : <>✅ {t('completeWorkOrder')}</>
                 }
               </button>
               {status === 'missing_data' && (
@@ -918,6 +1069,13 @@ export default function WorkOrderDetail({
                   {language === 'en'
                     ? 'Office must resolve the missing data flag before this WO can be completed.'
                     : 'La oficina debe resolver la marca de datos faltantes antes de completar.'}
+                </p>
+              )}
+              {status === 'update_required' && (
+                <p className="text-xs text-center text-blue-400">
+                  {language === 'en'
+                    ? 'Office must resolve the status update flag before this WO can be completed.'
+                    : 'La oficina debe resolver la marca de actualización antes de completar.'}
                 </p>
               )}
             </>

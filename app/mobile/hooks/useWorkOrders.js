@@ -114,7 +114,7 @@ export function useWorkOrders(currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .eq('lead_tech_id', currentUser.user_id)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data'])
+        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data', 'update_required'])
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
@@ -137,7 +137,7 @@ export function useWorkOrders(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data']);
+          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data', 'update_required']);
 
         if (helperError) throw helperError;
         helperWOs = helperWOData || [];
@@ -516,16 +516,22 @@ export function useWorkOrders(currentUser) {
   }
 
   // ==================== MISSING DATA: TECH MARKS AS FIXED ====================
-  // Tech clicks "Done" -> log a comment + notify office (email + push).
-  // Office still has to click Resolve in the dashboard to actually flip the status.
+  // Tech clicks "Done" -> log a comment + set lockout timestamp + notify office.
+  // ONE SHOT ONLY — once clicked, button stays disabled until Office resolves
+  // the flag. Prevents techs from spamming office with notifications.
+  // The lockout timestamp is cleared when Office calls handleResolveMissingData.
   async function markMissingDataFixed(woId) {
     if (!woId) throw new Error('No work order specified');
 
     const wo = workOrders.find(w => w.wo_id === woId);
     if (!wo) throw new Error('Work order not found');
     if (wo.status !== 'missing_data') throw new Error('This WO is not flagged for missing data');
+    if (wo.missing_data_tech_marked_fixed_at) {
+      throw new Error('You already notified the office. Wait for them to review.');
+    }
 
     const timestamp = new Date().toLocaleString();
+    const nowISO = new Date().toISOString();
     const techName = `${currentUser.first_name} ${currentUser.last_name}`;
     const fixedNote =
       `[${timestamp}] ${techName} — ✅ MARKED MISSING DATA AS FIXED\n` +
@@ -538,35 +544,46 @@ export function useWorkOrders(currentUser) {
         throw new Error('You need to be online to notify the office.');
       }
 
-      // 1) Append a log entry to the WO comments (audit trail)
+      // 1) Append a log entry to the WO comments + set lockout timestamp
       const { data: freshWO, error: fetchErr } = await supabase
         .from('work_orders')
-        .select('comments, missing_data_items')
+        .select('comments, missing_data_items, missing_data_tech_marked_fixed_at')
         .eq('wo_id', woId)
         .single();
       if (fetchErr) throw fetchErr;
+
+      // Re-check lockout against fresh DB state — race condition guard
+      if (freshWO?.missing_data_tech_marked_fixed_at) {
+        throw new Error('You already notified the office. Wait for them to review.');
+      }
 
       const existing = freshWO?.comments || '';
       const newComments = existing ? `${existing}\n\n${fixedNote}` : fixedNote;
 
       const { error: updateErr } = await supabase
         .from('work_orders')
-        .update({ comments: newComments })
+        .update({
+          comments: newComments,
+          missing_data_tech_marked_fixed_at: nowISO
+        })
         .eq('wo_id', woId);
       if (updateErr) throw updateErr;
 
-      // Update local state with the new comment
+      // Update local state with the new comment + lockout
       setWorkOrders(prev => prev.map(w =>
-        w.wo_id === woId ? { ...w, comments: newComments } : w
+        w.wo_id === woId
+          ? { ...w, comments: newComments, missing_data_tech_marked_fixed_at: nowISO }
+          : w
       ));
       if (selectedWO?.wo_id === woId) {
-        setSelectedWO(prev => ({ ...prev, comments: newComments }));
+        setSelectedWO(prev => ({
+          ...prev,
+          comments: newComments,
+          missing_data_tech_marked_fixed_at: nowISO
+        }));
       }
 
       // 2) Fire the notification via the subscription system.
-      // Recipients are pulled from notification_subscriptions (managed in
-      // Messages > Notifications tab). Fire-and-log: don't fail the action
-      // just because the email/push step had a hiccup.
       try {
         const { sendSubscribedNotification } = await import('@/lib/notificationRecipients');
         const result = await sendSubscribedNotification(supabase, {
@@ -589,6 +606,171 @@ export function useWorkOrders(currentUser) {
       return true;
     } catch (err) {
       console.error('Error marking missing data as fixed:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ==================== UPDATE REQUIRED: TECH MARKS AS FOLLOWED UP ====================
+  // Mirror of markMissingDataFixed but for the blue "Update Required" flag.
+  // Same one-shot lockout pattern.
+  async function markUpdateRequiredDone(woId) {
+    if (!woId) throw new Error('No work order specified');
+
+    const wo = workOrders.find(w => w.wo_id === woId);
+    if (!wo) throw new Error('Work order not found');
+    if (wo.status !== 'update_required') throw new Error('This WO is not flagged for status update');
+    if (wo.update_required_tech_marked_done_at) {
+      throw new Error('You already notified the office. Wait for them to review.');
+    }
+
+    const timestamp = new Date().toLocaleString();
+    const nowISO = new Date().toISOString();
+    const techName = `${currentUser.first_name} ${currentUser.last_name}`;
+    const doneNote =
+      `[${timestamp}] ${techName} — ✅ FOLLOWED UP ON STATUS UPDATE\n` +
+      `Awaiting office review and resolution.`;
+
+    try {
+      setSaving(true);
+
+      if (!navigator.onLine) {
+        throw new Error('You need to be online to notify the office.');
+      }
+
+      const { data: freshWO, error: fetchErr } = await supabase
+        .from('work_orders')
+        .select('comments, update_required_items, update_required_tech_marked_done_at')
+        .eq('wo_id', woId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      if (freshWO?.update_required_tech_marked_done_at) {
+        throw new Error('You already notified the office. Wait for them to review.');
+      }
+
+      const existing = freshWO?.comments || '';
+      const newComments = existing ? `${existing}\n\n${doneNote}` : doneNote;
+
+      const { error: updateErr } = await supabase
+        .from('work_orders')
+        .update({
+          comments: newComments,
+          update_required_tech_marked_done_at: nowISO
+        })
+        .eq('wo_id', woId);
+      if (updateErr) throw updateErr;
+
+      setWorkOrders(prev => prev.map(w =>
+        w.wo_id === woId
+          ? { ...w, comments: newComments, update_required_tech_marked_done_at: nowISO }
+          : w
+      ));
+      if (selectedWO?.wo_id === woId) {
+        setSelectedWO(prev => ({
+          ...prev,
+          comments: newComments,
+          update_required_tech_marked_done_at: nowISO
+        }));
+      }
+
+      try {
+        const { sendSubscribedNotification } = await import('@/lib/notificationRecipients');
+        await sendSubscribedNotification(supabase, {
+          type: 'update_required_followed_up',
+          workOrder: {
+            wo_id: wo.wo_id,
+            wo_number: wo.wo_number,
+            building: wo.building,
+            work_order_description: wo.work_order_description,
+            priority: wo.priority
+          },
+          actorName: techName,
+          updateRequiredItems: freshWO?.update_required_items || wo.update_required_items || []
+        });
+      } catch (notifyErr) {
+        console.error('Notification dispatch failed (non-fatal):', notifyErr);
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error marking update required as done:', err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ==================== UPDATE REQUIRED SNOOZE ====================
+  async function snoozeUpdateRequired(woId, reason) {
+    if (!woId) throw new Error('No work order specified');
+    if (!reason || reason.trim().length < 10) {
+      throw new Error('Please provide a reason (at least 10 characters)');
+    }
+
+    const fourHoursFromNow = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    const timestamp = new Date().toLocaleString();
+    const snoozeNote =
+      `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} ` +
+      `— 💤 SNOOZED STATUS UPDATE ALERT (4 hours)\n` +
+      `Reason: ${reason.trim()}`;
+
+    try {
+      setSaving(true);
+
+      if (navigator.onLine) {
+        const { data: freshWO, error: fetchErr } = await supabase
+          .from('work_orders')
+          .select('comments')
+          .eq('wo_id', woId)
+          .single();
+        if (fetchErr) throw fetchErr;
+
+        const existing = freshWO?.comments || '';
+        const newComments = existing ? `${existing}\n\n${snoozeNote}` : snoozeNote;
+
+        const { error } = await supabase
+          .from('work_orders')
+          .update({
+            update_required_snoozed_until: fourHoursFromNow,
+            update_required_snooze_reason: reason.trim(),
+            comments: newComments
+          })
+          .eq('wo_id', woId);
+        if (error) throw error;
+
+        setWorkOrders(prev => prev.map(wo =>
+          wo.wo_id === woId
+            ? { ...wo, update_required_snoozed_until: fourHoursFromNow, update_required_snooze_reason: reason.trim(), comments: newComments }
+            : wo
+        ));
+      } else {
+        setWorkOrders(prev => prev.map(wo =>
+          wo.wo_id === woId
+            ? {
+                ...wo,
+                update_required_snoozed_until: fourHoursFromNow,
+                update_required_snooze_reason: reason.trim(),
+                comments: (wo.comments ? `${wo.comments}\n\n` : '') + snoozeNote + ' [PENDING SYNC]'
+              }
+            : wo
+        ));
+        await updateCachedWorkOrder(woId, {
+          update_required_snoozed_until: fourHoursFromNow,
+          update_required_snooze_reason: reason.trim()
+        });
+        await addToSyncQueue('snooze_update_required', {
+          woId,
+          snoozedUntil: fourHoursFromNow,
+          reason: reason.trim(),
+          timestamp
+        });
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error snoozing update required:', err);
       throw err;
     } finally {
       setSaving(false);
@@ -1339,6 +1521,8 @@ export function useWorkOrders(currentUser) {
     saveSignature,
     snoozeMissingData,
     markMissingDataFixed,
+    markUpdateRequiredDone,
+    snoozeUpdateRequired,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,

@@ -26,6 +26,7 @@ import ChangePinModal from './components/modals/ChangePinModal';
 import TeamModal from './components/modals/TeamModal';
 import CarrierSetupModal from './components/modals/CarrierSetupModal';
 import MissingDataAlertModal from './components/MissingDataAlertModal';
+import UpdateRequiredAlertModal from './components/UpdateRequiredAlertModal';
 
 // Offline Components
 import { SyncNotification } from './components/ConnectionStatus';
@@ -80,6 +81,8 @@ export default function MobilePage() {
     saveSignature,
     snoozeMissingData,
     markMissingDataFixed,
+    markUpdateRequiredDone,
+    snoozeUpdateRequired,
     // DAILY HOURS EXPORTS
     dailyLogs,
     loadingLogs,
@@ -271,6 +274,8 @@ export default function MobilePage() {
         saveSignature={saveSignature}
         snoozeMissingData={snoozeMissingData}
         markMissingDataFixed={markMissingDataFixed}
+        markUpdateRequiredDone={markUpdateRequiredDone}
+        snoozeUpdateRequired={snoozeUpdateRequired}
         // DAILY HOURS PROPS
         dailyLogs={dailyLogs}
         addDailyHours={addDailyHours}
@@ -359,6 +364,8 @@ function MobileAppContent({
   saveSignature,
   snoozeMissingData,
   markMissingDataFixed,
+  markUpdateRequiredDone,
+  snoozeUpdateRequired,
   // DAILY HOURS PROPS
   dailyLogs,
   addDailyHours,
@@ -418,6 +425,22 @@ function MobileAppContent({
   const handleMissingDataSnooze = async (woId, reason) => {
     await snoozeMissingData(woId, reason);
     // Local state was updated inside snoozeMissingData; modal will re-evaluate
+  };
+
+  // === Update-Required Alert Modal: same pattern as missing data ===
+  const activeUpdateRequiredWOs = (workOrders || []).filter(wo => {
+    if (wo.status !== 'update_required') return false;
+    if (!wo.update_required_snoozed_until) return true;
+    return new Date(wo.update_required_snoozed_until) <= new Date();
+  });
+  const showUpdateRequiredAlert = activeUpdateRequiredWOs.length > 0;
+
+  const handleUpdateRequiredFixNow = (wo) => {
+    setSelectedWO(wo);
+  };
+
+  const handleUpdateRequiredSnooze = async (woId, reason) => {
+    await snoozeUpdateRequired(woId, reason);
   };
 
   // Check if we need to show carrier setup modal
@@ -554,6 +577,7 @@ function MobileAppContent({
           onDeleteDailyHours={deleteDailyHours}
           onDownloadLogs={downloadLogs}
           onMarkMissingDataFixed={markMissingDataFixed}
+          onMarkUpdateRequiredFollowedUp={markUpdateRequiredDone}
           // NTE INCREASE PROPS
           quotes={quotes}
           quotesLoading={quotesLoading}
@@ -626,6 +650,17 @@ function MobileAppContent({
           workOrders={activeMissingDataWOs}
           onFixNow={handleMissingDataFixNow}
           onSnooze={handleMissingDataSnooze}
+          onClose={() => { /* auto-hides when list is empty */ }}
+        />
+      )}
+
+      {/* Update Required Alert Modal — blue, same behavior. Only shows when no
+          missing-data alert is up (missing data takes priority). */}
+      {!showMissingDataAlert && showUpdateRequiredAlert && (
+        <UpdateRequiredAlertModal
+          workOrders={activeUpdateRequiredWOs}
+          onFixNow={handleUpdateRequiredFixNow}
+          onSnooze={handleUpdateRequiredSnooze}
           onClose={() => { /* auto-hides when list is empty */ }}
         />
       )}

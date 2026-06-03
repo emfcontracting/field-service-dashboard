@@ -314,6 +314,84 @@ EMF Contracting LLC
   `.trim();
 };
 
+// ============================================================
+// UPDATE REQUIRED FOLLOWED UP  — tech followed up on the status
+// update items, office should review and click Resolve.
+// ============================================================
+const buildUpdateRequiredFollowedUpEmailHTML = (workOrder, recipientName, actorName, items) => {
+  const itemLabels = {
+    nte_status: '📞 NTE Status with CBRE',
+    material_delivery: '📦 Material Delivery',
+    quote_status: '💰 Quote Status',
+    other: '❓ Other'
+  };
+  const itemsList = Array.isArray(items) && items.length
+    ? items.map(i => itemLabels[i] || i).join(', ')
+    : 'See WO for details';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,sans-serif;">
+      <div style="max-width:600px;margin:0 auto;padding:20px;">
+        <div style="background-color:#1f2937;border-radius:8px;overflow:hidden;">
+          <div style="background-color:#2563eb;padding:20px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:22px;">🔵 Tech Followed Up</h1>
+          </div>
+          <div style="padding:20px;color:white;">
+            <p style="margin:0 0 15px 0;font-size:16px;">Hi ${recipientName},</p>
+            <p style="margin:0 0 20px 0;color:#9ca3af;">
+              <strong>${actorName || 'A tech'}</strong> just followed up on the status update for this work order.
+              Please review and click <strong>✅ Resolve</strong> in the dashboard banner to restore the original status.
+            </p>
+            <div style="background-color:#374151;border-radius:8px;padding:15px;margin-bottom:20px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <tr><td style="padding:6px 0;color:#9ca3af;width:120px;">WO #:</td><td style="padding:6px 0;color:white;font-weight:bold;">${workOrder.wo_number}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;">Building:</td><td style="padding:6px 0;color:white;">${workOrder.building || 'Not specified'}</td></tr>
+                <tr><td style="padding:6px 0;color:#9ca3af;vertical-align:top;">Was flagged for:</td><td style="padding:6px 0;color:#d1d5db;">${itemsList}</td></tr>
+              </table>
+            </div>
+            <div style="text-align:center;margin:25px 0;">
+              <a href="https://field-service-dashboard.vercel.app/dashboard"
+                 style="background-color:#2563eb;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+                📊 Open Dashboard
+              </a>
+            </div>
+          </div>
+          <div style="background-color:#111827;padding:15px;text-align:center;border-top:1px solid #374151;">
+            <p style="margin:0;color:#6b7280;font-size:12px;">EMF Contracting LLC | Field Service Management</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+const buildUpdateRequiredFollowedUpEmailText = (workOrder, recipientName, actorName, items) => {
+  const itemsList = Array.isArray(items) && items.length ? items.join(', ') : 'See WO for details';
+  return `
+🔵 Tech Followed Up
+
+Hi ${recipientName},
+
+${actorName || 'A tech'} just followed up on the status update for this work order.
+Please review and click Resolve in the dashboard banner.
+
+Work Order Details:
+- WO#: ${workOrder.wo_number}
+- Building: ${workOrder.building || 'Not specified'}
+- Was flagged for: ${itemsList}
+
+Open the dashboard:
+https://field-service-dashboard.vercel.app/dashboard
+
+---
+EMF Contracting LLC
+  `.trim();
+};
+
 // Send push notification to a user
 const sendPushNotification = async (userId, payload) => {
   try {
@@ -378,7 +456,7 @@ const sendPushNotification = async (userId, payload) => {
 
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email', actorName, missingDataItems } = await request.json();
+    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -395,10 +473,11 @@ export async function POST(request) {
     const isAssignment = type === 'work_order_assigned' || type === 'emergency_work_order';
     const isMissingDataFixed = type === 'missing_data_fixed';
     const isCompleted = type === 'work_order_completed';
+    const isUpdateRequiredFollowedUp = type === 'update_required_followed_up';
 
     // For work order assignments and the new office-bound types, always use email (not SMS)
-    const useEmail = deliveryMethod === 'email' || isAssignment || isMissingDataFixed || isCompleted;
-    const useSMS = deliveryMethod === 'sms' && !isAssignment && !isMissingDataFixed && !isCompleted;
+    const useEmail = deliveryMethod === 'email' || isAssignment || isMissingDataFixed || isCompleted || isUpdateRequiredFollowedUp;
+    const useSMS = deliveryMethod === 'sms' && !isAssignment && !isMissingDataFixed && !isCompleted && !isUpdateRequiredFollowedUp;
 
     for (const recipient of recipients) {
       const { user_id, email, phone, sms_carrier, first_name, last_name } = recipient;
@@ -428,6 +507,11 @@ export async function POST(request) {
             subject = `✅ Work Order Completed: WO ${workOrder.wo_number}`;
             textMessage = buildCompletedEmailText(workOrder, recipientName, actorName);
             htmlMessage = buildCompletedEmailHTML(workOrder, recipientName, actorName);
+          } else if (isUpdateRequiredFollowedUp && workOrder) {
+            // Tech followed up on status update — office should review and Resolve
+            subject = `🔵 Tech Followed Up: WO ${workOrder.wo_number}`;
+            textMessage = buildUpdateRequiredFollowedUpEmailText(workOrder, recipientName, actorName, updateRequiredItems);
+            htmlMessage = buildUpdateRequiredFollowedUpEmailHTML(workOrder, recipientName, actorName, updateRequiredItems);
           } else if (customMessage) {
             // Custom message email
             subject = '💬 Message from EMF Contracting';
@@ -547,6 +631,19 @@ export async function POST(request) {
             icon: '/emf-logo.png',
             badge: '/emf-logo.png',
             tag: `wo-${workOrder.wo_number}-completed`,
+            data: {
+              url: '/dashboard',
+              wo_id: workOrder.wo_id,
+              wo_number: workOrder.wo_number
+            }
+          };
+        } else if (isUpdateRequiredFollowedUp) {
+          pushPayload = {
+            title: `🔵 Tech Followed Up: ${workOrder.wo_number}`,
+            body: `${actorName || 'Tech'} followed up. Review and resolve.`,
+            icon: '/emf-logo.png',
+            badge: '/emf-logo.png',
+            tag: `wo-${workOrder.wo_number}-ur-followed`,
             data: {
               url: '/dashboard',
               wo_id: workOrder.wo_id,

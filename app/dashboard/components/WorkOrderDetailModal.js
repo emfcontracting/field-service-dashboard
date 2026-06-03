@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import TeamMemberModal from './TeamMemberModal';
 import NTEIncreaseModal from './NTEIncreaseModal';
 import MissingDataModal from './MissingDataModal';
+import UpdateRequiredModal from './UpdateRequiredModal';
 import { 
   updateWorkOrder, 
   deleteWorkOrder, 
@@ -101,6 +102,9 @@ export default function WorkOrderDetailModal({
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
+  const [showUpdateRequiredModal, setShowUpdateRequiredModal] = useState(false);
+  const [updateRequiredModalMode, setUpdateRequiredModalMode] = useState('create'); // 'create' | 'edit'
+  const [resolvingUpdateRequired, setResolvingUpdateRequired] = useState(false);
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
   const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
@@ -885,6 +889,13 @@ export default function WorkOrderDetailModal({
       return;
     }
 
+    // Same pattern for 'update_required' — open the blue flag modal
+    if (newStatus === 'update_required') {
+      setUpdateRequiredModalMode('create');
+      setShowUpdateRequiredModal(true);
+      return;
+    }
+
     await handleUpdateField('status', newStatus);
     if (newStatus === 'completed' && !selectedWO.is_locked) {
       alert('✅ Work Order marked as Completed! Please acknowledge to lock it.');
@@ -965,6 +976,8 @@ export default function WorkOrderDetailModal({
           missing_data_flagged_at: null,
           missing_data_snoozed_until: null,
           missing_data_snooze_reason: null,
+          missing_data_tech_marked_fixed_at: null,
+          missing_data_office_reminded_at: null,
           comments: newComments
         })
         .eq('wo_id', selectedWO.wo_id)
@@ -980,6 +993,77 @@ export default function WorkOrderDetailModal({
       alert('Failed to resolve: ' + err.message);
     } finally {
       setResolvingMissingData(false);
+    }
+  };
+
+  // Called by UpdateRequiredModal after a successful save (create or edit).
+  const handleUpdateRequiredSaved = (updatedWO) => {
+    setSelectedWO(prev => ({ ...prev, ...updatedWO }));
+    refreshWorkOrders();
+  };
+
+  // Office/admin clicks "Resolve" on the blue Update Required flag.
+  // Restores previous_status and clears all update_required_* fields (incl. lockout).
+  const handleResolveUpdateRequired = async () => {
+    if (selectedWO.status !== 'update_required') return;
+
+    const confirmed = window.confirm(
+      'Resolve the Status Update flag for this work order?\n\n' +
+      'The status will be restored to: ' + (selectedWO.previous_status || 'in_progress') + '\n\n' +
+      'The tech will see the alert disappear on their next sync.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setResolvingUpdateRequired(true);
+
+      const restoredStatus = selectedWO.previous_status || 'in_progress';
+      const resolverName =
+        `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() ||
+        'Office';
+
+      const logEntry =
+        `[${new Date().toLocaleString()}] ${resolverName} — ✅ RESOLVED STATUS UPDATE FLAG\n` +
+        `Status restored to: ${restoredStatus}`;
+
+      const { data: freshWO, error: fetchErr } = await supabase
+        .from('work_orders')
+        .select('comments')
+        .eq('wo_id', selectedWO.wo_id)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const existingComments = freshWO?.comments || '';
+      const newComments = existingComments ? `${existingComments}\n\n${logEntry}` : logEntry;
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('work_orders')
+        .update({
+          status: restoredStatus,
+          previous_status: null,
+          update_required_items: null,
+          update_required_comment: null,
+          update_required_flagged_by: null,
+          update_required_flagged_at: null,
+          update_required_snoozed_until: null,
+          update_required_snooze_reason: null,
+          update_required_tech_marked_done_at: null,
+          update_required_office_reminded_at: null,
+          comments: newComments
+        })
+        .eq('wo_id', selectedWO.wo_id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      setSelectedWO(prev => ({ ...prev, ...updated }));
+      refreshWorkOrders();
+    } catch (err) {
+      console.error('Error resolving update required:', err);
+      alert('Failed to resolve: ' + err.message);
+    } finally {
+      setResolvingUpdateRequired(false);
     }
   };
 
@@ -1685,11 +1769,13 @@ const sendAssignmentNotifications = async () => {
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
-                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data'}
+                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data' || selectedWO.status === 'update_required'}
                 className={`w-full px-4 py-2 rounded-lg font-semibold ${
-                  selectedWO.status === 'missing_data' ? 'bg-red-600 text-white animate-pulse' : getStatusColor(selectedWO.status)
+                  selectedWO.status === 'missing_data' ? 'bg-red-600 text-white animate-pulse'
+                    : selectedWO.status === 'update_required' ? 'bg-blue-600 text-white animate-pulse'
+                    : getStatusColor(selectedWO.status)
                 } ${
-                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data') ? 'opacity-90 cursor-not-allowed' : ''
+                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data' || selectedWO.status === 'update_required') ? 'opacity-90 cursor-not-allowed' : ''
                 }`}
               >
                 <option value="pending" className="bg-[#0d0d14] text-slate-200">Pending</option>
@@ -1705,9 +1791,20 @@ const sendAssignmentNotifications = async () => {
                 {selectedWO.status !== 'missing_data' && (
                   <option value="missing_data" className="bg-[#0d0d14] text-slate-200">🚩 Flag as Missing Data...</option>
                 )}
+                {selectedWO.status === 'update_required' && (
+                  <option value="update_required" className="bg-[#0d0d14] text-slate-200">🔵 Update Required</option>
+                )}
+                {selectedWO.status !== 'update_required' && (
+                  <option value="update_required" className="bg-[#0d0d14] text-slate-200">🔵 Flag for Status Update...</option>
+                )}
               </select>
               {selectedWO.status === 'missing_data' && (
                 <p className="text-xs text-red-400 mt-1">
+                  Locked — use the banner below to edit or resolve.
+                </p>
+              )}
+              {selectedWO.status === 'update_required' && (
+                <p className="text-xs text-blue-400 mt-1">
                   Locked — use the banner below to edit or resolve.
                 </p>
               )}
@@ -1885,6 +1982,90 @@ const sendAssignmentNotifications = async () => {
                     💤 Tech snoozed until {new Date(selectedWO.missing_data_snoozed_until).toLocaleTimeString()}
                   </span>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Update Required Banner (blue) */}
+          {selectedWO.status === 'update_required' && (
+            <div className="bg-blue-500/10 border-2 border-blue-500/60 rounded-xl p-4"
+                 style={{ animation: 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🔵</span>
+                  <div>
+                    <h3 className="font-bold text-lg text-blue-300">Status Update Flag Active</h3>
+                    {selectedWO.update_required_flagged_at && (
+                      <p className="text-xs text-blue-400/80">
+                        Flagged {new Date(selectedWO.update_required_flagged_at).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setUpdateRequiredModalMode('edit');
+                      setShowUpdateRequiredModal(true);
+                    }}
+                    disabled={resolvingUpdateRequired}
+                    className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={handleResolveUpdateRequired}
+                    disabled={resolvingUpdateRequired}
+                    className="bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {resolvingUpdateRequired ? '⏳ Resolving...' : '✅ Resolve'}
+                  </button>
+                </div>
+              </div>
+
+              {Array.isArray(selectedWO.update_required_items) && selectedWO.update_required_items.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {selectedWO.update_required_items.map(item => {
+                    const labelMap = {
+                      nte_status: '📞 NTE Status',
+                      material_delivery: '📦 Material Delivery',
+                      quote_status: '💰 Quote Status',
+                      other: '❓ Other'
+                    };
+                    return (
+                      <span
+                        key={item}
+                        className="bg-blue-500/20 border border-blue-500/40 text-blue-200 px-2 py-0.5 rounded text-xs font-semibold"
+                      >
+                        {labelMap[item] || item}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedWO.update_required_comment && (
+                <div className="bg-[#0a0a0f] border border-blue-500/30 rounded-lg p-3 text-sm text-slate-200 whitespace-pre-wrap">
+                  {selectedWO.update_required_comment}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center mt-3 text-xs text-slate-400">
+                <span>
+                  Will be restored to: <span className="font-semibold text-slate-300">{selectedWO.previous_status || 'in_progress'}</span>
+                </span>
+                <div className="flex gap-3">
+                  {selectedWO.update_required_tech_marked_done_at && (
+                    <span className="text-emerald-400">
+                      ✅ Tech followed up {new Date(selectedWO.update_required_tech_marked_done_at).toLocaleString()}
+                    </span>
+                  )}
+                  {selectedWO.update_required_snoozed_until && new Date(selectedWO.update_required_snoozed_until) > new Date() && (
+                    <span className="text-amber-400">
+                      💤 Tech snoozed until {new Date(selectedWO.update_required_snoozed_until).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2919,6 +3100,18 @@ const sendAssignmentNotifications = async () => {
           mode={missingDataModalMode}
           onClose={() => setShowMissingDataModal(false)}
           onSaved={handleMissingDataSaved}
+        />
+      )}
+
+      {/* Update Required Modal */}
+      {showUpdateRequiredModal && (
+        <UpdateRequiredModal
+          workOrder={selectedWO}
+          currentUser={currentUser}
+          supabase={supabase}
+          mode={updateRequiredModalMode}
+          onClose={() => setShowUpdateRequiredModal(false)}
+          onSaved={handleUpdateRequiredSaved}
         />
       )}
     </div>

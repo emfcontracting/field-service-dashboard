@@ -83,6 +83,13 @@ export default function WorkOrdersList({
       if (!aMissing && bMissing) return 1;
       // If both are missing_data, fall through to normal sort below
 
+      // *** UPDATE_REQUIRED flagged WOs pinned next (below missing_data) ***
+      const aFlag = !!a.update_required_flagged_at && a.status !== 'missing_data';
+      const bFlag = !!b.update_required_flagged_at && b.status !== 'missing_data';
+      if (aFlag && !bFlag) return -1;
+      if (!aFlag && bFlag) return 1;
+      // If both are flagged (or neither), fall through to normal sort below
+
       let valA, valB;
       
       switch (sortBy) {
@@ -125,6 +132,14 @@ export default function WorkOrdersList({
   // Count of active missing_data WOs (for the sticky banner)
   const missingDataCount = useMemo(
     () => workOrders.filter(wo => wo.status === 'missing_data').length,
+    [workOrders]
+  );
+
+  // Count of WOs with an active update-required flag (excludes missing_data,
+  // which takes visual priority). Counts flagged WOs even if snoozed — the
+  // tech should always see what still needs follow-up.
+  const updateRequiredCount = useMemo(
+    () => workOrders.filter(wo => wo.update_required_flagged_at && wo.status !== 'missing_data').length,
     [workOrders]
   );
 
@@ -327,6 +342,34 @@ export default function WorkOrdersList({
                   </div>
                   <div className="text-xs text-red-100">
                     {language === 'es' ? 'Toca arriba para resolver' : 'Tap above to resolve'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === STICKY UPDATE REQUIRED BANNER === blue, always blinks while any flag
+            is active (even snoozed), so the tech sees what still needs follow-up */}
+        {updateRequiredCount > 0 && (
+          <div
+            className="mb-4 bg-blue-700 border-2 border-blue-400 rounded-xl p-3 text-white shadow-lg"
+            style={{ animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🔵</span>
+                <div>
+                  <div className="font-bold text-sm leading-tight">
+                    {updateRequiredCount === 1
+                      ? (language === 'es' ? '1 orden necesita actualización' : '1 work order needs a status update')
+                      : (language === 'es'
+                          ? `${updateRequiredCount} órdenes necesitan actualización`
+                          : `${updateRequiredCount} work orders need a status update`)
+                    }
+                  </div>
+                  <div className="text-xs text-blue-100">
+                    {language === 'es' ? 'Toca la orden azul para hacer seguimiento' : 'Tap the blue work order to follow up'}
                   </div>
                 </div>
               </div>
@@ -659,11 +702,19 @@ export default function WorkOrdersList({
                     ? 'bg-red-900 border-2 border-red-500'
                     : wo.status === 'tech_review' 
                     ? 'bg-red-900 border-2 border-red-500 animate-pulse' 
+                    : wo.update_required_flagged_at
+                    ? 'bg-blue-900 border-2 border-blue-500'
                     : selectedWOs.has(wo.wo_id)
                     ? 'bg-blue-900 border-2 border-blue-500'
                     : 'bg-gray-800 hover:bg-gray-750'
                 }`}
-                style={wo.status === 'missing_data' ? { animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : undefined}
+                style={
+                  wo.status === 'missing_data'
+                    ? { animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' }
+                    : (wo.update_required_flagged_at && wo.status !== 'missing_data')
+                    ? { animation: 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite' }
+                    : undefined
+                }
               >
                 {/* SELECT CHECKBOX */}
                 {selectMode && (
@@ -689,6 +740,19 @@ export default function WorkOrdersList({
                 {wo.status === 'missing_data' && (
                   <div className="bg-red-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
                     🚩 {language === 'es' ? 'DATOS FALTANTES - REQUIERE ACCIÓN' : 'MISSING DATA - ACTION REQUIRED'} 🚩
+                  </div>
+                )}
+
+                {/* UPDATE REQUIRED ALERT BANNER (on card) — blue, shows whenever the
+                    flag is active (even if snoozed), as long as not missing_data */}
+                {wo.update_required_flagged_at && wo.status !== 'missing_data' && (
+                  <div className="bg-blue-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
+                    🔵 {language === 'es' ? 'ACTUALIZACIÓN REQUERIDA' : 'STATUS UPDATE REQUIRED'} 🔵
+                    {wo.update_required_snoozed_until && new Date(wo.update_required_snoozed_until) > new Date() && (
+                      <span className="block text-[10px] font-normal text-blue-100 mt-0.5">
+                        💤 {language === 'es' ? 'pospuesto hasta' : 'snoozed until'} {new Date(wo.update_required_snoozed_until).toLocaleTimeString()}
+                      </span>
+                    )}
                   </div>
                 )}
                 

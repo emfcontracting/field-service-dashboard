@@ -12,8 +12,13 @@ import { useState, useEffect } from 'react';
  * pattern, same notifications. Only difference is the items and the BLUE
  * theme (not red).
  *
+ * SOFT REMINDER (Option B): unlike Missing Data, this flag does NOT change the
+ * work order's status or block the tech's workflow. The tech can still change
+ * status and complete the WO. The blue flag lives in the update_required_*
+ * columns as a reminder layer on top, detected via update_required_flagged_at.
+ *
  * Modes:
- *   - 'create' : new flag. Stores previous_status, sets status='update_required'.
+ *   - 'create' : new flag. Sets update_required_flagged_at (status untouched).
  *   - 'edit'   : edit existing flag. Updates only items + comment.
  *
  * Props:
@@ -97,15 +102,9 @@ export default function UpdateRequiredModal({
       let commentLogEntry;
 
       if (mode === 'create') {
-        // Defensive: don't overwrite previous_status if already set by another flag type
-        const previousStatus =
-          (workOrder.status === 'update_required' || workOrder.status === 'missing_data')
-            ? (workOrder.previous_status || 'in_progress')
-            : workOrder.status;
-
+        // Option B — SOFT reminder. Do NOT touch status; the flag lives only in
+        // the update_required_* columns. Tech keeps full control of the WO.
         updatePayload = {
-          status: 'update_required',
-          previous_status: previousStatus,
           update_required_items: itemsArray,
           update_required_comment: comment.trim(),
           update_required_flagged_by: safeUuid(currentUser?.user_id),
@@ -202,14 +201,14 @@ export default function UpdateRequiredModal({
 
         {/* Body */}
         <div className="p-6 space-y-5">
-          {/* Warning Box - only for create mode */}
+          {/* Info Box - only for create mode */}
           {mode === 'create' && (
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 text-sm text-blue-200">
-              <div className="font-semibold mb-1">⚠️ This will block the tech's workflow.</div>
+              <div className="font-semibold mb-1">🔔 This is a reminder — it won't block the tech.</div>
               <p className="text-xs text-blue-300/80 leading-relaxed">
-                The tech will see a full-screen blue pulsing alert on their next app open.
-                They must follow up on the items listed and tap "I followed up" to notify office.
-                The banner stays visible until you resolve it.
+                The tech will see a full-screen blue alert on their next app open and a banner on the WO.
+                They can still change status and complete the work order normally.
+                They tap "I followed up" to notify office. The banner stays until you resolve it.
               </p>
             </div>
           )}

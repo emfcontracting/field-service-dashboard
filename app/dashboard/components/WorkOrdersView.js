@@ -57,12 +57,17 @@ export default function WorkOrdersView({
       filtered = filtered.filter(wo => wo.nte_quotes?.some(q => q.nte_status === 'pending'));
     }
 
-    // Work status filter - handle both single value and array
+    // Work status filter - handle both single value and array.
+    // Special case: 'update_required' is a SOFT flag (not a real status), so it
+    // matches on update_required_flagged_at instead of status.
     if (statusFilter !== 'all') {
+      const matchStatus = (wo, val) =>
+        val === 'update_required' ? !!wo.update_required_flagged_at : wo.status === val;
+
       if (Array.isArray(statusFilter)) {
-        filtered = filtered.filter(wo => statusFilter.includes(wo.status));
+        filtered = filtered.filter(wo => statusFilter.some(val => matchStatus(wo, val)));
       } else {
-        filtered = filtered.filter(wo => wo.status === statusFilter);
+        filtered = filtered.filter(wo => matchStatus(wo, statusFilter));
       }
     }
 

@@ -620,7 +620,7 @@ export function useWorkOrders(currentUser) {
 
     const wo = workOrders.find(w => w.wo_id === woId);
     if (!wo) throw new Error('Work order not found');
-    if (wo.status !== 'update_required') throw new Error('This WO is not flagged for status update');
+    if (!wo.update_required_flagged_at) throw new Error('This WO is not flagged for status update');
     if (wo.update_required_tech_marked_done_at) {
       throw new Error('You already notified the office. Wait for them to review.');
     }

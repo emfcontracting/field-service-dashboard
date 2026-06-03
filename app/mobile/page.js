@@ -427,9 +427,9 @@ function MobileAppContent({
     // Local state was updated inside snoozeMissingData; modal will re-evaluate
   };
 
-  // === Update-Required Alert Modal: same pattern as missing data ===
+  // === Update-Required Alert Modal: SOFT flag, detected via flagged_at (not status) ===
   const activeUpdateRequiredWOs = (workOrders || []).filter(wo => {
-    if (wo.status !== 'update_required') return false;
+    if (!wo.update_required_flagged_at) return false;
     if (!wo.update_required_snoozed_until) return true;
     return new Date(wo.update_required_snoozed_until) <= new Date();
   });

@@ -644,8 +644,9 @@ export default function WorkOrderDetail({
           </div>
         )}
 
-        {/* 🔵 UPDATE REQUIRED ALERT — blue in-WO banner, mirrors missing data */}
-        {status === 'update_required' && (
+        {/* 🔵 UPDATE REQUIRED ALERT — blue in-WO banner. SOFT flag: detected via
+            flagged_at, NOT status. Does not block the tech — reminder only. */}
+        {wo.update_required_flagged_at && (
           <div
             className="bg-blue-700 border-4 border-blue-400 rounded-xl p-4 mb-4 shadow-lg"
             style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
@@ -863,15 +864,13 @@ export default function WorkOrderDetail({
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('updateStatus')}</h3>
             <select
-              value={status === 'missing_data' ? 'missing_data' : status === 'update_required' ? 'update_required' : status}
+              value={status === 'missing_data' ? 'missing_data' : status}
               onChange={(e) => onUpdateField(wo.wo_id, 'status', e.target.value)}
-              disabled={saving || status === 'completed' || status === 'missing_data' || status === 'update_required'}
+              disabled={saving || status === 'completed' || status === 'missing_data'}
               className={`w-full px-4 py-3 rounded-lg text-white font-semibold text-center ${
                 status === 'missing_data'
                   ? 'bg-red-600 cursor-not-allowed opacity-90'
-                  : status === 'update_required'
-                    ? 'bg-blue-600 cursor-not-allowed opacity-90'
-                    : 'bg-blue-600'
+                  : 'bg-blue-600'
               }`}
             >
               <option value="assigned">{t('assigned')}</option>
@@ -882,9 +881,6 @@ export default function WorkOrderDetail({
               {status === 'missing_data' && (
                 <option value="missing_data">🚩 Missing Data</option>
               )}
-              {status === 'update_required' && (
-                <option value="update_required">🔵 Update Required</option>
-              )}
             </select>
             {status === 'missing_data' && (
               <p className="text-xs text-red-400 mt-2 text-center">
@@ -893,11 +889,11 @@ export default function WorkOrderDetail({
                   : 'Estado bloqueado — la oficina debe resolver la marca'}
               </p>
             )}
-            {status === 'update_required' && (
+            {wo.update_required_flagged_at && status !== 'missing_data' && (
               <p className="text-xs text-blue-400 mt-2 text-center">
                 {language === 'en'
-                  ? 'Status locked — office must resolve the status update flag'
-                  : 'Estado bloqueado — la oficina debe resolver la marca'}
+                  ? '🔵 Status-update reminder active — you can still change status'
+                  : '🔵 Recordatorio activo — aún puedes cambiar el estado'}
               </p>
             )}
           </div>
@@ -1050,18 +1046,16 @@ export default function WorkOrderDetail({
             <>
               <button
                 onClick={handleCompleteWorkOrder}
-                disabled={saving || status === 'missing_data' || status === 'update_required'}
+                disabled={saving || status === 'missing_data'}
                 className={`w-full py-4 rounded-lg font-bold text-lg transition active:scale-95 ${
-                  status === 'missing_data' || status === 'update_required'
+                  status === 'missing_data'
                     ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
                 {status === 'missing_data'
                   ? (language === 'en' ? '🔒 Resolve Missing Data First' : '🔒 Resolver Datos Faltantes Primero')
-                  : status === 'update_required'
-                    ? (language === 'en' ? '🔒 Follow Up Required First' : '🔒 Seguimiento Requerido Primero')
-                    : <>✅ {t('completeWorkOrder')}</>
+                  : <>✅ {t('completeWorkOrder')}</>
                 }
               </button>
               {status === 'missing_data' && (
@@ -1069,13 +1063,6 @@ export default function WorkOrderDetail({
                   {language === 'en'
                     ? 'Office must resolve the missing data flag before this WO can be completed.'
                     : 'La oficina debe resolver la marca de datos faltantes antes de completar.'}
-                </p>
-              )}
-              {status === 'update_required' && (
-                <p className="text-xs text-center text-blue-400">
-                  {language === 'en'
-                    ? 'Office must resolve the status update flag before this WO can be completed.'
-                    : 'La oficina debe resolver la marca de actualización antes de completar.'}
                 </p>
               )}
             </>

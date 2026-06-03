@@ -1003,13 +1003,14 @@ export default function WorkOrderDetailModal({
   };
 
   // Office/admin clicks "Resolve" on the blue Update Required flag.
-  // Restores previous_status and clears all update_required_* fields (incl. lockout).
+  // SOFT flag (Option B): status was never changed, so we only clear the
+  // update_required_* columns. The work status is left exactly as-is.
   const handleResolveUpdateRequired = async () => {
-    if (selectedWO.status !== 'update_required') return;
+    if (!selectedWO.update_required_flagged_at) return;
 
     const confirmed = window.confirm(
       'Resolve the Status Update flag for this work order?\n\n' +
-      'The status will be restored to: ' + (selectedWO.previous_status || 'in_progress') + '\n\n' +
+      'This clears the blue reminder. The work order status is not affected.\n\n' +
       'The tech will see the alert disappear on their next sync.'
     );
     if (!confirmed) return;
@@ -1017,14 +1018,12 @@ export default function WorkOrderDetailModal({
     try {
       setResolvingUpdateRequired(true);
 
-      const restoredStatus = selectedWO.previous_status || 'in_progress';
       const resolverName =
         `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() ||
         'Office';
 
       const logEntry =
-        `[${new Date().toLocaleString()}] ${resolverName} — ✅ RESOLVED STATUS UPDATE FLAG\n` +
-        `Status restored to: ${restoredStatus}`;
+        `[${new Date().toLocaleString()}] ${resolverName} — ✅ RESOLVED STATUS UPDATE FLAG`;
 
       const { data: freshWO, error: fetchErr } = await supabase
         .from('work_orders')
@@ -1039,8 +1038,6 @@ export default function WorkOrderDetailModal({
       const { data: updated, error: updateErr } = await supabase
         .from('work_orders')
         .update({
-          status: restoredStatus,
-          previous_status: null,
           update_required_items: null,
           update_required_comment: null,
           update_required_flagged_by: null,
@@ -1769,13 +1766,12 @@ const sendAssignmentNotifications = async () => {
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
-                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data' || selectedWO.status === 'update_required'}
+                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data'}
                 className={`w-full px-4 py-2 rounded-lg font-semibold ${
                   selectedWO.status === 'missing_data' ? 'bg-red-600 text-white animate-pulse'
-                    : selectedWO.status === 'update_required' ? 'bg-blue-600 text-white animate-pulse'
                     : getStatusColor(selectedWO.status)
                 } ${
-                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data' || selectedWO.status === 'update_required') ? 'opacity-90 cursor-not-allowed' : ''
+                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data') ? 'opacity-90 cursor-not-allowed' : ''
                 }`}
               >
                 <option value="pending" className="bg-[#0d0d14] text-slate-200">Pending</option>
@@ -1791,21 +1787,17 @@ const sendAssignmentNotifications = async () => {
                 {selectedWO.status !== 'missing_data' && (
                   <option value="missing_data" className="bg-[#0d0d14] text-slate-200">🚩 Flag as Missing Data...</option>
                 )}
-                {selectedWO.status === 'update_required' && (
-                  <option value="update_required" className="bg-[#0d0d14] text-slate-200">🔵 Update Required</option>
-                )}
-                {selectedWO.status !== 'update_required' && (
-                  <option value="update_required" className="bg-[#0d0d14] text-slate-200">🔵 Flag for Status Update...</option>
-                )}
+                {/* Update Required is a soft flag (does not become the status) — always show the flag action */}
+                <option value="update_required" className="bg-[#0d0d14] text-slate-200">🔵 Flag for Status Update...</option>
               </select>
               {selectedWO.status === 'missing_data' && (
                 <p className="text-xs text-red-400 mt-1">
                   Locked — use the banner below to edit or resolve.
                 </p>
               )}
-              {selectedWO.status === 'update_required' && (
+              {selectedWO.update_required_flagged_at && selectedWO.status !== 'missing_data' && (
                 <p className="text-xs text-blue-400 mt-1">
-                  Locked — use the banner below to edit or resolve.
+                  🔵 Status-update flag active (reminder only) — you can still change status.
                 </p>
               )}
             </div>
@@ -1986,8 +1978,8 @@ const sendAssignmentNotifications = async () => {
             </div>
           )}
 
-          {/* Update Required Banner (blue) */}
-          {selectedWO.status === 'update_required' && (
+          {/* Update Required Banner (blue) — SOFT flag, detected via flagged_at (not status) */}
+          {selectedWO.update_required_flagged_at && (
             <div className="bg-blue-500/10 border-2 border-blue-500/60 rounded-xl p-4"
                  style={{ animation: 'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>
               <div className="flex justify-between items-start mb-3">
@@ -2051,10 +2043,7 @@ const sendAssignmentNotifications = async () => {
               )}
 
               <div className="flex justify-between items-center mt-3 text-xs text-slate-400">
-                <span>
-                  Will be restored to: <span className="font-semibold text-slate-300">{selectedWO.previous_status || 'in_progress'}</span>
-                </span>
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap">
                   {selectedWO.update_required_tech_marked_done_at && (
                     <span className="text-emerald-400">
                       ✅ Tech followed up {new Date(selectedWO.update_required_tech_marked_done_at).toLocaleString()}
@@ -2066,6 +2055,7 @@ const sendAssignmentNotifications = async () => {
                     </span>
                   )}
                 </div>
+                <span className="text-slate-500 italic">Reminder only — does not block work</span>
               </div>
             </div>
           )}

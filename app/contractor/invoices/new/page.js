@@ -147,30 +147,57 @@ export default function CreateInvoice() {
     setSaving(true);
     setMessage(null);
     try {
-      const year = new Date().getFullYear();
       const initials = (user.first_name?.[0] || '') + (user.last_name?.[0] || '');
-      const { count } = await supabase.from('subcontractor_invoices').select('*', { count: 'exact', head: true }).eq('user_id', user.user_id);
-      const invoiceNumber = 'SUB-' + year + '-' + initials.toUpperCase() + '-' + String((count || 0) + 1).padStart(3, '0');
 
-      const { data: invoice, error: invoiceError } = await supabase.from('subcontractor_invoices').insert({
-        user_id: user.user_id,
-        invoice_number: invoiceNumber,
-        period_start: periodStart,
-        period_end: periodEnd,
-        total_regular_hours: totalRegularHours,
-        total_ot_hours: totalOTHours,
-        total_hours_amount: hoursAmount,
-        total_miles: totalMiles,
-        total_mileage_amount: mileageAmount,
-        total_tech_material: totalTechMaterial,
-        total_line_items_amount: lineItemsAmount,
-        grand_total: grandTotal,
-        hourly_rate_used: rates.hourly,
-        ot_rate_used: rates.ot,
-        mileage_rate_used: rates.mileage,
-        status: 'draft',
-        sent_to_email: 'emfcontractingsc2@gmail.com'
-      }).select().single();
+      // ─── Generate next invoice number atomically via DB function ───
+      // Uses MAX() not COUNT(), so deleted invoices don't cause collisions.
+      // UNIQUE constraint on (user_id, invoice_number) guarantees no duplicates
+      // even under concurrent inserts. We retry up to 3 times if the race
+      // does occur (extremely unlikely but defensive).
+      let invoiceNumber = null;
+      let invoice = null;
+      let invoiceError = null;
+      const MAX_RETRIES = 3;
+
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const { data: numData, error: numError } = await supabase.rpc(
+          'next_subcontractor_invoice_number',
+          { p_user_id: user.user_id, p_initials: initials }
+        );
+        if (numError) throw numError;
+        invoiceNumber = numData;
+
+        const insertResult = await supabase.from('subcontractor_invoices').insert({
+          user_id: user.user_id,
+          invoice_number: invoiceNumber,
+          period_start: periodStart,
+          period_end: periodEnd,
+          total_regular_hours: totalRegularHours,
+          total_ot_hours: totalOTHours,
+          total_hours_amount: hoursAmount,
+          total_miles: totalMiles,
+          total_mileage_amount: mileageAmount,
+          total_tech_material: totalTechMaterial,
+          total_line_items_amount: lineItemsAmount,
+          grand_total: grandTotal,
+          hourly_rate_used: rates.hourly,
+          ot_rate_used: rates.ot,
+          mileage_rate_used: rates.mileage,
+          status: 'draft',
+          sent_to_email: 'emfcontractingsc2@gmail.com'
+        }).select().single();
+
+        invoice = insertResult.data;
+        invoiceError = insertResult.error;
+
+        if (!invoiceError) break;
+
+        // 23505 = unique_violation. Race condition: retry with next number.
+        // Any other error is fatal, throw immediately.
+        if (invoiceError.code !== '23505') throw invoiceError;
+        // small backoff to let the other writer's row land
+        await new Promise(r => setTimeout(r, 100));
+      }
 
       if (invoiceError) throw invoiceError;
 

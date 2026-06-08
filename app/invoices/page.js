@@ -208,6 +208,8 @@ export default function InvoicingPage() {
       list = list.filter(inv => AWAITING_STATUSES.includes(inv.status));
     } else if (statusFilter === 'paid') {
       list = list.filter(inv => inv.status === 'paid');
+    } else if (statusFilter === 'rejected') {
+      list = list.filter(inv => inv.status === 'rejected');
     }
     // 'all' = no status filter
 
@@ -484,6 +486,7 @@ export default function InvoicingPage() {
   // ── Filter counts (for the filter pills) ──────────────────────────────────────────────────────
   const awaitingCount = invoices.filter(i => AWAITING_STATUSES.includes(i.status)).length;
   const paidCount     = invoices.filter(i => i.status === 'paid').length;
+  const rejectedCount = invoices.filter(i => i.status === 'rejected').length;
   const selectedTotal = filteredInvoices
     .filter(i => selectedInvoiceIds.has(i.invoice_id))
     .reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
@@ -647,6 +650,16 @@ export default function InvoicingPage() {
                       }`}>
                       ✅ Paid <span className="opacity-70">({paidCount})</span>
                     </button>
+                    <button onClick={() => setStatusFilter('rejected')}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                        statusFilter === 'rejected'
+                          ? 'bg-red-600 text-white'
+                          : rejectedCount > 0
+                            ? 'text-red-400 hover:text-red-300 animate-pulse'
+                            : 'text-slate-400 hover:text-slate-200'
+                      }`}>
+                      ❌ Rejected <span className="opacity-70">({rejectedCount})</span>
+                    </button>
                     <button onClick={() => setStatusFilter('all')}
                       className={`px-3 py-1 rounded text-xs font-semibold transition ${
                         statusFilter === 'all' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'
@@ -673,7 +686,9 @@ export default function InvoicingPage() {
                         ? <p>🎉 No invoices awaiting payment — everything's collected!</p>
                         : statusFilter === 'paid'
                           ? <p>No paid invoices yet</p>
-                          : <p>No invoices generated yet.</p>}
+                          : statusFilter === 'rejected'
+                            ? <p>✅ No rejected invoices — nothing to fix!</p>
+                            : <p>No invoices generated yet.</p>}
                   </div>
                 </CardBody>
               ) : (
@@ -722,12 +737,15 @@ export default function InvoicingPage() {
                       {filteredInvoices.map((inv, i) => {
                         const unack = isUnacknowledged(inv);
                         const isSelected = selectedInvoiceIds.has(inv.invoice_id);
+                        const isRejected = inv.status === 'rejected';
                         return (
                         <tr key={inv.invoice_id} onClick={() => selectInvoice(inv)}
                           className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition cursor-pointer
                             ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}
                             ${unack ? 'ring-1 ring-yellow-500/20' : ''}
-                            ${isSelected ? 'bg-blue-500/10' : ''}`}>
+                            ${isRejected ? 'bg-red-500/10 ring-1 ring-red-500/40' : ''}
+                            ${isSelected ? 'bg-blue-500/10' : ''}`}
+                          style={isRejected ? { animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : undefined}>
                           <td className="px-3 py-3 w-10" onClick={e => e.stopPropagation()}>
                             <input type="checkbox"
                               checked={isSelected}

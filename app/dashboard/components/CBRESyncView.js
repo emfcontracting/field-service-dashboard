@@ -269,6 +269,7 @@ export default function CBRESyncView({ currentUser }) {
       const now = new Date().toISOString();
       const today = now.split('T')[0]; // YYYY-MM-DD for cmp_date
       const changesToLog = [];
+      const rejectedThisSync = []; // invoices newly flipped to 'rejected' (CIC) this run
 
       // 2. Apply each discrepancy
       for (const item of reconciliation.discrepancy) {
@@ -280,6 +281,14 @@ export default function CBRESyncView({ currentUser }) {
             update.cbre_status_label = item.row.status_label;
             update.cbre_status_updated_at = now;
             update.cbre_last_synced_at = now;
+            // Track invoices being newly rejected (CIC) so we can warn the office
+            if (change.field === 'status' && change.newValue === 'rejected' && item.invInDb.status !== 'rejected') {
+              rejectedThisSync.push({
+                invoice_number: item.invInDb.invoice_number,
+                wo_number: item.row.wo_number,
+                building: item.row.building,
+              });
+            }
             // IMPORTANT: don't set cbre_status_acknowledged_at — leaves an "unack" marker
             // for office staff to see something changed
             // Set cmp_date if not yet set and mapping says so
@@ -322,6 +331,7 @@ export default function CBRESyncView({ currentUser }) {
         applied: changesToLog.length,
         matched: reconciliation.matched.length,
         missing: reconciliation.missing.length,
+        rejected: rejectedThisSync,
       });
 
       // Reload DB data and clear file
@@ -366,16 +376,49 @@ export default function CBRESyncView({ currentUser }) {
 
       {/* ── Last sync result toast ── */}
       {lastSyncResult && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <div className="text-emerald-400 font-semibold text-sm">
-              ✅ Sync complete — {lastSyncResult.applied} change{lastSyncResult.applied !== 1 ? 's' : ''} applied
+        <div className="space-y-3">
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <div className="text-emerald-400 font-semibold text-sm">
+                ✅ Sync complete — {lastSyncResult.applied} change{lastSyncResult.applied !== 1 ? 's' : ''} applied
+              </div>
+              <div className="text-slate-500 text-xs mt-0.5">
+                {lastSyncResult.matched} matched · {lastSyncResult.missing} unmatched
+              </div>
             </div>
-            <div className="text-slate-500 text-xs mt-0.5">
-              {lastSyncResult.matched} matched · {lastSyncResult.missing} unmatched
-            </div>
+            <button onClick={() => setLastSyncResult(null)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
           </div>
-          <button onClick={() => setLastSyncResult(null)} className="text-slate-500 hover:text-slate-300 text-xl">×</button>
+
+          {/* ⚠️ Rejected-invoice warning — CBRE flagged these for correction (CIC) */}
+          {lastSyncResult.rejected && lastSyncResult.rejected.length > 0 && (
+            <div
+              className="bg-red-500/10 border-2 border-red-500/40 rounded-xl p-4"
+              style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="text-red-400 font-bold text-sm flex items-center gap-2">
+                    ❌ {lastSyncResult.rejected.length} invoice{lastSyncResult.rejected.length !== 1 ? 's were' : ' was'} rejected by CBRE (needs correction)
+                  </div>
+                  <div className="text-slate-400 text-xs mt-2 space-y-1">
+                    {lastSyncResult.rejected.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 font-mono">
+                        <span className="text-red-300 font-semibold">{r.invoice_number || '—'}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="text-blue-400">{r.wo_number}</span>
+                        {r.building && <><span className="text-slate-600">·</span><span className="text-slate-500 truncate">{r.building}</span></>}
+                      </div>
+                    ))}
+                  </div>
+                  <a href="/invoices"
+                    className="inline-block mt-3 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition">
+                    → Review rejected invoices
+                  </a>
+                </div>
+                <button onClick={() => setLastSyncResult(r => r ? { ...r, rejected: [] } : r)}
+                  className="text-slate-500 hover:text-slate-300 text-xl flex-shrink-0">×</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

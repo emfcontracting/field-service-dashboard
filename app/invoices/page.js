@@ -7,7 +7,7 @@ import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
-import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
+import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -211,6 +211,10 @@ export default function InvoicingPage() {
       list = list.filter(inv => inv.status === 'paid');
     } else if (statusFilter === 'rejected') {
       list = list.filter(inv => inv.status === 'rejected');
+    } else if (statusFilter.startsWith('posting:')) {
+      // CBRE posting-status filter (CPW/CIS/CIR/CA1/CA2/CMP) — lives on the work order
+      const code = statusFilter.split(':')[1];
+      list = list.filter(inv => inv.work_order?.cbre_posting_status === code);
     }
     // 'all' = no status filter
 
@@ -488,6 +492,11 @@ export default function InvoicingPage() {
   const awaitingCount = invoices.filter(i => AWAITING_STATUSES.includes(i.status)).length;
   const paidCount     = invoices.filter(i => i.status === 'paid').length;
   const rejectedCount = invoices.filter(i => i.status === 'rejected').length;
+  // Counts per CBRE posting code (CPW/CIS/CIR/CA1/CA2/CMP) for the filter pills
+  const postingCounts = CBRE_POSTING_ORDER.reduce((acc, code) => {
+    acc[code] = invoices.filter(i => i.work_order?.cbre_posting_status === code).length;
+    return acc;
+  }, {});
   const selectedTotal = filteredInvoices
     .filter(i => selectedInvoiceIds.has(i.invoice_id))
     .reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
@@ -634,47 +643,72 @@ export default function InvoicingPage() {
           {/* ── Invoiced Tab ── */}
           {activeTab === 'invoiced' && (
             <Card>
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
-                  {/* Status filter pills */}
-                  <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1 ml-2">
-                    <button onClick={() => setStatusFilter('awaiting')}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                        statusFilter === 'awaiting' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}>
-                      💰 Awaiting Payment <span className="opacity-70">({awaitingCount})</span>
-                    </button>
-                    <button onClick={() => setStatusFilter('paid')}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                        statusFilter === 'paid' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}>
-                      ✅ Paid <span className="opacity-70">({paidCount})</span>
-                    </button>
-                    <button onClick={() => setStatusFilter('rejected')}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                        statusFilter === 'rejected'
-                          ? 'bg-red-600 text-white'
-                          : rejectedCount > 0
-                            ? 'text-red-400 hover:text-red-300 animate-pulse'
-                            : 'text-slate-400 hover:text-slate-200'
-                      }`}>
-                      ❌ Rejected <span className="opacity-70">({rejectedCount})</span>
-                    </button>
-                    <button onClick={() => setStatusFilter('all')}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition ${
-                        statusFilter === 'all' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                      }`}>
-                      📋 All <span className="opacity-70">({invoices.length})</span>
-                    </button>
+              <CardHeader className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
+                    {/* Invoice status filter pills */}
+                    <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1 ml-2">
+                      <button onClick={() => setStatusFilter('awaiting')}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                          statusFilter === 'awaiting' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}>
+                        💰 Awaiting Payment <span className="opacity-70">({awaitingCount})</span>
+                      </button>
+                      <button onClick={() => setStatusFilter('paid')}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                          statusFilter === 'paid' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}>
+                        ✅ Paid <span className="opacity-70">({paidCount})</span>
+                      </button>
+                      <button onClick={() => setStatusFilter('rejected')}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                          statusFilter === 'rejected'
+                            ? 'bg-red-600 text-white'
+                            : rejectedCount > 0
+                              ? 'text-red-400 hover:text-red-300 animate-pulse'
+                              : 'text-slate-400 hover:text-slate-200'
+                        }`}>
+                        ❌ Rejected <span className="opacity-70">({rejectedCount})</span>
+                      </button>
+                      <button onClick={() => setStatusFilter('all')}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                          statusFilter === 'all' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}>
+                        📋 All <span className="opacity-70">({invoices.length})</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input value={invoiceSearchTerm} onChange={e => setInvoiceSearchTerm(e.target.value)}
+                      placeholder="Search Invoice#, WO#, building…" className="w-64" />
+                    {invoiceSearchTerm && (
+                      <Btn onClick={() => setInvoiceSearchTerm('')} variant="ghost" size="sm">Clear</Btn>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Input value={invoiceSearchTerm} onChange={e => setInvoiceSearchTerm(e.target.value)}
-                    placeholder="Search Invoice#, WO#, building…" className="w-64" />
-                  {invoiceSearchTerm && (
-                    <Btn onClick={() => setInvoiceSearchTerm('')} variant="ghost" size="sm">Clear</Btn>
-                  )}
+
+                {/* CBRE posting-status filter pills (CPW → CMP) */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">🏢 CBRE Posting:</span>
+                  <div className="flex gap-1 flex-wrap bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1">
+                    {CBRE_POSTING_ORDER.map(code => {
+                      const cfg = CBRE_POSTING_STATUS[code];
+                      const active = statusFilter === `posting:${code}`;
+                      const count = postingCounts[code] || 0;
+                      return (
+                        <button key={code} onClick={() => setStatusFilter(active ? 'all' : `posting:${code}`)}
+                          title={cfg.label}
+                          className={`px-2.5 py-1 rounded text-xs font-bold font-mono transition border ${
+                            active ? cfg.badge + ' ring-1 ring-current'
+                              : count > 0 ? 'text-slate-300 border-transparent hover:bg-[#1e1e2e]'
+                              : 'text-slate-600 border-transparent'
+                          }`}>
+                          {cfg.emoji} {code} <span className="opacity-60">({count})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -689,7 +723,9 @@ export default function InvoicingPage() {
                           ? <p>No paid invoices yet</p>
                           : statusFilter === 'rejected'
                             ? <p>✅ No rejected invoices — nothing to fix!</p>
-                            : <p>No invoices generated yet.</p>}
+                            : statusFilter.startsWith('posting:')
+                              ? <p>No invoices with CBRE posting status <span className="font-mono text-slate-400">{statusFilter.split(':')[1]}</span></p>
+                              : <p>No invoices generated yet.</p>}
                   </div>
                 </CardBody>
               ) : (
@@ -777,17 +813,10 @@ export default function InvoicingPage() {
                                 return (
                                   <span title={tip} className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold border ${cfg.badge}`}>
                                     {cfg.emoji} {cfg.short}
+                                    {payout && <span className="ml-1 opacity-70">· {payout.date.toLocaleDateString()}</span>}
                                   </span>
                                 );
                               })()}
-                              {inv.cbre_status && (
-                                <div className="flex items-center gap-1">
-                                  {cbreStatusBadge(inv.cbre_status, inv.cbre_status_label)}
-                                  {inv.cmp_date && (
-                                    <span title={`CMP date: ${new Date(inv.cmp_date).toLocaleDateString()} — paid 75d after`} className="text-[9px] text-emerald-500">✓</span>
-                                  )}
-                                </div>
-                              )}
                               {inv.work_order?.dispute_status && (
                                 <span title={`${DISPUTE_STATUS[inv.work_order.dispute_status]?.label} — see UPS Escalation tab`}
                                   className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${disputeBadgeClasses(inv.work_order.dispute_status)}`}>

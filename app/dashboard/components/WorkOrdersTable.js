@@ -6,6 +6,23 @@ import { calculateTotalCost } from '../utils/calculations';
 import { getPriorityBadge } from '../utils/priorityHelpers';
 import { formatDateEST } from '../utils/dateUtils';
 import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissionStatus';
+import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
+
+// CBRE posting-status badge (CPW/CIS/CIR/CA1/CA2/CMP) — separate track from the
+// active cbre_status. Shows the CBRE-side processing stage of a completed WO.
+const PostingStatusBadge = ({ wo }) => {
+  const cfg = postingBadgeConfig(wo.cbre_posting_status);
+  if (!cfg) return null;
+  const payout = computePostingPayoutDate(wo);
+  const tip = payout
+    ? `CBRE: ${cfg.label} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`
+    : `CBRE: ${cfg.label}`;
+  return (
+    <span title={tip} className={`${cfg.badge} text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-help`}>
+      {cfg.emoji} {cfg.short}
+    </span>
+  );
+};
 
 // Highest-priority open flag for this WO (high > medium > low).
 const getTopFlag = (wo) => {
@@ -270,6 +287,7 @@ export default function WorkOrdersTable({
                       <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
                       <SubmissionBadges wo={wo} />
                       <FlagBadge wo={wo} />
+                      <PostingStatusBadge wo={wo} />
                       {isUnackCbre && (
                         <button
                           onClick={(e) => {

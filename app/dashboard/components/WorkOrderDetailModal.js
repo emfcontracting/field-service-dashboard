@@ -20,6 +20,7 @@ import ProfitabilityTab from './ProfitabilityTab';
 import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
+import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
@@ -1627,6 +1628,19 @@ const sendAssignmentNotifications = async () => {
                   ✍️ Signed
                 </div>
               )}
+              {(() => {
+                const cfg = postingBadgeConfig(selectedWO.cbre_posting_status);
+                if (!cfg) return null;
+                const payout = computePostingPayoutDate(selectedWO);
+                const tip = payout
+                  ? `CBRE: ${cfg.label} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`
+                  : `CBRE: ${cfg.label}`;
+                return (
+                  <div title={tip} className={`px-3 py-1 rounded-lg text-sm inline-block border ${cfg.badge}`}>
+                    {cfg.emoji} {cfg.short}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <div className="flex gap-2">
@@ -1897,6 +1911,77 @@ const sendAssignmentNotifications = async () => {
               </div>
             )}
           </div>
+
+          {/* CBRE Posting Status (read-only) — separate track from active cbre_status.
+              Populated by the weekly CBRE Sync sheet upload. Shows the CBRE-side
+              processing chain (CPW → CIS → CIR → CA1 → CA2 → CMP) for a completed WO. */}
+          {(() => {
+            const cfg = postingBadgeConfig(selectedWO.cbre_posting_status);
+            if (!cfg) return null;
+            const payout = computePostingPayoutDate(selectedWO);
+            const currentStep = cfg.step;
+            return (
+              <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <label className="block text-sm text-slate-300 font-semibold mb-1">🏢 CBRE Posting Status</label>
+                    <p className="text-xs text-slate-400">CBRE-side processing after completion (from weekly sync) — separate from the status above</p>
+                  </div>
+                  <div title={cfg.label} className={`px-3 py-1.5 rounded-lg text-sm font-bold border ${cfg.badge}`}>
+                    {cfg.emoji} {cfg.short}
+                  </div>
+                </div>
+
+                {/* Progress chain CPW → CMP */}
+                <div className="flex items-center gap-1 mb-2">
+                  {CBRE_POSTING_ORDER.map((code, i) => {
+                    const stepCfg = CBRE_POSTING_STATUS[code];
+                    const reached = stepCfg.step <= currentStep;
+                    const isCurrent = stepCfg.step === currentStep;
+                    return (
+                      <div key={code} className="flex items-center gap-1 flex-1 last:flex-none">
+                        <div
+                          title={stepCfg.label}
+                          className={`flex items-center justify-center rounded-md text-[10px] font-bold font-mono px-1.5 py-1 border transition
+                            ${isCurrent ? stepCfg.badge + ' ring-1 ring-offset-0'
+                              : reached ? 'bg-slate-700/40 text-slate-300 border-slate-600/40'
+                              : 'bg-[#0a0a0f] text-slate-700 border-[#1e1e2e]'}`}>
+                          {code}
+                        </div>
+                        {i < CBRE_POSTING_ORDER.length - 1 && (
+                          <div className={`h-px flex-1 ${reached && stepCfg.step < currentStep ? 'bg-slate-600' : 'bg-[#1e1e2e]'}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="text-xs text-slate-400">{cfg.label}</div>
+
+                {/* CMP payout countdown */}
+                {payout && (
+                  <div className="mt-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-emerald-300 font-semibold">✅ Posted — payment expected</span>
+                      <span className="text-emerald-400 font-mono font-bold">{payout.date.toLocaleDateString()}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {payout.daysRemaining > 0
+                        ? `~${payout.daysRemaining} day${payout.daysRemaining !== 1 ? 's' : ''} remaining (75 days from posting)`
+                        : `Payout date reached (${Math.abs(payout.daysRemaining)} day${Math.abs(payout.daysRemaining) !== 1 ? 's' : ''} ago)`}
+                      {selectedWO.cmp_date && <> · CMP date: {new Date(selectedWO.cmp_date).toLocaleDateString()}</>}
+                    </div>
+                  </div>
+                )}
+
+                {selectedWO.cbre_posting_updated_at && (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Last posting sync: {new Date(selectedWO.cbre_posting_updated_at).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Missing Data Banner */}
           {selectedWO.status === 'missing_data' && (

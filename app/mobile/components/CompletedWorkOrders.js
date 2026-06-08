@@ -356,7 +356,19 @@ export default function CompletedWorkOrders({
                 'cancelled': { bg: 'bg-gray-600', text: language === 'en' ? '🚫 Cancelled' : '🚫 Cancelado' },
               };
               const cbreConfig = wo.cbre_status ? cbreConfigs[wo.cbre_status] : null;
-              
+
+              // CBRE posting status (CPW/CIS/CIR/CA1/CA2/CMP) — the CBRE-side
+              // processing chain after completion. Mobile-themed badge config.
+              const postingConfigs = {
+                CPW: { bg: 'bg-orange-600',  text: language === 'en' ? '📂 CPW · Waiting paperwork'  : '📂 CPW · Esperando papeleo' },
+                CIS: { bg: 'bg-yellow-600',  text: language === 'en' ? '💾 CIS · Invoice saved'      : '💾 CIS · Factura guardada' },
+                CIR: { bg: 'bg-blue-600',    text: language === 'en' ? '📝 CIR · Invoice approved'   : '📝 CIR · Factura aprobada' },
+                CA1: { bg: 'bg-purple-600',  text: language === 'en' ? '① CA1 · Awaiting approver 1' : '① CA1 · Aprobador 1' },
+                CA2: { bg: 'bg-purple-600',  text: language === 'en' ? '② CA2 · Awaiting approver 2' : '② CA2 · Aprobador 2' },
+                CMP: { bg: 'bg-emerald-600', text: language === 'en' ? '✅ CMP · Posted'             : '✅ CMP · Publicado' },
+              };
+              const postingConfig = wo.cbre_posting_status ? postingConfigs[wo.cbre_posting_status] : null;
+
               return (
               <div
                 key={wo.wo_id}
@@ -380,6 +392,15 @@ export default function CompletedWorkOrders({
                   <div className="mb-2">
                     <span className={`${cbreConfig.bg} text-white text-xs px-2 py-0.5 rounded-full font-semibold`}>
                       {cbreConfig.text}
+                    </span>
+                  </div>
+                )}
+
+                {/* CBRE Posting Status Badge (CPW → CMP) */}
+                {postingConfig && (
+                  <div className="mb-2">
+                    <span className={`${postingConfig.bg} text-white text-xs px-2 py-0.5 rounded-full font-semibold`}>
+                      {postingConfig.text}
                     </span>
                   </div>
                 )}

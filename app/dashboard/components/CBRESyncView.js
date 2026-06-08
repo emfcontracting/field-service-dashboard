@@ -18,6 +18,7 @@ import {
   buildEffectiveMapping,
   parseCbreStatus,
 } from '@/lib/cbreStatusMapping';
+import { isPostingCode, postingBadgeConfig } from '@/lib/cbrePostingStatus';
 
 const supabase = getSupabase();
 const supabaseClient = createClient(
@@ -91,7 +92,7 @@ export default function CBRESyncView({ currentUser }) {
     try {
       const [invRes, woRes, mapRes, logRes] = await Promise.all([
         supabaseClient.from('invoices').select('invoice_id, invoice_number, wo_id, invoice_date, status, cbre_status, cbre_status_label, cmp_date, cbre_status_updated_at, cbre_status_acknowledged_at, total, work_order:work_orders(wo_number)'),
-        supabaseClient.from('work_orders').select('wo_id, wo_number, status, cbre_status, cbre_status_label, cbre_status_updated_at, cbre_status_acknowledged_at, acknowledged, is_locked'),
+        supabaseClient.from('work_orders').select('wo_id, wo_number, status, cbre_status, cbre_status_label, cbre_status_updated_at, cbre_status_acknowledged_at, acknowledged, is_locked, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date'),
         supabaseClient.from('cbre_status_mappings').select('*').eq('is_active', true),
         supabaseClient.from('cbre_sync_log').select('*').order('synced_at', { ascending: false }).limit(10),
       ]);
@@ -300,11 +301,29 @@ export default function CBRESyncView({ currentUser }) {
               .update(update)
               .eq('invoice_id', item.invInDb.invoice_id);
           } else if (change.target === 'wo' && item.woInDb) {
-            const update = { [change.field]: change.newValue };
-            update.cbre_status = item.row.status_code;
-            update.cbre_status_label = item.row.status_label;
-            update.cbre_status_updated_at = now;
+            // Build the WO update based on WHICH field changed. The posting-status
+            // track (cbre_posting_*) is kept SEPARATE from the active cbre_status
+            // track — we must not let a posting code (CPW/CIS/.../CMP) overwrite
+            // the active cbre_status used for live tickets.
+            let update = {};
+
+            if (change.field === 'cbre_posting_status') {
+              update.cbre_posting_status = change.newValue;
+              update.cbre_posting_label = item.row.status_label;
+              update.cbre_posting_updated_at = now;
+            } else if (change.field === 'cmp_date') {
+              // 'today' placeholder → real date for the 75-day payout clock
+              update.cmp_date = today;
+            } else if (change.field === 'cbre_status') {
+              update.cbre_status = item.row.status_code;
+              update.cbre_status_label = item.row.status_label;
+              update.cbre_status_updated_at = now;
+            } else {
+              // status or any other plain WO field
+              update[change.field] = change.newValue;
+            }
             update.cbre_last_synced_at = now;
+
             await supabaseClient
               .from('work_orders')
               .update(update)
@@ -666,6 +685,37 @@ function computeProposedChanges(row, woInDb, invInDb, map) {
       oldValue: target.cbre_status || '—',
       newValue: row.status_code,
     });
+  }
+
+  // ── CBRE POSTING STATUS ──────────────────────────────────────────────────
+  // For codes in the posting chain (CPW/CIS/CIR/CA1/CA2/CMP), record the
+  // posting status on the WORK ORDER (separate track from cbre_status).
+  // Logical guard: only post-completion WOs should carry a posting status
+  // (tech-completed OR office-acknowledged/locked). This avoids stamping an
+  // active ticket with a "completed/posted" code by mistake.
+  if (woInDb && isPostingCode(row.status_code)) {
+    const isPostCompletion =
+      woInDb.status === 'completed' ||
+      woInDb.acknowledged === true ||
+      woInDb.is_locked === true;
+
+    if (isPostCompletion && woInDb.cbre_posting_status !== row.status_code) {
+      changes.push({
+        target: 'wo',
+        field: 'cbre_posting_status',
+        oldValue: woInDb.cbre_posting_status || '—',
+        newValue: row.status_code,
+      });
+      // First time we see CMP, capture the posting date for the 75-day payout clock
+      if (row.status_code === 'CMP' && !woInDb.cmp_date) {
+        changes.push({
+          target: 'wo',
+          field: 'cmp_date',
+          oldValue: null,
+          newValue: 'today',
+        });
+      }
+    }
   }
 
   return { changes };

@@ -7,6 +7,7 @@ import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
+import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -288,7 +289,7 @@ export default function InvoicingPage() {
 
   const fetchInvoices = async () => {
     const { data } = await supabase.from('invoices')
-      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, dispute_status, dispute_reason, lead_tech:users!lead_tech_id(first_name, last_name))')
+      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
       .order('created_at', { ascending: false });
     setInvoices(data || []);
   };
@@ -766,6 +767,19 @@ export default function InvoicingPage() {
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">
                               {statusBadge(inv.status)}
+                              {inv.work_order?.cbre_posting_status && (() => {
+                                const cfg = postingBadgeConfig(inv.work_order.cbre_posting_status);
+                                if (!cfg) return null;
+                                const payout = computePostingPayoutDate(inv.work_order);
+                                const tip = payout
+                                  ? `CBRE: ${cfg.label} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`
+                                  : `CBRE: ${cfg.label}`;
+                                return (
+                                  <span title={tip} className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold border ${cfg.badge}`}>
+                                    {cfg.emoji} {cfg.short}
+                                  </span>
+                                );
+                              })()}
                               {inv.cbre_status && (
                                 <div className="flex items-center gap-1">
                                   {cbreStatusBadge(inv.cbre_status, inv.cbre_status_label)}

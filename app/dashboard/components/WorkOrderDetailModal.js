@@ -449,9 +449,33 @@ export default function WorkOrderDetailModal({
           <p style="color:#7e22ce;font-size:11px;margin-top:4px;">Final actual costs reconciled against original NTE budget.</p>
         </div>
 
-        <!-- Final Actual Costs (Purple box) - total only, no internal markup breakdown -->
+        <!-- Final Actual Costs (Purple box) - itemized like the estimate mode, WITHOUT markup labels -->
         <div class="cost-box" style="border-color:#a855f7;background:#faf5ff;">
           <div class="cost-box-title" style="color:#6b21a8;">FINAL ACTUAL COSTS (Work Completed)</div>
+          <div class="summary-row">
+            <span>Labor</span>
+            <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Materials</span>
+            <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Equipment</span>
+            <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Rental</span>
+            <span>${(parseFloat(quote.rental_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Trailer</span>
+            <span>${(parseFloat(quote.trailer_with_markup) || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Mileage</span>
+            <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
+          </div>
           <div class="summary-total">
             <div class="summary-row" style="border: none; color:#6b21a8;">
               <span>FINAL ACTUAL TOTAL</span>

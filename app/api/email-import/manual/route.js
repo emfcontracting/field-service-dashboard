@@ -148,9 +148,10 @@ function parseCBREEmail(subject, body) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]?\d+)/i);
+  // Prefix can be 0-3 letters (C, P, S, ST, etc.)
+  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]{0,3}\d+)/i);
   if (woMatch) {
-    workOrder.wo_number = woMatch[1];
+    workOrder.wo_number = woMatch[1].toUpperCase();
   }
 
   const priorityMatch = cleanBody.match(/Priority[:\s]*(P\d+)[\s\-]*([^<\n]*)/i) || 
@@ -288,8 +289,8 @@ export async function GET(request) {
     // Parse the email
     const workOrder = parseCBREEmail(email.subject, email.body);
 
-    // Verify WO number matches
-    if (workOrder.wo_number !== woNumber) {
+    // Verify WO number matches (case-insensitive)
+    if (workOrder.wo_number.toUpperCase() !== woNumber.toUpperCase()) {
       return Response.json({
         success: false,
         error: `Email found but WO number doesn't match. Expected: ${woNumber}, Found: ${workOrder.wo_number}`,

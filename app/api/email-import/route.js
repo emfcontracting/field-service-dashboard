@@ -221,9 +221,11 @@ function parseCBREEmail(subject, body) {
   // - "Dispatch of Work Order C2959324 - Priority: P2-Urgent"
   // - "Dispatch_of_Work_Order_C2959324_-_Priority__P2-Urgent"
   // - "PM Work Order P2919408"
-  const woMatch = (subject || '').match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]?\d+)/i);
+  // - "Dispatch of Work Order ST3162410 ..." (multi-letter prefix)
+  // Prefix can be 0-3 letters (C, P, S, ST, etc.)
+  const woMatch = (subject || '').match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]{0,3}\d+)/i);
   if (woMatch) {
-    workOrder.wo_number = woMatch[1];
+    workOrder.wo_number = woMatch[1].toUpperCase();
   }
 
   // Extract Priority - handle both formats
@@ -480,8 +482,8 @@ export async function POST(request) {
       
       // Try to extract WO from content if not found
       if (!parsed.wo_number) {
-        const woMatch = content.match(/work order[^\d]*([A-Z]?\d{5,})/i);
-        if (woMatch) parsed.wo_number = woMatch[1];
+        const woMatch = content.match(/work order[^\dA-Z]*([A-Z]{0,3}\d{5,})/i);
+        if (woMatch) parsed.wo_number = woMatch[1].toUpperCase();
       }
       
       return Response.json({ success: true, parsedData: parsed });

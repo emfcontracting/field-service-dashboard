@@ -449,37 +449,9 @@ export default function WorkOrderDetailModal({
           <p style="color:#7e22ce;font-size:11px;margin-top:4px;">Final actual costs reconciled against original NTE budget.</p>
         </div>
 
-        <!-- Final Actual Costs (Purple box) -->
+        <!-- Final Actual Costs (Purple box) - total only, no internal markup breakdown -->
         <div class="cost-box" style="border-color:#a855f7;background:#faf5ff;">
           <div class="cost-box-title" style="color:#6b21a8;">FINAL ACTUAL COSTS (Work Completed)</div>
-          ${(parseFloat(quote.actual_rt_hours) || parseFloat(quote.actual_ot_hours) || parseFloat(quote.actual_material_cost) || parseFloat(quote.actual_equipment_cost) || parseFloat(quote.actual_rental_cost) || parseFloat(quote.actual_trailer_cost) || parseFloat(quote.actual_miles)) ? `
-          <div class="summary-row">
-            <span>Labor (RT ${(parseFloat(quote.actual_rt_hours) || 0).toFixed(2)} hrs + OT ${(parseFloat(quote.actual_ot_hours) || 0).toFixed(2)} hrs + 2 admin hrs)</span>
-            <span>${(parseFloat(quote.labor_total) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Materials (with 25% markup)</span>
-            <span>${(parseFloat(quote.materials_with_markup) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Equipment (with 25% markup)</span>
-            <span>${(parseFloat(quote.equipment_with_markup) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Rental (with 25% markup)</span>
-            <span>${(parseFloat(quote.rental_with_markup) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Trailer (with 25% markup)</span>
-            <span>${(parseFloat(quote.trailer_with_markup) || 0).toFixed(2)}</span>
-          </div>
-          <div class="summary-row">
-            <span>Mileage (${(parseFloat(quote.actual_miles) || 0).toFixed(1)} mi × $1.00)</span>
-            <span>${(parseFloat(quote.mileage_total) || 0).toFixed(2)}</span>
-          </div>
-          ` : `
-          <div style="text-align: center; color: #666; font-size: 10px; margin-bottom: 8px;">📸 Final actual snapshot from ${new Date(quote.created_at).toLocaleDateString()}</div>
-          `}
           <div class="summary-total">
             <div class="summary-row" style="border: none; color:#6b21a8;">
               <span>FINAL ACTUAL TOTAL</span>

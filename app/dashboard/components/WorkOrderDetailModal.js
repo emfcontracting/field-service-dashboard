@@ -1605,9 +1605,9 @@ const sendAssignmentNotifications = async () => {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-2xl max-w-6xl w-full my-8 shadow-2xl">
         {/* Header */}
-        <div className="sticky top-0 bg-[#0d0d14] border-b border-[#2d2d44] p-6 flex justify-between items-start z-10 rounded-t-2xl">
-          <div>
-            <h2 className="text-2xl font-bold">{selectedWO.wo_number}</h2>
+        <div className="sticky top-0 bg-[#0d0d14] border-b border-[#2d2d44] p-4 md:p-6 flex flex-col md:flex-row justify-between items-start gap-3 md:gap-4 z-10 rounded-t-2xl">
+          <div className="min-w-0">
+            <h2 className="text-xl md:text-2xl font-bold break-all">{selectedWO.wo_number}</h2>
             <div className="flex gap-2 mt-2 flex-wrap">
               {selectedWO.acknowledged && (
                 <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm inline-block">
@@ -1639,30 +1639,30 @@ const sendAssignmentNotifications = async () => {
               })()}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap w-full md:w-auto justify-start md:justify-end">
             <button
               onClick={() => exportSingleWOCostDetail(supabase, selectedWO)}
-              className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              className="bg-purple-600 hover:bg-purple-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
               title="Download cost detail CSV for this work order"
             >
               💰 Cost CSV
             </button>
             <button
               onClick={() => setShowActivityLog(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              className="bg-indigo-600 hover:bg-indigo-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
               title="Export activity log (check-ins, status changes, submissions, etc)"
             >
               📜 Activity Log
             </button>
             <button
               onClick={downloadCompletionCertificate}
-              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-semibold"
+              className="bg-green-600 hover:bg-green-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
             >
               📄 Completion Cert
             </button>
             <button
               onClick={onClose}
-              className="text-slate-500 hover:text-slate-200 text-3xl leading-none w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#2d2d44] transition"
+              className="text-slate-500 hover:text-slate-200 text-3xl leading-none w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#2d2d44] transition ml-auto md:ml-0"
             >
               ×
             </button>

@@ -10,6 +10,7 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     building: '',
     work_order_description: '',
     requestor: '',
+    requestor_phone: '',
     priority: 'medium',
     status: 'pending',
     lead_tech_id: '',
@@ -111,16 +112,28 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
             />
           </div>
 
-          {/* Requestor */}
-          <div>
-            <label className="block text-xs md:text-sm text-gray-400 mb-1">Requestor</label>
-            <input
-              type="text"
-              value={newWO.requestor}
-              onChange={(e) => setNewWO({ ...newWO, requestor: e.target.value })}
-              className="w-full bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg text-sm md:text-base"
-              placeholder="Contact name"
-            />
+          {/* Requestor name + phone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+            <div>
+              <label className="block text-xs md:text-sm text-gray-400 mb-1">Requestor</label>
+              <input
+                type="text"
+                value={newWO.requestor}
+                onChange={(e) => setNewWO({ ...newWO, requestor: e.target.value })}
+                className="w-full bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg text-sm md:text-base"
+                placeholder="Contact name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs md:text-sm text-gray-400 mb-1">Requestor Phone</label>
+              <input
+                type="tel"
+                value={newWO.requestor_phone}
+                onChange={(e) => setNewWO({ ...newWO, requestor_phone: e.target.value })}
+                className="w-full bg-gray-700 text-white px-3 md:px-4 py-2 rounded-lg text-sm md:text-base"
+                placeholder="555-555-5555"
+              />
+            </div>
           </div>
 
           {/* Priority, Status, Scheduled Date - 2 cols on mobile, 3 on desktop */}

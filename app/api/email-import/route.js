@@ -4,6 +4,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import { buildContactLines } from './contactParser';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -348,7 +349,12 @@ function parseCBREEmail(subject, body) {
   
   if (workOrder.address) comments.push(`Address: ${workOrder.address}`);
   if (workOrder.city && workOrder.state) comments.push(`Location: ${workOrder.city}, ${workOrder.state}`);
-  if (workOrder.requestor_phone) comments.push(`Contact Phone: ${workOrder.requestor_phone}`);
+  // CBRE escalation contacts (Dispatcher / Conveyors / Environmental / Capital / GTSG ...)
+  const contactLines = buildContactLines(cleanBody);
+  if (contactLines.length > 0) {
+    comments.push('📞 CBRE Contacts');
+    contactLines.forEach(line => comments.push(line));
+  }
   
   // Extract Target Completion if available
   const targetMatch = cleanBody.match(/Target Completion:\s*([A-Za-z]+\s+\d+\s+\d+)/i);
@@ -518,6 +524,7 @@ export async function POST(request) {
           date_entered: wo.date_entered,
           work_order_description: wo.work_order_description,
           requestor: wo.requestor,
+          requestor_phone: wo.requestor_phone || null,
           status: 'pending',
           comments: wo.comments,
           nte: wo.nte || 0
@@ -572,6 +579,7 @@ export async function POST(request) {
             date_entered: wo.date_entered,
             work_order_description: wo.work_order_description,
             requestor: wo.requestor,
+            requestor_phone: wo.requestor_phone || null,
             status: wo.status || 'pending',
             comments: wo.comments,
             nte: wo.nte || 0

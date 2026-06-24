@@ -2,22 +2,29 @@
 // Backfill scanner - finds CBRE work orders that the cron auto-import missed.
 //
 // WHY THIS EXISTS:
-// The cron (/api/email-import/cron) only fetches emails that are:
-//   1. UNSEEN (unread)
-//   2. From the last 7 days
-//   3. Have "Work Order" or "Dispatch" literally in the subject
-// Any dispatch that was already opened in Gmail, arrived earlier, or uses a
-// different subject wording (common for PJ project dispatches) gets silently
-// skipped forever. This endpoint bypasses ALL three limits:
-//   - scans regardless of read status
-//   - scans a configurable window (default 90 days / ~3 months)
-//   - NO narrow subject pre-filter; the WO-number regex is the only gate
+// The cron (/api/email-import/cron) only imports emails that are UNSEEN, from
+// the last 7 days, and have "Work Order"/"Dispatch" in the subject. Anything
+// already read, older, or worded differently is skipped forever. This endpoint
+// bypasses all of that: it scans a configurable window (default 90 days)
+// regardless of read status.
+//
+// IMPORTANT - TYPE FILTERING:
+// CBRE sends many WO-related emails that are NOT new dispatches:
+//   - "Notice of Cancellation of WO# ..."   (cancellation)
+//   - "Reassignment of Work Order ..."      (reassignment)
+//   - "OVD Alert - Work Order #..."         (alert)
+//   - "... ESCALATION"                       (escalation)
+// Importing those as fresh 'pending' work orders would create garbage. So every
+// candidate is CLASSIFIED, and by default only category 'dispatch' is imported.
+// Status-change notices for EXISTING work orders are handled by /api/email-sync.
 //
 // USAGE:
-//   GET  /api/email-import/backfill?days=90   -> DRY RUN report (preview only, imports nothing)
-//   POST /api/email-import/backfill?days=90   -> imports every "missing" work order found in the window
+//   GET  /api/email-import/backfill?days=90               -> DRY RUN report (imports nothing)
+//   GET  /api/email-import/backfill?days=90&types=dispatch -> same, explicit
+//   POST /api/email-import/backfill?days=90               -> import missing DISPATCHES only (default)
+//   POST /api/email-import/backfill?days=90&types=dispatch,reassignment -> override allowed types
 //
-// Recommended flow: run GET first, review the "missing" list, then POST to import.
+// Recommended: run GET first, review, then POST.
 
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
@@ -28,8 +35,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Hard safety cap so a huge window can never blow up a serverless invocation.
-const MAX_CANDIDATES = 1500;
+// Safety cap. With the WO-focused subject search below, real volume stays well
+// under this, so the cap should not truncate the window the way a date-only
+// scan does (which gets swamped by bids/invoices/newsletters).
+const MAX_CANDIDATES = 2500;
+
+// Categories that POST will import unless overridden via ?types=
+const DEFAULT_IMPORT_TYPES = ['dispatch'];
 
 function connectIMAP() {
   const email = process.env.EMAIL_IMPORT_USER;
@@ -55,11 +67,36 @@ function formatIMAPDate(date) {
   return `${day}-${month}-${year}`;
 }
 
+// Classify a subject line into the kind of CBRE notice it is.
+// Order matters: a "Cancellation of Work Order" must NOT be read as a dispatch.
+function classifySubject(subject) {
+  const s = (subject || '').toLowerCase();
+
+  // Real new dispatch indicators (some are prefixed "ALERT:" / "Principal Workorder Created").
+  const looksDispatch =
+    s.includes('dispatch of work order') ||
+    s.includes('dispatch_of_work_order') ||
+    s.includes('pm work order') ||
+    s.includes('principal workorder');
+
+  if (looksDispatch) {
+    // ...but a cancellation/reassignment OF a work order is not a new dispatch.
+    if (s.includes('cancellation') || s.includes('cancelled') || s.includes('canceled')) return 'cancellation';
+    if (s.includes('reassignment') || s.includes('reassigned')) return 'reassignment';
+    return 'dispatch';
+  }
+
+  if (s.includes('cancellation') || s.includes('cancelled') || s.includes('canceled')) return 'cancellation';
+  if (s.includes('reassignment') || s.includes('reassigned')) return 'reassignment';
+  if (s.includes('escalation')) return 'escalation';
+  if (s.includes('ovd alert') || s.includes('alert')) return 'alert';
+  return 'other';
+}
+
 // Robust WO-number extraction from a subject line.
-// Layer 1 (canonical): "...Work Order ST3162410..." / "PM Work Order P2919408" / underscores.
-// Layer 2 (loose):     any "<1-3 letters><6+ digits>" token, e.g. a project subject
-//                      "Project Assignment PJ3118923" that omits the words "Work Order".
-// Returns { wo: string|null, matchType: 'canonical' | 'loose' | null }
+// Layer 1 (canonical): "...Work Order ST3162410..." / "PM Work Order P2919408".
+// Layer 2 (loose):     any "<1-3 letters><6+ digits>" token (covers "WO# C2765194",
+//                      "OVD Alert - Work Order #C2856093", project subjects, etc.).
 function extractWoFromSubject(subject) {
   const s = subject || '';
 
@@ -68,9 +105,6 @@ function extractWoFromSubject(subject) {
     return { wo: canonical[1].toUpperCase(), matchType: 'canonical' };
   }
 
-  // Loose: letter-prefixed CBRE WO token. Require >=6 digits to avoid catching
-  // phone numbers, priority codes (P2), dates, etc. Prefix is 1-3 letters here
-  // (a bare number with no prefix is too risky for a loose scan).
   const loose = s.match(/\b([A-Z]{1,3}\d{6,})\b/i);
   if (loose && loose[1]) {
     return { wo: loose[1].toUpperCase(), matchType: 'loose' };
@@ -79,8 +113,9 @@ function extractWoFromSubject(subject) {
   return { wo: null, matchType: null };
 }
 
-// PHASE 1: fetch lightweight headers (subject + date + read flag) for every
-// message in the window. No bodies -> fast and timeout-safe.
+// PHASE 1: fetch lightweight headers (subject + date + read flag) for WO-related
+// emails in the window. WO-focused subject search keeps volume low so the cap
+// does not truncate the window. No bodies -> fast and timeout-safe.
 async function scanHeaders(days) {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
@@ -97,8 +132,18 @@ async function scanHeaders(days) {
         since.setDate(since.getDate() - days);
         const sinceDate = formatIMAPDate(since);
 
-        // Only filter by date. Deliberately NO subject filter - the WO regex is the gate.
-        imap.search([['SINCE', sinceDate]], (err, results) => {
+        // WO-related subjects only (dispatches, cancellations, reassignments,
+        // OVD alerts). Excludes bids/invoices/newsletters that otherwise swamp
+        // the scan. Classification + type filter decide what actually imports.
+        const searchCriteria = [
+          ['SINCE', sinceDate],
+          ['OR',
+            ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Workorder']],
+            ['OR', ['SUBJECT', 'WO#'], ['SUBJECT', 'Dispatch']]
+          ]
+        ];
+
+        imap.search(searchCriteria, (err, results) => {
           if (err) {
             imap.end();
             return reject(err);
@@ -142,7 +187,8 @@ async function scanHeaders(days) {
                     date: parsed.date || null,
                     isRead: flags.includes('\\Seen'),
                     wo_number: wo,
-                    matchType
+                    matchType,
+                    category: classifySubject(subject)
                   });
                   res();
                 });
@@ -220,8 +266,7 @@ async function fetchBodiesByUid(uids) {
 }
 
 // Full CBRE parser (mirrors cron/route.js). wo_number can be overridden by the
-// caller with the value already extracted during the scan, so a non-canonical
-// subject (e.g. a project dispatch) still imports with the correct WO number.
+// caller with the value already extracted during the scan.
 function parseCBREEmail(subject, body) {
   const workOrder = {
     wo_number: '',
@@ -329,27 +374,38 @@ function parseCBREEmail(subject, body) {
   return workOrder;
 }
 
-// Shared: scan window, classify candidates against the DB.
-async function buildReport(days) {
+function parseTypes(searchParams) {
+  const raw = (searchParams.get('types') || '').trim();
+  if (!raw) return DEFAULT_IMPORT_TYPES;
+  if (raw.toLowerCase() === 'all') {
+    return ['dispatch', 'cancellation', 'reassignment', 'escalation', 'alert', 'other'];
+  }
+  return raw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+}
+
+// Shared: scan window, classify candidates against the DB and the type filter.
+async function buildReport(days, allowedTypes) {
   const candidates = await scanHeaders(days);
 
   const withWo = candidates.filter(c => c.wo_number);
   const noWo = candidates.filter(c => !c.wo_number);
 
   // Dedupe within the scan (same WO can appear in multiple emails).
+  // Prefer a 'dispatch' email and the most recent date per WO number.
   const seen = new Map();
   for (const c of withWo) {
     const existing = seen.get(c.wo_number);
-    // Prefer canonical match and the most recent email per WO number.
-    if (!existing ||
-        (existing.matchType === 'loose' && c.matchType === 'canonical') ||
-        (c.date && existing.date && new Date(c.date) > new Date(existing.date))) {
+    if (!existing) { seen.set(c.wo_number, c); continue; }
+    const existingIsDispatch = existing.category === 'dispatch';
+    const cIsDispatch = c.category === 'dispatch';
+    if ((cIsDispatch && !existingIsDispatch) ||
+        (cIsDispatch === existingIsDispatch && c.date && existing.date && new Date(c.date) > new Date(existing.date))) {
       seen.set(c.wo_number, c);
     }
   }
   const uniqueWos = Array.from(seen.values());
 
-  // Which of these already exist in the DB?
+  // Which already exist in the DB?
   const woNumbers = uniqueWos.map(c => c.wo_number);
   let existingSet = new Set();
   if (woNumbers.length > 0) {
@@ -360,25 +416,43 @@ async function buildReport(days) {
     existingSet = new Set((existing || []).map(w => w.wo_number));
   }
 
-  const missing = uniqueWos.filter(c => !existingSet.has(c.wo_number));
-  const alreadyImported = uniqueWos.filter(c => existingSet.has(c.wo_number));
+  const missingAll = uniqueWos.filter(c => !existingSet.has(c.wo_number));
+
+  // Split missing into importable (allowed type) vs excluded (other types).
+  const importable = missingAll.filter(c => allowedTypes.includes(c.category));
+  const excluded = missingAll.filter(c => !allowedTypes.includes(c.category));
+
+  // Category counts across all missing (for awareness).
+  const categorySummary = {};
+  for (const c of missingAll) {
+    categorySummary[c.category] = (categorySummary[c.category] || 0) + 1;
+  }
+
+  const shape = (c) => ({
+    wo_number: c.wo_number,
+    subject: c.subject,
+    date: c.date,
+    wasRead: c.isRead,
+    category: c.category,
+    matchType: c.matchType,
+    uid: c.uid
+  });
 
   return {
     windowDays: days,
+    allowedTypes,
     scannedEmails: candidates.length,
     capped: candidates.length >= MAX_CANDIDATES,
     uniqueWorkOrders: uniqueWos.length,
-    missing: missing
+    missingTotal: missingAll.length,
+    categorySummary,
+    importable: importable
       .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-      .map(c => ({
-        wo_number: c.wo_number,
-        subject: c.subject,
-        date: c.date,
-        wasRead: c.isRead,
-        matchType: c.matchType,
-        uid: c.uid
-      })),
-    alreadyImported: alreadyImported.map(c => c.wo_number),
+      .map(shape),
+    excluded: excluded
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+      .map(shape),
+    alreadyImported: uniqueWos.filter(c => existingSet.has(c.wo_number)).map(c => c.wo_number),
     noWoNumber: noWo.slice(0, 25).map(c => ({ subject: c.subject, date: c.date }))
   };
 }
@@ -388,6 +462,7 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const days = Math.min(parseInt(searchParams.get('days')) || 90, 365);
+    const allowedTypes = parseTypes(searchParams);
 
     const email = process.env.EMAIL_IMPORT_USER;
     const password = process.env.EMAIL_IMPORT_PASSWORD;
@@ -395,14 +470,17 @@ export async function GET(request) {
       return Response.json({ success: false, error: 'IMAP not configured' }, { status: 400 });
     }
 
-    const report = await buildReport(days);
+    const report = await buildReport(days, allowedTypes);
 
     return Response.json({
       success: true,
       mode: 'dry-run',
-      message: report.missing.length > 0
-        ? `Found ${report.missing.length} work order(s) in the last ${days} days that are NOT yet imported. POST to this endpoint to import them.`
-        : `No missing work orders found in the last ${days} days. Everything is already imported.`,
+      message: report.importable.length > 0
+        ? `Found ${report.importable.length} importable work order(s) [types: ${allowedTypes.join(', ')}] in the last ${days} days. ${report.excluded.length} other WO-related notice(s) (cancellations/reassignments/alerts) are listed under "excluded" and will NOT be imported. POST to import.`
+        : `No importable work orders [types: ${allowedTypes.join(', ')}] found in the last ${days} days. (${report.excluded.length} excluded notice(s) found — see "excluded".)`,
+      note: report.capped
+        ? `Scan hit the ${MAX_CANDIDATES}-email cap; the window may be incomplete at its oldest end. Narrow with a smaller ?days= if you need certainty for older orders.`
+        : undefined,
       ...report
     });
   } catch (error) {
@@ -411,12 +489,13 @@ export async function GET(request) {
   }
 }
 
-// POST: import the missing work orders found in the window.
+// POST: import the missing work orders of the allowed type(s).
 export async function POST(request) {
   const startTime = Date.now();
   try {
     const { searchParams } = new URL(request.url);
     const days = Math.min(parseInt(searchParams.get('days')) || 90, 365);
+    const allowedTypes = parseTypes(searchParams);
 
     const email = process.env.EMAIL_IMPORT_USER;
     const password = process.env.EMAIL_IMPORT_PASSWORD;
@@ -424,45 +503,35 @@ export async function POST(request) {
       return Response.json({ success: false, error: 'IMAP not configured' }, { status: 400 });
     }
 
-    const report = await buildReport(days);
+    const report = await buildReport(days, allowedTypes);
 
-    if (report.missing.length === 0) {
+    if (report.importable.length === 0) {
       return Response.json({
         success: true,
-        message: `Nothing to import - all work orders in the last ${days} days already exist.`,
+        message: `Nothing to import for types [${allowedTypes.join(', ')}] in the last ${days} days.`,
         imported: 0,
         windowDays: days,
+        allowedTypes,
+        excludedCount: report.excluded.length,
         alreadyImported: report.alreadyImported
       });
     }
 
-    // Map WO number -> uid for the missing set, then fetch only those bodies.
-    const missingByUid = new Map(report.missing.map(m => [m.uid, m]));
-    const fullEmails = await fetchBodiesByUid(report.missing.map(m => m.uid));
+    // Fetch bodies only for the importable set.
+    const importableByUid = new Map(report.importable.map(m => [m.uid, m]));
+    const fullEmails = await fetchBodiesByUid(report.importable.map(m => m.uid));
 
     const results = { imported: 0, skipped: 0, errors: [], workOrders: [] };
 
     for (const fe of fullEmails) {
-      const meta = missingByUid.get(fe.uid);
+      const meta = importableByUid.get(fe.uid);
       const knownWo = meta?.wo_number;
       try {
         const parsed = parseCBREEmail(fe.subject, fe.body);
-        // Trust the WO number resolved during the scan (handles non-canonical subjects).
         const woNumber = knownWo || parsed.wo_number;
         if (!woNumber) {
           results.skipped++;
           results.errors.push(`UID ${fe.uid}: could not resolve WO number`);
-          continue;
-        }
-
-        // Final duplicate guard (in case it was imported between scan and now).
-        const { data: existing } = await supabase
-          .from('work_orders')
-          .select('wo_id')
-          .eq('wo_number', woNumber)
-          .single();
-        if (existing) {
-          results.skipped++;
           continue;
         }
 
@@ -502,8 +571,9 @@ export async function POST(request) {
     return Response.json({
       success: true,
       mode: 'import',
-      message: `Backfill imported ${results.imported} work order(s) from the last ${days} days, skipped ${results.skipped}.`,
+      message: `Backfill imported ${results.imported} ${allowedTypes.join('/')} work order(s) from the last ${days} days, skipped ${results.skipped}. (${report.excluded.length} other notice(s) intentionally not imported.)`,
       windowDays: days,
+      allowedTypes,
       duration: `${Date.now() - startTime}ms`,
       ...results
     });

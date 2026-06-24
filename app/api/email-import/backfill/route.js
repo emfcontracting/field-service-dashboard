@@ -390,20 +390,43 @@ async function buildReport(days, allowedTypes) {
   const withWo = candidates.filter(c => c.wo_number);
   const noWo = candidates.filter(c => !c.wo_number);
 
-  // Dedupe within the scan (same WO can appear in multiple emails).
-  // Prefer a 'dispatch' email and the most recent date per WO number.
-  const seen = new Map();
+  // Group all candidate emails by WO number so we can reason across the whole
+  // history of each WO in the window (e.g. dispatched on the 4th, cancelled on
+  // the 15th). A cancellation SUPERSEDES a dispatch: a WO that was dispatched
+  // and later cancelled must NOT be imported as a fresh 'pending' order.
+  const groups = new Map();
   for (const c of withWo) {
-    const existing = seen.get(c.wo_number);
-    if (!existing) { seen.set(c.wo_number, c); continue; }
-    const existingIsDispatch = existing.category === 'dispatch';
-    const cIsDispatch = c.category === 'dispatch';
-    if ((cIsDispatch && !existingIsDispatch) ||
-        (cIsDispatch === existingIsDispatch && c.date && existing.date && new Date(c.date) > new Date(existing.date))) {
-      seen.set(c.wo_number, c);
-    }
+    if (!groups.has(c.wo_number)) groups.set(c.wo_number, []);
+    groups.get(c.wo_number).push(c);
   }
-  const uniqueWos = Array.from(seen.values());
+
+  const uniqueWos = [];
+  for (const [woNumber, list] of groups.entries()) {
+    const hasDispatch = list.some(e => e.category === 'dispatch');
+    const hasCancellation = list.some(e => e.category === 'cancellation');
+
+    // Representative email: the dispatch email if present (its body is needed to
+    // parse building/NTE on import); otherwise the most recent email.
+    const byNewest = (a, b) => new Date(b.date || 0) - new Date(a.date || 0);
+    const dispatchEmail = list.filter(e => e.category === 'dispatch').sort(byNewest)[0];
+    const newest = list.slice().sort(byNewest)[0];
+    const rep = dispatchEmail || newest;
+
+    // Effective category: cancellation wins, then dispatch, else the rep's own.
+    let effectiveCategory;
+    if (hasCancellation) effectiveCategory = 'cancellation';
+    else if (hasDispatch) effectiveCategory = 'dispatch';
+    else effectiveCategory = rep.category;
+
+    uniqueWos.push({
+      ...rep,
+      wo_number: woNumber,
+      category: effectiveCategory,
+      // Keep the dispatch email's uid for the body fetch even if relabelled.
+      uid: (dispatchEmail || rep).uid,
+      cancelledAfterDispatch: hasDispatch && hasCancellation
+    });
+  }
 
   // Which already exist in the DB?
   const woNumbers = uniqueWos.map(c => c.wo_number);
@@ -434,6 +457,7 @@ async function buildReport(days, allowedTypes) {
     date: c.date,
     wasRead: c.isRead,
     category: c.category,
+    cancelledAfterDispatch: !!c.cancelledAfterDispatch,
     matchType: c.matchType,
     uid: c.uid
   });
@@ -445,6 +469,7 @@ async function buildReport(days, allowedTypes) {
     capped: candidates.length >= MAX_CANDIDATES,
     uniqueWorkOrders: uniqueWos.length,
     missingTotal: missingAll.length,
+    dispatchedThenCancelled: missingAll.filter(c => c.cancelledAfterDispatch).length,
     categorySummary,
     importable: importable
       .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))

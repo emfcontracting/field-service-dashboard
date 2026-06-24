@@ -508,10 +508,10 @@ export async function POST(request) {
         return Response.json({ success: false, error: `Work order ${wo.wo_number} already exists` }, { status: 400 });
       }
 
-      // Insert
-      const { data, error } = await supabase
+      // Insert (race-safe: ON CONFLICT DO NOTHING via upsert)
+      const { data: insertedRows, error } = await supabase
         .from('work_orders')
-        .insert({
+        .upsert({
           wo_number: wo.wo_number,
           building: wo.building,
           priority: wo.priority,
@@ -521,15 +521,18 @@ export async function POST(request) {
           status: 'pending',
           comments: wo.comments,
           nte: wo.nte || 0
-        })
-        .select()
-        .single();
+        }, { onConflict: 'wo_number', ignoreDuplicates: true })
+        .select();
 
       if (error) {
         return Response.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return Response.json({ success: true, message: `Work order ${wo.wo_number} created!`, workOrder: data });
+      if (!insertedRows || insertedRows.length === 0) {
+        return Response.json({ success: false, error: `Work order ${wo.wo_number} already exists` }, { status: 400 });
+      }
+
+      return Response.json({ success: true, message: `Work order ${wo.wo_number} created!`, workOrder: insertedRows[0] });
     }
     
     // Handle bulk import from IMAP
@@ -559,10 +562,10 @@ export async function POST(request) {
           continue;
         }
 
-        // Insert work order
-        const { error: insertError } = await supabase
+        // Insert work order (race-safe: ON CONFLICT DO NOTHING via upsert)
+        const { data: insertedRows, error: insertError } = await supabase
           .from('work_orders')
-          .insert({
+          .upsert({
             wo_number: wo.wo_number,
             building: wo.building,
             priority: wo.priority,
@@ -572,10 +575,18 @@ export async function POST(request) {
             status: wo.status || 'pending',
             comments: wo.comments,
             nte: wo.nte || 0
-          });
+          }, { onConflict: 'wo_number', ignoreDuplicates: true })
+          .select();
 
         if (insertError) {
           results.errors.push(`${wo.wo_number}: ${insertError.message}`);
+          continue;
+        }
+
+        // No row returned = conflict = already existed (race caught at insert).
+        if (!insertedRows || insertedRows.length === 0) {
+          results.skipped++;
+          results.errors.push(`${wo.wo_number}: Already exists`);
           continue;
         }
 

@@ -560,10 +560,11 @@ export async function GET(request) {
           continue;
         }
 
-        // Insert work order
-        const { data: insertedWO, error: insertError } = await supabase
+        // Insert work order (race-safe: ON CONFLICT DO NOTHING via upsert).
+        // Requires UNIQUE constraint uq_work_orders_wo_number on work_orders.wo_number.
+        const { data: insertedRows, error: insertError } = await supabase
           .from('work_orders')
-          .insert({
+          .upsert({
             wo_number: workOrder.wo_number,
             building: workOrder.building,
             priority: workOrder.priority,
@@ -573,9 +574,8 @@ export async function GET(request) {
             status: 'pending',
             comments: workOrder.comments,
             nte: workOrder.nte || 0
-          })
-          .select()
-          .single();
+          }, { onConflict: 'wo_number', ignoreDuplicates: true })
+          .select();
 
         if (insertError) {
           console.error(`Error inserting WO ${workOrder.wo_number}:`, insertError);
@@ -583,6 +583,16 @@ export async function GET(request) {
           continue;
         }
 
+        // No row returned = conflict = the WO already existed (caught a race).
+        if (!insertedRows || insertedRows.length === 0) {
+          console.log(`WO ${workOrder.wo_number} already existed (caught at insert), skipping`);
+          results.duplicates++;
+          existingWONumbers.add(workOrder.wo_number);
+          await markAsRead(email.uid);
+          continue;
+        }
+
+        const insertedWO = insertedRows[0];
         console.log(`✓ Imported WO ${workOrder.wo_number}`);
         results.imported++;
         results.workOrders.push({

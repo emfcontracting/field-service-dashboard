@@ -83,14 +83,21 @@ export async function POST(request) {
           comments: rowData['COMMENTS'] || null,
         };
 
-        // Insert work order
-        const { error: woError } = await supabase
+        // Insert work order (race-safe: ON CONFLICT DO NOTHING via upsert)
+        const { data: insertedRows, error: woError } = await supabase
           .from('work_orders')
-          .insert(workOrder);
+          .upsert(workOrder, { onConflict: 'wo_number', ignoreDuplicates: true })
+          .select();
 
         if (woError) {
           console.error('Error importing:', woNumber, woError);
           errors++;
+          continue;
+        }
+
+        // No row returned = conflict = already existed (race caught at insert).
+        if (!insertedRows || insertedRows.length === 0) {
+          skipped++;
           continue;
         }
 

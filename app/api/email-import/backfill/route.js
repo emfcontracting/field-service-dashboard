@@ -466,9 +466,9 @@ export async function POST(request) {
           continue;
         }
 
-        const { error: insertError } = await supabase
+        const { data: insertedRows, error: insertError } = await supabase
           .from('work_orders')
-          .insert({
+          .upsert({
             wo_number: woNumber,
             building: parsed.building,
             priority: parsed.priority,
@@ -478,10 +478,17 @@ export async function POST(request) {
             status: 'pending',
             comments: parsed.comments,
             nte: parsed.nte || 0
-          });
+          }, { onConflict: 'wo_number', ignoreDuplicates: true })
+          .select();
 
         if (insertError) {
           results.errors.push(`${woNumber}: ${insertError.message}`);
+          continue;
+        }
+
+        // No row returned = conflict = already existed (race caught at insert).
+        if (!insertedRows || insertedRows.length === 0) {
+          results.skipped++;
           continue;
         }
 

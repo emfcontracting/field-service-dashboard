@@ -309,9 +309,10 @@ export async function GET(request) {
     }
 
     // Import work order
-    const { data: inserted, error: insertError } = await supabase
+    // Import work order (race-safe: ON CONFLICT DO NOTHING via upsert).
+    const { data: insertedRows, error: insertError } = await supabase
       .from('work_orders')
-      .insert({
+      .upsert({
         wo_number: workOrder.wo_number,
         building: workOrder.building,
         priority: workOrder.priority,
@@ -321,9 +322,8 @@ export async function GET(request) {
         status: 'pending',
         comments: workOrder.comments,
         nte: workOrder.nte || 0
-      })
-      .select()
-      .single();
+      }, { onConflict: 'wo_number', ignoreDuplicates: true })
+      .select();
 
     if (insertError) {
       return Response.json({
@@ -331,6 +331,16 @@ export async function GET(request) {
         error: insertError.message
       }, { status: 500 });
     }
+
+    // No row returned = conflict = it already existed (race caught at insert).
+    if (!insertedRows || insertedRows.length === 0) {
+      return Response.json({
+        success: false,
+        error: `Work order ${workOrder.wo_number} already exists`
+      }, { status: 400 });
+    }
+
+    const inserted = insertedRows[0];
 
     return Response.json({
       success: true,

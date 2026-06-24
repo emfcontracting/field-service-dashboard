@@ -1,5 +1,8 @@
 // app/api/email-import/manual/route.js
-// Manual work order import by WO number - searches email regardless of read status
+// Manual work order import by WO number - searches email regardless of read status.
+// Default lookback window is now 90 days (~3 months); override with ?days=N (max 365).
+//   GET /api/email-import/manual?wo=ST3107912
+//   GET /api/email-import/manual?wo=PJ3118923&days=120
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
@@ -27,8 +30,8 @@ function connectIMAP() {
   });
 }
 
-// Search for email by WO number (regardless of read status)
-async function findEmailByWO(woNumber) {
+// Search for email by WO number (regardless of read status), within the last `days` days.
+async function findEmailByWO(woNumber, days = 90) {
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
     let foundEmail = null;
@@ -40,13 +43,13 @@ async function findEmailByWO(woNumber) {
           return reject(err);
         }
 
-        // Search for emails with this WO number in subject (any sender)
-        // Search last 30 days, regardless of read status
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Search for emails with this WO number in subject (any sender),
+        // within the lookback window, regardless of read status.
+        const since = new Date();
+        since.setDate(since.getDate() - days);
 
         imap.search([
-          ['SINCE', thirtyDaysAgo],
+          ['SINCE', since],
           ['SUBJECT', woNumber]
         ], (err, results) => {
           if (err) {
@@ -59,8 +62,9 @@ async function findEmailByWO(woNumber) {
             return resolve(null);
           }
 
-          // Get the first matching email
-          const fetch = imap.fetch([results[0]], {
+          // Get the most recent matching email (highest UID).
+          const targetUid = results.sort((a, b) => b - a)[0];
+          const fetch = imap.fetch([targetUid], {
             bodies: '',
             markSeen: false
           });
@@ -148,14 +152,14 @@ function parseCBREEmail(subject, body) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Prefix can be 0-3 letters (C, P, S, ST, etc.)
-  const woMatch = (subject || '').match(/(?:PM\s+)?Work Order\s+([A-Z]{0,3}\d+)/i);
+  // Prefix can be 0-3 letters (C, P, S, ST, PJ, etc.). Handles spaces OR underscores.
+  const woMatch = (subject || '').match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]{0,3}\d+)/i);
   if (woMatch) {
     workOrder.wo_number = woMatch[1].toUpperCase();
   }
 
-  const priorityMatch = cleanBody.match(/Priority[:\s]*(P\d+)[\s\-]*([^<\n]*)/i) || 
-                        (subject || '').match(/Priority[:\s]*(P\d+)/i);
+  const priorityMatch = cleanBody.match(/Priority[:\s_]*(P\d+)[\s\-_]*([^<\n]*)/i) || 
+                        (subject || '').match(/Priority[:\s_]*(P\d+)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
     const pText = (priorityMatch[2] || '').toLowerCase();
@@ -252,11 +256,12 @@ function parseCBREEmail(subject, body) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const woNumber = searchParams.get('wo');
+  const days = Math.min(parseInt(searchParams.get('days')) || 90, 365);
 
   if (!woNumber) {
     return Response.json({
       success: false,
-      error: 'Please provide a WO number using ?wo=C2958127'
+      error: 'Please provide a WO number using ?wo=C2958127 (optional &days=N, default 90, max 365)'
     }, { status: 400 });
   }
 
@@ -277,25 +282,30 @@ export async function GET(request) {
     }
 
     // Search for email
-    const email = await findEmailByWO(woNumber);
+    const email = await findEmailByWO(woNumber, days);
 
     if (!email) {
       return Response.json({
         success: false,
-        error: `No email found for work order ${woNumber} in last 30 days`
+        error: `No email found for work order ${woNumber} in last ${days} days`
       }, { status: 404 });
     }
 
     // Parse the email
     const workOrder = parseCBREEmail(email.subject, email.body);
 
-    // Verify WO number matches (case-insensitive)
-    if (workOrder.wo_number.toUpperCase() !== woNumber.toUpperCase()) {
+    // Verify WO number matches (case-insensitive). Fall back to the requested
+    // number if the subject wording prevented canonical extraction but the
+    // email genuinely matched the WO number in the IMAP subject search.
+    if (workOrder.wo_number && workOrder.wo_number.toUpperCase() !== woNumber.toUpperCase()) {
       return Response.json({
         success: false,
         error: `Email found but WO number doesn't match. Expected: ${woNumber}, Found: ${workOrder.wo_number}`,
         parsedData: workOrder
       }, { status: 400 });
+    }
+    if (!workOrder.wo_number) {
+      workOrder.wo_number = woNumber.toUpperCase();
     }
 
     // Import work order

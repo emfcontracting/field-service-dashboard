@@ -445,9 +445,17 @@ function DisputeCard({
               {reasonLabel}
             </span>
             {invoice && (
-              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 font-mono">
+              <a
+                href={`/invoices?invoiceId=${invoice.invoice_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title={`Open invoice ${invoice.invoice_number} in a new tab`}
+                className="text-[10px] px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 font-mono hover:bg-blue-500/30 hover:text-blue-300 hover:border-blue-400/50 transition cursor-pointer inline-flex items-center gap-1"
+              >
                 {invoice.invoice_number}
-              </span>
+                <span className="text-[8px] opacity-70">↗</span>
+              </a>
             )}
           </div>
           <div className="text-slate-500 text-xs mt-1 truncate">{dispute.building}</div>

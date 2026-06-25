@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
@@ -188,6 +188,9 @@ export default function InvoicingPage() {
   const [lastSelectedIndex, setLastSelectedIndex]       = useState(null);
   const [bulkMarking, setBulkMarking]                   = useState(false);
 
+  // Guard so the deep-link auto-open (from ?invoiceId=) only fires once
+  const deepLinkDone = useRef(false);
+
   const AWAITING_STATUSES = ['draft', 'approved', 'accepted', 'synced'];
 
   // ── Filter effects ──────────────────────────────────────────────────────
@@ -240,6 +243,29 @@ export default function InvoicingPage() {
   }, [invoiceSearchTerm, invoices, statusFilter]);
 
   useEffect(() => { fetchData(); }, []);
+
+  // Deep-link: when arriving from another view (e.g. UPS Escalation) with
+  // ?invoiceId=<uuid> (or ?invoiceNo=INV-...), jump to the Invoices tab and
+  // open that invoice automatically — no manual search needed.
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    if (loading || invoices.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('invoiceId') || params.get('invoiceNo') || params.get('invoice');
+    if (!target) { deepLinkDone.current = true; return; }
+    deepLinkDone.current = true;
+    const t = target.toLowerCase();
+    const match = invoices.find(
+      inv => inv.invoice_id === target || inv.invoice_number?.toLowerCase() === t
+    );
+    if (match) {
+      setActiveTab('invoiced');
+      setStatusFilter('all');
+      setInvoiceSearchTerm(match.invoice_number);
+      selectInvoice(match);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, invoices]);
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = async () => {

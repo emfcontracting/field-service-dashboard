@@ -31,11 +31,18 @@ const CONTACT_LABELS = [
   { match: 'Electrical',                          display: 'Electrical' },
   { match: 'Fire',                                display: 'Fire' },
   { match: 'Security',                            display: 'Security' },
-  { match: 'GTSG',                                display: 'GTSG' },
+  { match: 'GTSG',                                display: 'GTSG', boundary: true },
 ];
 
 // Matches US phone formats: "720-216-9999", "(912) 650-1081", "555.555.5555"
 const PHONE_REGEX = /(\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})/;
+
+// Hard end of the contact block. CBRE dispatch emails follow the contact list
+// with a coding/compliance section ("UPS Specific Coding", cost codes, the HSE
+// WARNING, Terms & Conditions, ...). None of that belongs in the contacts, so we
+// truncate any contact value at the first of these markers — this also stops the
+// final contact from swallowing the rest of the email when no label follows it.
+const STOP_REGEX = /(UPS Specific Coding|Location Cost Code|Project Cost Code|Client Contract Number|Ops\s*Type|Product Code|\*{0,3}\s*WARNING|Terms and Conditions)/i;
 
 function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,7 +129,10 @@ export function buildContactLines(cleanBody) {
     const next = found[i + 1];
     if (cur.def.boundary) continue; // requestor — handled as its own field
 
-    const rawValue = scope.slice(cur.valueStart, next ? next.start : undefined);
+    let rawValue = scope.slice(cur.valueStart, next ? next.start : undefined);
+    // Never let a value bleed into the post-contact coding/compliance section.
+    const stopAt = rawValue.search(STOP_REGEX);
+    if (stopAt >= 0) rawValue = rawValue.slice(0, stopAt);
     const formatted = formatContact(cur.def.display, rawValue);
     if (formatted) lines.push(formatted);
   }

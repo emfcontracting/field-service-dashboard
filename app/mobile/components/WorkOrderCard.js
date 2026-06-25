@@ -58,14 +58,17 @@ function NTEStatusBadge({ cbreStatus, language }) {
 export default function WorkOrderCard({ workOrder, onClick }) {
   const { language } = useLanguage();
   
-  // Highlight card border for escalation
+  // Highlight card border for escalation / returned-for-review
   const isEscalation = workOrder.cbre_status === 'escalation';
   const isRejected = workOrder.cbre_status === 'quote_rejected' || workOrder.cbre_status === 'invoice_rejected';
-  const cardBorder = isEscalation 
-    ? 'border-l-4 border-red-500' 
-    : isRejected 
-      ? 'border-l-4 border-orange-500' 
-      : '';
+  const isTechReview = workOrder.status === 'tech_review';
+  const cardBorder = isTechReview
+    ? 'border-l-4 border-yellow-400'
+    : isEscalation 
+      ? 'border-l-4 border-red-500' 
+      : isRejected 
+        ? 'border-l-4 border-orange-500' 
+        : '';
   
   return (
     <div
@@ -80,7 +83,11 @@ export default function WorkOrderCard({ workOrder, onClick }) {
             {getPriorityBadge(workOrder.priority)}
           </span>
         </div>
-        <span className="text-xs bg-gray-700 px-2 py-1 rounded-full">
+        <span className={`text-xs px-2 py-1 rounded-full ${
+          workOrder.status === 'tech_review'
+            ? 'bg-yellow-400 text-black font-bold animate-pulse'
+            : 'bg-gray-700'
+        }`}>
           {getStatusBadge(workOrder.status)}
         </span>
       </div>

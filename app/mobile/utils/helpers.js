@@ -55,6 +55,7 @@ export function getStatusBadge(status) {
     'completed': '✅ Completed',
     'on_hold': '⏸️ On Hold',
     'needs_return': '🔁 Return for Review',
+    'tech_review': '🔍 Tech Review',
     'return_trip': '🔁 Return Trip',
     'rejected': '❌ Rejected',
     'missing_data': '🚩 MISSING DATA',

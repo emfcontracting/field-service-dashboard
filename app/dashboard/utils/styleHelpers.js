@@ -7,6 +7,7 @@ export function getStatusColor(status) {
     in_progress: 'bg-yellow-600',
     return_trip: 'bg-amber-700',          // Tech needs to physically go back to site
     needs_return: 'bg-orange-600',         // Invoicing sent it back for missing data
+    tech_review: 'bg-yellow-400 text-black font-bold animate-pulse', // Returned from invoicing for tech review — bright yellow, blinking
     rejected: 'bg-red-700',                // EMF rejected the work
     completed: 'bg-green-600',
     missing_data: 'bg-red-600 animate-pulse',

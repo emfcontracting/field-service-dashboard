@@ -118,7 +118,7 @@ export function getStatusColor(status) {
     'assigned': 'bg-blue-600',
     'in-progress': 'bg-orange-600',
     'in_progress': 'bg-orange-600',
-    'tech_review': 'bg-purple-600',
+    'tech_review': 'bg-yellow-400 text-black font-bold animate-pulse',
     'return_trip': 'bg-orange-600',
     'completed': 'bg-green-600',
     'acknowledged': 'bg-cyan-600'

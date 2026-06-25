@@ -121,7 +121,7 @@ const getStatusBadge = (status) => {
     case 'in_progress':
       return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
     case 'tech_review':
-      return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+      return 'bg-yellow-400 text-black border border-yellow-300 animate-pulse font-bold';
     case 'return_trip':
       return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
     case 'completed':

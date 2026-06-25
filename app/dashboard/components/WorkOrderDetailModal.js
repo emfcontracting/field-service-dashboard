@@ -1789,6 +1789,7 @@ const sendAssignmentNotifications = async () => {
                 <option value="in_progress" className="bg-[#0d0d14] text-slate-200">In Progress</option>
                 <option value="return_trip" className="bg-[#0d0d14] text-slate-200">Return Trip</option>
                 <option value="needs_return" className="bg-[#0d0d14] text-slate-200">Return for Review</option>
+                <option value="tech_review" className="bg-[#0d0d14] text-slate-200">🔍 Tech Review (returned from invoicing)</option>
                 <option value="completed" className="bg-[#0d0d14] text-slate-200">Completed</option>
                 <option value="rejected" className="bg-[#0d0d14] text-slate-200">❌ Rejected</option>
                 {selectedWO.status === 'missing_data' && (

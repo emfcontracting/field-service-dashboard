@@ -2463,6 +2463,13 @@ const sendAssignmentNotifications = async () => {
                         }`}>
                           {quote.is_verbal_nte ? '📞 Verbal NTE' : '📄 Written NTE'}
                         </span>
+                        {!isReconciliation && (
+                          <span className={`inline-block px-3 py-1 rounded text-xs font-bold mr-2 ${
+                            quote.billing_mode === 'fixed' ? 'bg-emerald-600 text-emerald-100' : 'bg-slate-600 text-slate-100'
+                          }`}>
+                            {quote.billing_mode === 'fixed' ? '💵 Fixed Quote' : '📊 T&M'}
+                          </span>
+                        )}
                         <span className="text-slate-400 text-sm">
                           {new Date(quote.created_at).toLocaleDateString('en-US', {
                             month: 'short',
@@ -2539,6 +2546,44 @@ const sendAssignmentNotifications = async () => {
                           />
                         ) : (
                           <p className="text-slate-300 text-sm">{quote.description}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Billing mode toggle (fixed quote vs T&M) — only while editing, estimate quotes only */}
+                    {editingNTE === quote.quote_id && !isReconciliation && (
+                      <div className="mb-3 bg-[#0a0a0f] border border-emerald-500/30 rounded-lg p-3">
+                        <label className="text-xs text-slate-400 block mb-2">🧾 How will CBRE be billed?</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = nteIncreases.map(q => q.quote_id === quote.quote_id ? { ...q, billing_mode: 'actual' } : q);
+                              setNteIncreases(updated);
+                              handleUpdateNTEIncrease(quote.quote_id, { billing_mode: 'actual' });
+                            }}
+                            className={`px-3 py-2 rounded text-xs font-semibold border-2 transition ${
+                              quote.billing_mode !== 'fixed' ? 'bg-blue-700 border-blue-400 text-white' : 'bg-[#2d2d44] border-[#3d3d5c] text-slate-400'
+                            }`}
+                          >
+                            📊 T&M / Estimate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = nteIncreases.map(q => q.quote_id === quote.quote_id ? { ...q, billing_mode: 'fixed' } : q);
+                              setNteIncreases(updated);
+                              handleUpdateNTEIncrease(quote.quote_id, { billing_mode: 'fixed' });
+                            }}
+                            className={`px-3 py-2 rounded text-xs font-semibold border-2 transition ${
+                              quote.billing_mode === 'fixed' ? 'bg-emerald-700 border-emerald-400 text-white' : 'bg-[#2d2d44] border-[#3d3d5c] text-slate-400'
+                            }`}
+                          >
+                            💵 Fixed Quote
+                          </button>
+                        </div>
+                        {quote.billing_mode === 'fixed' && (
+                          <p className="text-[11px] text-emerald-300 mt-2">Invoice will bill this quote amount as-is (not actual costs).</p>
                         )}
                       </div>
                     )}

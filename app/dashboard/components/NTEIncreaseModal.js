@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getCurrentNteCeiling, markSubmittedToCBRE } from '../../mobile/services/quoteService';
 
 // Rate constants - MUST match CostSummarySection & quoteService
 const RATES = {
@@ -68,6 +69,20 @@ export default function NTEIncreaseModal({
 
   const [saving, setSaving] = useState(false);
   const [loadingCosts, setLoadingCosts] = useState(true);
+
+  // Cumulative NTE chain: current ceiling + count of prior increases for this WO.
+  // Excludes the quote being edited so a follow-up baselines off its predecessor.
+  const [nteChain, setNteChain] = useState({ ceiling: 0, priorCount: 0, latestStatus: null, latestQuoteId: null });
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const excludeId = editMode && existingQuote ? existingQuote.quote_id : null;
+      const chain = await getCurrentNteCeiling(supabase, workOrder.wo_id, workOrder.nte, excludeId);
+      if (active) setNteChain(chain);
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrder.wo_id, editMode, existingQuote?.quote_id]);
 
   // Load current accrued costs on mount
   useEffect(() => {
@@ -243,13 +258,21 @@ export default function NTEIncreaseModal({
 
   const additional = calcAdditional();
   const reconciliation = calcReconciliation();
-  const originalNTE = parseFloat(workOrder.nte) || 0;
+
+  // Cumulative chain (decken-basiert): a follow-up builds on the running ceiling,
+  // while the first increase keeps the original accrued-based math.
+  const isFollowUp = nteChain.priorCount > 0;
+  const baselineNTE = isFollowUp ? nteChain.ceiling : (parseFloat(workOrder.nte) || 0);
+  const originalNTE = baselineNTE;
+  const sequenceNumber = nteChain.priorCount + 1;
+  const supersedesQuoteId = isFollowUp ? nteChain.latestQuoteId : null;
+  const priorNotApproved = isFollowUp && nteChain.latestStatus !== 'approved' && nteChain.latestStatus !== 'verbal_approved';
 
   // Mode-specific values
   const isReconciliation = requestMode === 'reconciliation';
   const projectedTotal = isReconciliation
     ? reconciliation.total
-    : currentCosts.total + additional.total;
+    : (isFollowUp ? baselineNTE + additional.total : currentCosts.total + additional.total);
   const isOverBudget = projectedTotal > originalNTE;
   const overageAmount = Math.max(0, projectedTotal - originalNTE);
 
@@ -378,6 +401,12 @@ Final Cost Breakdown:
         });
       }
 
+      // Chain fields only on create (sequence/supersedes are immutable per increase)
+      if (!editMode) {
+        nteData.sequence_number = sequenceNumber;
+        nteData.supersedes_quote_id = supersedesQuoteId;
+      }
+
       let result;
 
       if (editMode && existingQuote) {
@@ -470,9 +499,31 @@ Final Cost Breakdown:
     }
   };
 
+  // Mark a written NTE as uploaded to CBRE (pending → submitted)
+  const handleMarkSubmitted = async () => {
+    if (!existingQuote) return;
+    const submitter = prompt('Mark this NTE Increase as uploaded to CBRE.\nEnter your name:');
+    if (!submitter) return;
+    try {
+      setSaving(true);
+      await markSubmittedToCBRE(supabase, existingQuote.quote_id, submitter);
+      alert('✅ Marked as submitted to CBRE — now waiting on CBRE approval.');
+      onSave({ ...existingQuote, nte_status: 'submitted' });
+    } catch (err) {
+      console.error('Error marking submitted:', err);
+      alert('❌ Error: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const isWrittenPending = editMode && existingQuote && 
     !existingQuote.is_verbal_nte && 
     (existingQuote.nte_status === 'pending' || !existingQuote.nte_status);
+  const isWrittenSubmitted = editMode && existingQuote &&
+    !existingQuote.is_verbal_nte &&
+    existingQuote.nte_status === 'submitted';
+  const canApproveNTE = isWrittenPending || isWrittenSubmitted;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4 overflow-y-auto">
@@ -490,6 +541,26 @@ Final Cost Breakdown:
 
         {/* Content */}
         <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+
+          {/* Follow-up NTE increase context */}
+          {isFollowUp && (
+            <div className={`rounded-lg p-4 border-2 ${priorNotApproved ? 'bg-orange-900 border-orange-500' : 'bg-blue-900 border-blue-500'}`}>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl flex-shrink-0">{priorNotApproved ? '⚠️' : 'ℹ️'}</span>
+                <div className="text-sm">
+                  <h3 className="font-bold mb-1">Follow-up NTE Increase #{sequenceNumber}</h3>
+                  <p className="leading-relaxed">
+                    This builds on the current ceiling of <strong>${baselineNTE.toFixed(2)}</strong> from the previous increase. The new work below is added on top of it.
+                  </p>
+                  {priorNotApproved && (
+                    <p className="mt-2 text-orange-200">
+                      Heads up: the previous increase isn't approved yet (status: <strong>{nteChain.latestStatus || 'pending'}</strong>). This request chains on its requested amount — if that one changes, revisit this one.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ⚠️ WARNING BANNER */}
           <div className="bg-amber-900 border-2 border-amber-500 rounded-lg p-4">
@@ -940,6 +1011,25 @@ Final Cost Breakdown:
                     </span>
                   </div>
                 </>
+              ) : isFollowUp ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span>Previous NTE (current ceiling):</span>
+                    <span className="font-semibold text-blue-300">${baselineNTE.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>+ Additional Work Estimate:</span>
+                    <span className="font-semibold text-yellow-300">${additional.total.toFixed(2)}</span>
+                  </div>
+                  <div className="border-t border-green-700 pt-2 mt-2 flex justify-between text-lg font-bold text-green-300">
+                    <span>NEW NTE NEEDED:</span>
+                    <span>${projectedTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Accrued so far (reference only):</span>
+                    <span>${currentCosts.total.toFixed(2)}</span>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="flex justify-between text-sm">
@@ -961,7 +1051,7 @@ Final Cost Breakdown:
               <div className="mt-4 pt-4 border-t border-green-700">
                 {!isReconciliation && (
                   <div className="flex justify-between text-sm text-gray-300 mb-2">
-                    <span>Original NTE Budget:</span>
+                    <span>{isFollowUp ? 'Current NTE (ceiling):' : 'Original NTE Budget:'}</span>
                     <span>${originalNTE.toFixed(2)}</span>
                   </div>
                 )}
@@ -1021,8 +1111,20 @@ Final Cost Breakdown:
                     : '✅ Create NTE Increase Request'}
             </button>
             
-            {/* Approve Button - Only for written pending NTEs in edit mode */}
+            {/* Mark as uploaded to CBRE (pending → submitted) */}
             {isWrittenPending && (
+              <button
+                onClick={handleMarkSubmitted}
+                disabled={saving}
+                className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold transition"
+                title="Mark this NTE increase as uploaded to CBRE"
+              >
+                📤 Submitted to CBRE
+              </button>
+            )}
+
+            {/* Approve - available once pending or submitted to CBRE */}
+            {canApproveNTE && (
               <button
                 onClick={handleApproveWrittenNTE}
                 disabled={saving}

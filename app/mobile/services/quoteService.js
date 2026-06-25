@@ -156,6 +156,74 @@ export async function calculateExistingCosts(supabase, workOrder, currentTeamLis
   }
 }
 
+// ============================================================
+// CUMULATIVE CHAIN HELPERS (decken-basiert / ceiling-based)
+// ============================================================
+
+// Returns the current effective NTE ceiling for a work order, derived from its
+// NTE increase chain rather than the (possibly stale) work_orders.nte value.
+//
+// The ceiling = new_nte_amount of the most recent NON-REJECTED increase.
+// Rejected increases are ignored so the chain doesn't carry dead amounts.
+// When there are no prior increases, falls back to `fallbackNte` (the WO's NTE).
+//
+// `excludeQuoteId` lets the edit flow ignore the quote being edited so a
+// follow-up baselines off its predecessor, not itself.
+//
+// Returns: { ceiling, priorCount, latestStatus, latestQuoteId }
+export async function getCurrentNteCeiling(supabase, woId, fallbackNte = 0, excludeQuoteId = null) {
+  const fallback = parseFloat(fallbackNte) || 0;
+  if (!woId) return { ceiling: fallback, priorCount: 0, latestStatus: null, latestQuoteId: null };
+
+  const { data, error } = await supabase
+    .from('work_order_quotes')
+    .select('quote_id, new_nte_amount, nte_status, created_at')
+    .eq('wo_id', woId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('getCurrentNteCeiling error:', error);
+    return { ceiling: fallback, priorCount: 0, latestStatus: null, latestQuoteId: null };
+  }
+
+  // Non-rejected increases form the running ceiling chain.
+  const chain = (data || []).filter(
+    q => q.nte_status !== 'rejected' && q.quote_id !== excludeQuoteId
+  );
+
+  if (chain.length === 0) {
+    return { ceiling: fallback, priorCount: 0, latestStatus: null, latestQuoteId: null };
+  }
+
+  const latest = chain[0]; // already sorted newest-first
+  const ceiling = parseFloat(latest.new_nte_amount) || fallback;
+  return {
+    ceiling: Math.round(ceiling * 100) / 100,
+    priorCount: chain.length,
+    latestStatus: latest.nte_status || null,
+    latestQuoteId: latest.quote_id || null
+  };
+}
+
+// Mark a written NTE increase as uploaded to CBRE (status: submitted).
+// This is the step between 'pending' (created in FSM) and 'approved' (CBRE OK'd).
+export async function markSubmittedToCBRE(supabase, quoteId, submittedBy) {
+  const { data, error } = await supabase
+    .from('work_order_quotes')
+    .update({
+      nte_status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      submitted_by: submittedBy || null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('quote_id', quoteId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 // Load quotes for a work order
 export async function loadQuotes(supabase, woId) {
   const { data, error } = await supabase
@@ -203,11 +271,32 @@ export async function loadQuoteWithMaterials(supabase, quoteId) {
 export async function createQuote(supabase, quoteData, userId) {
   const totals = calculateQuoteTotals(quoteData);
 
-  // Get snapshot values from NTEIncreasePage
+  // Snapshot of accrued costs at creation time (informational + first-increase base)
   const currentCostsSnapshot = Math.round((parseFloat(quoteData.existing_costs_total) || 0) * 100) / 100;
-  const newNteAmount = Math.round((parseFloat(quoteData.projected_total) || (currentCostsSnapshot + totals.grand_total)) * 100) / 100;
-  const originalNte = parseFloat(quoteData.original_nte) || 0;
   const isVerbal = quoteData.is_verbal_nte || false;
+
+  // ── CUMULATIVE CHAIN (decken-basiert) ───────────────────────────────────
+  // A follow-up increase builds on the PREVIOUS increase's ceiling, not the
+  // stale work_orders.nte (which isn't bumped until approval). The FIRST
+  // increase has no prior ceiling, so it keeps the original accrued-based math.
+  const chain = await getCurrentNteCeiling(supabase, quoteData.wo_id, quoteData.original_nte);
+  const isFollowUp = chain.priorCount > 0;
+  const sequenceNumber = chain.priorCount + 1;
+
+  let originalNte;
+  let newNteAmount;
+  let supersedesQuoteId = null;
+
+  if (isFollowUp) {
+    // Previous ceiling + THIS request's additional work
+    originalNte = chain.ceiling;
+    newNteAmount = Math.round((chain.ceiling + totals.grand_total) * 100) / 100;
+    supersedesQuoteId = chain.latestQuoteId;
+  } else {
+    // First increase: original WO NTE as reference, accrued + additional as new NTE
+    originalNte = parseFloat(quoteData.original_nte) || 0;
+    newNteAmount = Math.round((parseFloat(quoteData.projected_total) || (currentCostsSnapshot + totals.grand_total)) * 100) / 100;
+  }
 
   const { data, error } = await supabase
     .from('work_order_quotes')
@@ -238,6 +327,9 @@ export async function createQuote(supabase, quoteData, userId) {
       current_costs_snapshot: currentCostsSnapshot,
       new_nte_amount: newNteAmount,
       original_nte: originalNte,
+      // CUMULATIVE CHAIN
+      sequence_number: sequenceNumber,
+      supersedes_quote_id: supersedesQuoteId,
       // STATUS: verbal = immediately approved, written = pending
       nte_status: isVerbal ? 'verbal_approved' : 'pending',
       approved_at: isVerbal ? new Date().toISOString() : null,

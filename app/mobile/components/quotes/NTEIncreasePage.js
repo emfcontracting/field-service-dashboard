@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { RATES as QUOTE_RATES, calculateExistingCosts as calcExistingCosts } from '../../services/quoteService';
+import { RATES as QUOTE_RATES, calculateExistingCosts as calcExistingCosts, getCurrentNteCeiling } from '../../services/quoteService';
 
 // Rate constants from shared quoteService (single source of truth)
 const RATES = {
@@ -54,6 +54,7 @@ export default function NTEIncreasePage({
     grandTotal: 0
   });
   const [loadingExisting, setLoadingExisting] = useState(true);
+  const [nteChain, setNteChain] = useState({ ceiling: 0, priorCount: 0, latestStatus: null, latestQuoteId: null });
   
   // Form state for ADDITIONAL costs (the new work being estimated)
   const [formData, setFormData] = useState({
@@ -80,6 +81,19 @@ export default function NTEIncreasePage({
       calculateExistingCosts();
     }
   }, [wo.wo_id, currentTeamList]);
+
+  // Load the current NTE ceiling from the increase chain (for cumulative follow-ups)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!wo.wo_id) return;
+      const excludeId = editMode && selectedQuote ? selectedQuote.quote_id : null;
+      const chain = await getCurrentNteCeiling(supabase, wo.wo_id, wo.nte, excludeId);
+      if (active) setNteChain(chain);
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo.wo_id, editMode, selectedQuote]);
   
   // Calculate existing costs using shared function from quoteService
   const calculateExistingCosts = async () => {
@@ -187,8 +201,14 @@ export default function NTEIncreasePage({
   const additionalCosts = calculateAdditionalCosts();
   
   // Combined totals
-  const projectedTotalCost = existingCosts.grandTotal + additionalCosts.grand_total;
-  const originalNTE = parseFloat(wo.nte) || 0;
+  // Cumulative chain (decken-basiert): a follow-up builds on the running ceiling.
+  const isFollowUp = nteChain.priorCount > 0;
+  const baselineNTE = isFollowUp ? nteChain.ceiling : (parseFloat(wo.nte) || 0);
+  const sequenceNumber = nteChain.priorCount + 1;
+  const projectedTotalCost = isFollowUp
+    ? baselineNTE + additionalCosts.grand_total
+    : existingCosts.grandTotal + additionalCosts.grand_total;
+  const originalNTE = baselineNTE;
   const remaining = originalNTE - projectedTotalCost;
 
   const handleSave = async () => {
@@ -263,6 +283,22 @@ export default function NTEIncreasePage({
             </div>
           </div>
         </div>
+
+        {/* Follow-up context */}
+        {isFollowUp && (
+          <div className="bg-blue-900 rounded-lg p-4 border-2 border-blue-500">
+            <h3 className="font-bold text-blue-200 text-sm mb-1">
+              {language === 'en'
+                ? <>Follow-up NTE Increase #{sequenceNumber}</>
+                : <>Aumento NTE de Seguimiento #{sequenceNumber}</>}
+            </h3>
+            <p className="text-blue-100 text-sm">
+              {language === 'en'
+                ? <>Builds on the current ceiling of <strong>${baselineNTE.toFixed(2)}</strong>. The new work below is added on top.</>
+                : <>Se basa en el techo actual de <strong>${baselineNTE.toFixed(2)}</strong>. El trabajo nuevo se suma encima.</>}
+            </p>
+          </div>
+        )}
 
         {/* NTE Type Toggle */}
         <div className="bg-gray-800 rounded-lg p-4">
@@ -595,24 +631,45 @@ export default function NTEIncreasePage({
             💰 {language === 'en' ? 'NTE Increase Summary' : 'Resumen de Aumento NTE'}
           </h3>
           
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Current Costs Accrued' : 'Costos Actuales'}</span>
-              <span className="text-blue-300">${existingCosts.grandTotal.toFixed(2)}</span>
+          {isFollowUp ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? 'Previous NTE (ceiling)' : 'NTE Previo (techo)'}</span>
+                <span className="text-blue-300">${baselineNTE.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? '+ Additional Work' : '+ Trabajo Adicional'}</span>
+                <span className="text-yellow-300">${additionalCosts.grand_total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold border-t border-green-400 pt-2">
+                <span>{language === 'en' ? 'NEW NTE NEEDED' : 'NUEVO NTE NECESARIO'}</span>
+                <span className="text-white">${projectedTotalCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>{language === 'en' ? 'Accrued so far (reference)' : 'Acumulado (referencia)'}</span>
+                <span>${existingCosts.grandTotal.toFixed(2)}</span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Additional Work Estimate' : 'Trabajo Adicional'}</span>
-              <span className="text-yellow-300">${additionalCosts.grand_total.toFixed(2)}</span>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? 'Current Costs Accrued' : 'Costos Actuales'}</span>
+                <span className="text-blue-300">${existingCosts.grandTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">{language === 'en' ? 'Additional Work Estimate' : 'Trabajo Adicional'}</span>
+                <span className="text-yellow-300">${additionalCosts.grand_total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold border-t border-green-400 pt-2">
+                <span>{language === 'en' ? 'PROJECTED TOTAL COST' : 'COSTO TOTAL PROYECTADO'}</span>
+                <span className="text-white">${projectedTotalCost.toFixed(2)}</span>
+              </div>
             </div>
-            <div className="flex justify-between text-lg font-bold border-t border-green-400 pt-2">
-              <span>{language === 'en' ? 'PROJECTED TOTAL COST' : 'COSTO TOTAL PROYECTADO'}</span>
-              <span className="text-white">${projectedTotalCost.toFixed(2)}</span>
-            </div>
-          </div>
+          )}
 
           <div className="mt-4 pt-4 border-t border-green-600 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-300">{language === 'en' ? 'Original NTE Budget' : 'Presupuesto NTE Original'}</span>
+              <span className="text-gray-300">{isFollowUp ? (language === 'en' ? 'Current NTE (ceiling)' : 'NTE Actual (techo)') : (language === 'en' ? 'Original NTE Budget' : 'Presupuesto NTE Original')}</span>
               <span>${originalNTE.toFixed(2)}</span>
             </div>
 

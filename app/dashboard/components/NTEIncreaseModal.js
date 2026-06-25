@@ -35,6 +35,7 @@ export default function NTEIncreaseModal({
 
   const [formData, setFormData] = useState({
     is_verbal_nte: false,
+    billing_mode: 'actual',
     verbal_approved_by: '',
     description: '',
     estimated_techs: 1,
@@ -108,6 +109,7 @@ export default function NTEIncreaseModal({
 
       setFormData({
         is_verbal_nte: existingQuote.is_verbal_nte || false,
+        billing_mode: existingQuote.billing_mode || 'actual',
         verbal_approved_by: existingQuote.verbal_approved_by || '',
         description: existingQuote.description || '',
         estimated_techs: existingQuote.estimated_techs || 1,
@@ -333,6 +335,7 @@ Final Cost Breakdown:
       const nteData = {
         wo_id: workOrder.wo_id,
         created_by: currentUser.user_id,
+        billing_mode: (!isReconciliation && formData.billing_mode === 'fixed') ? 'fixed' : 'actual',
         is_verbal_nte: isVerbal,
         verbal_approved_by: isVerbal ? formData.verbal_approved_by : null,
         description: formData.description,
@@ -981,6 +984,44 @@ Final Cost Breakdown:
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Includes admin fee + 25% markup on materials/equipment/rental/trailer</p>
               </div>
+            </div>
+          )}
+
+          {/* 💵 BILLING MODE: fixed quote vs T&M (estimate mode only) */}
+          {!isReconciliation && (
+            <div className="bg-gray-700 border-2 border-emerald-600 rounded-lg p-4">
+              <h3 className="font-bold text-sm text-emerald-300 mb-3">🧾 How will CBRE be billed?</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, billing_mode: 'actual' })}
+                  className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
+                    formData.billing_mode !== 'fixed'
+                      ? 'bg-blue-700 border-blue-400 text-white'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                  }`}
+                >
+                  📊 T&M / Estimate
+                  <div className="text-xs font-normal mt-1 opacity-90">Bill actual costs (capped by NTE)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, billing_mode: 'fixed' })}
+                  className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
+                    formData.billing_mode === 'fixed'
+                      ? 'bg-emerald-700 border-emerald-400 text-white'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                  }`}
+                >
+                  💵 Fixed Quote
+                  <div className="text-xs font-normal mt-1 opacity-90">Bill the quote amount as-is</div>
+                </button>
+              </div>
+              {formData.billing_mode === 'fixed' && (
+                <p className="text-xs text-emerald-300 mt-3 leading-relaxed">
+                  💡 Fixed Quote: the invoice uses this quote's amount regardless of final actual costs. The invoice team sees a clear FIXED badge.
+                </p>
+              )}
             </div>
           )}
 

@@ -59,6 +59,7 @@ export default function NTEIncreasePage({
   // Form state for ADDITIONAL costs (the new work being estimated)
   const [formData, setFormData] = useState({
     is_verbal_nte: false,
+    billing_mode: 'actual',
     verbal_approved_by: '',
     estimated_techs: 1,
     estimated_rt_hours: 0,
@@ -134,6 +135,7 @@ export default function NTEIncreasePage({
     if (selectedQuote && editMode) {
       setFormData({
         is_verbal_nte: selectedQuote.is_verbal_nte || false,
+        billing_mode: selectedQuote.billing_mode || 'actual',
         verbal_approved_by: selectedQuote.verbal_approved_by || '',
         estimated_techs: selectedQuote.estimated_techs || 1,
         estimated_rt_hours: selectedQuote.estimated_rt_hours || 0,
@@ -623,6 +625,44 @@ export default function NTEIncreasePage({
               <span className="text-yellow-300">${additionalCosts.grand_total.toFixed(2)}</span>
             </div>
           </div>
+        </div>
+
+        {/* 💵 BILLING MODE: fixed quote vs T&M */}
+        <div className="bg-gray-800 rounded-lg p-4 border-2 border-emerald-600">
+          <h3 className="font-bold text-sm text-emerald-300 mb-3">
+            🧾 {language === 'en' ? 'How will CBRE be billed?' : '¿Cómo se facturará a CBRE?'}
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, billing_mode: 'actual' })}
+              className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
+                formData.billing_mode !== 'fixed'
+                  ? 'bg-blue-700 border-blue-400 text-white'
+                  : 'bg-gray-700 border-gray-600 text-gray-400'
+              }`}
+            >
+              📊 {language === 'en' ? 'T&M / Estimate' : 'T&M / Estimado'}
+              <div className="text-xs font-normal mt-1 opacity-90">{language === 'en' ? 'Bill actual costs' : 'Facturar costo real'}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, billing_mode: 'fixed' })}
+              className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
+                formData.billing_mode === 'fixed'
+                  ? 'bg-emerald-700 border-emerald-400 text-white'
+                  : 'bg-gray-700 border-gray-600 text-gray-400'
+              }`}
+            >
+              💵 {language === 'en' ? 'Fixed Quote' : 'Precio Fijo'}
+              <div className="text-xs font-normal mt-1 opacity-90">{language === 'en' ? 'Bill the quote amount' : 'Facturar el monto'}</div>
+            </button>
+          </div>
+          {formData.billing_mode === 'fixed' && (
+            <p className="text-xs text-emerald-300 mt-3 leading-relaxed">
+              💡 {language === 'en' ? 'Fixed: invoice uses this quote amount regardless of actual costs.' : 'Fijo: la factura usa este monto sin importar el costo real.'}
+            </p>
+          )}
         </div>
 
         {/* ===== SECTION 3: NTE INCREASE SUMMARY ===== */}

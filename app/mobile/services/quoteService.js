@@ -224,6 +224,61 @@ export async function markSubmittedToCBRE(supabase, quoteId, submittedBy) {
   return data;
 }
 
+// ============================================================
+// INVOICE BILLING MODE (fixed quote vs actual / T&M)
+// ============================================================
+//
+// Determines how a WO should be billed to CBRE. The newest NON-REJECTED quote
+// on the WO is the source of truth:
+//   - billing_mode === 'fixed'  -> bill the quote amount as-is (returns quote)
+//   - billing_mode === 'actual' -> bill actual costs (returns null)
+//   - no quote                  -> bill actual costs (returns null)
+//
+// Returns the fixed quote object (with breakdown + new_nte_amount) or null.
+export async function getFixedQuoteForInvoice(supabase, woId) {
+  if (!woId) return null;
+
+  const { data, error } = await supabase
+    .from('work_order_quotes')
+    .select('*')
+    .eq('wo_id', woId)
+    .neq('nte_status', 'rejected')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error || !data || data.length === 0) return null;
+
+  const q = data[0];
+  const fixedTotal = parseFloat(q.new_nte_amount) || 0;
+  if (q.billing_mode === 'fixed' && fixedTotal > 0) return q;
+  return null;
+}
+
+// Build invoice line items for a FIXED-price quote.
+// "prior work = labor": every non-labor category comes straight from the quote;
+// Labor is the plug that makes the lines sum to EXACTLY new_nte_amount (it
+// absorbs the accrued/prior work + admin + the quote's additional labor).
+// Returns core line items: { description, quantity, unit_price, amount, line_type }.
+// Each caller adds its own fields (editable / invoice_id).
+export function buildFixedQuoteLineItems(quote) {
+  const fixedTotal = parseFloat(quote.new_nte_amount) || 0;
+  const qMat = parseFloat(quote.materials_with_markup) || 0;
+  const qEqp = parseFloat(quote.equipment_with_markup) || 0;
+  const qTrl = parseFloat(quote.trailer_with_markup) || 0;
+  const qRen = parseFloat(quote.rental_with_markup) || 0;
+  const qMil = parseFloat(quote.mileage_total) || 0;
+  const qLabor = Math.round((fixedTotal - (qMat + qEqp + qTrl + qRen + qMil)) * 100) / 100;
+
+  const items = [];
+  if (qLabor > 0) items.push({ description: 'Labor (per approved Quote)', quantity: 1, unit_price: qLabor, amount: qLabor, line_type: 'labor' });
+  if (qMat > 0)   items.push({ description: 'Materials', quantity: 1, unit_price: qMat, amount: qMat, line_type: 'material' });
+  if (qEqp > 0)   items.push({ description: 'Equipment', quantity: 1, unit_price: qEqp, amount: qEqp, line_type: 'equipment' });
+  if (qTrl > 0)   items.push({ description: 'Trailer', quantity: 1, unit_price: qTrl, amount: qTrl, line_type: 'equipment' });
+  if (qRen > 0)   items.push({ description: 'Rental', quantity: 1, unit_price: qRen, amount: qRen, line_type: 'rental' });
+  if (qMil > 0)   items.push({ description: 'Mileage', quantity: 1, unit_price: qMil, amount: qMil, line_type: 'mileage' });
+  return items;
+}
+
 // Load quotes for a work order
 export async function loadQuotes(supabase, woId) {
   const { data, error } = await supabase
@@ -303,6 +358,7 @@ export async function createQuote(supabase, quoteData, userId) {
     .insert({
       wo_id: quoteData.wo_id,
       created_by: userId,
+      billing_mode: quoteData.billing_mode === 'fixed' ? 'fixed' : 'actual',
       is_verbal_nte: isVerbal,
       verbal_approved_by: isVerbal ? (quoteData.verbal_approved_by || null) : null,
       estimated_techs: parseInt(quoteData.estimated_techs) || 1,
@@ -411,6 +467,9 @@ export async function updateQuote(supabase, quoteId, quoteData) {
   }
   if (quoteData.original_nte !== undefined) {
     updateData.original_nte = parseFloat(quoteData.original_nte) || 0;
+  }
+  if (quoteData.billing_mode !== undefined) {
+    updateData.billing_mode = quoteData.billing_mode === 'fixed' ? 'fixed' : 'actual';
   }
 
   const { data, error } = await supabase

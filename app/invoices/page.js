@@ -8,6 +8,7 @@ import MarkDisputedModal from '@/app/components/MarkDisputedModal';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
+import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -162,6 +163,7 @@ export default function InvoicingPage() {
   const [acknowledgedWOs, setAcknowledgedWOs]           = useState([]);
   const [filteredAcknowledgedWOs, setFilteredAcknowledgedWOs] = useState([]);
   const [woTotals, setWoTotals]                         = useState({});
+  const [fixedQuoteMap, setFixedQuoteMap]               = useState({});
   const [invoices, setInvoices]                         = useState([]);
   const [filteredInvoices, setFilteredInvoices]         = useState([]);
   const [selectedItem, setSelectedItem]                 = useState(null);
@@ -172,6 +174,7 @@ export default function InvoicingPage() {
   const [showInvoicePreview, setShowInvoicePreview]     = useState(false);
   const [previewWO, setPreviewWO]                       = useState(null);
   const [previewLineItems, setPreviewLineItems]         = useState([]);
+  const [previewFixedQuote, setPreviewFixedQuote]       = useState(null);
   const [workPerformedText, setWorkPerformedText]       = useState('');
   const [customLineItem, setCustomLineItem]             = useState({ description: '', quantity: 1, unit_price: 0 });
   const [showGlobalSearch, setShowGlobalSearch]         = useState(false);
@@ -282,7 +285,7 @@ export default function InvoicingPage() {
       .order('acknowledged_at', { ascending: true });
     if (!error) {
       setAcknowledgedWOs(data || []);
-      if (data?.length) calculateAllTotals(data);
+      if (data?.length) { calculateAllTotals(data); loadFixedQuoteMap(data); }
     }
   };
 
@@ -315,6 +318,26 @@ export default function InvoicingPage() {
       } catch { totals[wo.wo_id] = 128; }
     }
     setWoTotals(totals);
+  };
+
+  // Map wo_id -> { amount } for WOs whose newest non-rejected quote is billing_mode 'fixed'.
+  // (null/absent means T&M). Drives the FIXED badge + accurate Est. Total in the Ready list.
+  const loadFixedQuoteMap = async (workOrders) => {
+    const ids = (workOrders || []).map(w => w.wo_id);
+    if (!ids.length) { setFixedQuoteMap({}); return; }
+    const { data } = await supabase.from('work_order_quotes')
+      .select('wo_id, billing_mode, new_nte_amount, nte_status, created_at')
+      .in('wo_id', ids)
+      .neq('nte_status', 'rejected')
+      .order('created_at', { ascending: false });
+    const map = {};
+    (data || []).forEach(q => {
+      if (map[q.wo_id] !== undefined) return; // newest per wo already taken (desc order)
+      map[q.wo_id] = (q.billing_mode === 'fixed' && (parseFloat(q.new_nte_amount) || 0) > 0)
+        ? { amount: parseFloat(q.new_nte_amount) || 0 }
+        : null;
+    });
+    setFixedQuoteMap(map);
   };
 
   const fetchInvoices = async () => {
@@ -367,7 +390,13 @@ export default function InvoicingPage() {
       daily?.forEach(l => { dRT+=parseFloat(l.hours_regular)||0; dOT+=parseFloat(l.hours_overtime)||0; dMi+=parseFloat(l.miles)||0; dTechMat+=parseFloat(l.tech_material_cost)||0; });
       const totalRT=pRT+tRT+dRT, totalOT=pOT+tOT+dOT, totalMi=pMi+tMi+dMi;
 
+      // Billing mode: does a fixed-price quote drive this invoice?
+      const fixedQuotePrev = await getFixedQuoteForInvoice(supabase, woId);
+
       const items = [];
+      if (fixedQuotePrev) {
+        buildFixedQuoteLineItems(fixedQuotePrev).forEach(it => items.push({ ...it, editable:true }));
+      } else {
       if (totalRT>0) items.push({ description:`Labor – Regular Time (${totalRT} hrs @ $64/hr)`, quantity:totalRT, unit_price:64, amount:totalRT*64, line_type:'labor', editable:true });
       if (totalOT>0) items.push({ description:`Labor – Overtime (${totalOT} hrs @ $96/hr)`, quantity:totalOT, unit_price:96, amount:totalOT*96, line_type:'labor', editable:true });
       items.push({ description:'Administrative Hours (2 hrs @ $64/hr)', quantity:2, unit_price:64, amount:128, line_type:'labor', editable:true });
@@ -377,10 +406,13 @@ export default function InvoicingPage() {
       const trl = parseFloat(wo.trailer_cost)||0;        if (trl>0)  items.push({ description:'Trailer',    quantity:1, unit_price:trl*1.25,  amount:trl*1.25,  line_type:'equipment', editable:true });
       const ren = parseFloat(wo.rental_cost)||0;         if (ren>0)  items.push({ description:'Rental',     quantity:1, unit_price:ren*1.25,  amount:ren*1.25,  line_type:'rental',    editable:true });
 
+      } // end actual-cost line items (skipped for fixed-price quotes)
+
       let wp = filterWorkComments(wo.comments) || filterWorkComments(wo.comments_english) || wo.work_order_description || 'Work completed as requested.';
       setWorkPerformedText(wp);
       setPreviewWO(wo);
       setPreviewLineItems(items);
+      setPreviewFixedQuote(fixedQuotePrev);
       setShowInvoicePreview(true);
       setSelectedItem(null);
     } catch (err) { alert('❌ Failed to generate preview: ' + err.message); }
@@ -645,14 +677,23 @@ export default function InvoicingPage() {
                       {filteredAcknowledgedWOs.map((wo, i) => (
                         <tr key={wo.wo_id}
                           className={`border-b border-[#1e1e2e]/60 hover:bg-[#1e1e2e]/40 transition ${i % 2 === 0 ? '' : 'bg-[#0a0a0f]/30'}`}>
-                          <td className="px-4 py-3 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                          <td className="px-4 py-3 font-mono font-semibold text-blue-400">
+                            <div className="flex items-center gap-2">
+                              <span>{wo.wo_number}</span>
+                              {fixedQuoteMap[wo.wo_id] && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-emerald-500/15 text-emerald-400 border-emerald-500/30" title="Fixed-price quote">💵 FIXED</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-slate-300">{wo.building}</td>
                           <td className="px-4 py-3 text-slate-400">{wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : '—'}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{wo.acknowledged_at ? new Date(wo.acknowledged_at).toLocaleString() : '—'}</td>
                           <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">
-                            {woTotals[wo.wo_id] !== undefined
-                              ? `$${woTotals[wo.wo_id].toFixed(2)}`
-                              : <span className="text-slate-600 text-xs animate-pulse">calculating…</span>}
+                            {fixedQuoteMap[wo.wo_id]
+                              ? <span title="Fixed-price quote — bills the quote amount, not T&M">${fixedQuoteMap[wo.wo_id].amount.toFixed(2)}</span>
+                              : woTotals[wo.wo_id] !== undefined
+                                ? <span>${woTotals[wo.wo_id].toFixed(2)}</span>
+                                : <span className="text-slate-600 text-xs animate-pulse">calculating…</span>}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <Btn onClick={() => selectWorkOrder(wo)} variant="success" size="sm">Generate</Btn>
@@ -938,6 +979,17 @@ export default function InvoicingPage() {
                 <div>
                   <h2 className="text-xl font-bold text-slate-100">Invoice Preview</h2>
                   <p className="text-slate-500 text-sm mt-0.5">WO #{previewWO.wo_number} — {previewWO.building}</p>
+                  <div className="mt-2">
+                    {previewFixedQuote ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border bg-emerald-500/15 text-emerald-400 border-emerald-500/30" title="Fixed-price quote — line items come from the approved quote and the total is locked to the quote amount">
+                        💵 FIXED QUOTE — billing ${Number(previewFixedQuote.new_nte_amount).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border bg-blue-500/15 text-blue-400 border-blue-500/30" title="Time & materials — billed from actual logged costs">
+                        📊 T&M — actual costs
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button onClick={() => { setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText(''); }}
                   className="text-slate-500 hover:text-slate-300 text-2xl leading-none">×</button>

@@ -12,6 +12,8 @@ import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
 import NTEIncreaseList from './quotes/NTEIncreaseList';
 import JurassicParkError from './JurassicParkError';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { calculateExistingCosts } from '../services/quoteService';
 
 // Map missing_data item -> DOM id of the matching section in this view.
 // Used by the clickable badges in the missing-data banner to scroll the tech
@@ -88,6 +90,7 @@ export default function WorkOrderDetail({
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
+  const supabase = createClientComponentClient();
   
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
@@ -234,7 +237,33 @@ export default function WorkOrderDetail({
       return;
     }
 
-    // Validation 2: Check if Photos exist (only when online)
+    // Validation 2: Actual costs must be within the NTE (green zone).
+    // Over-NTE means an increase is needed and must be APPROVED (which bumps
+    // wo.nte) before completion. Uses the same canonical calc as the Cost
+    // Summary the tech sees, computed fresh at the moment of completion.
+    try {
+      const costs = await calculateExistingCosts(supabase, wo, currentTeamList);
+      const nteValue = parseFloat(wo.nte) || 0;
+      const grand = parseFloat(costs.grandTotal) || 0;
+      if (grand > nteValue + 0.01) {
+        const over = (grand - nteValue).toFixed(2);
+        const msg = language === 'en'
+          ? `💸 Over budget. Cannot complete yet.\n\nActual costs $${grand.toFixed(2)} exceed the NTE $${nteValue.toFixed(2)} by $${over}.\n\nSubmit an NTE increase and wait for it to be APPROVED (the NTE goes up to cover the costs). Once costs are within the NTE, you can complete.`
+          : `💸 Sobre el presupuesto. Aún no se puede completar.\n\nLos costos reales $${grand.toFixed(2)} superan el NTE $${nteValue.toFixed(2)} por $${over}.\n\nEnvía un aumento de NTE y espera la APROBACIÓN (el NTE sube para cubrir los costos). Cuando los costos estén dentro del NTE, podrás completar.`;
+        setJurassicError(msg);
+        return;
+      }
+    } catch (err) {
+      console.error('NTE cost-guard check failed:', err);
+      const proceed = window.confirm(
+        language === 'en'
+          ? `⚠️ Could not verify costs against the NTE (network issue).\n\nContinue completing this work order? Make sure you are within the NTE budget!`
+          : `⚠️ No se pudieron verificar los costos contra el NTE (problema de red).\n\n¿Continuar completando esta orden? ¡Asegúrate de estar dentro del presupuesto NTE!`
+      );
+      if (!proceed) return;
+    }
+
+    // Validation 3: Check if Photos exist (only when online)
     if (navigator.onLine) {
       try {
         const response = await fetch(`/api/verify-photos/${woNumber}`);

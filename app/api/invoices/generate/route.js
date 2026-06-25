@@ -1,6 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 
 // Rate constants - MUST match CostSummarySection / Invoicing page logic
 const RT_RATE       = 64;
@@ -83,6 +84,10 @@ export async function POST(request) {
       );
     }
 
+    // Billing mode: is there a fixed-price quote driving this invoice?
+    // (newest non-rejected quote with billing_mode = 'fixed')
+    const fixedQuote = await getFixedQuoteForInvoice(supabase, wo_id);
+
     // ============================================================
     // COMBINED hours calculation: legacy + team assignments + daily_hours_log
     // (matches /app/invoices/page.js generateInvoicePreview EXACTLY)
@@ -150,9 +155,16 @@ export async function POST(request) {
     const laborAdmin    = ADMIN_FEE;
     const laborSubtotal = laborRT + laborOT + laborAdmin;
 
-    // Grand total
-    const subtotal = laborSubtotal + mileageCost
-                   + materialsTotal + equipmentTotal + trailerTotal + rentalTotal;
+    // ── Billing mode: FIXED quote vs ACTUAL (T&M) ──
+    // Fixed  -> line items come straight from the quote and sum to new_nte_amount.
+    // Actual -> the computed cost lines above.
+    const fixedLineItems = fixedQuote ? buildFixedQuoteLineItems(fixedQuote) : null;
+
+    const actualSubtotal = laborSubtotal + mileageCost
+                         + materialsTotal + equipmentTotal + trailerTotal + rentalTotal;
+    const subtotal = fixedLineItems
+      ? Math.round(fixedLineItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0) * 100) / 100
+      : actualSubtotal;
     const tax      = 0;
     const total    = subtotal + tax;
 
@@ -215,6 +227,19 @@ export async function POST(request) {
     // ============================================================
     const lineItems = [];
 
+    if (fixedLineItems) {
+      // FIXED billing: line items straight from the approved quote
+      fixedLineItems.forEach(it => {
+        lineItems.push({
+          invoice_id: invoice.invoice_id,
+          description: it.description,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          amount: it.amount,
+          line_type: it.line_type
+        });
+      });
+    } else {
     if (totalRT > 0) {
       lineItems.push({
         invoice_id: invoice.invoice_id,
@@ -301,6 +326,8 @@ export async function POST(request) {
         line_type: 'rental'
       });
     }
+
+    } // end actual-cost line items (skipped for fixed-price quotes)
 
     // Work Performed Description (always last)
     lineItems.push({

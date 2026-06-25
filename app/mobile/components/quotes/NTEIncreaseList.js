@@ -26,6 +26,20 @@ export default function NTEIncreaseList({
   const wo = workOrder || {};
   const currentNTE = parseFloat(wo.nte) || 0;
 
+  // Rollup: the NEWEST increase governs the WO's current NTE situation, not the
+  // latest-approved one. Surfaces a pending/submitted increase even when an
+  // older increase is already approved.
+  const sortedBySeq = [...quotesList].sort(
+    (a, b) => (b.sequence_number || 0) - (a.sequence_number || 0) ||
+              (new Date(b.created_at || 0) - new Date(a.created_at || 0))
+  );
+  const newestQuote = sortedBySeq[0] || null;
+  const newestStatus = newestQuote
+    ? (newestQuote.nte_status || (newestQuote.is_verbal_nte ? 'verbal_approved' : 'pending'))
+    : null;
+  const newestSeq = newestQuote ? (newestQuote.sequence_number || quotesList.length) : null;
+  const awaitingCBRE = newestStatus === 'pending' || newestStatus === 'submitted';
+
   // Handle view/edit action
   const handleView = (quote) => {
     if (onViewQuote) onViewQuote(quote);
@@ -79,7 +93,21 @@ export default function NTEIncreaseList({
           )}
         </div>
       </div>
-      
+
+      {awaitingCBRE && (
+        <div className="mb-3 rounded-lg p-3 border-2 bg-orange-900/60 border-orange-500 text-orange-100 text-sm flex items-start gap-2">
+          <span className="text-lg flex-shrink-0">⚠️</span>
+          <div>
+            <span className="font-bold">
+              {language === 'en' ? 'NTE Increase #' : 'Aumento NTE #'}{newestSeq}
+            </span>{' '}
+            {newestStatus === 'submitted'
+              ? (language === 'en' ? 'is submitted to CBRE — waiting for approval.' : 'enviado a CBRE — esperando aprobación.')
+              : (language === 'en' ? 'is waiting to be uploaded to CBRE.' : 'esperando ser subido a CBRE.')}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-4 text-gray-400">
           {language === 'en' ? 'Loading...' : 'Cargando...'}
@@ -117,6 +145,9 @@ export default function NTEIncreaseList({
                 {/* Header with badge and actions */}
                 <div className="flex justify-between items-start mb-3">
                   <div>
+                    {quote.sequence_number ? (
+                      <span className="text-xs text-gray-400 mr-2 font-mono">#{quote.sequence_number}</span>
+                    ) : null}
                     <StatusBadge quote={quote} />
                     <div className="text-gray-400 text-xs mt-1">
                       {new Date(quote.created_at).toLocaleDateString()}

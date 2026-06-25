@@ -254,6 +254,7 @@ export default function WorkOrdersTable({
               const priorityBadge = getPriorityBadge(wo.priority);
               const priorityStyle = getPriorityStyle(priorityBadge);
               const hasPendingNTE = wo.nte_quotes?.some(q => q.nte_status === 'pending');
+              const hasSubmittedNTE = wo.nte_quotes?.some(q => q.nte_status === 'submitted');
               const isUnackCbre = hasUnackCbreUpdate(wo);
 
               const rowBg = isSelected
@@ -308,9 +309,17 @@ export default function WorkOrdersTable({
                       {hasPendingNTE && (
                         <span
                           className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                          title="Tech submitted NTE request – needs to be sent to CBRE"
+                          title="NTE increase created – needs to be uploaded to CBRE"
                         >
                           💰 NTE
+                        </span>
+                      )}
+                      {hasSubmittedNTE && !hasPendingNTE && (
+                        <span
+                          className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                          title="NTE increase uploaded to CBRE – awaiting approval"
+                        >
+                          📤 NTE
                         </span>
                       )}
                     </div>

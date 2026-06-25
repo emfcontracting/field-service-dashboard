@@ -363,8 +363,8 @@ export default function InvoicingPage() {
       let tRT=0, tOT=0, tMi=0;
       teams?.forEach(m => { tRT+=parseFloat(m.hours_regular)||0; tOT+=parseFloat(m.hours_overtime)||0; tMi+=parseFloat(m.miles)||0; });
       const { data: daily } = await supabase.from('daily_hours_log').select('*').eq('wo_id', woId);
-      let dRT=0, dOT=0, dMi=0;
-      daily?.forEach(l => { dRT+=parseFloat(l.hours_regular)||0; dOT+=parseFloat(l.hours_overtime)||0; dMi+=parseFloat(l.miles)||0; });
+      let dRT=0, dOT=0, dMi=0, dTechMat=0;
+      daily?.forEach(l => { dRT+=parseFloat(l.hours_regular)||0; dOT+=parseFloat(l.hours_overtime)||0; dMi+=parseFloat(l.miles)||0; dTechMat+=parseFloat(l.tech_material_cost)||0; });
       const totalRT=pRT+tRT+dRT, totalOT=pOT+tOT+dOT, totalMi=pMi+tMi+dMi;
 
       const items = [];
@@ -372,7 +372,7 @@ export default function InvoicingPage() {
       if (totalOT>0) items.push({ description:`Labor – Overtime (${totalOT} hrs @ $96/hr)`, quantity:totalOT, unit_price:96, amount:totalOT*96, line_type:'labor', editable:true });
       items.push({ description:'Administrative Hours (2 hrs @ $64/hr)', quantity:2, unit_price:64, amount:128, line_type:'labor', editable:true });
       if (totalMi>0) items.push({ description:`Mileage (${totalMi} miles @ $1.00/mile)`, quantity:totalMi, unit_price:1, amount:totalMi, line_type:'mileage', editable:true });
-      const mat = parseFloat(wo.material_cost)||0;       if (mat>0)  items.push({ description:'Materials',  quantity:1, unit_price:mat*1.25,  amount:mat*1.25,  line_type:'material',  editable:true });
+      const mat = (parseFloat(wo.material_cost)||0) + dTechMat;       if (mat>0)  items.push({ description:'Materials',  quantity:1, unit_price:mat*1.25,  amount:mat*1.25,  line_type:'material',  editable:true });
       const eqp = parseFloat(wo.emf_equipment_cost)||0;  if (eqp>0)  items.push({ description:'Equipment',  quantity:1, unit_price:eqp*1.25,  amount:eqp*1.25,  line_type:'equipment', editable:true });
       const trl = parseFloat(wo.trailer_cost)||0;        if (trl>0)  items.push({ description:'Trailer',    quantity:1, unit_price:trl*1.25,  amount:trl*1.25,  line_type:'equipment', editable:true });
       const ren = parseFloat(wo.rental_cost)||0;         if (ren>0)  items.push({ description:'Rental',     quantity:1, unit_price:ren*1.25,  amount:ren*1.25,  line_type:'rental',    editable:true });

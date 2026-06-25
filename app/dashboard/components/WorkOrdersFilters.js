@@ -52,7 +52,7 @@ export default function WorkOrdersFilters({
     { value: 'assigned', label: 'Assigned', color: 'bg-blue-600' },
     { value: 'in_progress', label: 'In Progress', color: 'bg-yellow-600' },
     { value: 'return_trip', label: 'Return Trip', color: 'bg-amber-700' },
-    { value: 'needs_return', label: 'Return for Review', color: 'bg-orange-600' },
+    { value: 'tech_review', label: '🔍 Tech Review', color: 'bg-yellow-400 animate-pulse', textColor: 'text-black' },
     { value: 'rejected', label: '❌ Rejected', color: 'bg-red-700' },
     { value: 'completed', label: 'Completed', color: 'bg-emerald-600' }
   ];
@@ -251,7 +251,7 @@ export default function WorkOrdersFilters({
               {statusOptions.map(opt => (
                 <div key={opt.value} className={dropdownItem} onClick={() => toggleStatus(opt.value)}>
                   <input type="checkbox" checked={selectedStatuses.includes(opt.value)} onChange={() => {}} className="w-3.5 h-3.5 accent-blue-500" />
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${opt.color} text-white`}>{opt.label}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${opt.color} ${opt.textColor || 'text-white'}`}>{opt.label}</span>
                 </div>
               ))}
             </div>
@@ -385,7 +385,7 @@ export default function WorkOrdersFilters({
           {selectedStatuses.map(status => {
             const opt = statusOptions.find(o => o.value === status);
             return opt ? (
-              <span key={status} className={`${opt.color} text-white px-2 py-0.5 rounded-full text-xs flex items-center gap-1 opacity-90`}>
+              <span key={status} className={`${opt.color} ${opt.textColor || 'text-white'} px-2 py-0.5 rounded-full text-xs flex items-center gap-1 opacity-90`}>
                 {opt.label}
                 <button onClick={() => toggleStatus(status)} className="hover:text-red-200">✕</button>
               </span>

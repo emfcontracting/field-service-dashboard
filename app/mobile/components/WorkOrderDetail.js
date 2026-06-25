@@ -906,8 +906,9 @@ export default function WorkOrderDetail({
               <option value="in_progress">{t('inProgress')}</option>
               <option value="pending">{t('pending')}</option>
               <option value="return_trip">{t('returnTrip')}</option>
-              <option value="needs_return">{t('returnForReview')}</option>
-              <option value="tech_review">{language === 'en' ? '🔍 Tech Review' : '🔍 Revisión Técnica'}</option>
+              {status === 'tech_review' && (
+                <option value="tech_review">{language === 'en' ? '🔍 Tech Review' : '🔍 Revisión Técnica'}</option>
+              )}
               {status === 'missing_data' && (
                 <option value="missing_data">🚩 Missing Data</option>
               )}

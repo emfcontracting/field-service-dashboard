@@ -69,7 +69,7 @@ const STATUS_CFG = {
   pending:      { label: 'Pending',            color: 'bg-slate-500/15 text-slate-400 border-slate-500/30' },
   assigned:     { label: 'Assigned',           color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
   in_progress:  { label: 'In Progress',        color: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
-  needs_return: { label: 'Review for Invoice', color: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
+  tech_review:  { label: 'Tech Review',        color: 'bg-yellow-400 text-black border-yellow-300 animate-pulse' },
   completed:    { label: 'Completed',          color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
 };
 
@@ -275,15 +275,15 @@ export default function WorkOrderDetail({ params }) {
 
         <div className="max-w-7xl mx-auto px-6 py-6">
 
-          {/* Needs return alert */}
-          {workOrder.status === 'needs_return' && (
-            <div className="mb-5 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 flex items-start gap-3">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-400 flex-shrink-0 mt-0.5">
+          {/* Tech review alert — returned from invoicing */}
+          {workOrder.status === 'tech_review' && (
+            <div className="mb-5 bg-yellow-400/10 border border-yellow-400/40 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-yellow-400 flex-shrink-0 mt-0.5">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
               <div>
-                <p className="text-orange-400 font-bold text-sm">Returned from Invoicing Team</p>
+                <p className="text-yellow-400 font-bold text-sm">Returned from Invoicing Team</p>
                 <p className="text-slate-500 text-xs mt-1 leading-relaxed">
                   Review comments below for details. After updating, set status to{' '}
                   <span className="text-emerald-400 font-semibold">Completed</span> to send back for invoicing.
@@ -306,7 +306,7 @@ export default function WorkOrderDetail({ params }) {
                       <option value="pending">Pending</option>
                       <option value="assigned">Assigned</option>
                       <option value="in_progress">In Progress</option>
-                      <option value="needs_return">Review for Invoice</option>
+                      <option value="tech_review">Tech Review</option>
                       <option value="completed">Completed</option>
                     </Sel>
                     <Sel label="Priority" value={workOrder.priority} disabled={saving} onChange={e => updateWO({ priority: e.target.value })}>

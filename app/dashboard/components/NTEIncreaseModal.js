@@ -230,15 +230,17 @@ export default function NTEIncreaseModal({
   };
 
   // Calculate additional work costs (ESTIMATE mode)
+  // NaN guard: a cleared input makes parseFloat("") return NaN, which would
+  // poison labor/total and get saved to the DB as NULL.
   const calcAdditional = () => {
     const techs = parseInt(formData.estimated_techs) || 1;
-    const labor = (parseFloat(formData.hours_regular) * techs * RATES.RT_RATE) + 
-                  (parseFloat(formData.hours_overtime) * techs * RATES.OT_RATE);
-    const materials = parseFloat(formData.materials_base) * (1 + RATES.MARKUP_PERCENT);
-    const equipment = parseFloat(formData.equipment_base) * (1 + RATES.MARKUP_PERCENT);
-    const rental = parseFloat(formData.rental_base) * (1 + RATES.MARKUP_PERCENT);
-    const trailer = parseFloat(formData.trailer_base) * (1 + RATES.MARKUP_PERCENT);
-    const mileage = parseFloat(formData.miles) * RATES.MILEAGE_RATE;
+    const labor = ((parseFloat(formData.hours_regular) || 0) * techs * RATES.RT_RATE) +
+                  ((parseFloat(formData.hours_overtime) || 0) * techs * RATES.OT_RATE);
+    const materials = (parseFloat(formData.materials_base) || 0) * (1 + RATES.MARKUP_PERCENT);
+    const equipment = (parseFloat(formData.equipment_base) || 0) * (1 + RATES.MARKUP_PERCENT);
+    const rental = (parseFloat(formData.rental_base) || 0) * (1 + RATES.MARKUP_PERCENT);
+    const trailer = (parseFloat(formData.trailer_base) || 0) * (1 + RATES.MARKUP_PERCENT);
+    const mileage = (parseFloat(formData.miles) || 0) * RATES.MILEAGE_RATE;
     const total = labor + materials + equipment + rental + trailer + mileage;
     return { labor, materials, equipment, rental, trailer, mileage, total };
   };

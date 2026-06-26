@@ -2689,8 +2689,17 @@ const sendAssignmentNotifications = async () => {
                       let currentCosts;
                       let newNTENeeded;
                       
+                      // Cumulative chain: a follow-up builds on the PREVIOUS CEILING
+                      // (stored original_nte, which already includes prior labor/costs),
+                      // NOT the accrued snapshot. Detected via supersedes/sequence so the
+                      // displayed NEW NTE matches the chain + create-modal (ceiling + additional).
+                      const isChainFollowUp = !!quote.supersedes_quote_id || (parseInt(quote.sequence_number) || 1) > 1;
                       if (hasSnapshot) {
-                        currentCosts = parseFloat(quote.current_costs_snapshot) || 0;
+                        // First increase → base = accrued snapshot.
+                        // Follow-up    → base = previous NTE ceiling (original_nte), labor included.
+                        currentCosts = isChainFollowUp
+                          ? (parseFloat(quote.original_nte) || 0)
+                          : (parseFloat(quote.current_costs_snapshot) || 0);
                         // Always recompute newNTENeeded fresh from line items
                         // (don't trust stored new_nte_amount — it may be stale after edits)
                         newNTENeeded = currentCosts + additionalTotal;
@@ -2776,10 +2785,10 @@ const sendAssignmentNotifications = async () => {
                             </div>
                           )}
                           
-                          {/* Current Costs */}
+                          {/* Current Costs (first increase) / Previous Ceiling (follow-up) */}
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-blue-400">
-                              Current Costs {hasSnapshot ? '(at submission)' : 'Accrued'}:
+                              {isChainFollowUp ? 'Previous NTE Ceiling' : `Current Costs ${hasSnapshot ? '(at submission)' : 'Accrued'}`}:
                             </span>
                             <span className="text-blue-400 font-semibold">${currentCosts.toFixed(2)}</span>
                           </div>

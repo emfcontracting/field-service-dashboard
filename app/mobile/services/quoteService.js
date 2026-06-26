@@ -26,18 +26,22 @@ export function calculateQuoteTotals(quoteData) {
 
   // Labor: (RT hours × techs × $64) + (OT hours × techs × $96)
   // NO admin fee here - admin is already included in current/accrued costs
-  const laborTotal = 
-    (parseFloat(estimated_rt_hours) * parseInt(estimated_techs) * RATES.RT_HOURLY) +
-    (parseFloat(estimated_ot_hours) * parseInt(estimated_techs) * RATES.OT_HOURLY);
+  // Guard every parseFloat with `|| 0` (techs with `|| 1`). An empty-string
+  // input (user cleared a field) makes parseFloat() return NaN, and NaN poisons
+  // the whole sum, so labor_total / grand_total get written to the DB as NULL.
+  const techCount = parseInt(estimated_techs) || 1;
+  const laborTotal =
+    ((parseFloat(estimated_rt_hours) || 0) * techCount * RATES.RT_HOURLY) +
+    ((parseFloat(estimated_ot_hours) || 0) * techCount * RATES.OT_HOURLY);
 
-  // All cost categories with 25% markup
-  const materialsWithMarkup = parseFloat(material_cost) * (1 + RATES.MARKUP_PERCENT);
-  const equipmentWithMarkup = parseFloat(equipment_cost) * (1 + RATES.MARKUP_PERCENT);
-  const rentalWithMarkup = parseFloat(rental_cost) * (1 + RATES.MARKUP_PERCENT);
-  const trailerWithMarkup = parseFloat(trailer_cost) * (1 + RATES.MARKUP_PERCENT);
+  // All cost categories with 25% markup (same NaN guard)
+  const materialsWithMarkup = (parseFloat(material_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
+  const equipmentWithMarkup = (parseFloat(equipment_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
+  const rentalWithMarkup = (parseFloat(rental_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
+  const trailerWithMarkup = (parseFloat(trailer_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
 
-  // Mileage @ $1/mile
-  const mileageTotal = parseFloat(estimated_miles) * RATES.MILEAGE;
+  // Mileage at the per-mile rate
+  const mileageTotal = (parseFloat(estimated_miles) || 0) * RATES.MILEAGE;
 
   // Grand total for ADDITIONAL work (no admin fee)
   const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + 

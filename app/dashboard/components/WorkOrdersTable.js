@@ -154,6 +154,17 @@ const isNewWorkOrder = (wo) => {
   return hours <= 24;
 };
 
+// Cost-center detection from the description prefix:
+// "144017 - UPS - ..." vs "141303 - CBRE - ..." — the token right after the
+// numeric cost-center code tells us who the work is for. CBRE rows get a
+// green background tint so both cost centers are distinguishable at a glance.
+// Anchored to the start of the string on purpose: a stray "CBRE" later in
+// the free-text description must NOT trigger the tint.
+const isCbreCostCenter = (wo) => {
+  const desc = wo.work_order_description || '';
+  return /^\s*\d+\s*-\s*CBRE\b/i.test(desc);
+};
+
 // Returns true if this WO has a CBRE status change that hasn't been acknowledged yet.
 // Compares cbre_status_updated_at against cbre_status_acknowledged_at.
 const hasUnackCbreUpdate = (wo) => {
@@ -257,12 +268,18 @@ export default function WorkOrdersTable({
               const hasSubmittedNTE = wo.nte_quotes?.some(q => q.nte_status === 'submitted');
               const isUnackCbre = hasUnackCbreUpdate(wo);
 
+              const isCbreWork = isCbreCostCenter(wo);
+
+              // Semantic state tints (missing data, unack CBRE update, escalation,
+              // cancelled, selection) keep priority — the CBRE cost-center green
+              // is the neutral fallback tint. UPS rows stay unchanged (no tint).
               const rowBg = isSelected
                 ? 'bg-blue-600/10 border-l-2 border-l-blue-500'
                 : wo.status === 'missing_data' ? 'bg-red-950/40 border-l-4 border-l-red-500'
                 : isUnackCbre ? 'bg-amber-500/10 border-l-4 border-l-amber-500'
                 : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
                 : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'
+                : isCbreWork ? 'bg-emerald-950/40 border-l-2 border-l-emerald-500/60'
                 : '';
 
               return (

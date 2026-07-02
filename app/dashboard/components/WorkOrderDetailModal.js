@@ -32,6 +32,105 @@ import {
   formatDateTimeEST,
   getTodayEST
 } from '../../mobile/utils/dateUtils';
+import { getClientType, getEffectiveAdminHours, CLIENT_STYLES } from '@/lib/clientType';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Client type marker + per-WO admin-hours override.
+// Prominent CBRE/UPS banner at the top of the ticket (spec: CBRE green,
+// UPS brown/gold) plus the billing controls:
+//   - client_type select (CBRE / UPS) — fixes unclassified WOs (e.g. EMF-*)
+//   - include_admin_hours override: NULL = client default (UPS 2h / CBRE 0h),
+//     TRUE = force on, FALSE = force off. Policy lives in lib/clientType.js
+//     and is consumed by calculateCostSummaryWithDailyHours, the dashboard
+//     calculations util and quoteService, so it propagates to invoicing.
+// Controls are visible to admins only; everyone else just sees the banner.
+// ─────────────────────────────────────────────────────────────────────────────
+function ClientBillingStrip({ wo, supabase, canEdit, onUpdated }) {
+  const [saving, setSaving] = useState(false);
+  const clientType = getClientType(wo);
+  const style = clientType ? CLIENT_STYLES[clientType] : null;
+  const effectiveAdmin = getEffectiveAdminHours(wo);
+  const override = wo.include_admin_hours; // true | false | null/undefined
+
+  const save = async (fields) => {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('work_orders')
+        .update(fields)
+        .eq('wo_id', wo.wo_id);
+      if (error) throw error;
+      if (onUpdated) onUpdated(fields);
+    } catch (err) {
+      alert('Failed to update: ' + err.message +
+        '\n\nIf this mentions a missing column, run migrations/cbre_ups_differentiation.sql in Supabase.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden border"
+      style={{ borderColor: style ? style.bgHex : '#b45309' }}
+    >
+      {/* Centered brand banner */}
+      <div
+        className="py-2.5 px-4 text-center"
+        style={{ backgroundColor: style ? style.bgHex : '#78350f' }}
+      >
+        <span
+          className="text-xl font-black tracking-[0.3em]"
+          style={{ color: style ? style.textHex : '#fcd34d' }}
+        >
+          {clientType || 'CLIENT TYPE NOT SET'}
+        </span>
+      </div>
+
+      {/* Billing controls (admin only) */}
+      {canEdit && (
+        <div className="bg-[#0d0d14] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 uppercase tracking-wider">Client</span>
+            <select
+              value={clientType || ''}
+              disabled={saving}
+              onChange={(e) => save({ client_type: e.target.value || null })}
+              className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-500/60"
+            >
+              <option value="">— not set —</option>
+              <option value="CBRE">CBRE</option>
+              <option value="UPS">UPS</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 uppercase tracking-wider">Admin Hours</span>
+            <select
+              value={override === true ? 'on' : override === false ? 'off' : ''}
+              disabled={saving}
+              onChange={(e) =>
+                save({
+                  include_admin_hours:
+                    e.target.value === 'on' ? true : e.target.value === 'off' ? false : null,
+                })
+              }
+              className="bg-[#1e1e2e] border border-[#2d2d44] text-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-500/60"
+            >
+              <option value="">Client default (UPS 2h / CBRE 0h)</option>
+              <option value="on">Force ON (2h)</option>
+              <option value="off">Force OFF (0h)</option>
+            </select>
+            <span className={effectiveAdmin > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500 font-bold'}>
+              billed: {effectiveAdmin}h ({"$"}{effectiveAdmin * 64})
+            </span>
+            {saving && <span className="text-slate-500 animate-pulse">saving…</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function WorkOrderDetailModal({ 
   workOrder, 
@@ -276,7 +375,7 @@ export default function WorkOrderDetailModal({
     const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
     
     let existingCostsTotal = 0;
-    let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: 128 };
+    let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: getEffectiveAdminHours(selectedWO) * 64 };
     
     if (hasSnapshot) {
       // USE SAVED SNAPSHOT - matches what the NTE card shows
@@ -1539,7 +1638,9 @@ const sendAssignmentNotifications = async () => {
     const totalOT = legacyOT + legacyTeamOT + dailyTotals.totalOT;
     const totalMiles = legacyMiles + legacyTeamMiles + dailyTotals.totalMiles;
 
-    const adminHours = 2;
+    // Client-type aware: UPS = 2 admin hrs (legacy), CBRE = 0 by default,
+    // per-WO override via include_admin_hours (policy in lib/clientType.js).
+    const adminHours = getEffectiveAdminHours(selectedWO);
     const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
 
     // EMF Material (company paid - from work_orders table)
@@ -1571,6 +1672,7 @@ const sendAssignmentNotifications = async () => {
       totalOT,
       totalMiles,
       laborCost,
+      adminHours,
       // EMF Material
       emfMaterialBase,
       emfMaterialWithMarkup,
@@ -1609,6 +1711,20 @@ const sendAssignmentNotifications = async () => {
           <div className="min-w-0">
             <h2 className="text-xl md:text-2xl font-bold break-all">{selectedWO.wo_number}</h2>
             <div className="flex gap-2 mt-2 flex-wrap">
+              {(() => {
+                const ct = getClientType(selectedWO);
+                if (!ct) return null;
+                const st = CLIENT_STYLES[ct];
+                return (
+                  <div
+                    className="px-3 py-1 rounded-lg text-sm font-black tracking-wider inline-block"
+                    style={{ backgroundColor: st.bgHex, color: st.textHex }}
+                    title={ct + ' work order'}
+                  >
+                    {ct}
+                  </div>
+                );
+              })()}
               {selectedWO.acknowledged && (
                 <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm inline-block">
                   ✅ Acknowledged
@@ -1707,6 +1823,16 @@ const sendAssignmentNotifications = async () => {
 
           {/* ── Details Tab ── */}
           {activeTab !== 'profitability' && (<>
+          {/* Client type marker + admin-hours override (CBRE/UPS differentiation) */}
+          <ClientBillingStrip
+            wo={selectedWO}
+            supabase={supabase}
+            canEdit={isAdmin}
+            onUpdated={(fields) => {
+              setSelectedWO(prev => ({ ...prev, ...fields }));
+              refreshWorkOrders();
+            }}
+          />
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -2732,7 +2858,7 @@ const sendAssignmentNotifications = async () => {
                         const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
                         const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
                         const mileageCost = totalMileageFromLogs * 1.00;
-                        const adminFee = 128;
+                        const adminFee = getEffectiveAdminHours(selectedWO) * 64;
                         
                         currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
                         newNTENeeded = currentCosts + additionalTotal;
@@ -2963,7 +3089,7 @@ const sendAssignmentNotifications = async () => {
             </div>
 
             <div className="bg-blue-500/10 border border-blue-500/20 text-blue-100 rounded-xl p-3 mb-3">
-              <div className="font-bold mb-2">LABOR (with 2 Admin Hours)</div>
+              <div className="font-bold mb-2">LABOR {costSummary.adminHours > 0 ? '(with ' + costSummary.adminHours + ' Admin Hours)' : '(no Admin Hours)'}</div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Regular Hours ({costSummary.totalRT.toFixed(1)} hrs × $64)</span>
@@ -2973,9 +3099,15 @@ const sendAssignmentNotifications = async () => {
                   <span>Overtime Hours ({costSummary.totalOT.toFixed(1)} hrs × $96)</span>
                   <span>${(costSummary.totalOT * 96).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-yellow-300">
+                <div className={costSummary.adminHours > 0 ? 'flex justify-between text-yellow-300' : 'flex justify-between text-slate-500'}>
                   <span>+ Admin Hours</span>
-                  <span>2 hrs × $64 = $128.00</span>
+                  <span>
+                    {costSummary.adminHours > 0 ? (
+                      <>{costSummary.adminHours} hrs × {"$"}64 = {"$"}{(costSummary.adminHours * 64).toFixed(2)}</>
+                    ) : (
+                      <>0 hrs (off for this client)</>
+                    )}
+                  </span>
                 </div>
                 <div className="border-t border-blue-500/30 pt-1 mt-1 flex justify-between font-bold">
                   <span>Total Labor:</span>

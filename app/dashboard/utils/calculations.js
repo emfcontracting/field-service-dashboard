@@ -1,5 +1,7 @@
 // app/dashboard/utils/calculations.js
 
+import { getEffectiveAdminHours } from '@/lib/clientType';
+
 export function calculateStats(orders) {
   return {
     total: orders.length,
@@ -33,8 +35,10 @@ export function calculateTotalCost(wo) {
   const rental = parseFloat(wo.rental_cost) || 0;
   const mileage = miles * 1.00;
   
-  // Add admin hours (2 hrs @ $64) for a more accurate estimate
-  const adminHours = 128;
+  // Admin hours are client-type aware: UPS = 2 hrs embedded (legacy), CBRE = 0
+  // by default, per-WO override via work_orders.include_admin_hours.
+  // Policy lives in lib/clientType.js (getEffectiveAdminHours).
+  const adminHours = getEffectiveAdminHours(wo) * 64;
   
   // Apply markups to materials/equipment/trailer/rental (25%)
   const materialsWithMarkup = materials * 1.25;
@@ -61,8 +65,8 @@ export function calculateInvoiceTotal(wo, teamMembers = []) {
     });
   }
   
-  // Admin hours (always 2)
-  const adminHours = 2 * 64;
+  // Admin hours (client-type aware: UPS 2 hrs, CBRE 0 unless overridden per WO)
+  const adminHours = getEffectiveAdminHours(wo) * 64;
   
   // Total labor
   const totalLabor = leadRegular + leadOvertime + teamLabor + adminHours;

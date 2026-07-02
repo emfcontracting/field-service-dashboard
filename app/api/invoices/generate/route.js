@@ -2,14 +2,15 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
+import { getEffectiveAdminHours } from '@/lib/clientType';
 
 // Rate constants - MUST match CostSummarySection / Invoicing page logic
 const RT_RATE       = 64;
 const OT_RATE       = 96;
 const MILEAGE_RATE  = 1.00;
 const MARKUP        = 1.25;          // 25% markup on materials/equipment/rental/trailer
-const ADMIN_HOURS   = 2;             // 2 admin hours @ RT_RATE
-const ADMIN_FEE     = ADMIN_HOURS * RT_RATE; // = $128
+const ADMIN_HOURS   = 2;             // DEFAULT admin hours (UPS); CBRE defaults to 0 — see getEffectiveAdminHours
+const ADMIN_FEE     = ADMIN_HOURS * RT_RATE; // default admin fee (UPS)
 
 // Filter check-in/out lines from comments (mirrors /app/invoices/page.js)
 function filterWorkComments(comments) {
@@ -54,6 +55,11 @@ export async function POST(request) {
         { status: 404 }
       );
     }
+
+    // Client-type aware admin hours (UPS default 2h, CBRE default 0h,
+    // per-WO override via work_orders.include_admin_hours — lib/clientType.js)
+    const effectiveAdminHours = getEffectiveAdminHours(workOrder);
+    const effectiveAdminFee   = effectiveAdminHours * RT_RATE;
 
     // Check if work order is completed and acknowledged
     if (workOrder.status !== 'completed') {
@@ -152,7 +158,7 @@ export async function POST(request) {
     // Labor totals
     const laborRT       = totalRT * RT_RATE;
     const laborOT       = totalOT * OT_RATE;
-    const laborAdmin    = ADMIN_FEE;
+    const laborAdmin    = effectiveAdminFee;
     const laborSubtotal = laborRT + laborOT + laborAdmin;
 
     // ── Billing mode: FIXED quote vs ACTUAL (T&M) ──
@@ -262,15 +268,17 @@ export async function POST(request) {
       });
     }
 
-    // Admin hours always included
-    lineItems.push({
-      invoice_id: invoice.invoice_id,
-      description: `Administrative Hours (${ADMIN_HOURS} hrs @ $${RT_RATE}/hr)`,
-      quantity: ADMIN_HOURS,
-      unit_price: RT_RATE,
-      amount: ADMIN_FEE,
-      line_type: 'labor'
-    });
+    // Admin hours — client-type aware (skipped entirely when 0, e.g. CBRE default)
+    if (effectiveAdminHours > 0) {
+      lineItems.push({
+        invoice_id: invoice.invoice_id,
+        description: 'Administrative Hours (' + effectiveAdminHours + ' hrs @ ' + "$" + RT_RATE + '/hr)',
+        quantity: effectiveAdminHours,
+        unit_price: RT_RATE,
+        amount: effectiveAdminFee,
+        line_type: 'labor'
+      });
+    }
 
     if (totalMiles > 0) {
       lineItems.push({

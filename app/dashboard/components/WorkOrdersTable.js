@@ -7,7 +7,7 @@ import { getPriorityBadge } from '../utils/priorityHelpers';
 import { formatDateEST } from '../utils/dateUtils';
 import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissionStatus';
 import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
-import { isCbreDescription } from '@/lib/costCenter';
+import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 
 // CBRE posting-status badge (CPW/CIS/CIR/CA1/CA2/CMP) — separate track from the
 // active cbre_status. Shows the CBRE-side processing stage of a completed WO.
@@ -258,7 +258,8 @@ export default function WorkOrdersTable({
               const hasSubmittedNTE = wo.nte_quotes?.some(q => q.nte_status === 'submitted');
               const isUnackCbre = hasUnackCbreUpdate(wo);
 
-              const isCbreWork = isCbreDescription(wo.work_order_description);
+              const clientType = getClientType(wo);
+              const isCbreWork = clientType === 'CBRE';
 
               // Semantic state tints (missing data, unack CBRE update, escalation,
               // cancelled, selection) keep priority — the CBRE cost-center green
@@ -269,7 +270,7 @@ export default function WorkOrdersTable({
                 : isUnackCbre ? 'bg-amber-500/10 border-l-4 border-l-amber-500'
                 : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
                 : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'
-                : isCbreWork ? 'bg-emerald-950/40 border-l-2 border-l-emerald-500/60'
+                : isCbreWork ? 'bg-emerald-900/40 border-l-2 border-l-emerald-500'
                 : '';
 
               return (
@@ -293,6 +294,15 @@ export default function WorkOrdersTable({
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-blue-400 font-semibold">{wo.wo_number}</span>
+                      {clientType && (
+                        <span
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                          style={{ backgroundColor: CLIENT_STYLES[clientType].bgHex, color: CLIENT_STYLES[clientType].textHex }}
+                          title={clientType === 'CBRE' ? 'CBRE work order' : 'UPS work order'}
+                        >
+                          {clientType}
+                        </span>
+                      )}
                       <SubmissionBadges wo={wo} />
                       <FlagBadge wo={wo} />
                       <PostingStatusBadge wo={wo} />

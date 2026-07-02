@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge } from '../utils/helpers';
-import { isCbreDescription } from '@/lib/costCenter';
+import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 
 export default function CompletedWorkOrders({
   currentUser,
@@ -348,7 +348,8 @@ export default function CompletedWorkOrders({
               // Cost-center tint (shared logic with the dashboard table):
               // CBRE work gets a green card + green left border, UPS stays
               // default gray. Escalation / rejected win over the green.
-              const isCbre = isCbreDescription(wo.work_order_description);
+              const clientType = getClientType(wo);
+              const isCbre = clientType === 'CBRE';
               const border = isEsc ? 'border-l-4 border-red-500'
                 : isRej ? 'border-l-4 border-orange-500'
                 : isCbre ? 'border-l-4 border-green-500/70'
@@ -387,6 +388,14 @@ export default function CompletedWorkOrders({
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <span className="font-bold text-lg">{wo.wo_number}</span>
+                    {clientType && (
+                      <span
+                        className="ml-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: CLIENT_STYLES[clientType].bgHex, color: CLIENT_STYLES[clientType].textHex }}
+                      >
+                        {clientType}
+                      </span>
+                    )}
                     <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
                       {getPriorityBadge(wo.priority)}
                     </span>

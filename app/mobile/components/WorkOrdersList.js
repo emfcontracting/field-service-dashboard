@@ -7,7 +7,7 @@ import ConnectionStatus from './ConnectionStatus';
 import WeatherWidget from './WeatherWidget';
 import NotificationBell from './NotificationBell';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
-import { isCbreDescription } from '@/lib/costCenter';
+import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 
 export default function WorkOrdersList({
   currentUser,
@@ -691,7 +691,8 @@ export default function WorkOrdersList({
               // CBRE work gets a green card + green left border, UPS stays
               // default gray. Escalation / rejected keep their red / orange
               // borders and suppress the green entirely.
-              const isCbreWork = isCbreDescription(wo.work_order_description);
+              const clientType = getClientType(wo);
+              const isCbreWork = clientType === 'CBRE';
               const cbreBorder = isEscalation ? 'border-l-4 border-red-500'
                 : isRejected ? 'border-l-4 border-orange-500'
                 : isCbreWork ? 'border-l-4 border-green-500/70'
@@ -771,6 +772,14 @@ export default function WorkOrdersList({
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1 min-w-0">
                     <span className="font-bold text-lg">{wo.wo_number}</span>
+                    {clientType && (
+                      <span
+                        className="ml-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: CLIENT_STYLES[clientType].bgHex, color: CLIENT_STYLES[clientType].textHex }}
+                      >
+                        {clientType}
+                      </span>
+                    )}
                     <span className={`ml-2 text-sm ${getPriorityColor(wo.priority)}`}>
                       {getPriorityBadge(wo.priority)}
                     </span>

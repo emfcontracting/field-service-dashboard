@@ -23,15 +23,18 @@ END $$;
 
 -- Backfill client_type from the description prefix ("<code> - CBRE - ..." etc).
 -- Anchored to the start so "CBRE"/"UPS" later in free text never mis-classifies.
+-- Tolerates an optional "Problem Description:" prefix and stray letters glued
+-- to the code by the email import (e.g. "141303that - CBRE").
+-- NOTE: Postgres word boundary is \y — NOT \b (\b means backspace in Postgres ARE!).
 UPDATE work_orders
    SET client_type = 'CBRE'
  WHERE client_type IS NULL
-   AND work_order_description ~* '^\s*\d+\s*-\s*CBRE\b';
+   AND work_order_description ~* '^\s*(problem\s*description\s*:\s*)?\d+[a-z]*\s*-\s*CBRE\y';
 
 UPDATE work_orders
    SET client_type = 'UPS'
  WHERE client_type IS NULL
-   AND work_order_description ~* '^\s*\d+\s*-\s*UPS\b';
+   AND work_order_description ~* '^\s*(problem\s*description\s*:\s*)?\d+[a-z]*\s*-\s*UPS\y';
 
 -- ── WORK ORDER QUOTES: structured description + on-site + photo + ack ─────────
 ALTER TABLE work_order_quotes

@@ -7,6 +7,7 @@ import ConnectionStatus from './ConnectionStatus';
 import WeatherWidget from './WeatherWidget';
 import NotificationBell from './NotificationBell';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
+import { isCbreDescription } from '@/lib/costCenter';
 
 export default function WorkOrdersList({
   currentUser,
@@ -685,7 +686,16 @@ export default function WorkOrdersList({
               const cbreConfig = wo.cbre_status ? cbreConfigs[wo.cbre_status] : null;
               const isEscalation = wo.cbre_status === 'escalation';
               const isRejected = wo.cbre_status === 'quote_rejected' || wo.cbre_status === 'invoice_rejected';
-              const cbreBorder = isEscalation ? 'border-l-4 border-red-500' : isRejected ? 'border-l-4 border-orange-500' : '';
+
+              // Cost-center tint (shared logic with the dashboard table):
+              // CBRE work gets a green card + green left border, UPS stays
+              // default gray. Escalation / rejected keep their red / orange
+              // borders and suppress the green entirely.
+              const isCbreWork = isCbreDescription(wo.work_order_description);
+              const cbreBorder = isEscalation ? 'border-l-4 border-red-500'
+                : isRejected ? 'border-l-4 border-orange-500'
+                : isCbreWork ? 'border-l-4 border-green-500/70'
+                : '';
               
               return (
               <div
@@ -706,6 +716,8 @@ export default function WorkOrdersList({
                     ? 'bg-blue-900 border-2 border-blue-500'
                     : selectedWOs.has(wo.wo_id)
                     ? 'bg-blue-900 border-2 border-blue-500'
+                    : (isCbreWork && !isEscalation && !isRejected)
+                    ? 'bg-green-900/60 hover:bg-green-900/80'
                     : 'bg-gray-800 hover:bg-gray-750'
                 }`}
                 style={

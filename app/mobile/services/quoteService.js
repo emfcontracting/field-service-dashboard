@@ -2,6 +2,8 @@
 // FIXED: Verbal NTE = immediate update, Written NTE = pending until approved
 // Snapshot principle: saves current costs at time of creation, never recalculates
 
+import { getEffectiveAdminHours } from '@/lib/clientType';
+
 // Rate constants
 export const RATES = {
   RT_HOURLY: 64,
@@ -122,8 +124,12 @@ export async function calculateExistingCosts(supabase, workOrder, currentTeamLis
     const totalOT = legacyTotalOT + dailyTotalOT;
     const totalMiles = legacyTotalMiles + dailyTotalMiles;
 
-    // Labor includes admin hours
-    const laborCost = (totalRT * RATES.RT_HOURLY) + (totalOT * RATES.OT_HOURLY) + (RATES.ADMIN_HOURS * RATES.RT_HOURLY);
+    // Labor includes admin hours.
+    // Admin hours are client-dependent: UPS keeps the legacy 2 hrs, CBRE
+    // defaults to 0 (admins can force them on per WO via include_admin_hours).
+    // Unclassified WOs keep the legacy 2 hrs so nothing shifts until they're set.
+    const adminHours = getEffectiveAdminHours(wo, RATES.ADMIN_HOURS);
+    const laborCost = (totalRT * RATES.RT_HOURLY) + (totalOT * RATES.OT_HOURLY) + (adminHours * RATES.RT_HOURLY);
 
     // Materials: EMF + Tech, both with markup
     const emfMaterialBase = parseFloat(wo.material_cost) || 0;
@@ -146,6 +152,7 @@ export async function calculateExistingCosts(supabase, workOrder, currentTeamLis
 
     return {
       totalRT, totalOT, totalMiles,
+      adminHours,
       laborCost,
       emfMaterialBase, techMaterialBase, totalMaterialBase, materialWithMarkup,
       equipmentBase, equipmentWithMarkup,
@@ -375,6 +382,17 @@ export async function createQuote(supabase, quoteData, userId) {
       estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
       description: quoteData.description || null,
       notes: quoteData.notes || null,
+      // Structured job description (CBRE rejects insufficient descriptions)
+      troubleshooting_findings: quoteData.troubleshooting_findings || null,
+      work_required: quoteData.work_required || null,
+      parts_materials: quoteData.parts_materials || null,
+      // On-site status + site photo (photo required when on site)
+      is_on_site: typeof quoteData.is_on_site === 'boolean' ? quoteData.is_on_site : null,
+      photo_url: quoteData.photo_url || null,
+      photo_uploaded_at: quoteData.photo_uploaded_at || null,
+      // CBRE no-contact acknowledgment (audit trail)
+      no_contact_ack: quoteData.no_contact_ack || false,
+      no_contact_ack_at: quoteData.no_contact_ack ? new Date().toISOString() : null,
       // Calculated totals for additional work
       labor_total: totals.labor_total,
       materials_with_markup: totals.materials_with_markup,
@@ -447,6 +465,16 @@ export async function updateQuote(supabase, quoteId, quoteData) {
     estimated_miles: parseFloat(quoteData.estimated_miles) || 0,
     description: quoteData.description || null,
     notes: quoteData.notes || null,
+    // Structured job description (CBRE rejects insufficient descriptions)
+    troubleshooting_findings: quoteData.troubleshooting_findings || null,
+    work_required: quoteData.work_required || null,
+    parts_materials: quoteData.parts_materials || null,
+    // On-site status + site photo (photo required when on site)
+    is_on_site: typeof quoteData.is_on_site === 'boolean' ? quoteData.is_on_site : null,
+    photo_url: quoteData.photo_url || null,
+    photo_uploaded_at: quoteData.photo_uploaded_at || null,
+    // CBRE no-contact acknowledgment (preserve original ack timestamp on edit)
+    no_contact_ack: quoteData.no_contact_ack || false,
     updated_at: new Date().toISOString(),
     // Recalculated totals
     labor_total: totals.labor_total,

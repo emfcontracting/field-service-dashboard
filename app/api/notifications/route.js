@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import {
+  buildCbreNteSubmittedSubject,
+  buildCbreNteSubmittedEmailText,
+  buildCbreNteSubmittedEmailHTML
+} from '@/lib/cbreNteEmail';
 
 // Initialize Supabase for fetching push subscriptions
 const supabase = createClient(
@@ -456,7 +461,7 @@ const sendPushNotification = async (userId, payload) => {
 
 export async function POST(request) {
   try {
-    const { type, recipients, workOrder, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = await request.json();
+    const { type, recipients, workOrder, quote, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = await request.json();
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -474,10 +479,12 @@ export async function POST(request) {
     const isMissingDataFixed = type === 'missing_data_fixed';
     const isCompleted = type === 'work_order_completed';
     const isUpdateRequiredFollowedUp = type === 'update_required_followed_up';
+    // CBRE NTE submitted: EMAIL ONLY, to selected subscribers. Never SMS/push.
+    const isCbreNteSubmitted = type === 'cbre_nte_submitted';
 
     // For work order assignments and the new office-bound types, always use email (not SMS)
-    const useEmail = deliveryMethod === 'email' || isAssignment || isMissingDataFixed || isCompleted || isUpdateRequiredFollowedUp;
-    const useSMS = deliveryMethod === 'sms' && !isAssignment && !isMissingDataFixed && !isCompleted && !isUpdateRequiredFollowedUp;
+    const useEmail = deliveryMethod === 'email' || isAssignment || isMissingDataFixed || isCompleted || isUpdateRequiredFollowedUp || isCbreNteSubmitted;
+    const useSMS = deliveryMethod === 'sms' && !isAssignment && !isMissingDataFixed && !isCompleted && !isUpdateRequiredFollowedUp && !isCbreNteSubmitted;
 
     for (const recipient of recipients) {
       const { user_id, email, phone, sms_carrier, first_name, last_name } = recipient;
@@ -512,6 +519,11 @@ export async function POST(request) {
             subject = `🔵 Tech Followed Up: WO ${workOrder.wo_number}`;
             textMessage = buildUpdateRequiredFollowedUpEmailText(workOrder, recipientName, actorName, updateRequiredItems);
             htmlMessage = buildUpdateRequiredFollowedUpEmailHTML(workOrder, recipientName, actorName, updateRequiredItems);
+          } else if (isCbreNteSubmitted && workOrder) {
+            // CBRE NTE submitted — admin must handle all CBRE contact
+            subject = buildCbreNteSubmittedSubject(workOrder, quote);
+            textMessage = buildCbreNteSubmittedEmailText(workOrder, quote, actorName, recipientName);
+            htmlMessage = buildCbreNteSubmittedEmailHTML(workOrder, quote, actorName, recipientName);
           } else if (customMessage) {
             // Custom message email
             subject = '💬 Message from EMF Contracting';
@@ -608,7 +620,8 @@ export async function POST(request) {
       }
 
       // === SEND PUSH NOTIFICATION (only for work order notifications) ===
-      if (user_id && workOrder) {
+      // CBRE NTE submitted is EMAIL ONLY by policy — never push.
+      if (user_id && workOrder && !isCbreNteSubmitted) {
         let pushPayload;
 
         if (isMissingDataFixed) {

@@ -4,6 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge } from '../utils/helpers';
+import { isCbreDescription } from '@/lib/costCenter';
 
 export default function CompletedWorkOrders({
   currentUser,
@@ -343,7 +344,15 @@ export default function CompletedWorkOrders({
             {filteredWorkOrders.map(wo => {
               const isEsc = wo.cbre_status === 'escalation';
               const isRej = wo.cbre_status === 'quote_rejected' || wo.cbre_status === 'invoice_rejected';
-              const border = isEsc ? 'border-l-4 border-red-500' : isRej ? 'border-l-4 border-orange-500' : '';
+
+              // Cost-center tint (shared logic with the dashboard table):
+              // CBRE work gets a green card + green left border, UPS stays
+              // default gray. Escalation / rejected win over the green.
+              const isCbre = isCbreDescription(wo.work_order_description);
+              const border = isEsc ? 'border-l-4 border-red-500'
+                : isRej ? 'border-l-4 border-orange-500'
+                : isCbre ? 'border-l-4 border-green-500/70'
+                : '';
               
               const cbreConfigs = {
                 'pending_quote': { bg: 'bg-orange-600', text: language === 'en' ? '📋 NTE Pending' : '📋 NTE Pendiente' },
@@ -373,7 +382,7 @@ export default function CompletedWorkOrders({
               <div
                 key={wo.wo_id}
                 onClick={() => onSelectWO(wo)}
-                className={`bg-gray-800 rounded-lg p-4 hover:bg-gray-750 transition cursor-pointer active:scale-[0.99] ${border}`}
+                className={`${(isCbre && !isEsc && !isRej) ? 'bg-green-900/60 hover:bg-green-900/80' : 'bg-gray-800 hover:bg-gray-750'} rounded-lg p-4 transition cursor-pointer active:scale-[0.99] ${border}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>

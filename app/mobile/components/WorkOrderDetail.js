@@ -14,6 +14,7 @@ import NTEIncreaseList from './quotes/NTEIncreaseList';
 import JurassicParkError from './JurassicParkError';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { calculateExistingCosts } from '../services/quoteService';
+import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 
 // Map missing_data item -> DOM id of the matching section in this view.
 // Used by the clickable badges in the missing-data banner to scroll the tech
@@ -551,6 +552,24 @@ export default function WorkOrderDetail({
             </button>
           </div>
         </div>
+
+        {/* CBRE/UPS client marker — prominent, centered at the top of the ticket.
+            Techs see the marker only; the admin-hours toggle is dashboard/admin-only. */}
+        {(() => {
+          const ct = getClientType(wo);
+          if (!ct) return null;
+          const st = CLIENT_STYLES[ct];
+          return (
+            <div
+              className="rounded-xl py-2.5 px-4 mb-4 text-center border-2"
+              style={{ backgroundColor: st.bgHex, borderColor: st.accentHex }}
+            >
+              <span className="text-xl font-black tracking-[0.3em]" style={{ color: st.textHex }}>
+                {ct}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* 🚨 TECH REVIEW ALERT - HIGHLY VISIBLE */}
         {status === 'tech_review' && (

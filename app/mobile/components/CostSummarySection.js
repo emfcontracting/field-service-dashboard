@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { getEffectiveAdminHours } from '@/lib/clientType';
 
 export default function CostSummarySection({ workOrder, currentTeamList }) {
   const { language } = useLanguage();
@@ -96,7 +97,10 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const totalOT = legacyTotals.totalOT + dailyTotals.totalOT;
   const totalMiles = legacyTotals.totalMiles + dailyTotals.totalMiles;
   
-  const adminHours = 2;
+  // Client-type aware: UPS = 2 admin hrs (legacy), CBRE = 0 by default,
+  // per-WO override via include_admin_hours (policy in lib/clientType.js).
+  // Must stay in sync with the dashboard cost summary and the invoice route.
+  const adminHours = getEffectiveAdminHours(wo);
 
   const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
   
@@ -152,9 +156,15 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
               <span className="text-gray-400">{t('teamOTHours')}</span>
               <span>{totalOT.toFixed(2)} {t('hrs')} × $96 = ${(totalOT * 96).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm text-yellow-400">
+            <div className={adminHours > 0 ? 'flex justify-between text-sm text-yellow-400' : 'flex justify-between text-sm text-gray-500'}>
               <span>{t('adminHours')}</span>
-              <span>2 {t('hrs')} × $64 = $128.00</span>
+              <span>
+                {adminHours > 0 ? (
+                  <>{adminHours} {t('hrs')} × {"$"}64 = {"$"}{(adminHours * 64).toFixed(2)}</>
+                ) : (
+                  <>0 {t('hrs')} {language === 'en' ? '(off for this client)' : '(desactivado para este cliente)'}</>
+                )}
+              </span>
             </div>
             <div className="flex justify-between font-bold border-t border-gray-700 pt-2">
               <span>{t('totalLabor')}</span>

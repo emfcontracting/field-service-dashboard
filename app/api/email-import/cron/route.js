@@ -7,6 +7,7 @@ import nodemailer from 'nodemailer';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { buildContactLines } from '../contactParser';
+import { parseCbreDateEntered } from '../parseCbreDate';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -248,18 +249,13 @@ function parseCBREEmail(subject, body) {
     }
   }
 
-  // Extract Date Entered
-  const dateMatch = cleanBody.match(/Date Entered:\s*([A-Za-z]+\s+\d+\s+\d+\s+[\d:]+\s*[AP]?M?)/i);
-  if (dateMatch) {
-    try {
-      const dateStr = dateMatch[1].replace(/\s+/g, ' ').trim();
-      const parsed = new Date(dateStr);
-      if (!isNaN(parsed.getTime())) {
-        workOrder.date_entered = parsed.toISOString();
-      }
-    } catch (e) {
-      console.log('Date parse error:', e);
-    }
+  // Extract Date Entered. CBRE stamps this in Eastern and usually includes the
+  // source offset (e.g. "UTC-05"); parseCbreDateEntered honors it and returns a
+  // correct UTC instant. Without it, the naive string is read in the runtime
+  // zone (UTC on Vercel) and lands 4-5 hours early.
+  const dateEntered = parseCbreDateEntered(cleanBody);
+  if (dateEntered) {
+    workOrder.date_entered = dateEntered;
   }
 
   // Extract Building

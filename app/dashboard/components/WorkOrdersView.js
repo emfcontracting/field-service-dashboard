@@ -71,12 +71,16 @@ export default function WorkOrdersView({
       }
     }
 
-    // CBRE status filter - handle both single value and array
+    // CBRE status filter - handle both single value and array.
+    // 'escalation' is now a separate overlay flag (wo.escalation), not a
+    // cbre_status value — match it against the flag instead.
     if (cbreStatusFilter !== 'all') {
+      const matchCbre = (wo, val) =>
+        val === 'escalation' ? wo.escalation === true : wo.cbre_status === val;
       if (Array.isArray(cbreStatusFilter)) {
-        filtered = filtered.filter(wo => cbreStatusFilter.includes(wo.cbre_status));
+        filtered = filtered.filter(wo => cbreStatusFilter.some(val => matchCbre(wo, val)));
       } else {
-        filtered = filtered.filter(wo => wo.cbre_status === cbreStatusFilter);
+        filtered = filtered.filter(wo => matchCbre(wo, cbreStatusFilter));
       }
     }
 

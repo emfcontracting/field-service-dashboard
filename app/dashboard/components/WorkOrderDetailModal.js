@@ -976,6 +976,32 @@ export default function WorkOrderDetailModal({
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Escalation is an independent overlay FLAG (work_orders.escalation), NOT a
+  // cbre_status value — so raising/clearing it never touches the lifecycle
+  // status. Toggled manually here; also set automatically by the Gmail sync.
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleToggleEscalation = async () => {
+    const next = !selectedWO.escalation;
+    const now = new Date().toISOString();
+    try {
+      await updateWorkOrder(supabase, selectedWO.wo_id, {
+        escalation: next,
+        escalation_updated_at: now,
+        escalation_acknowledged_at: next ? null : now,
+      });
+      setSelectedWO({
+        ...selectedWO,
+        escalation: next,
+        escalation_updated_at: now,
+        escalation_acknowledged_at: next ? null : now,
+      });
+      refreshWorkOrders();
+    } catch (error) {
+      alert('Failed to update escalation: ' + error.message);
+    }
+  };
+
   const handleUpdateStatus = async (newStatus) => {
     // Special handling for 'missing_data' — don't write directly, open the modal instead.
     // The dropdown value will visually snap back to the real status because we don't update state.
@@ -1969,6 +1995,33 @@ const sendAssignmentNotifications = async () => {
             </div>
           </div>
 
+          {/* Escalation flag — independent overlay, never overwrites CBRE Status */}
+          <div className={`rounded-xl p-4 border ${selectedWO.escalation ? 'bg-red-500/10 border-red-500/40' : 'bg-[#0d0d14] border-[#2d2d44]'}`}>
+            <div className="flex justify-between items-center">
+              <div>
+                <label className={`block text-sm font-semibold mb-1 ${selectedWO.escalation ? 'text-red-300' : 'text-slate-300'}`}>🚨 Escalation</label>
+                <p className="text-xs text-slate-400">Priority flag — independent of CBRE Status</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleEscalation}
+                className={`px-4 py-2 rounded-lg font-semibold transition ${selectedWO.escalation ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-[#2d2d44] text-slate-300 hover:bg-[#3a3a55]'}`}
+              >
+                {selectedWO.escalation ? 'Escalated — clear' : 'Mark escalated'}
+              </button>
+            </div>
+            {selectedWO.escalation && (
+              <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300 animate-pulse">
+                🚨 ESCALATION - This ticket requires immediate attention!
+              </div>
+            )}
+            {selectedWO.escalation && selectedWO.escalation_updated_at && (
+              <div className="mt-2 text-xs text-slate-500">
+                Escalated: {new Date(selectedWO.escalation_updated_at).toLocaleString()}
+              </div>
+            )}
+          </div>
+
           {/* CBRE Status - Synced from Gmail Labels */}
           <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
             <div className="flex justify-between items-center">
@@ -1980,7 +2033,6 @@ const sendAssignmentNotifications = async () => {
                 value={selectedWO.cbre_status || ''}
                 onChange={(e) => handleCBREStatusChange(e.target.value)}
                 className={`px-4 py-2 rounded-lg font-semibold ${
-                  selectedWO.cbre_status === 'escalation' ? 'bg-red-600 text-white' :
                   selectedWO.cbre_status === 'quote_rejected' ? 'bg-red-700 text-white' :
                   selectedWO.cbre_status === 'invoice_rejected' ? 'bg-red-800 text-white' :
                   selectedWO.cbre_status === 'cancelled' ? 'bg-[#2d2d44] text-white' :
@@ -1992,7 +2044,6 @@ const sendAssignmentNotifications = async () => {
                 }`}
               >
                 <option value="">— No CBRE Status —</option>
-                <option value="escalation">🚨 Escalation</option>
                 <option value="pending_quote">📋 Pending Quote</option>
                 <option value="quote_submitted">📤 Quote Submitted</option>
                 <option value="quote_approved">✅ Quote Approved</option>
@@ -2002,11 +2053,6 @@ const sendAssignmentNotifications = async () => {
                 <option value="cancelled">🚫 Cancelled</option>
               </select>
             </div>
-            {selectedWO.cbre_status === 'escalation' && (
-              <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300 animate-pulse">
-                🚨 ESCALATION - This ticket requires immediate attention!
-              </div>
-            )}
             {selectedWO.cbre_status === 'quote_rejected' && (
               <div className="mt-3 bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-sm text-red-300">
                 ❌ Quote was rejected by CBRE. Review and resubmit if needed.

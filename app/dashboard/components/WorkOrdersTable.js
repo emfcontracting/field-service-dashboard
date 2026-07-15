@@ -92,8 +92,6 @@ const SubmissionBadges = ({ wo }) => {
 
 const getCBREStatusBadge = (cbreStatus) => {
   switch (cbreStatus) {
-    case 'escalation':
-      return { text: '🚨 ESCALATION', color: 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse', shortText: '🚨 ESC' };
     case 'quote_approved':
       return { text: '✅ QUOTE APPROVED', color: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30', shortText: '✅ Approved' };
     case 'quote_rejected':
@@ -268,7 +266,7 @@ export default function WorkOrdersTable({
                 ? 'bg-blue-600/10 border-l-2 border-l-blue-500'
                 : wo.status === 'missing_data' ? 'bg-red-950/40 border-l-4 border-l-red-500'
                 : isUnackCbre ? 'bg-amber-500/10 border-l-4 border-l-amber-500'
-                : wo.cbre_status === 'escalation' ? 'bg-red-950/30'
+                : wo.escalation ? 'bg-red-950/30'
                 : wo.cbre_status === 'cancelled' ? 'bg-slate-900/30'
                 : isCbreWork ? 'bg-emerald-900/40 border-l-2 border-l-emerald-500'
                 : '';
@@ -305,6 +303,11 @@ export default function WorkOrdersTable({
                       )}
                       <SubmissionBadges wo={wo} />
                       <FlagBadge wo={wo} />
+                      {wo.escalation && (
+                        <span title="Escalation — requires immediate attention" className="bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-help">
+                          🚨 ESC
+                        </span>
+                      )}
                       <PostingStatusBadge wo={wo} />
                       {isUnackCbre && (
                         <button

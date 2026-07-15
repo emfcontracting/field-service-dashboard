@@ -13,7 +13,8 @@ export function calculateStats(orders) {
     needs_return: orders.filter(wo => wo.status === 'needs_return').length,
     rejected: orders.filter(wo => wo.status === 'rejected').length,
     // CBRE status counts (from Gmail labels)
-    escalation: orders.filter(wo => wo.cbre_status === 'escalation').length,
+    // escalation is now a separate overlay flag (wo.escalation), not a cbre_status value
+    escalation: orders.filter(wo => wo.escalation === true).length,
     quote_approved: orders.filter(wo => wo.cbre_status === 'quote_approved').length,
     quote_rejected: orders.filter(wo => wo.cbre_status === 'quote_rejected').length,
     quote_submitted: orders.filter(wo => wo.cbre_status === 'quote_submitted').length,

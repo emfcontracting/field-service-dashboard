@@ -10,9 +10,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Gmail label to CBRE status mapping
+// Gmail label to CBRE status mapping.
+// NOTE: 'escalation' is a FLAG (type:'flag'), not a lifecycle status. It is
+// applied to its own work_orders.escalation column and NEVER competes for or
+// overwrites cbre_status. Every other entry is a lifecycle status.
 const LABEL_STATUS_MAP = {
-  'escalation': { cbre_status: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
+  'escalation': { type: 'flag', flag: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false, extractNTE: true },
   'quote-rejected': { cbre_status: 'quote_rejected', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false, extractQuoteAmount: true },
@@ -20,6 +23,22 @@ const LABEL_STATUS_MAP = {
   'invoice-rejected': { cbre_status: 'invoice_rejected', invoice_status: 'rejected', notify: true, notifyRoles: ['admin', 'office'] },
   'cancellation': { cbre_status: 'cancelled', notify: true, notifyRoles: ['admin', 'office'] },
 };
+
+// Lifecycle status ranking for the "sticky" protection below.
+// A newly-arriving status with a LOWER rank will not overwrite a PROTECTED
+// milestone the WO has already reached (it is logged as a comment instead).
+const STATUS_RANK = {
+  reassigned: 1,
+  pending_quote: 1,
+  quote_submitted: 2,
+  quote_rejected: 2,
+  quote_approved: 3,
+  invoice_rejected: 4,
+  cancelled: 5,
+};
+
+// Once a WO reaches one of these, a lower-ranked status email can't clobber it.
+const PROTECTED_STATUSES = new Set(['quote_approved']);
 
 // Connect to Gmail via IMAP
 function connectIMAP() {
@@ -391,8 +410,10 @@ export async function GET(request) {
     };
 
     // ========== PHASE 1: Collect ALL emails from ALL labels ==========
-    // Group by WO number, keep only the NEWEST email per WO
-    const woEmailMap = {}; // woNumber -> { email, label, labelConfig, date }
+    // Lifecycle-status labels compete for cbre_status (newest wins).
+    // Flag labels (escalation) are collected separately and NEVER touch cbre_status.
+    const woEmailMap = {};   // woNumber -> { email, label, labelConfig, date }  (status labels)
+    const flagEmailMap = {}; // woNumber -> { email, label, labelConfig, date }  (escalation flag)
 
     for (const label of labelsToCheck) {
       const labelConfig = LABEL_STATUS_MAP[label];
@@ -413,7 +434,16 @@ export async function GET(request) {
 
           const emailDate = new Date(email.date);
 
-          // Keep only the NEWEST email per WO (most recent status wins)
+          // Flag labels (escalation) go to their own bucket — they do NOT
+          // compete for the cbre_status slot, so they can't overwrite a status.
+          if (labelConfig.type === 'flag') {
+            if (!flagEmailMap[woNumber] || emailDate > flagEmailMap[woNumber].date) {
+              flagEmailMap[woNumber] = { email, label, labelConfig, date: emailDate };
+            }
+            continue;
+          }
+
+          // Keep only the NEWEST status email per WO (most recent status wins)
           if (!woEmailMap[woNumber] || emailDate > woEmailMap[woNumber].date) {
             woEmailMap[woNumber] = { email, label, labelConfig, date: emailDate };
           }
@@ -444,6 +474,35 @@ export async function GET(request) {
         // Skip if WO already has this status (duplicate prevention)
         if (workOrder.cbre_status === labelConfig.cbre_status) {
           results.skipped++;
+          continue;
+        }
+
+        // ── Sticky protection ───────────────────────────────────────────────
+        // Don't let a regressive (lower-ranked) status overwrite a protected
+        // milestone the WO already reached (e.g. quote_approved). Log the
+        // incoming email as a comment instead so nothing is lost.
+        const incomingRank = STATUS_RANK[labelConfig.cbre_status] ?? 0;
+        const currentRank  = STATUS_RANK[workOrder.cbre_status] ?? 0;
+        if (PROTECTED_STATUSES.has(workOrder.cbre_status) && incomingRank < currentRank) {
+          if (!dryRun) {
+            const ts = new Date().toLocaleString();
+            const note = `[CBRE ${labelConfig.cbre_status.toUpperCase()} — IGNORED, ${workOrder.cbre_status.toUpperCase()} is protected] ${ts}\nEmail: ${winningEmail.subject}`;
+            const mergedComments = workOrder.comments ? `${workOrder.comments}\n\n${note}` : note;
+            await supabase
+              .from('work_orders')
+              .update({ comments: mergedComments })
+              .eq('wo_id', workOrder.wo_id);
+          }
+          results.skipped++;
+          results.updates.push({
+            wo_number: woNumber,
+            building: workOrder.building,
+            label,
+            new_status: labelConfig.cbre_status,
+            old_status: workOrder.cbre_status,
+            sticky_protected: true,
+            subject: winningEmail.subject.substring(0, 80),
+          });
           continue;
         }
 
@@ -581,9 +640,74 @@ export async function GET(request) {
       }
     }
 
+    // ========== PHASE 3: Apply escalation FLAGS (independent of cbre_status) ==========
+    for (const [woNumber, entry] of Object.entries(flagEmailMap)) {
+      const { email: winningEmail, labelConfig } = entry;
+
+      try {
+        const { data: workOrder, error: woError } = await supabase
+          .from('work_orders')
+          .select('wo_id, wo_number, building, escalation, comments')
+          .eq('wo_number', woNumber)
+          .single();
+
+        if (woError || !workOrder) {
+          results.notFound++;
+          results.errors.push(`WO ${woNumber} not found in system (escalation)`);
+          continue;
+        }
+
+        // Duplicate prevention: already escalated
+        if (workOrder.escalation === true) {
+          results.skipped++;
+          continue;
+        }
+
+        if (!dryRun) {
+          const ts = new Date().toLocaleString();
+          const note = `[CBRE ESCALATION] ${ts}\nEmail: ${winningEmail.subject}`;
+          const mergedComments = workOrder.comments ? `${workOrder.comments}\n\n${note}` : note;
+
+          const { error: flagError } = await supabase
+            .from('work_orders')
+            .update({
+              escalation: true,
+              escalation_updated_at: new Date().toISOString(),
+              escalation_acknowledged_at: null,
+              comments: mergedComments,
+            })
+            .eq('wo_id', workOrder.wo_id);
+
+          if (flagError) {
+            results.errors.push(`Failed to flag ${woNumber}: ${flagError.message}`);
+            continue;
+          }
+
+          if (!skipNotify && labelConfig.notify) {
+            await sendNotification('escalation', workOrder, winningEmail.subject);
+          }
+        }
+
+        results.updated++;
+        results.updates.push({
+          wo_number: woNumber,
+          building: workOrder.building,
+          label: 'escalation',
+          new_status: 'escalation (flag)',
+          flag: true,
+          email_date: entry.date.toISOString(),
+          subject: winningEmail.subject.substring(0, 80),
+          notified: labelConfig.notify,
+        });
+
+      } catch (msgErr) {
+        results.errors.push(`Error processing escalation for WO ${woNumber}: ${msgErr.message}`);
+      }
+    }
+
     return Response.json({
       success: true,
-      message: `Processed ${results.processed} emails, ${Object.keys(woEmailMap).length} unique WOs, updated ${results.updated}, skipped ${results.skipped} (already current)`,
+      message: `Processed ${results.processed} emails, ${Object.keys(woEmailMap).length} status WOs + ${Object.keys(flagEmailMap).length} escalation flags, updated ${results.updated}, skipped ${results.skipped} (already current)`,
       dryRun,
       searchDays,
       ...results

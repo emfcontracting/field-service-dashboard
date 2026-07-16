@@ -294,6 +294,15 @@ export default function WorkOrderDetailModal({
       const isReconciliation = updatedQuote.request_type === 'reconciliation';
       const currentCostsSnapshot = parseFloat(updatedQuote.current_costs_snapshot) || 0;
 
+      // Cumulative chain: a follow-up increase builds on the PREVIOUS CEILING
+      // (original_nte), NOT the accrued snapshot. Mirrors the create modal, the
+      // NTE card and the printed PDF so an admin line-item edit keeps the stored
+      // ceiling (and thus the WO NTE applied on approval) correct.
+      const isChainFollowUp = !!updatedQuote.supersedes_quote_id || (parseInt(updatedQuote.sequence_number) || 1) > 1;
+      const estimateBase = isChainFollowUp
+        ? (parseFloat(updatedQuote.original_nte) || 0)
+        : currentCostsSnapshot;
+
       let finalUpdates;
       if (isReconciliation) {
         // In reconciliation: line items represent the actual final breakdown,
@@ -307,11 +316,13 @@ export default function WorkOrderDetailModal({
           actual_final_total: lineItemsTotal,
         };
       } else {
-        // In estimate: grand_total = additional work total, new_nte = snapshot + additional
+        // In estimate: grand_total = additional work total,
+        // new_nte = base (previous ceiling for a follow-up / accrued snapshot for
+        // a first increase) + additional work
         finalUpdates = {
           ...updates,
           grand_total: lineItemsTotal,
-          new_nte_amount: currentCostsSnapshot + lineItemsTotal,
+          new_nte_amount: estimateBase + lineItemsTotal,
         };
       }
       
@@ -442,6 +453,16 @@ export default function WorkOrderDetailModal({
       ? parseFloat(quote.original_nte) 
       : (parseFloat(selectedWO.nte) || 0);
 
+    // Cumulative chain: a follow-up increase builds on the PREVIOUS CEILING
+    // (stored original_nte, which already includes prior labor/costs), NOT the
+    // accrued snapshot. Detected via supersedes/sequence — mirrors the NTE card
+    // logic so the printed PDF matches what the dashboard shows.
+    const isChainFollowUp = !!quote.supersedes_quote_id || (parseInt(quote.sequence_number) || 1) > 1;
+
+    // Base for the NEW NTE: previous ceiling for a follow-up, accrued costs for
+    // a first increase.
+    const summaryBase = isChainFollowUp ? originalNTE : existingCostsTotal;
+
     // Reconciliation-specific values
     const finalActualTotal = isReconciliation
       ? (parseFloat(quote.actual_final_total) || parseFloat(quote.new_nte_amount) || existingCostsTotal)
@@ -450,9 +471,9 @@ export default function WorkOrderDetailModal({
       ? Math.max(0, finalActualTotal - originalNTE)
       : 0;
 
-    // For estimate mode: always recompute fresh from snapshot + line items
+    // For estimate mode: always recompute fresh from base + line items
     // (don't trust stored new_nte_amount — it may be stale after line item edits)
-    const projectedTotal = existingCostsTotal + additionalTotal;
+    const projectedTotal = summaryBase + additionalTotal;
     
     const newNTENeeded = isReconciliation ? finalActualTotal : projectedTotal;
     
@@ -696,8 +717,8 @@ export default function WorkOrderDetailModal({
         <div class="cost-box cost-box-green">
           <div class="cost-box-title" style="color: #065f46;">NTE INCREASE SUMMARY</div>
           <div class="summary-row">
-            <span>Current Costs Accrued</span>
-            <span>${existingCostsTotal.toFixed(2)}</span>
+            <span>${isChainFollowUp ? 'Previous NTE Ceiling' : 'Current Costs Accrued'}</span>
+            <span>${summaryBase.toFixed(2)}</span>
           </div>
           <div class="summary-row">
             <span>Additional Work Estimate</span>
@@ -706,7 +727,7 @@ export default function WorkOrderDetailModal({
           <div class="summary-total">
             <div class="summary-row" style="border: none; font-size: 14px;">
               <span>PROJECTED TOTAL COST</span>
-              <span>${(existingCostsTotal + additionalTotal).toFixed(2)}</span>
+              <span>${(summaryBase + additionalTotal).toFixed(2)}</span>
             </div>
           </div>
         </div>

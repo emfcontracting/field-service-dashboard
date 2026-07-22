@@ -31,6 +31,7 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { buildContactLines } from '../contactParser';
 import { parseCbreDateEntered } from '../parseCbreDate';
+import { PRIORITY_CODES } from '@/lib/priorityCodes';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -307,13 +308,18 @@ function parseCBREEmail(subject, body) {
   const priorityMatch = cleanBody.match(/Priority[:\s_]*(P\d+)[\s\-_]*([^<\n]*)/i) ||
                         (subject || '').match(/Priority[:\s_]*(P\d+)/i);
   if (priorityMatch) {
-    const pCode = priorityMatch[1].toUpperCase();
-    const pText = (priorityMatch[2] || '').toLowerCase();
-    const pNum = parseInt(pCode.replace('P', ''));
-    if (pNum === 1 || pText.includes('emergency')) workOrder.priority = 'emergency';
-    else if (pNum === 2 || pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'high';
-    else if (pNum === 3 || pNum === 4 || pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'medium';
-    else workOrder.priority = 'low';
+    const pNum = parseInt(String(priorityMatch[1]).replace(/P/i, ''), 10);
+    const canonical = `P${pNum}`;
+    if (PRIORITY_CODES[canonical]) {
+      // Store the real CBRE priority code (single source of truth).
+      workOrder.priority = canonical;
+    } else {
+      const pText = (priorityMatch[2] || '').toLowerCase();
+      if (pText.includes('emergency')) workOrder.priority = 'emergency';
+      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'high';
+      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'medium';
+      else workOrder.priority = 'low';
+    }
   }
 
   // Extract Date Entered. CBRE stamps this in Eastern and usually includes the

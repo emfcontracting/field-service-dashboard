@@ -1,4 +1,5 @@
 // Helper Functions and Utilities
+import { getPriorityInfo, extractPriorityCode } from '@/lib/priorityCodes';
 
 export function formatDate(dateString) {
   if (!dateString) return 'N/A';
@@ -33,18 +34,20 @@ export function calculateAge(dateString) {
 }
 
 export function getPriorityColor(priority) {
-  const priorityMap = {
-    'P1': 'text-red-500',
-    'P2': 'text-orange-500',
-    'P3': 'text-yellow-500',
-    'P4': 'text-blue-500',
-    'P5': 'text-green-500'
+  const TW = {
+    P1: 'text-red-500', P2: 'text-orange-500', P3: 'text-amber-500', P4: 'text-yellow-500',
+    P5: 'text-green-500', P6: 'text-gray-400', P10: 'text-blue-400', P11: 'text-sky-400', P23: 'text-violet-400',
+    emergency: 'text-red-500', urgent: 'text-orange-500', high: 'text-orange-500', medium: 'text-yellow-500', low: 'text-green-500',
   };
-  return priorityMap[priority] || 'text-gray-500';
+  const code = extractPriorityCode(priority);
+  if (code && TW[code]) return TW[code];
+  const lower = (priority || '').toString().trim().toLowerCase();
+  return TW[lower] || 'text-gray-500';
 }
 
+// Canonical label, e.g. "P1 · Emergency" (single source of truth: lib/priorityCodes).
 export function getPriorityBadge(priority) {
-  return priority || 'N/A';
+  return getPriorityInfo(priority).label;
 }
 
 export function getStatusBadge(status) {

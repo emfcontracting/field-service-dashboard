@@ -1,4 +1,5 @@
 // mobile/utils/formatters.js
+import { getPriorityInfo, extractPriorityCode } from '@/lib/priorityCodes';
 
 export function formatDate(dateString) {
   if (!dateString) return 'N/A';
@@ -34,68 +35,24 @@ export function calculateAge(dateString) {
   return diffDays;
 }
 
+// Canonical badge with emoji + label, e.g. "🚨 P1 · Emergency"
+// (single source of truth: lib/priorityCodes).
 export function getPriorityBadge(priority) {
-  const priorityMap = {
-    'P1': '🚨 P1',
-    'P2': '⚡ P2',
-    'P3': '🔥 P3',
-    'P4': '📢 P4',
-    'P5': '⚠️ P5',
-    'P6': '🟠 P6',
-    'P7': '🔶 P7',
-    'P8': '🟡 P8',
-    'P9': '🟢 P9',
-    'P10': '🔵 P10',
-    'P11': '🟣 P11',
-    'P12': '⚪ P12',
-    'P13': '⚫ P13',
-    'P14': '🟤 P14',
-    'P15': '🔘 P15',
-    'P16': '💠 P16',
-    'P17': '🔷 P17',
-    'P18': '🔹 P18',
-    'P19': '🔸 P19',
-    'P20': '🔶 P20',
-    'P21': '🟨 P21',
-    'P22': '🟩 P22',
-    'P23': '🟦 P23',
-    'high': '🔴 HIGH',
-    'medium': '🟡 MEDIUM',
-    'low': '🟢 LOW'
-  };
-  return priorityMap[priority] || '⚪ NORMAL';
+  return getPriorityInfo(priority).badge;
 }
 
 export function getPriorityColor(priority) {
-  const colorMap = {
-    'P1': 'text-red-500 font-bold',
-    'P2': 'text-red-400 font-bold',
-    'P3': 'text-orange-500 font-bold',
-    'P4': 'text-orange-400',
-    'P5': 'text-yellow-500',
-    'P6': 'text-yellow-400',
-    'P7': 'text-yellow-300',
-    'P8': 'text-green-300',
-    'P9': 'text-green-400',
-    'P10': 'text-blue-300',
-    'P11': 'text-blue-400',
-    'P12': 'text-purple-300',
-    'P13': 'text-purple-400',
-    'P14': 'text-gray-400',
-    'P15': 'text-gray-300',
-    'P16': 'text-cyan-300',
-    'P17': 'text-cyan-400',
-    'P18': 'text-indigo-300',
-    'P19': 'text-indigo-400',
-    'P20': 'text-pink-300',
-    'P21': 'text-pink-400',
-    'P22': 'text-teal-300',
-    'P23': 'text-teal-400',
-    'high': 'text-red-500 font-bold',
-    'medium': 'text-yellow-500',
-    'low': 'text-green-500'
+  const TW = {
+    P1: 'text-red-500 font-bold', P2: 'text-orange-500 font-bold', P3: 'text-amber-500 font-bold',
+    P4: 'text-yellow-500', P5: 'text-green-500', P6: 'text-gray-400',
+    P10: 'text-blue-400', P11: 'text-sky-400', P23: 'text-violet-400',
+    emergency: 'text-red-500 font-bold', urgent: 'text-orange-500 font-bold',
+    high: 'text-orange-500 font-bold', medium: 'text-yellow-500', low: 'text-green-500',
   };
-  return colorMap[priority] || 'text-gray-400';
+  const code = extractPriorityCode(priority);
+  if (code && TW[code]) return TW[code];
+  const lower = (priority || '').toString().trim().toLowerCase();
+  return TW[lower] || 'text-gray-400';
 }
 
 export function getStatusBadge(status) {

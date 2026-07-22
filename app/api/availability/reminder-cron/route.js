@@ -2,6 +2,7 @@
 // Automated daily reminder - reads settings from automated_messages table
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { notifyTech } from '@/lib/expoPush';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -173,6 +174,8 @@ async function runAutomation(automation, todayDate) {
     sms_failed: 0,
     email_sent: 0,
     email_failed: 0,
+    push_sent: 0,
+    push_failed: 0,
     skipped: 0,
     details: []
   };
@@ -212,7 +215,7 @@ async function runAutomation(automation, todayDate) {
     // Send notifications
     for (const user of targetUsers) {
       const userName = `${user.first_name} ${user.last_name}`;
-      const userResult = { name: userName, sms: null, email: null };
+      const userResult = { name: userName, sms: null, email: null, push: null };
 
       // Send SMS
       if (automation.send_sms && user.phone && user.sms_carrier) {
@@ -251,6 +254,26 @@ async function runAutomation(automation, todayDate) {
         }
       }
 
+      // Send native push — opens the mobile app, where the tech is blocked on the
+      // availability gate until they answer. Only techs with a registered token.
+      try {
+        const pushRes = await notifyTech(
+          user.user_id,
+          automation.email_subject || '⏰ Availability',
+          automation.sms_message || 'Please submit your availability in the app.',
+          { type: 'availability', automation: automation.automation_key || 'availability_reminder' }
+        );
+        if (pushRes && pushRes.sent > 0) {
+          results.push_sent++;
+          userResult.push = 'sent';
+        } else {
+          userResult.push = 'no_token';
+        }
+      } catch (e) {
+        results.push_failed++;
+        userResult.push = 'failed';
+      }
+
       results.details.push(userResult);
     }
 
@@ -260,8 +283,8 @@ async function runAutomation(automation, todayDate) {
         message_type: automation.automation_key,
         message_text: automation.sms_message,
         recipient_count: targetUsers.length,
-        sent_count: results.sms_sent + results.email_sent,
-        failed_count: results.sms_failed + results.email_failed,
+        sent_count: results.sms_sent + results.email_sent + results.push_sent,
+        failed_count: results.sms_failed + results.email_failed + results.push_failed,
         automation_id: automation.id || null,
         sent_at: new Date().toISOString()
       });

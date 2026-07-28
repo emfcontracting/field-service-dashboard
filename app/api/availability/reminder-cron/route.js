@@ -105,6 +105,7 @@ export async function GET(request) {
           target_roles: ['lead_tech', 'tech', 'helper'],
           send_sms: true,
           send_email: true,
+          send_push: true,
           sms_message: 'EMF: Please submit your availability for tomorrow in the mobile app.',
           email_subject: '⏰ Daily Availability Reminder - EMF',
           condition_type: 'missing_submission',
@@ -254,24 +255,26 @@ async function runAutomation(automation, todayDate) {
         }
       }
 
-      // Send native push — opens the mobile app, where the tech is blocked on the
-      // availability gate until they answer. Only techs with a registered token.
-      try {
-        const pushRes = await notifyTech(
-          user.user_id,
-          automation.email_subject || '⏰ Availability',
-          automation.sms_message || 'Please submit your availability in the app.',
-          { type: 'availability', automation: automation.automation_key || 'availability_reminder' }
-        );
-        if (pushRes && pushRes.sent > 0) {
-          results.push_sent++;
-          userResult.push = 'sent';
-        } else {
-          userResult.push = 'no_token';
+      // Send native push to the mobile app — only if this automation has the
+      // "Send to App" option enabled. Only reaches techs with a registered token.
+      if (automation.send_push) {
+        try {
+          const pushRes = await notifyTech(
+            user.user_id,
+            automation.email_subject || automation.name || 'EMF',
+            automation.sms_message || 'You have a new notification from EMF.',
+            { type: 'automation', automation: automation.automation_key || 'reminder' }
+          );
+          if (pushRes && pushRes.sent > 0) {
+            results.push_sent++;
+            userResult.push = 'sent';
+          } else {
+            userResult.push = 'no_token';
+          }
+        } catch (e) {
+          results.push_failed++;
+          userResult.push = 'failed';
         }
-      } catch (e) {
-        results.push_failed++;
-        userResult.push = 'failed';
       }
 
       results.details.push(userResult);

@@ -169,7 +169,7 @@ export default function AutomationsPage() {
     name:'', description:'', schedule_time:'19:00', icon:'📨',
     schedule_days:['monday','tuesday','wednesday','thursday','friday'],
     target_roles:['lead_tech','tech','helper'],
-    send_sms:true, send_email:true, sms_message:'', email_subject:'',
+    send_sms:true, send_email:true, send_push:true, sms_message:'', email_subject:'',
     is_enabled:true, condition_type:'always',
   });
 
@@ -210,6 +210,7 @@ export default function AutomationsPage() {
         description: automation.description, schedule_time: automation.schedule_time,
         schedule_days: automation.schedule_days, target_roles: automation.target_roles,
         send_sms: automation.send_sms, send_email: automation.send_email,
+        send_push: automation.send_push !== false,
         sms_message: automation.sms_message, email_subject: automation.email_subject,
         is_enabled: automation.is_enabled, condition_type: automation.condition_type,
         icon: automation.icon, updated_at: new Date().toISOString(),
@@ -246,7 +247,7 @@ export default function AutomationsPage() {
     setAutomations(p => [...p, automation]);
     await saveAutomation(automation);
     setShowAddNew(false);
-    setNewAuto({ name:'', description:'', schedule_time:'19:00', icon:'📨', schedule_days:['monday','tuesday','wednesday','thursday','friday'], target_roles:['lead_tech','tech','helper'], send_sms:true, send_email:true, sms_message:'', email_subject:'', is_enabled:true, condition_type:'always' });
+    setNewAuto({ name:'', description:'', schedule_time:'19:00', icon:'📨', schedule_days:['monday','tuesday','wednesday','thursday','friday'], target_roles:['lead_tech','tech','helper'], send_sms:true, send_email:true, send_push:true, sms_message:'', email_subject:'', is_enabled:true, condition_type:'always' });
   }
 
   const updateAuto = (id, field, val) => setAutomations(p => p.map(a => a.id === id ? { ...a, [field]: val } : a));
@@ -296,6 +297,7 @@ export default function AutomationsPage() {
         <div className="flex gap-2">
           <CheckRow id={`sms-${data.automation_key||'new'}`} checked={data.send_sms} onChange={e => onChange('send_sms', e.target.checked)}>📱 SMS</CheckRow>
           <CheckRow id={`email-${data.automation_key||'new'}`} checked={data.send_email} onChange={e => onChange('send_email', e.target.checked)}>📧 Email</CheckRow>
+          <CheckRow id={`push-${data.automation_key||'new'}`} checked={data.send_push !== false} onChange={e => onChange('send_push', e.target.checked)}>🔔 App</CheckRow>
         </div>
       </div>
 

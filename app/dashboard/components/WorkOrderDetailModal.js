@@ -553,6 +553,27 @@ export default function WorkOrderDetailModal({
         </div>
         ` : ''}
 
+        ${quote.troubleshooting_findings ? `
+        <div class="section">
+          <div class="section-title">Troubleshooting / Findings</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px; white-space: pre-wrap;">${quote.troubleshooting_findings}</p>
+        </div>
+        ` : ''}
+
+        ${quote.work_required ? `
+        <div class="section">
+          <div class="section-title">Work Required</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px; white-space: pre-wrap;">${quote.work_required}</p>
+        </div>
+        ` : ''}
+
+        ${quote.parts_materials ? `
+        <div class="section">
+          <div class="section-title">Parts / Materials</div>
+          <p style="padding: 10px; background: #f9fafb; border-radius: 5px; white-space: pre-wrap;">${quote.parts_materials}</p>
+        </div>
+        ` : ''}
+
         ${quote.description ? `
         <div class="section">
           <div class="section-title">${isReconciliation ? 'Description of Work Performed' : 'Description of Additional Work'}</div>
@@ -2740,6 +2761,26 @@ const sendAssignmentNotifications = async () => {
                         ) : (
                           <p className="text-slate-300 text-sm">{quote.description}</p>
                         )}
+                      </div>
+                    )}
+
+                    {/* Structured CBRE description fields (read-only) */}
+                    {quote.troubleshooting_findings && (
+                      <div className="mb-3">
+                        <label className="text-xs text-slate-400">Troubleshooting / Findings:</label>
+                        <p className="text-slate-300 text-sm whitespace-pre-wrap">{quote.troubleshooting_findings}</p>
+                      </div>
+                    )}
+                    {quote.work_required && (
+                      <div className="mb-3">
+                        <label className="text-xs text-slate-400">Work Required:</label>
+                        <p className="text-slate-300 text-sm whitespace-pre-wrap">{quote.work_required}</p>
+                      </div>
+                    )}
+                    {quote.parts_materials && (
+                      <div className="mb-3">
+                        <label className="text-xs text-slate-400">Parts / Materials:</label>
+                        <p className="text-slate-300 text-sm whitespace-pre-wrap">{quote.parts_materials}</p>
                       </div>
                     )}
 

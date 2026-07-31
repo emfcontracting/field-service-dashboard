@@ -74,7 +74,7 @@ export async function GET(request) {
       const info = await transporter.sendMail({
         from: `"EMF Test" <${emailUser}>`,
         to: testEmail,
-        subject: `Test Email - ${new Date().toLocaleString()}`,
+        subject: `Test Email - ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}`,
         html: `
           <h2>Email Test Successful</h2>
           <p>This is a test email from the EMF Subcontractor Portal.</p>

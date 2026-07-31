@@ -184,7 +184,7 @@ async function sendTestNotification(params) {
             <p>This is a test notification from the <strong>PCS FieldService Backend Dashboard</strong>.</p>
             <p>If you received this email, the notification system is working correctly!</p>
             <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-              Sent: ${new Date().toLocaleString()}<br>
+              Sent: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}<br>
               From: Backend Dashboard Manual Trigger
             </p>
           </div>

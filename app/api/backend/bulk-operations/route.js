@@ -148,7 +148,7 @@ async function bulkUpdatePriority(workOrderIds, newPriority) {
 
 // Bulk add comment
 async function bulkAddComment(workOrderIds, comment) {
-  const timestamp = new Date().toLocaleString();
+  const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
   const commentText = `[BULK UPDATE ${timestamp}]\n${comment}`;
 
   // Fetch current comments

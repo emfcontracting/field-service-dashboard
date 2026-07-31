@@ -258,7 +258,7 @@ export async function POST(request, { params }) {
     };
 
     if (override_reason) {
-      const timestamp = new Date().toLocaleString();
+      const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
       const newComment = `[PHOTOS OVERRIDE] ${timestamp}\nManually marked as ${received ? 'received' : 'not received'}: ${override_reason}`;
       updates.comments = workOrder.comments 
         ? `${workOrder.comments}\n\n${newComment}`

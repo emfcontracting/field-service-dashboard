@@ -364,7 +364,7 @@ function parseCBREEmail(subject, body) {
     comments.push(`Asset Tag: ${tagMatch[1]}`);
   }
   
-  comments.push(`[Imported from CBRE ${isPM ? 'PM ' : ''}email on ${new Date().toLocaleString()}]`);
+  comments.push(`[Imported from CBRE ${isPM ? 'PM ' : ''}email on ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}]`);
   workOrder.comments = comments.join('\n');
 
   return workOrder;

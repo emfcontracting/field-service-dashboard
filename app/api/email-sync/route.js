@@ -485,7 +485,7 @@ export async function GET(request) {
         const currentRank  = STATUS_RANK[workOrder.cbre_status] ?? 0;
         if (PROTECTED_STATUSES.has(workOrder.cbre_status) && incomingRank < currentRank) {
           if (!dryRun) {
-            const ts = new Date().toLocaleString();
+            const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
             const note = `[CBRE ${labelConfig.cbre_status.toUpperCase()} — IGNORED, ${workOrder.cbre_status.toUpperCase()} is protected] ${ts}\nEmail: ${winningEmail.subject}`;
             const mergedComments = workOrder.comments ? `${workOrder.comments}\n\n${note}` : note;
             await supabase
@@ -530,7 +530,7 @@ export async function GET(request) {
         }
 
         // Add to comments
-        const timestamp = new Date().toLocaleString();
+        const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
         let newComment = `[CBRE ${labelConfig.cbre_status.toUpperCase()}] ${timestamp}\nEmail: ${winningEmail.subject}`;
         if (newNTE) {
           newComment += `\n✅ NTE Updated: ${workOrder.nte?.toFixed(2) || '0.00'} → ${newNTE.toFixed(2)}`;
@@ -664,7 +664,7 @@ export async function GET(request) {
         }
 
         if (!dryRun) {
-          const ts = new Date().toLocaleString();
+          const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
           const note = `[CBRE ESCALATION] ${ts}\nEmail: ${winningEmail.subject}`;
           const mergedComments = workOrder.comments ? `${workOrder.comments}\n\n${note}` : note;
 

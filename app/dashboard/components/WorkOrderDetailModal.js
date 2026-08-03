@@ -149,10 +149,19 @@ export default function WorkOrderDetailModal({
   // — and saves — the complete WO. Without this, partial WOs could cause comments
   // and work_order_description to appear blank in the UI.
   useEffect(() => {
+    // A truly-full WO comes from the main dashboard fetch (SELECT '*').
+    // Partial callers (CBRE Data Entry, Review Queue) hand-pick a few columns —
+    // and some of them DO include work_order_description/comments/nte, which used
+    // to fool this check (e.g. CBRE Data Entry), leaving date/requestor/priority/
+    // lead tech/CBRE status blank. Also require columns that ONLY the full '*'
+    // fetch provides (date_entered, lead_tech_id) so those partials get
+    // re-hydrated from the DB.
     const hasFullWO = workOrder && (
       'work_order_description' in workOrder &&
       'comments' in workOrder &&
-      'nte' in workOrder
+      'nte' in workOrder &&
+      'date_entered' in workOrder &&
+      'lead_tech_id' in workOrder
     );
     if (hasFullWO) {
       setSelectedWO(workOrder);

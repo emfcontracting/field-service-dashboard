@@ -2573,6 +2573,11 @@ const sendAssignmentNotifications = async () => {
                           {entry.notes?.includes('[Added by Admin]') && (
                             <span className="text-blue-400 text-xs ml-2">👤 Admin Added</span>
                           )}
+                          {(parseFloat(entry.tech_material_cost) || 0) > 0 &&
+                            (parseFloat(entry.hours_regular) || 0) === 0 &&
+                            (parseFloat(entry.hours_overtime) || 0) === 0 && (
+                            <span className="text-emerald-400 text-xs ml-2">🧰 Material entry — no labor</span>
+                          )}
                         </div>
                         <button
                           onClick={() => handleDeleteDailyHours(entryId)}
@@ -2623,10 +2628,15 @@ const sendAssignmentNotifications = async () => {
                         </div>
                       </div>
 
-                      {/* Labor Cost Display */}
+                      {/* Labor + Material Cost Display */}
                       <div className="mt-2 flex justify-between text-xs">
-                        <span className="text-slate-400">
-                          Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
+                        <span className="flex items-center gap-3">
+                          <span className="text-slate-400">
+                            Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
+                          </span>
+                          {(parseFloat(entry.tech_material_cost) || 0) > 0 && (
+                            <span className="text-emerald-400 font-semibold">🧰 Material: ${(parseFloat(entry.tech_material_cost) || 0).toFixed(2)}</span>
+                          )}
                         </span>
                         {entry.notes && !entry.notes.includes('[MIGRATED]') && !entry.notes.includes('[Added by Admin]') && (
                           <span className="text-slate-400">📝 {entry.notes}</span>

@@ -408,10 +408,12 @@ function MobileAppContent({
   const [localUser, setLocalUser] = useState(currentUser);
 
   // === Missing-Data Alert Modal: which WOs are currently demanding attention?
-  // A WO triggers the modal if status='missing_data' AND not currently snoozed.
+  // A WO triggers the modal if status='missing_data', the tech hasn't already
+  // marked it fixed (one-shot lockout until Office resolves), AND it's not snoozed.
   // (Banner shows for ALL missing_data WOs regardless of snooze; modal only for non-snoozed.)
   const activeMissingDataWOs = (workOrders || []).filter(wo => {
     if (wo.status !== 'missing_data') return false;
+    if (wo.missing_data_tech_marked_fixed_at) return false; // tech already marked fixed → stop blocking until Office resolves
     if (!wo.missing_data_snoozed_until) return true;
     return new Date(wo.missing_data_snoozed_until) <= new Date();
   });
@@ -430,6 +432,7 @@ function MobileAppContent({
   // === Update-Required Alert Modal: SOFT flag, detected via flagged_at (not status) ===
   const activeUpdateRequiredWOs = (workOrders || []).filter(wo => {
     if (!wo.update_required_flagged_at) return false;
+    if (wo.update_required_tech_marked_done_at) return false; // tech already followed up → stop blocking until Office resolves
     if (!wo.update_required_snoozed_until) return true;
     return new Date(wo.update_required_snoozed_until) <= new Date();
   });

@@ -112,9 +112,12 @@ export default function MissingDataModal({
           missing_data_comment: comment.trim(),
           missing_data_flagged_by: safeUuid(currentUser?.user_id),
           missing_data_flagged_at: nowISO,
-          // Clear any leftover snooze from a previous flag cycle
+          // Clear any leftover state from a previous flag cycle (snooze + the
+          // tech's one-shot lockout), so a fresh flag re-alerts the tech.
           missing_data_snoozed_until: null,
-          missing_data_snooze_reason: null
+          missing_data_snooze_reason: null,
+          missing_data_tech_marked_fixed_at: null,
+          missing_data_office_reminded_at: null
         };
 
         commentLogEntry =

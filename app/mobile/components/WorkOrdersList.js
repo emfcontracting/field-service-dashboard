@@ -16,6 +16,7 @@ export default function WorkOrdersList({
   onShowCompleted,
   onShowChangePin,
   onLogout,
+  onOpenAvailability,
   // OFFLINE MODE PROPS
   isOnline = true,
   pendingSyncCount = 0,
@@ -318,6 +319,14 @@ export default function WorkOrdersList({
           >
             🔒 {t('pin')}
           </button>
+          {onOpenAvailability && (
+            <button
+              onClick={onOpenAvailability}
+              className="bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0"
+            >
+              ⏰ {t('myAvailability')}
+            </button>
+          )}
         </div>
       </div>
 

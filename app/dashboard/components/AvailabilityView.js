@@ -38,6 +38,13 @@ const ROLE_CFG = {
   helper:    { label: 'Helpers',          bar: 'bg-slate-500/20 border-slate-500/30',   dot: 'bg-slate-400' },
 };
 
+// Why an available tech already has work (from the mobile "I have work" flow).
+const REASON_LABELS = {
+  return_trip: 'Return trip',
+  waiting_material: 'Waiting on material',
+  other: 'Other',
+};
+
 export default function AvailabilityView({ supabase, users }) {
   const [avail,   setAvail]   = useState({});
   const [date,    setDate]    = useState(() => { const t = new Date(); t.setHours(0,0,0,0); return t; });
@@ -71,6 +78,9 @@ export default function AvailabilityView({ supabase, users }) {
           scheduled_work: a?.scheduled_work || false,
           emergency_work: a?.emergency_work || false,
           not_available:  a?.not_available  || false,
+          has_work:           a?.has_work ?? null,
+          work_status_reason: a?.work_status_reason || null,
+          work_status_note:   a?.work_status_note || null,
           submitted_at:   a?.submitted_at,
         };
       });
@@ -92,6 +102,7 @@ export default function AvailabilityView({ supabase, users }) {
     fully:         all.filter(u => u.scheduled_work && u.emergency_work).length,
     scheduled:     all.filter(u => u.scheduled_work && !u.emergency_work && !u.not_available).length,
     emergency:     all.filter(u => !u.scheduled_work && u.emergency_work && !u.not_available).length,
+    needsWork:     all.filter(u => u.submitted && !u.not_available && u.has_work === false).length,
     notAvailable:  all.filter(u => u.not_available).length,
     pending:       all.filter(u => !u.submitted).length,
   };
@@ -123,12 +134,26 @@ export default function AvailabilityView({ supabase, users }) {
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide flex-shrink-0 ${s.pill}`}>
               {s.label}
             </span>
+            {user.submitted && !user.not_available && user.has_work !== null && (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide flex-shrink-0 ${
+                user.has_work
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              }`}>
+                {user.has_work ? '✅ Has work' : '🔎 Needs work'}
+              </span>
+            )}
           </div>
 
           {/* Details */}
           <div className="flex items-center gap-4 text-xs pl-5 md:pl-0">
             {user.submitted && fmtTime(user.submitted_at) && (
               <span className="text-slate-600 font-mono text-[10px]">{fmtTime(user.submitted_at)}</span>
+            )}
+            {user.has_work && user.work_status_reason && (
+              <span className="text-slate-500 text-[10px] truncate max-w-[160px]">
+                {REASON_LABELS[user.work_status_reason] || user.work_status_reason}{user.work_status_note ? ` · ${user.work_status_note}` : ''}
+              </span>
             )}
             <div className="hidden md:flex items-center gap-4">
               <span className={user.scheduled_work ? 'text-blue-400' : 'text-slate-700'}>
@@ -184,12 +209,13 @@ export default function AvailabilityView({ supabase, users }) {
       </div>
 
       {/* ── Stats row ── */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 md:grid md:grid-cols-7 md:overflow-visible">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 md:grid md:grid-cols-8 md:overflow-visible">
         <Stat value={stats.total}        label="Total"     />
         <Stat value={stats.submitted}    label="Submitted"   color="text-emerald-400" />
         <Stat value={stats.fully}        label="Fully Avail" color="text-emerald-300" />
         <Stat value={stats.scheduled}    label="Scheduled"   color="text-blue-400" />
         <Stat value={stats.emergency}    label="Emergency"   color="text-orange-400" />
+        <Stat value={stats.needsWork}    label="Needs Work"  color="text-amber-400" />
         <Stat value={stats.notAvailable} label="Not Avail"   color="text-red-400" />
         <Stat value={stats.pending}      label="Pending"     color="text-yellow-400" />
       </div>

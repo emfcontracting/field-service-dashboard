@@ -116,8 +116,17 @@ export default function MobilePage() {
     notAvailable,
     hasSubmittedToday,
     saving: availabilitySaving,
+    hasWork,
+    workReason,
+    workNote,
     submitAvailability,
-    handleAvailabilityChange
+    handleAvailabilityChange,
+    handleWorkChoice,
+    setWorkReason,
+    setWorkNote,
+    manualOpen,
+    openAvailability,
+    closeAvailability
   } = useAvailability(currentUser);
 
   // NTE Increases / Quotes
@@ -263,8 +272,17 @@ export default function MobilePage() {
         notAvailable={notAvailable}
         hasSubmittedToday={hasSubmittedToday}
         availabilitySaving={availabilitySaving}
+        hasWork={hasWork}
+        workReason={workReason}
+        workNote={workNote}
         submitAvailability={submitAvailability}
         handleAvailabilityChange={handleAvailabilityChange}
+        handleWorkChoice={handleWorkChoice}
+        setWorkReason={setWorkReason}
+        setWorkNote={setWorkNote}
+        manualOpen={manualOpen}
+        openAvailability={openAvailability}
+        closeAvailability={closeAvailability}
         showCompletedPage={showCompletedPage}
         setShowCompletedPage={setShowCompletedPage}
         showChangePinModal={showChangePinModal}
@@ -353,8 +371,17 @@ function MobileAppContent({
   notAvailable,
   hasSubmittedToday,
   availabilitySaving,
+  hasWork,
+  workReason,
+  workNote,
   submitAvailability,
   handleAvailabilityChange,
+  handleWorkChoice,
+  setWorkReason,
+  setWorkNote,
+  manualOpen,
+  openAvailability,
+  closeAvailability,
   showCompletedPage,
   setShowCompletedPage,
   showChangePinModal,
@@ -507,7 +534,13 @@ function MobileAppContent({
         emergencyWork={emergencyWork}
         notAvailable={notAvailable}
         saving={availabilitySaving}
+        hasWork={hasWork}
+        workReason={workReason}
+        workNote={workNote}
         handleAvailabilityChange={handleAvailabilityChange}
+        onWorkChoice={handleWorkChoice}
+        onReasonChange={setWorkReason}
+        onNoteChange={setWorkNote}
         submitAvailability={submitAvailability}
       />
     );
@@ -670,12 +703,35 @@ function MobileAppContent({
 
       {/* Push Notification Permission Prompt */}
       <PushNotificationPrompt userId={currentUser?.user_id} />
+
+      {/* Manual availability — tech opened it themselves (closeable overlay) */}
+      {manualOpen && (
+        <AvailabilityModal
+          showAvailabilityModal
+          availabilityBlocked={false}
+          scheduledWork={scheduledWork}
+          emergencyWork={emergencyWork}
+          notAvailable={notAvailable}
+          saving={availabilitySaving}
+          hasWork={hasWork}
+          workReason={workReason}
+          workNote={workNote}
+          handleAvailabilityChange={handleAvailabilityChange}
+          onWorkChoice={handleWorkChoice}
+          onReasonChange={setWorkReason}
+          onNoteChange={setWorkNote}
+          submitAvailability={submitAvailability}
+          blocking={false}
+          onClose={closeAvailability}
+        />
+      )}
       
       <WorkOrdersList
         currentUser={currentUser}
         workOrders={workOrders}
         onSelectWO={setSelectedWO}
         onShowCompleted={() => setShowCompletedPage(true)}
+        onOpenAvailability={openAvailability}
         onShowChangePin={() => setShowChangePinModal(true)}
         onLogout={handleLogout}
         // OFFLINE MODE PROPS

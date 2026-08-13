@@ -12,13 +12,19 @@ export function useAvailability(currentUser) {
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // "Have work / need work" — only relevant when the tech is available.
+  const [hasWork, setHasWork] = useState(null);       // true = has work, false = needs work
+  const [workReason, setWorkReason] = useState('');   // 'return_trip' | 'waiting_material' | 'other'
+  const [workNote, setWorkNote] = useState('');
+  const [manualOpen, setManualOpen] = useState(false); // tech opened the gate themselves
+
   const supabase = createClientComponentClient();
 
   useEffect(() => {
     if (!currentUser) return;
-    
+
     checkAvailabilityStatus();
-    
+
     const interval = setInterval(() => {
       checkAvailabilityStatus();
     }, 60000); // Check every minute
@@ -36,7 +42,7 @@ export function useAvailability(currentUser) {
 
     // Check if already submitted today
     const todaySubmission = await availabilityService.checkTodaySubmission(supabase, currentUser.user_id);
-    
+
     if (todaySubmission) {
       setHasSubmittedToday(true);
       setShowAvailabilityModal(false);
@@ -47,9 +53,18 @@ export function useAvailability(currentUser) {
     // Calculate if we should show modal
     const { hour, dayOfWeek } = availabilityService.calculateAvailabilityWindow();
     const { show, blocked } = availabilityService.shouldShowAvailabilityModal(hour, dayOfWeek, false);
-    
+
     setShowAvailabilityModal(show);
     setAvailabilityBlocked(blocked);
+  }
+
+  function resetForm() {
+    setScheduledWork(false);
+    setEmergencyWork(false);
+    setNotAvailable(false);
+    setHasWork(null);
+    setWorkReason('');
+    setWorkNote('');
   }
 
   async function submitAvailability() {
@@ -60,6 +75,17 @@ export function useAvailability(currentUser) {
       return;
     }
 
+    // Work-status is required when the tech is available.
+    const available = !notAvailable && (scheduledWork || emergencyWork);
+    if (available && hasWork === null) {
+      alert('Please choose: do you already have work, or do you need work?');
+      return;
+    }
+    if (available && hasWork === true && !workReason) {
+      alert('Please pick why you already have work (return trip, waiting on material, or other).');
+      return;
+    }
+
     try {
       setSaving(true);
       await availabilityService.submitAvailability(
@@ -67,16 +93,15 @@ export function useAvailability(currentUser) {
         currentUser.user_id,
         scheduledWork,
         emergencyWork,
-        notAvailable
+        notAvailable,
+        { hasWork, reason: workReason || null, note: workNote || null }
       );
 
       setHasSubmittedToday(true);
       setShowAvailabilityModal(false);
       setAvailabilityBlocked(false);
-      
-      setScheduledWork(false);
-      setEmergencyWork(false);
-      setNotAvailable(false);
+      setManualOpen(false);
+      resetForm();
 
       alert('✅ Availability submitted successfully!');
     } catch (err) {
@@ -92,6 +117,9 @@ export function useAvailability(currentUser) {
         setNotAvailable(true);
         setScheduledWork(false);
         setEmergencyWork(false);
+        setHasWork(null);
+        setWorkReason('');
+        setWorkNote('');
       } else {
         setNotAvailable(false);
       }
@@ -106,6 +134,25 @@ export function useAvailability(currentUser) {
     }
   }
 
+  // Tech picks "I have work" (true) or "I need work" (false).
+  function handleWorkChoice(choice) {
+    setHasWork(choice);
+    if (choice === false) {
+      setWorkReason('');
+      setWorkNote('');
+    }
+  }
+
+  // Manual open/close (tech taps the "My Availability" button).
+  function openAvailability() {
+    resetForm();
+    setManualOpen(true);
+  }
+  function closeAvailability() {
+    setManualOpen(false);
+    resetForm();
+  }
+
   return {
     showAvailabilityModal,
     availabilityBlocked,
@@ -114,7 +161,16 @@ export function useAvailability(currentUser) {
     notAvailable,
     hasSubmittedToday,
     saving,
+    hasWork,
+    workReason,
+    workNote,
     submitAvailability,
-    handleAvailabilityChange
+    handleAvailabilityChange,
+    handleWorkChoice,
+    setWorkReason,
+    setWorkNote,
+    manualOpen,
+    openAvailability,
+    closeAvailability
   };
 }

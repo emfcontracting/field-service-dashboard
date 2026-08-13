@@ -141,6 +141,19 @@ export const translations = {
     appLockedUntilSubmit: 'App is locked until you submit',
     availabilitySubmittedSuccess: 'Availability submitted successfully!',
 
+    // Have work / need work + manual availability
+    workStatusPrompt: "You're available — do you already have work, or do you need work?",
+    haveWork: 'I already have work',
+    needWork: 'I need work',
+    reasonPrompt: 'Why? (so the office knows)',
+    reasonReturnTrip: 'Return trip',
+    reasonWaitingMaterial: 'Waiting on material',
+    reasonOther: 'Other',
+    workNotePlaceholder: 'Add a note (optional)…',
+    myAvailability: 'My Availability',
+    updateAvailability: 'Update your availability',
+    close: 'Close',
+
     // Error Messages
     errorCheckingIn: 'Error checking in:',
     errorCheckingOut: 'Error checking out:',
@@ -352,6 +365,19 @@ export const translations = {
     submitting: 'Enviando...',
     appLockedUntilSubmit: 'La aplicación está bloqueada hasta que envíe',
     availabilitySubmittedSuccess: '¡Disponibilidad enviada exitosamente!',
+
+    // Have work / need work + manual availability
+    workStatusPrompt: '¿Está disponible — ya tiene trabajo o necesita trabajo?',
+    haveWork: 'Ya tengo trabajo',
+    needWork: 'Necesito trabajo',
+    reasonPrompt: '¿Por qué? (para que la oficina sepa)',
+    reasonReturnTrip: 'Viaje de retorno',
+    reasonWaitingMaterial: 'Esperando material',
+    reasonOther: 'Otro',
+    workNotePlaceholder: 'Agregar una nota (opcional)…',
+    myAvailability: 'Mi Disponibilidad',
+    updateAvailability: 'Actualiza tu disponibilidad',
+    close: 'Cerrar',
 
     // Error Messages
     errorCheckingIn: 'Error al registrar entrada:',

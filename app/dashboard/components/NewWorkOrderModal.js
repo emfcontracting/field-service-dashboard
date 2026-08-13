@@ -11,7 +11,7 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
     work_order_description: '',
     requestor: '',
     requestor_phone: '',
-    priority: 'medium',
+    priority: 'P4',
     status: 'pending',
     lead_tech_id: '',
     nte: 0,
@@ -145,10 +145,15 @@ export default function NewWorkOrderModal({ users, supabase, onClose, refreshWor
                 onChange={(e) => setNewWO({ ...newWO, priority: e.target.value })}
                 className="w-full bg-gray-700 text-white px-2 md:px-4 py-2 rounded-lg text-sm md:text-base"
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="emergency">Emergency</option>
+                <option value="P1">🚨 P1 · Emergency</option>
+                <option value="P2">⚡ P2 · Urgent</option>
+                <option value="P3">🔥 P3 · Urgent - Non-Emergency</option>
+                <option value="P4">📢 P4 · Non-Urgent</option>
+                <option value="P5">🛠️ P5 · Handyman</option>
+                <option value="P6">🔧 P6 · Tech/Vendor</option>
+                <option value="P10">🗓️ P10 · PM</option>
+                <option value="P11">✅ P11 · PM Compliance</option>
+                <option value="P23">📣 P23 · Complaints</option>
               </select>
             </div>
 

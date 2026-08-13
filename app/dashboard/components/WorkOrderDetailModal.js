@@ -1338,7 +1338,7 @@ const sendAssignmentNotifications = async () => {
       console.log('Sending notifications to:', recipients.map(r => `${r.first_name} ${r.last_name}`));
       
       // Send notifications (email + push)
-      const notificationType = selectedWO.priority === 'emergency' ? 
+      const notificationType = (selectedWO.priority === 'P1' || selectedWO.priority === 'emergency') ? 
         'emergency_work_order' : 'work_order_assigned';
       
       const response = await fetch('/api/notifications', {
@@ -2022,10 +2022,15 @@ const sendAssignmentNotifications = async () => {
                 onChange={(e) => handleUpdateField('priority', e.target.value)}
                 className={`w-full px-4 py-2 rounded-lg font-semibold ${getPriorityColor(selectedWO.priority)}`}
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="emergency">Emergency</option>
+                <option value="P1">🚨 P1 · Emergency</option>
+                <option value="P2">⚡ P2 · Urgent</option>
+                <option value="P3">🔥 P3 · Urgent - Non-Emergency</option>
+                <option value="P4">📢 P4 · Non-Urgent</option>
+                <option value="P5">🛠️ P5 · Handyman</option>
+                <option value="P6">🔧 P6 · Tech/Vendor</option>
+                <option value="P10">🗓️ P10 · PM</option>
+                <option value="P11">✅ P11 · PM Compliance</option>
+                <option value="P23">📣 P23 · Complaints</option>
               </select>
             </div>
 

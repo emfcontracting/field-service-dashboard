@@ -368,13 +368,13 @@ async function sendOfficeNotification(importedWOs) {
     }
 
     const count = importedWOs.length;
-    const emergencyCount = importedWOs.filter(wo => wo.priority === 'emergency').length;
+    const emergencyCount = importedWOs.filter(wo => (wo.priority === 'P1' || wo.priority === 'emergency')).length;
     
     // Build work order list
     const woList = importedWOs.map(wo => {
-      const priorityEmoji = wo.priority === 'emergency' ? '🔴' : 
-                           wo.priority === 'high' ? '🟠' : 
-                           wo.priority === 'medium' ? '🟡' : '🟢';
+      const priorityEmoji = wo.priority === 'P1' ? '🔴' : 
+                           wo.priority === 'P2' ? '🟠' : 
+                           (wo.priority === 'P3' || wo.priority === 'P4') ? '🟡' : '🟢';
       return `${priorityEmoji} <strong>${wo.wo_number}</strong> - ${wo.building} (${wo.priority.toUpperCase()})`;
     }).join('<br>');
 

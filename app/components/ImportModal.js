@@ -578,14 +578,19 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                               <div>
                                 <label className="block text-xs text-gray-400 mb-1">Priority</label>
                                 <select
-                                  value={email.parsedData.priority || 'medium'}
+                                  value={email.parsedData.priority || 'P4'}
                                   onChange={(e) => updateEmailField(idx, 'priority', e.target.value)}
                                   className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
                                 >
-                                  <option value="emergency">🔴 Emergency</option>
-                                  <option value="high">🟠 High</option>
-                                  <option value="medium">🟡 Medium</option>
-                                  <option value="low">🔵 Low</option>
+                                  <option value="P1">🚨 P1 · Emergency</option>
+                                  <option value="P2">⚡ P2 · Urgent</option>
+                                  <option value="P3">🔥 P3 · Urgent - Non-Emergency</option>
+                                  <option value="P4">📢 P4 · Non-Urgent</option>
+                                  <option value="P5">🛠️ P5 · Handyman</option>
+                                  <option value="P6">🔧 P6 · Tech/Vendor</option>
+                                  <option value="P10">🗓️ P10 · PM</option>
+                                  <option value="P11">✅ P11 · PM Compliance</option>
+                                  <option value="P23">📣 P23 · Complaints</option>
                                 </select>
                               </div>
                               <div>

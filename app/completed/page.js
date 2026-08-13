@@ -253,9 +253,9 @@ if (assignments && assignments.length > 0) {
                 <div>
                   <span className="text-gray-400">Priority:</span>
                   <span className={`ml-2 px-2 py-1 rounded text-xs font-bold ${
-                    selectedWO.priority === 'emergency' ? 'bg-red-100 text-red-700' :
-                    selectedWO.priority === 'high' ? 'bg-orange-100 text-orange-700' :
-                    selectedWO.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    selectedWO.priority === 'P1' ? 'bg-red-100 text-red-700' :
+                    selectedWO.priority === 'P2' ? 'bg-orange-100 text-orange-700' :
+                    (selectedWO.priority === 'P3' || selectedWO.priority === 'P4') ? 'bg-yellow-100 text-yellow-700' :
                     'bg-green-100 text-green-700'
                   }`}>
                     {selectedWO.priority.toUpperCase()}

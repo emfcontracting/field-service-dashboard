@@ -64,8 +64,8 @@ const createTransporter = () => {
 // Build HTML email template for work order assignments
 const buildAssignmentEmailHTML = (workOrder, recipientName, isEmergency = false) => {
   const priorityColor = isEmergency ? '#dc2626' : 
-    workOrder.priority === 'high' ? '#f97316' :
-    workOrder.priority === 'medium' ? '#eab308' : '#3b82f6';
+    workOrder.priority === 'P2' ? '#f97316' :
+    (workOrder.priority === 'P3' || workOrder.priority === 'P4') ? '#eab308' : '#3b82f6';
   
   const priorityLabel = workOrder.priority?.toUpperCase() || 'NORMAL';
   
@@ -489,7 +489,7 @@ export async function POST(request) {
     for (const recipient of recipients) {
       const { user_id, email, phone, sms_carrier, first_name, last_name } = recipient;
       const recipientName = first_name || 'Team Member';
-      const isEmergency = type === 'emergency_work_order' || workOrder?.priority === 'emergency';
+      const isEmergency = type === 'emergency_work_order' || (workOrder?.priority === 'P1' || workOrder?.priority === 'emergency');
 
       // === SEND EMAIL ===
       if (useEmail && email) {

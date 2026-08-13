@@ -7,6 +7,7 @@ import StatsCards from './StatsCards';
 import WorkOrdersFilters from './WorkOrdersFilters';
 import ExportDropdown from './ExportDropdown';
 import { exportCostDetailCSV } from '../utils/exportHelpers';
+import { extractPriorityCode } from '@/lib/priorityCodes';
 
 export default function WorkOrdersView({ 
   workOrders, 
@@ -84,13 +85,10 @@ export default function WorkOrdersView({
       }
     }
 
-    // Priority filter - handle both single value and array
+    // Priority filter - match by canonical P-code (handles "P1", "P1 - Emergency", etc.)
     if (priorityFilter !== 'all') {
-      if (Array.isArray(priorityFilter)) {
-        filtered = filtered.filter(wo => priorityFilter.includes(wo.priority));
-      } else {
-        filtered = filtered.filter(wo => wo.priority === priorityFilter);
-      }
+      const codes = Array.isArray(priorityFilter) ? priorityFilter : [priorityFilter];
+      filtered = filtered.filter(wo => codes.includes(extractPriorityCode(wo.priority)));
     }
 
     // Tech filter - handle both single value and array

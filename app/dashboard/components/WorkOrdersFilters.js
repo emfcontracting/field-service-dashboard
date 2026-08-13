@@ -58,16 +58,15 @@ export default function WorkOrdersFilters({
   ];
 
   const priorityOptions = [
-    { value: 'emergency', label: 'Emergency', color: 'bg-red-600' },
-    { value: 'high', label: 'High', color: 'bg-orange-600' },
-    { value: 'medium', label: 'Medium', color: 'bg-yellow-600' },
-    { value: 'low', label: 'Low', color: 'bg-blue-600' },
-    { value: 'P1', label: 'P1', color: 'bg-red-600' },
-    { value: 'P2', label: 'P2', color: 'bg-orange-600' },
-    { value: 'P3', label: 'P3', color: 'bg-yellow-600' },
-    { value: 'P4', label: 'P4', color: 'bg-blue-600' },
-    { value: 'P5', label: 'P5', color: 'bg-emerald-600' },
-    { value: 'P10', label: 'P10', color: 'bg-cyan-600' }
+    { value: 'P1', label: '🚨 P1 · Emergency', color: 'bg-red-600' },
+    { value: 'P2', label: '⚡ P2 · Urgent', color: 'bg-orange-600' },
+    { value: 'P3', label: '🔥 P3 · Urgent (Non-Emerg.)', color: 'bg-amber-600' },
+    { value: 'P4', label: '📢 P4 · Non-Urgent', color: 'bg-yellow-600' },
+    { value: 'P5', label: '🛠️ P5 · Handyman', color: 'bg-green-600' },
+    { value: 'P6', label: '🔧 P6 · Tech/Vendor', color: 'bg-gray-600' },
+    { value: 'P10', label: '🗓️ P10 · PM', color: 'bg-blue-600' },
+    { value: 'P11', label: '✅ P11 · PM Compliance', color: 'bg-sky-600' },
+    { value: 'P23', label: '📣 P23 · Complaints', color: 'bg-violet-600' }
   ];
 
   const cbreStatusOptions = [

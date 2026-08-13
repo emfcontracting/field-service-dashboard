@@ -21,10 +21,6 @@ const CBRE_OPTS = [
   ['pending_quote', '📋 Pending Quote'], ['quote_rejected', '❌ Quote Rej.'], ['invoice_rejected', '❌ Invoice Rej.'],
   ['reassigned', '🔄 Reassigned'], ['cancelled', '🚫 Cancelled'],
 ];
-const PRIORITY_OPTS = [
-  ['P1', '🚨 P1'], ['P2', '⚡ P2'], ['P3', '🔥 P3'], ['P4', '📢 P4'], ['P5', '🛠️ P5'],
-  ['P6', '🔧 P6'], ['P10', '🗓️ P10'], ['P11', '✅ P11'], ['P23', '📣 P23'],
-];
 
 export default function WorkOrdersList({
   currentUser,
@@ -54,7 +50,6 @@ export default function WorkOrdersList({
   const [sortOrder, setSortOrder] = useState('desc'); // asc, desc
   const [selStatuses, setSelStatuses] = useState([]);
   const [selCbre, setSelCbre] = useState([]);
-  const [selPriorities, setSelPriorities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWOs, setSelectedWOs] = useState(new Set());
   const [selectMode, setSelectMode] = useState(false);
@@ -93,9 +88,6 @@ export default function WorkOrdersList({
     }
     if (selCbre.length) {
       filtered = filtered.filter(wo => selCbre.includes(wo.cbre_status));
-    }
-    if (selPriorities.length) {
-      filtered = filtered.filter(wo => selPriorities.includes(extractPriorityCode(wo.priority)));
     }
 
     // Sort
@@ -152,7 +144,7 @@ export default function WorkOrdersList({
     });
 
     return filtered;
-  }, [workOrders, sortBy, sortOrder, selStatuses, selCbre, selPriorities, searchTerm]);
+  }, [workOrders, sortBy, sortOrder, selStatuses, selCbre, searchTerm]);
 
   // Count of active missing_data WOs (for the sticky banner)
   const missingDataCount = useMemo(
@@ -207,10 +199,9 @@ export default function WorkOrdersList({
     let count = 0;
     if (selStatuses.length) count++;
     if (selCbre.length) count++;
-    if (selPriorities.length) count++;
     if (searchTerm.trim()) count++;
     return count;
-  }, [selStatuses, selCbre, selPriorities, searchTerm]);
+  }, [selStatuses, selCbre, searchTerm]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-20">
@@ -500,11 +491,10 @@ export default function WorkOrdersList({
                 </div>
               </div>
 
-              {/* Filter chips: Status / CBRE / Priority */}
+              {/* Filter chips: Status / CBRE */}
               {[
                 { label: 'Status', opts: STATUS_OPTS, sel: selStatuses, set: setSelStatuses },
                 { label: 'CBRE Status', opts: CBRE_OPTS, sel: selCbre, set: setSelCbre },
-                { label: 'Priority', opts: PRIORITY_OPTS, sel: selPriorities, set: setSelPriorities },
               ].map(group => (
                 <div key={group.label}>
                   <label className="block text-xs font-semibold text-gray-400 mb-1">{group.label}</label>
@@ -535,7 +525,6 @@ export default function WorkOrdersList({
                   onClick={() => {
                     setSelStatuses([]);
                     setSelCbre([]);
-                    setSelPriorities([]);
                     setSearchTerm('');
                   }}
                   className="w-full bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-semibold"
@@ -600,7 +589,6 @@ export default function WorkOrdersList({
                     onClick={() => {
                       setSelStatuses([]);
                       setSelCbre([]);
-                      setSelPriorities([]);
                       setSearchTerm('');
                     }}
                     className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"

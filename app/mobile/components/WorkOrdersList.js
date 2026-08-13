@@ -8,6 +8,23 @@ import WeatherWidget from './WeatherWidget';
 import NotificationBell from './NotificationBell';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
+import { extractPriorityCode } from '@/lib/priorityCodes';
+
+// Tech filter options (mirror of pcs-mobile/src/lib/workOrderFilters.ts)
+const STATUS_OPTS = [
+  ['assigned', 'Assigned'], ['in_progress', 'In Progress'], ['pending', 'Pending'],
+  ['needs_return', 'Needs Return'], ['return_trip', 'Return Trip'], ['tech_review', '🔍 Tech Review'],
+  ['missing_data', '🚩 Missing Data'], ['update_required', '🔵 Update Required'],
+];
+const CBRE_OPTS = [
+  ['escalation', '🚨 Escalation'], ['quote_approved', '✅ Approved'], ['quote_submitted', '📤 Submitted'],
+  ['pending_quote', '📋 Pending Quote'], ['quote_rejected', '❌ Quote Rej.'], ['invoice_rejected', '❌ Invoice Rej.'],
+  ['reassigned', '🔄 Reassigned'], ['cancelled', '🚫 Cancelled'],
+];
+const PRIORITY_OPTS = [
+  ['P1', '🚨 P1'], ['P2', '⚡ P2'], ['P3', '🔥 P3'], ['P4', '📢 P4'], ['P5', '🛠️ P5'],
+  ['P6', '🔧 P6'], ['P10', '🗓️ P10'], ['P11', '✅ P11'], ['P23', '📣 P23'],
+];
 
 export default function WorkOrdersList({
   currentUser,
@@ -35,11 +52,15 @@ export default function WorkOrdersList({
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState('date_entered'); // date_entered, priority, nte, age, status
   const [sortOrder, setSortOrder] = useState('desc'); // asc, desc
-  const [filterPriority, setFilterPriority] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [selStatuses, setSelStatuses] = useState([]);
+  const [selCbre, setSelCbre] = useState([]);
+  const [selPriorities, setSelPriorities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWOs, setSelectedWOs] = useState(new Set());
   const [selectMode, setSelectMode] = useState(false);
+
+  const toggleFilter = (arr, setArr, val) =>
+    setArr(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
 
   // Format last sync time
   const formatLastSync = () => {
@@ -66,14 +87,15 @@ export default function WorkOrdersList({
       );
     }
 
-    // Priority filter
-    if (filterPriority !== 'all') {
-      filtered = filtered.filter(wo => wo.priority === filterPriority);
+    // Status / CBRE / Priority filters (multi-select; empty = all)
+    if (selStatuses.length) {
+      filtered = filtered.filter(wo => selStatuses.includes(wo.status));
     }
-
-    // Status filter
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(wo => wo.status === filterStatus);
+    if (selCbre.length) {
+      filtered = filtered.filter(wo => selCbre.includes(wo.cbre_status));
+    }
+    if (selPriorities.length) {
+      filtered = filtered.filter(wo => selPriorities.includes(extractPriorityCode(wo.priority)));
     }
 
     // Sort
@@ -99,11 +121,12 @@ export default function WorkOrdersList({
           valA = new Date(a.date_entered).getTime();
           valB = new Date(b.date_entered).getTime();
           break;
-        case 'priority':
-          const priorityOrder = { urgent: 3, high: 2, normal: 1, low: 0 };
-          valA = priorityOrder[a.priority] || 0;
-          valB = priorityOrder[b.priority] || 0;
+        case 'priority': {
+          const rank = { P1: 9, P2: 8, P3: 7, P4: 6, P5: 5, P6: 4, P10: 3, P11: 2, P23: 1 };
+          valA = rank[extractPriorityCode(a.priority)] || 0;
+          valB = rank[extractPriorityCode(b.priority)] || 0;
           break;
+        }
         case 'nte':
           valA = a.nte || 0;
           valB = b.nte || 0;
@@ -129,7 +152,7 @@ export default function WorkOrdersList({
     });
 
     return filtered;
-  }, [workOrders, sortBy, sortOrder, filterPriority, filterStatus, searchTerm]);
+  }, [workOrders, sortBy, sortOrder, selStatuses, selCbre, selPriorities, searchTerm]);
 
   // Count of active missing_data WOs (for the sticky banner)
   const missingDataCount = useMemo(
@@ -182,11 +205,12 @@ export default function WorkOrdersList({
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-    if (filterPriority !== 'all') count++;
-    if (filterStatus !== 'all') count++;
+    if (selStatuses.length) count++;
+    if (selCbre.length) count++;
+    if (selPriorities.length) count++;
     if (searchTerm.trim()) count++;
     return count;
-  }, [filterPriority, filterStatus, searchTerm]);
+  }, [selStatuses, selCbre, selPriorities, searchTerm]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-20">
@@ -476,136 +500,42 @@ export default function WorkOrdersList({
                 </div>
               </div>
 
-              {/* Filter by Priority */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Priority</label>
-                <div className="grid grid-cols-5 gap-1">
-                  <button
-                    onClick={() => setFilterPriority('all')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterPriority === 'all' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setFilterPriority('urgent')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterPriority === 'urgent' 
-                        ? 'bg-red-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Urgent
-                  </button>
-                  <button
-                    onClick={() => setFilterPriority('high')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterPriority === 'high' 
-                        ? 'bg-orange-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    High
-                  </button>
-                  <button
-                    onClick={() => setFilterPriority('normal')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterPriority === 'normal' 
-                        ? 'bg-yellow-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Normal
-                  </button>
-                  <button
-                    onClick={() => setFilterPriority('low')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterPriority === 'low' 
-                        ? 'bg-green-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Low
-                  </button>
+              {/* Filter chips: Status / CBRE / Priority */}
+              {[
+                { label: 'Status', opts: STATUS_OPTS, sel: selStatuses, set: setSelStatuses },
+                { label: 'CBRE Status', opts: CBRE_OPTS, sel: selCbre, set: setSelCbre },
+                { label: 'Priority', opts: PRIORITY_OPTS, sel: selPriorities, set: setSelPriorities },
+              ].map(group => (
+                <div key={group.label}>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">{group.label}</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.opts.map(([val, lbl]) => {
+                      const on = group.sel.includes(val);
+                      return (
+                        <button
+                          key={val}
+                          onClick={() => toggleFilter(group.sel, group.set, val)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+                            on
+                              ? 'bg-blue-600 border-blue-400 text-white'
+                              : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              {/* Filter by Status */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Status</label>
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    onClick={() => setFilterStatus('all')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'all' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus('assigned')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'assigned' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Assigned
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus('in_progress')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'in_progress' 
-                        ? 'bg-yellow-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    In Progress
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus('pending_approval')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'pending_approval' 
-                        ? 'bg-purple-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Pending
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus('tech_review')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'tech_review' 
-                        ? 'bg-red-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    Returned
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus('on_hold')}
-                    className={`py-1.5 px-2 rounded text-xs font-semibold ${
-                      filterStatus === 'on_hold' 
-                        ? 'bg-gray-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
-                    }`}
-                  >
-                    On Hold
-                  </button>
-                </div>
-              </div>
+              ))}
 
               {/* Clear Filters */}
               {activeFiltersCount > 0 && (
                 <button
                   onClick={() => {
-                    setFilterPriority('all');
-                    setFilterStatus('all');
+                    setSelStatuses([]);
+                    setSelCbre([]);
+                    setSelPriorities([]);
                     setSearchTerm('');
                   }}
                   className="w-full bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-semibold"
@@ -668,8 +598,9 @@ export default function WorkOrdersList({
                   <p className="text-gray-400 text-lg">No work orders match your filters</p>
                   <button
                     onClick={() => {
-                      setFilterPriority('all');
-                      setFilterStatus('all');
+                      setSelStatuses([]);
+                      setSelCbre([]);
+                      setSelPriorities([]);
                       setSearchTerm('');
                     }}
                     className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium"

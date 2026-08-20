@@ -1,16 +1,14 @@
 // app/api/cbre-form/probe/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// DISCOVERY ONLY — reads the CBRE Vendor App form's own definition so we can
-// learn its field identifiers. Submits nothing; sends no data to CBRE.
+// DISCOVERY ONLY — reads the CBRE Vendor App form's definition to learn its
+// field identifiers. Submits nothing; sends no data to CBRE.
 //
 // EMF has CBRE's permission to automate submissions through the Vendor App
-// form. CBRE's restriction is on API access into VAWS behind their security,
-// which this does not touch.
+// form. CBRE's restriction is on API access into VAWS, which this never touches.
 //
-// HOW IT WORKS: the form page ships its whole schema inline as
-//   window.formDefinition = "<base64 of JSON>"
-// and posts to window.formEndpoint. We decode that definition and report the
-// field list, so the submitter can be written against the real ids.
+// The form ships its schema inline as window.formDefinition = "<base64 JSON>"
+// and posts to window.formEndpoint. v3 keeps the response SMALL and returns the
+// RAW field objects, because the identifier keys are not named what we guessed.
 //
 // DELETE THIS ROUTE once the field map is captured. It is scaffolding.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,39 +19,16 @@ export const maxDuration = 60;
 const FORM_ID = '019aa33a6ffd70a7983bbf4af282307a';
 const FORM_URL = `https://app.smartsheet.com/b/form/${FORM_ID}`;
 
-// Recursively walk the decoded definition and pull out anything that looks
-// like a field, whatever the nesting turns out to be.
-function collectFields(node, acc = [], depth = 0) {
-  if (!node || depth > 12) return acc;
+// Collect objects that carry a human label — those are the form controls.
+function collectRaw(node, acc = [], depth = 0) {
+  if (!node || depth > 14 || acc.length > 60) return acc;
   if (Array.isArray(node)) {
-    for (const item of node) collectFields(item, acc, depth + 1);
+    for (const i of node) collectRaw(i, acc, depth + 1);
     return acc;
   }
   if (typeof node !== 'object') return acc;
-
-  const looksLikeField =
-    'label' in node || 'title' in node || 'displayValue' in node || 'fieldId' in node;
-
-  if (looksLikeField) {
-    acc.push({
-      label: node.label ?? node.title ?? node.displayValue ?? null,
-      fieldId: node.fieldId ?? node.id ?? null,
-      columnId: node.columnId ?? null,
-      objectId: node.objectId ?? null,
-      type: node.type ?? node.fieldType ?? node.controlType ?? null,
-      required: node.required ?? node.isRequired ?? null,
-      // Dropdown choices, however they are spelled.
-      options:
-        node.options ?? node.choices ?? node.values ?? node.picklistOptions ?? null,
-      // Which other field/value reveals this one — the form is conditional.
-      conditional:
-        node.conditionalRule ?? node.condition ?? node.visibilityRule ?? null,
-    });
-  }
-
-  for (const key of Object.keys(node)) {
-    collectFields(node[key], acc, depth + 1);
-  }
+  if ('label' in node || 'title' in node) acc.push(node);
+  for (const k of Object.keys(node)) collectRaw(node[k], acc, depth + 1);
   return acc;
 }
 
@@ -68,11 +43,13 @@ export async function GET(request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const want = (searchParams.get('label') || 'Work Order #').toLowerCase();
+
   try {
     const res = await fetch(FORM_URL, {
       headers: {
         'User-Agent': 'EMF-Contracting-FSM/1.0 (authorised vendor form integration)',
-        Accept: 'text/html,application/json,*/*',
+        Accept: 'text/html,*/*',
       },
       redirect: 'follow',
     });
@@ -80,53 +57,35 @@ export async function GET(request) {
 
     const endpoint = (html.match(/window\.formEndpoint\s*=\s*"([^"]+)"/) || [])[1] || null;
     const b64 = (html.match(/window\.formDefinition\s*=\s*"([^"]+)"/) || [])[1] || null;
+    if (!b64) return Response.json({ error: 'formDefinition not found', endpoint });
 
-    if (!b64) {
-      return Response.json({
-        note: 'Discovery only. Nothing was submitted.',
-        error: 'window.formDefinition not found',
-        endpoint,
-        bytes: html.length,
-        head: html.slice(0, 1200),
-      });
-    }
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const definition = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
 
-    let definition = null;
-    let decodeError = null;
-    try {
-      const json = Buffer.from(b64, 'base64').toString('utf8');
-      definition = JSON.parse(json);
-    } catch (e) {
-      decodeError = e.message;
-      // Padding is sometimes stripped — retry with it restored.
-      try {
-        const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-        definition = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-        decodeError = null;
-      } catch (e2) {
-        decodeError = `${e.message} / retry: ${e2.message}`;
-      }
-    }
+    const raw = collectRaw(definition);
 
-    const fields = definition ? collectFields(definition) : [];
+    // Every distinct key name used across all control objects. This tells us
+    // what the identifier is actually called.
+    const allKeys = [...new Set(raw.flatMap((o) => Object.keys(o)))].sort();
+
+    // One control in full, verbatim — the one whose label matches ?label=
+    const match =
+      raw.find((o) => String(o.label ?? o.title ?? '').toLowerCase() === want) ||
+      raw.find((o) => String(o.label ?? o.title ?? '').toLowerCase().includes(want)) ||
+      raw[0] ||
+      null;
 
     return Response.json({
-      note: 'Discovery only. Nothing was submitted to CBRE.',
-      probedAt: new Date().toISOString(),
-      formUrl: FORM_URL,
+      note: 'Discovery only. Nothing submitted.',
       endpoint,
-      decodeError,
-      formName: definition?.name ?? null,
-      // Top-level keys, so we can see the overall shape at a glance.
-      topLevelKeys: definition ? Object.keys(definition) : [],
-      fieldCount: fields.length,
-      fields,
-      // Kept last and trimmed: full definition for anything the walker missed.
-      definitionSample: definition
-        ? JSON.stringify(definition).slice(0, 12000)
-        : null,
+      controlCount: raw.length,
+      allKeys,
+      labels: raw.map((o) => o.label ?? o.title).filter(Boolean).slice(0, 25),
+      // Raw object, trimmed so the response stays readable.
+      matchedLabel: match ? (match.label ?? match.title) : null,
+      matchedRaw: match ? JSON.stringify(match).slice(0, 2500) : null,
     });
   } catch (err) {
-    return Response.json({ error: err.message, formUrl: FORM_URL }, { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }

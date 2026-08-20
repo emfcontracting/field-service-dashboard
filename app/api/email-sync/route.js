@@ -5,6 +5,12 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 
+// Vercel: this route opens seven IMAP folders in sequence and parses up to 30
+// days of mail per folder. The platform default kills it mid-run, which is why
+// CBRE statuses stopped updating silently. 300s is the Pro ceiling.
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -387,6 +393,15 @@ export async function GET(request) {
     const dryRun = searchParams.get('dryRun') === 'true';
     const searchDays = parseInt(searchParams.get('days')) || 30; // Default 30 days, use ?days=90 for deeper rescan
     const skipNotify = searchParams.get('skipNotify') === 'true'; // Skip all notifications for this run
+
+    // Same guard email-import/cron uses. Vercel sends this bearer token on
+    // scheduled invocations; ?manual=true still lets the dashboard button through.
+    const authHeader = request.headers.get('authorization');
+    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      if (searchParams.get('manual') !== 'true') {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
     
     // Check IMAP credentials
     const email = process.env.EMAIL_IMPORT_USER;

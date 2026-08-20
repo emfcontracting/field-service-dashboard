@@ -625,28 +625,12 @@ export async function GET(request) {
     // Checks Gmail labels for status updates: escalation, quote-approval,
     // quote-rejected, quote-submitted, reassignment, invoice-rejected, cancellation
     // ============================================================
+    // CBRE label sync now runs on its own schedule (see vercel.json).
+    // It used to be chained here as a self-fetch, which inherited whatever was
+    // left of this function's timeout and was killed part-way through. Worse,
+    // the early return above (no new dispatch emails) skipped it entirely on
+    // nearly every one of the 144 daily cycles.
     let syncResults = null;
-    try {
-      console.log('=== Running CBRE Label Sync ===');
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL 
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-        || 'http://localhost:3000';
-      
-      const syncResponse = await fetch(`${baseUrl}/api/email-sync`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (syncResponse.ok) {
-        syncResults = await syncResponse.json();
-        console.log(`CBRE Sync: Processed ${syncResults.processed || 0}, Updated ${syncResults.updated || 0}`);
-      } else {
-        console.error('CBRE Sync failed:', syncResponse.status);
-      }
-    } catch (syncErr) {
-      console.error('CBRE Label Sync error:', syncErr.message);
-      // Don't fail the whole cron - import was successful
-    }
 
     // Log activity
     await logImportActivity(results);

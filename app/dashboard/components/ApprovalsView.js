@@ -55,10 +55,11 @@ const STATUS_TONE = {
 const CBRE_FORM_URL = 'https://app.smartsheet.com/b/form/019aa33a6ffd70a7983bbf4af282307a';
 
 // Smartsheet prefills a published form from the query string, keyed by the
-// SHEET COLUMN NAME — not by the internal field key we store in the payload.
-// These labels are read off the rendered form. If CBRE renames a column the
-// prefill for that one field silently stops working, which is why the form is
-// shown to you before you submit: you would see the empty box.
+// FORM FIELD LABEL — not by the internal field key we store in the payload,
+// and not by the sheet's column name either. These are read off the rendered
+// form and are case sensitive. If CBRE relabels a field the prefill for that
+// one box silently stops working, which is why you see the form before you
+// submit it: an empty box is visible, a wrong guess would not be.
 //
 // We send the internal key as well. Unknown query parameters are ignored, so
 // covering both spellings costs nothing and survives one of them being wrong.
@@ -71,19 +72,30 @@ const PREFILL_COLUMN = {
   yZpQ0pqkp:   'Comment/Reason',
 };
 
+// Smartsheet's rules, from their own documentation:
+//   - the parameter is the FORM FIELD LABEL, not the sheet column name
+//   - labels are CASE SENSITIVE
+//   - a space must be %20. URLSearchParams encodes spaces as '+', which
+//     Smartsheet does NOT decode back to a space, so we encode by hand.
+//   - prefill is ignored on forms that require sign-in (this one does not)
+// https://help.smartsheet.com/articles/2478871-url-query-string-form-default-values
 function prefillUrl(payload) {
   if (!payload || typeof payload !== 'object') return null;
-  const q = new URLSearchParams();
+  const parts = [];
+  const add = (name, value) =>
+    parts.push(`${encodeURIComponent(name)}=${encodeURIComponent(value)}`);
+
   for (const [key, value] of Object.entries(payload)) {
     // Keys beginning with _ are our own readability mirror, not form fields.
     if (key.startsWith('_')) continue;
     if (value === null || value === undefined || value === '') continue;
-    const column = PREFILL_COLUMN[key];
-    if (column) q.set(column, String(value));
-    q.set(key, String(value));
+    const label = PREFILL_COLUMN[key];
+    if (label) add(label, String(value));
+    // The internal key too — an unknown parameter is ignored, so if one of the
+    // labels above is ever wrong, we have not lost anything by trying both.
+    add(key, String(value));
   }
-  const qs = q.toString();
-  return qs ? `${CBRE_FORM_URL}?${qs}` : CBRE_FORM_URL;
+  return parts.length ? `${CBRE_FORM_URL}?${parts.join('&')}` : CBRE_FORM_URL;
 }
 
 const money = (v) => {

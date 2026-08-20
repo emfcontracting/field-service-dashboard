@@ -166,6 +166,12 @@ export const NAV_ITEMS = [
       <line x1="8" y1="12" x2="14" y2="12"/>
     </svg>
   ), officeOrAdmin: true },
+  { id: 'approvals',      label: 'Approvals',      approvals: true, Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  ), officeOrAdmin: true },
 ];
 
 export const QUICK_LINKS = [
@@ -180,7 +186,7 @@ export const QUICK_LINKS = [
 ];
 
 // ── SidebarNav (inner component — needs useSearchParams) ──────────────────────
-function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQueueCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
+function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQueueCount, approvalsCount, sidebarCollapsed, onCollapse, onLogout, onThemeToggle, theme, isMobile, activeLink }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -220,10 +226,11 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQue
               if (item.adminOnly && userInfo?.role !== 'admin') return false;
               if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
               return true;
-            }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue }) => {
+            }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue, approvals }) => {
               const isActive = activeView === id;
               const badgeCount = alert ? missingHoursCount
                                 : cbreDataEntry ? cbreDataEntryCount
+                                : approvals ? approvalsCount
                                 : reviewQueue ? reviewQueueCount
                                 : 0;
               return (
@@ -317,7 +324,7 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQue
           if (item.adminOnly && userInfo?.role !== 'admin') return false;
           if (item.officeOrAdmin && !['admin', 'office_staff'].includes(userInfo?.role)) return false;
           return true;
-        }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue }) => {
+        }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue, approvals }) => {
           const isActive = !activeLink && activeView === id;
           const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
             : id === 'aging' ? 'bg-red-500/10 text-red-400'
@@ -327,7 +334,8 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQue
 
           const badgeCount = alert ? missingHoursCount
                             : cbreDataEntry ? cbreDataEntryCount
-                            : reviewQueue ? reviewQueueCount
+                            : approvals ? approvalsCount
+                                : reviewQueue ? reviewQueueCount
                             : 0;
           const badgeColor = reviewQueue
             ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
@@ -429,6 +437,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   const [missingHoursCount, setMissingHoursCount] = useState(0);
   const [cbreDataEntryCount, setCbreDataEntryCount] = useState(0);
   const [reviewQueueCount, setReviewQueueCount] = useState(0);
+  const [approvalsCount, setApprovalsCount] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -550,6 +559,25 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     return () => { cancelled = true; clearInterval(interval); };
   }, [authenticated, userInfo]);
 
+  // ── Approvals pending count (admin/office only) ──
+  useEffect(() => {
+    if (!authenticated || !userInfo) return;
+    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const { count } = await supabase
+          .from('approval_requests')
+          .select('approval_id', { count: 'exact', head: true })
+          .eq('status', 'pending');
+        if (!cancelled) setApprovalsCount(count || 0);
+      } catch {}   // table may not exist until the migration is run
+    };
+    load();
+    const interval = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [authenticated, userInfo]);
+
   async function checkAuth() {
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
@@ -604,6 +632,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
           missingHoursCount={missingHoursCount}
           cbreDataEntryCount={cbreDataEntryCount}
           reviewQueueCount={reviewQueueCount}
+          approvalsCount={approvalsCount}
           sidebarCollapsed={sidebarCollapsed}
           onCollapse={() => setSidebarCollapsed(p => !p)}
           onLogout={handleLogout}

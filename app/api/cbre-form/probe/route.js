@@ -1,16 +1,17 @@
 // app/api/cbre-form/probe/route.js
 // ─────────────────────────────────────────────────────────────────────────────
 // DISCOVERY ONLY — reads the CBRE Vendor App form's definition to learn its
-// field identifiers. Submits nothing; sends no data to CBRE.
+// field keys. Submits nothing; sends no data to CBRE.
 //
 // EMF has CBRE's permission to automate submissions through the Vendor App
 // form. CBRE's restriction is on API access into VAWS, which this never touches.
 //
-// The form ships its schema inline as window.formDefinition = "<base64 JSON>"
-// and posts to window.formEndpoint. v3 keeps the response SMALL and returns the
-// RAW field objects, because the identifier keys are not named what we guessed.
+// SCHEMA (learned in v3): every control carries a short `key` (e.g. "GY7jE7PwJ")
+// which is the identifier the payload uses. `logic` holds SHOW_COMPONENT rules
+// predicated on the Action control's key, which is how the form reveals
+// different fields per action.
 //
-// DELETE THIS ROUTE once the field map is captured. It is scaffolding.
+// DELETE THIS ROUTE once the map is captured. It is scaffolding.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,6 @@ export const maxDuration = 60;
 const FORM_ID = '019aa33a6ffd70a7983bbf4af282307a';
 const FORM_URL = `https://app.smartsheet.com/b/form/${FORM_ID}`;
 
-// Collect objects that carry a human label — those are the form controls.
 function collectRaw(node, acc = [], depth = 0) {
   if (!node || depth > 14 || acc.length > 60) return acc;
   if (Array.isArray(node)) {
@@ -27,9 +27,26 @@ function collectRaw(node, acc = [], depth = 0) {
     return acc;
   }
   if (typeof node !== 'object') return acc;
-  if ('label' in node || 'title' in node) acc.push(node);
+  if ('key' in node && ('label' in node || 'title' in node)) acc.push(node);
   for (const k of Object.keys(node)) collectRaw(node[k], acc, depth + 1);
   return acc;
+}
+
+// Pull the Action values that reveal a given control, so we know which fields
+// belong to which action without submitting anything to find out.
+function shownBy(control) {
+  const out = new Set();
+  const walk = (n) => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (n.value && n.value.value) out.add(n.value.value);
+    if (n.values && Array.isArray(n.values.values)) {
+      n.values.values.forEach((v) => out.add(`NOT:${v}`));
+    }
+    Object.values(n).forEach(walk);
+  };
+  walk(control.logic);
+  return [...out];
 }
 
 export async function GET(request) {
@@ -42,8 +59,6 @@ export async function GET(request) {
   ) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const want = (searchParams.get('label') || 'Work Order #').toLowerCase();
 
   try {
     const res = await fetch(FORM_URL, {
@@ -61,29 +76,40 @@ export async function GET(request) {
 
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
     const definition = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-
     const raw = collectRaw(definition);
 
-    // Every distinct key name used across all control objects. This tells us
-    // what the identifier is actually called.
-    const allKeys = [...new Set(raw.flatMap((o) => Object.keys(o)))].sort();
+    // Compact map: everything needed to build a payload, nothing else.
+    const fields = raw.map((c) => ({
+      label: c.label ?? c.title ?? null,
+      key: c.key,
+      type: c.type,
+      valueType: c.valueType ?? null,
+      required: !!c.required,
+      shownWhenActionIs: shownBy(c),
+    }));
 
-    // One control in full, verbatim — the one whose label matches ?label=
-    const match =
-      raw.find((o) => String(o.label ?? o.title ?? '').toLowerCase() === want) ||
-      raw.find((o) => String(o.label ?? o.title ?? '').toLowerCase().includes(want)) ||
-      raw[0] ||
-      null;
+    // The Action control's choices, verbatim — these strings must match exactly.
+    const action = raw.find((c) => (c.label ?? '') === 'Action');
+    const actionOptions = Array.isArray(action?.options)
+      ? action.options.map((o) => (typeof o === 'string' ? o : o?.value ?? o?.label ?? null))
+      : null;
+
+    // Anything the form posts alongside the answers.
+    const formKeyish = {
+      formId: definition?.formId ?? definition?.id ?? null,
+      version: definition?.version ?? null,
+      confirmationType: definition?.confirmation?.type ?? null,
+      topLevelKeys: Object.keys(definition || {}),
+    };
 
     return Response.json({
       note: 'Discovery only. Nothing submitted.',
       endpoint,
-      controlCount: raw.length,
-      allKeys,
-      labels: raw.map((o) => o.label ?? o.title).filter(Boolean).slice(0, 25),
-      // Raw object, trimmed so the response stays readable.
-      matchedLabel: match ? (match.label ?? match.title) : null,
-      matchedRaw: match ? JSON.stringify(match).slice(0, 2500) : null,
+      actionKey: action?.key ?? null,
+      actionOptions,
+      formKeyish,
+      fieldCount: fields.length,
+      fields,
     });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });

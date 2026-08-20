@@ -25,6 +25,77 @@ const PostingStatusBadge = ({ wo }) => {
   );
 };
 
+// ── Acknowledged to CBRE ─────────────────────────────────────────────────────
+// Three different "acknowledged" fields live on a work order. They are not
+// interchangeable and mixing them up hides real work:
+//
+//   work_orders.acknowledged          our own "I am done looking at this" flag
+//   cbre_status_acknowledged_at       we have SEEN a status CBRE sent us
+//   cbre_acknowledged_at              we have TOLD CBRE we accept the job  <- this
+//
+// Only the last one is a message that left the building. It is stamped when the
+// Vendor App form is submitted from the Approvals tab.
+
+// Matches DEFAULT_MAX_AGE_DAYS in app/api/cbre/queue-acknowledgements — beyond
+// this the producer stops queueing, so an inline nag would be a dead end.
+const ACK_FRESH_DAYS = 14;
+
+const ackAgeDays = (wo) => {
+  const d = wo.date_entered || wo.created_at;
+  if (!d) return null;
+  return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+};
+
+// Inline badge: only ever shows the MISSING state, and only while it is still
+// actionable. The column carries the full picture, so a green tick here too
+// would just be noise on every row.
+const CbreAckBadge = ({ wo }) => {
+  if (getClientType(wo) !== 'CBRE') return null;   // UPS work has no such form
+  if (wo.cbre_acknowledged_at) return null;
+  const age = ackAgeDays(wo);
+  if (age === null || age > ACK_FRESH_DAYS) return null;
+  return (
+    <span
+      title={`CBRE has not been told we accepted this work order (dispatched ${age}d ago). Approve it in the Approvals tab, then submit the prefilled form.`}
+      className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-help"
+    >
+      ACK?
+    </span>
+  );
+};
+
+// Column cell: the record, for every row.
+const CbreAckCell = ({ wo }) => {
+  if (getClientType(wo) !== 'CBRE') {
+    return <span className="text-slate-700" title="Not a CBRE work order">—</span>;
+  }
+  if (wo.cbre_acknowledged_at) {
+    const when = new Date(wo.cbre_acknowledged_at);
+    return (
+      <span
+        className="text-emerald-400 cursor-help"
+        title={`Acknowledged to CBRE on ${when.toLocaleDateString()} at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+      >
+        ✓
+      </span>
+    );
+  }
+  const age = ackAgeDays(wo);
+  const stale = age !== null && age > ACK_FRESH_DAYS;
+  return (
+    <span
+      className={stale ? 'text-slate-600 cursor-help' : 'text-orange-400 cursor-help'}
+      title={
+        stale
+          ? `Never acknowledged in the FSM (dispatched ${age}d ago). Old enough that it was almost certainly handled by phone or in VAWS — the queue skips it.`
+          : 'Not yet acknowledged to CBRE'
+      }
+    >
+      {stale ? '·' : '○'}
+    </span>
+  );
+};
+
 // Highest-priority open flag for this WO (high > medium > low).
 const getTopFlag = (wo) => {
   const flags = wo.open_flags || [];
@@ -235,6 +306,7 @@ export default function WorkOrdersTable({
               <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '280px' }}>Description</th>
               <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '110px' }}>Status</th>
               <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '100px' }}>CBRE</th>
+              <th className="px-3 py-2.5 text-center text-slate-500 font-medium tracking-wide" style={{ width: '48px' }} title="Acknowledged to CBRE via the Vendor App form">ACK</th>
               <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '72px' }}>Priority</th>
               <th className="px-3 py-2.5 text-left text-slate-500 font-medium tracking-wide" style={{ width: '110px' }}>Lead Tech</th>
               <th className="px-3 py-2.5 text-right text-slate-500 font-medium tracking-wide" style={{ width: '80px' }}>NTE</th>
@@ -309,6 +381,7 @@ export default function WorkOrdersTable({
                         </span>
                       )}
                       <PostingStatusBadge wo={wo} />
+                      <CbreAckBadge wo={wo} />
                       {isUnackCbre && (
                         <button
                           onClick={(e) => {
@@ -381,6 +454,11 @@ export default function WorkOrdersTable({
                     ) : (
                       <span className="text-slate-700">—</span>
                     )}
+                  </td>
+
+                  {/* Acknowledged to CBRE */}
+                  <td className="px-3 py-2.5 text-center">
+                    <CbreAckCell wo={wo} />
                   </td>
 
                   {/* Priority */}

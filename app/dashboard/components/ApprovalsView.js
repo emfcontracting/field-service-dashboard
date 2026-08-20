@@ -6,10 +6,19 @@
 // `kind`. Adding CBRE acknowledgements, NTE submissions or ETA updates needs a
 // new producer writing rows — not a new tab and not a change here.
 //
-// Nothing in this component talks to CBRE. Approving sets status='approved';
-// a separate sender is responsible for acting on approved rows and setting
-// 'sent'. That separation is the point: the decision and the transmission are
-// different steps, so a bug in one cannot silently cause the other.
+// HOW SOMETHING ACTUALLY REACHES CBRE
+// -----------------------------------
+// Nothing in this app posts to CBRE. Their Vendor App form is protected by an
+// invisible reCAPTCHA, which is their way of saying "a person submits this".
+// So the last click stays yours — but the typing does not.
+//
+//   Approve  ->  "Open form"  ->  CBRE's form opens with all six fields
+//                                 already filled in  ->  you press Submit
+//            ->  "Mark submitted"  ->  the work order leaves the queue
+//
+// The prefill is a plain query string on the published form URL, which is a
+// documented Smartsheet feature. No automation, no token, no impersonation:
+// a real browser, a real person, one click instead of six fields typed.
 // ─────────────────────────────────────────────────────────────────────────────
 'use client';
 
@@ -42,6 +51,41 @@ const STATUS_TONE = {
   cancelled:'bg-slate-500/20 text-slate-500 border-slate-500/30',
 };
 
+// ── CBRE Vendor App form ─────────────────────────────────────────────────────
+const CBRE_FORM_URL = 'https://app.smartsheet.com/b/form/019aa33a6ffd70a7983bbf4af282307a';
+
+// Smartsheet prefills a published form from the query string, keyed by the
+// SHEET COLUMN NAME — not by the internal field key we store in the payload.
+// These labels are read off the rendered form. If CBRE renames a column the
+// prefill for that one field silently stops working, which is why the form is
+// shown to you before you submit: you would see the empty box.
+//
+// We send the internal key as well. Unknown query parameters are ignored, so
+// covering both spellings costs nothing and survives one of them being wrong.
+const PREFILL_COLUMN = {
+  PbOqlOgpG:   'Action',
+  WaG1J2w0J:   'Requestor Email',
+  GY7jE7PwJ:   'Work Order #',
+  aKvjgv3dl:   'Vendor',
+  '6wAdpAQzv': 'UPS Building Code',
+  yZpQ0pqkp:   'Comment/Reason',
+};
+
+function prefillUrl(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(payload)) {
+    // Keys beginning with _ are our own readability mirror, not form fields.
+    if (key.startsWith('_')) continue;
+    if (value === null || value === undefined || value === '') continue;
+    const column = PREFILL_COLUMN[key];
+    if (column) q.set(column, String(value));
+    q.set(key, String(value));
+  }
+  const qs = q.toString();
+  return qs ? `${CBRE_FORM_URL}?${qs}` : CBRE_FORM_URL;
+}
+
 const money = (v) => {
   const n = parseFloat(v);
   return Number.isFinite(n)
@@ -58,14 +102,22 @@ const ago = (iso) => {
   return `${Math.floor(hrs / 24)}d`;
 };
 
+const TABS = [
+  { id: 'pending', label: 'Pending' },
+  { id: 'ready',   label: 'Ready to send' },
+  { id: 'history', label: 'History' },
+];
+
 export default function ApprovalsView({ userInfo }) {
-  const [rows, setRows]           = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
-  const [tab, setTab]             = useState('pending');
-  const [selected, setSelected]   = useState(() => new Set());
-  const [busy, setBusy]           = useState(false);
-  const [expanded, setExpanded]   = useState(null);
+  const [rows, setRows]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [notice, setNotice]     = useState(null);
+  const [tab, setTab]           = useState('pending');
+  const [selected, setSelected] = useState(() => new Set());
+  const [busy, setBusy]         = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [opened, setOpened]     = useState(() => new Set());
 
   const load = useCallback(async () => {
     setError(null);
@@ -95,21 +147,28 @@ export default function ApprovalsView({ userInfo }) {
     return () => clearInterval(t);
   }, [load]);
 
-  const shown = useMemo(
-    () => rows.filter((r) => (tab === 'pending' ? r.status === 'pending' : r.status !== 'pending')),
-    [rows, tab]
-  );
+  const shown = useMemo(() => {
+    if (tab === 'pending') return rows.filter((r) => r.status === 'pending');
+    if (tab === 'ready')   return rows.filter((r) => r.status === 'approved' && !r.sent_at);
+    return rows.filter((r) => r.status !== 'pending' && !(r.status === 'approved' && !r.sent_at));
+  }, [rows, tab]);
 
   const pendingCount = useMemo(() => rows.filter((r) => r.status === 'pending').length, [rows]);
+  const readyCount   = useMemo(
+    () => rows.filter((r) => r.status === 'approved' && !r.sent_at).length,
+    [rows]
+  );
 
   const toggle = (id) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
   const allShownSelected = shown.length > 0 && shown.every((r) => selected.has(r.approval_id));
+  const selectable = tab === 'pending' || tab === 'ready';
 
   async function decide(ids, decision, reason = null) {
     if (!ids.length) return;
@@ -131,6 +190,12 @@ export default function ApprovalsView({ userInfo }) {
 
       setSelected(new Set());
       await load();
+      if (decision === 'approved') {
+        setNotice(
+          `${ids.length} approved. They are in "Ready to send" — open each form and press Submit on CBRE's side.`
+        );
+        setTab('ready');
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -146,29 +211,102 @@ export default function ApprovalsView({ userInfo }) {
     decide(ids, 'rejected', reason || null);
   }
 
+  // ── Opening the prefilled form ──────────────────────────────────────────────
+  // This only opens a tab. It submits nothing. Popup blockers stop a burst of
+  // window.open calls, so we open a few at a time and say so rather than
+  // silently dropping the rest.
+  function openForm(row) {
+    const url = prefillUrl(row.payload);
+    if (!url) { setError(`No payload on ${row.wo_number || 'this request'} — nothing to prefill.`); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setOpened((prev) => new Set(prev).add(row.approval_id));
+  }
+
+  function openSelectedForms() {
+    const list = shown.filter((r) => selected.has(r.approval_id));
+    if (!list.length) return;
+    if (list.length > 5) {
+      setError('Open at most 5 at a time — your browser will block the rest as popups.');
+      return;
+    }
+    list.forEach(openForm);
+    setNotice(
+      `${list.length} form${list.length === 1 ? '' : 's'} opened. Press Submit in each tab, then mark them submitted here.`
+    );
+  }
+
+  // ── Recording that YOU submitted it ─────────────────────────────────────────
+  // Marks the request sent and stamps the work order, so the producer stops
+  // queueing it tomorrow. It is a record of something you did, not an action.
+  async function markSubmitted(ids) {
+    if (!ids.length) return;
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const affected = rows.filter((r) => ids.includes(r.approval_id));
+
+      const { error: err } = await supabase
+        .from('approval_requests')
+        .update({ status: 'sent', sent_at: now, send_error: null })
+        .in('approval_id', ids)
+        .eq('status', 'approved');
+      if (err) throw err;
+
+      // Close the loop on the work order itself, per kind.
+      const ackWoIds = affected
+        .filter((r) => r.kind === 'cbre_acknowledge' && r.wo_id)
+        .map((r) => r.wo_id);
+      if (ackWoIds.length) {
+        const { error: woErr } = await supabase
+          .from('work_orders')
+          .update({
+            cbre_acknowledged_at: now,
+            cbre_acknowledged_by: userInfo?.user_id ?? null,
+            cbre_acknowledged_via: 'vendor_app_form',
+          })
+          .in('wo_id', ackWoIds)
+          .is('cbre_acknowledged_at', null);   // never overwrite an earlier record
+        // A failure here is worth seeing: the request says sent but the work
+        // order does not, so it would be queued again tomorrow.
+        if (woErr) setError(`Marked sent, but the work order stamp failed: ${woErr.message}`);
+      }
+
+      setSelected(new Set());
+      setNotice(`${ids.length} marked as submitted.`);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Approvals</h1>
           <p className="text-sm text-slate-400 mt-0.5">
-            Nothing here has been sent. Approving marks it ready; a separate step transmits it.
+            Approve here, then open the prefilled CBRE form and press Submit. This app never submits for you.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {['pending', 'history'].map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSelected(new Set()); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
-                tab === t
-                  ? 'bg-slate-700/60 text-slate-100 border-slate-600'
-                  : 'bg-transparent text-slate-400 border-slate-700 hover:text-slate-200'
-              }`}
-            >
-              {t === 'pending' ? `Pending${pendingCount ? ` (${pendingCount})` : ''}` : 'History'}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = t.id === 'pending' ? pendingCount : t.id === 'ready' ? readyCount : 0;
+            return (
+              <button
+                key={t.id}
+                onClick={() => { setTab(t.id); setSelected(new Set()); setNotice(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
+                  tab === t.id
+                    ? 'bg-slate-700/60 text-slate-100 border-slate-600'
+                    : 'bg-transparent text-slate-400 border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {t.label}{count ? ` (${count})` : ''}
+              </button>
+            );
+          })}
           <button
             onClick={load}
             className="px-3 py-1.5 rounded-lg text-sm font-medium border border-slate-700 text-slate-400 hover:text-slate-200"
@@ -179,12 +317,27 @@ export default function ApprovalsView({ userInfo }) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-sm px-4 py-3">
-          {error}
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-sm px-4 py-3 flex items-start gap-3">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200">×</button>
+        </div>
+      )}
+      {notice && !error && (
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-200 text-sm px-4 py-3 flex items-start gap-3">
+          <span className="flex-1">{notice}</span>
+          <button onClick={() => setNotice(null)} className="text-sky-400 hover:text-sky-200">×</button>
         </div>
       )}
 
-      {tab === 'pending' && shown.length > 0 && (
+      {tab === 'ready' && shown.length > 0 && (
+        <div className="rounded-lg border border-slate-700 bg-slate-800/30 px-4 py-3 text-sm text-slate-400">
+          <span className="text-slate-200 font-medium">These are approved and waiting on you.</span>{' '}
+          Open the form — every field is already filled in — press <span className="text-slate-200">Submit</span> on
+          CBRE&apos;s page, then mark it submitted here so it stops coming back.
+        </div>
+      )}
+
+      {selectable && shown.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2">
           <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
             <input
@@ -198,20 +351,42 @@ export default function ApprovalsView({ userInfo }) {
           </label>
           <span className="text-slate-500 text-sm">{selected.size} selected</span>
           <div className="flex-1" />
-          <button
-            disabled={!selected.size || busy}
-            onClick={() => decide([...selected], 'approved')}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white disabled:opacity-40"
-          >
-            Approve selected
-          </button>
-          <button
-            disabled={!selected.size || busy}
-            onClick={rejectSelected}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-600 text-slate-300 disabled:opacity-40"
-          >
-            Reject
-          </button>
+
+          {tab === 'pending' ? (
+            <>
+              <button
+                disabled={!selected.size || busy}
+                onClick={() => decide([...selected], 'approved')}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white disabled:opacity-40"
+              >
+                Approve selected
+              </button>
+              <button
+                disabled={!selected.size || busy}
+                onClick={rejectSelected}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold border border-slate-600 text-slate-300 disabled:opacity-40"
+              >
+                Reject
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                disabled={!selected.size || busy}
+                onClick={openSelectedForms}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-sky-600 text-white disabled:opacity-40"
+              >
+                Open {selected.size || ''} form{selected.size === 1 ? '' : 's'}
+              </button>
+              <button
+                disabled={!selected.size || busy}
+                onClick={() => markSubmitted([...selected])}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold border border-emerald-600 text-emerald-400 disabled:opacity-40"
+              >
+                Mark submitted
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -220,12 +395,16 @@ export default function ApprovalsView({ userInfo }) {
       ) : shown.length === 0 ? (
         <div className="rounded-lg border border-slate-700 bg-slate-800/30 px-4 py-10 text-center">
           <p className="text-slate-300 font-medium">
-            {tab === 'pending' ? 'Nothing waiting on you' : 'No history yet'}
+            {tab === 'pending' ? 'Nothing waiting on you'
+              : tab === 'ready' ? 'Nothing approved and unsent'
+              : 'No history yet'}
           </p>
           <p className="text-slate-500 text-sm mt-1">
             {tab === 'pending'
               ? 'Requests appear here as soon as something needs a decision.'
-              : 'Approved and rejected requests will be listed here.'}
+              : tab === 'ready'
+              ? 'Approve something in Pending and it moves here.'
+              : 'Submitted and rejected requests will be listed here.'}
           </p>
         </div>
       ) : (
@@ -234,13 +413,15 @@ export default function ApprovalsView({ userInfo }) {
             const meta = KIND_META[r.kind] || KIND_META.other;
             const amount = money(r.payload?.amount ?? r.payload?.nte);
             const open = expanded === r.approval_id;
+            const readable = r.payload?._readable;
+            const wasOpened = opened.has(r.approval_id);
             return (
               <div
                 key={r.approval_id}
                 className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2.5"
               >
                 <div className="flex items-start gap-3">
-                  {tab === 'pending' && (
+                  {selectable && (
                     <input
                       type="checkbox"
                       className="mt-1"
@@ -262,6 +443,11 @@ export default function ApprovalsView({ userInfo }) {
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_TONE[r.status]}`}>
                         {r.status}
                       </span>
+                      {wasOpened && r.status === 'approved' && !r.sent_at && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-sky-500/20 text-sky-400 border-sky-500/30">
+                          form opened
+                        </span>
+                      )}
                       <span className="text-slate-500 text-xs">{ago(r.created_at)} ago</span>
                     </div>
                     <p className="text-slate-300 text-sm mt-1">{r.title}</p>
@@ -280,9 +466,21 @@ export default function ApprovalsView({ userInfo }) {
                       {open ? 'Hide exact values' : 'Show exact values'}
                     </button>
                     {open && (
-                      <pre className="mt-2 text-[11px] leading-relaxed text-slate-300 bg-slate-900/70 border border-slate-700 rounded p-2 overflow-x-auto">
+                      <div className="mt-2 space-y-2">
+                        {readable && (
+                          <dl className="text-[11px] grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 bg-slate-900/70 border border-slate-700 rounded p-2">
+                            {Object.entries(readable).map(([k, v]) => (
+                              <div key={k} className="contents">
+                                <dt className="text-slate-500">{k}</dt>
+                                <dd className="text-slate-200 break-words">{String(v ?? '')}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                        <pre className="text-[11px] leading-relaxed text-slate-300 bg-slate-900/70 border border-slate-700 rounded p-2 overflow-x-auto">
 {JSON.stringify(r.payload, null, 2)}
-                      </pre>
+                        </pre>
+                      </div>
                     )}
                   </div>
 
@@ -305,6 +503,25 @@ export default function ApprovalsView({ userInfo }) {
                         className="px-3 py-1 rounded-md text-xs font-semibold border border-slate-600 text-slate-300 disabled:opacity-40"
                       >
                         Reject
+                      </button>
+                    </div>
+                  )}
+
+                  {tab === 'ready' && (
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        disabled={busy}
+                        onClick={() => openForm(r)}
+                        className="px-3 py-1 rounded-md text-xs font-semibold bg-sky-600 text-white disabled:opacity-40"
+                      >
+                        Open form
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() => markSubmitted([r.approval_id])}
+                        className="px-3 py-1 rounded-md text-xs font-semibold border border-emerald-600 text-emerald-400 disabled:opacity-40"
+                      >
+                        Mark submitted
                       </button>
                     </div>
                   )}

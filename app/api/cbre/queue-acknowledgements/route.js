@@ -48,6 +48,19 @@ const ACTION_VALUE = 'Acknowledge Work';
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;
 
+// Do not acknowledge ancient work orders. The queue legitimately contains 123
+// rows, but 86 are over a month old and 10 are over six months — those were
+// acknowledged long ago by phone or in VAWS and simply never recorded here.
+// Telling CBRE in August that we accept a work order from last December would
+// be nonsense, and might reopen something that is closed. Override per call
+// with ?maxAgeDays=, and only do that deliberately.
+const DEFAULT_MAX_AGE_DAYS = 14;
+
+// CBRE work order numbers look like C3270457, P3209068, PJ3118923, ST2705334.
+// Anything else is ours (EMF-PJ-03) or another system's and must never be
+// posted into CBRE's form.
+const CBRE_WO_PATTERN = /^(C|P|PJ|ST|COU)\d+$/i;
+
 // Set these in Vercel rather than hardcoding a person into the repo.
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';
 const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)';
@@ -97,10 +110,23 @@ async function handle(request) {
     MAX_LIMIT
   );
   const dryRun = searchParams.get('dryRun') === 'true';
+  const maxAgeDays = Math.max(
+    parseInt(searchParams.get('maxAgeDays') || DEFAULT_MAX_AGE_DAYS, 10) || DEFAULT_MAX_AGE_DAYS,
+    0
+  );
   const notify = searchParams.get('notify') !== 'false';
   const deliveryMethod = searchParams.get('via') === 'sms' ? 'sms' : 'email';
 
-  const result = { queued: 0, skipped: 0, dryRun, limit, rows: [], errors: [] };
+  const result = {
+    queued: 0,
+    skipped: 0,
+    dryRun,
+    limit,
+    maxAgeDays,
+    excluded: { tooOld: [], notACbreNumber: [], noBuildingCode: [] },
+    rows: [],
+    errors: [],
+  };
 
   try {
     // Newest first: a fresh work order is the one CBRE is actually waiting on.
@@ -108,7 +134,7 @@ async function handle(request) {
       .from('cbre_acknowledgement_queue')
       .select('wo_id, wo_number, ups_building_code, priority, status, date_entered, assigned_to_field_at, days_since_dispatch')
       .order('date_entered', { ascending: false })
-      .limit(limit);
+      .limit(Math.min(limit * 6, 200));   // over-fetch; guards below drop some
     if (qErr) throw new Error(`queue read failed: ${qErr.message}`);
 
     if (!candidates?.length) {
@@ -116,7 +142,22 @@ async function handle(request) {
     }
 
     for (const wo of candidates) {
+      // ── Guards. Each exclusion is reported, never silent. ────────────────
+      const age = wo.days_since_dispatch ?? 0;
+      if (maxAgeDays > 0 && age > maxAgeDays) {
+        result.excluded.tooOld.push(`${wo.wo_number} (${age}d)`);
+        continue;
+      }
+      if (!CBRE_WO_PATTERN.test(String(wo.wo_number || '').trim())) {
+        result.excluded.notACbreNumber.push(wo.wo_number);
+        continue;
+      }
+
       const code = buildingCode(wo.ups_building_code);
+      if (!code || !/^[A-Z]{5}$/.test(code)) {
+        result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.ups_building_code || 'null'})`);
+        continue;
+      }
       const payload = {
         // Exactly what will be posted, keyed by CBRE's field ids.
         [FIELD.action]: ACTION_VALUE,
@@ -151,6 +192,7 @@ async function handle(request) {
       if (dryRun) {
         result.rows.push(row);
         result.queued++;
+        if (result.queued >= limit) break;
         continue;
       }
 
@@ -171,6 +213,7 @@ async function handle(request) {
       }
       result.queued++;
       result.rows.push({ approval_id: data.approval_id, wo_number: wo.wo_number });
+      if (result.queued >= limit) break;
     }
 
     // ── One notification for the batch, not one per row ──────────────────────

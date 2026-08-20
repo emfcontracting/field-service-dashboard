@@ -46,6 +46,14 @@ const STATUS_RANK = {
 // Once a WO reaches one of these, a lower-ranked status email can't clobber it.
 const PROTECTED_STATUSES = new Set(['quote_approved']);
 
+// Statuses this route OWNS. Anything else living in work_orders.cbre_status
+// came from the manual CBRE CSV reconciliation (CBRESyncView) — codes like
+// CPW, CMP, CIR. That export carries richer data than the email stream does
+// (invoice-level status above all), so it is the authoritative source and an
+// email must never overwrite it. Mirrors the rule already enforced in the
+// other direction, where a posting code is kept out of the active status.
+const EMAIL_OWNED_STATUSES = new Set(Object.keys(STATUS_RANK));
+
 // Connect to Gmail via IMAP
 function connectIMAP() {
   const email = process.env.EMAIL_IMPORT_USER;
@@ -489,6 +497,33 @@ export async function GET(request) {
         // Skip if WO already has this status (duplicate prevention)
         if (workOrder.cbre_status === labelConfig.cbre_status) {
           results.skipped++;
+          continue;
+        }
+
+        // ── CSV ownership guard ─────────────────────────────────────────────
+        // The WO is currently carrying a status the CSV sync put there. Leave
+        // it alone and record the email as a comment so the information is not
+        // lost — the office can reconcile it on the next CBRE export upload.
+        if (workOrder.cbre_status && !EMAIL_OWNED_STATUSES.has(workOrder.cbre_status)) {
+          if (!dryRun) {
+            const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+            const note = `[CBRE ${labelConfig.cbre_status.toUpperCase()} — NOT APPLIED, ${workOrder.cbre_status} came from the CBRE CSV and wins] ${ts}\nEmail: ${winningEmail.subject}`;
+            const mergedComments = workOrder.comments ? `${workOrder.comments}\n\n${note}` : note;
+            await supabase
+              .from('work_orders')
+              .update({ comments: mergedComments })
+              .eq('wo_id', workOrder.wo_id);
+          }
+          results.skipped++;
+          results.updates.push({
+            wo_number: woNumber,
+            building: workOrder.building,
+            label,
+            new_status: labelConfig.cbre_status,
+            old_status: workOrder.cbre_status,
+            csv_protected: true,
+            subject: winningEmail.subject.substring(0, 80),
+          });
           continue;
         }
 

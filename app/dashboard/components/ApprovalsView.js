@@ -12,9 +12,14 @@
 // invisible reCAPTCHA, which is their way of saying "a person submits this".
 // So the last click stays yours — but the typing does not.
 //
-//   Approve  ->  "Open form"  ->  CBRE's form opens with all six fields
-//                                 already filled in  ->  you press Submit
+//   Approve  ->  "Fill in here"  ->  CBRE's form appears below the row with
+//                                    the fields already filled in, on their
+//                                    domain  ->  you press their Submit
 //            ->  "Mark submitted"  ->  the work order leaves the queue
+//
+// The form is framed rather than linked so this works on a phone, where an
+// extension or bookmarklet is not an option. "Open in a tab instead" is there
+// for the case where CBRE's page refuses to be framed.
 //
 // The prefill is a plain query string on the published form URL, which is a
 // documented Smartsheet feature. No automation, no token, no impersonation:
@@ -130,6 +135,7 @@ export default function ApprovalsView({ userInfo }) {
   const [busy, setBusy]         = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [opened, setOpened]     = useState(() => new Set());
+  const [embedded, setEmbedded] = useState(null);   // which row shows the form inline
 
   const load = useCallback(async () => {
     setError(null);
@@ -427,6 +433,7 @@ export default function ApprovalsView({ userInfo }) {
             const open = expanded === r.approval_id;
             const readable = r.payload?._readable;
             const wasOpened = opened.has(r.approval_id);
+            const isEmbedded = embedded === r.approval_id;
             return (
               <div
                 key={r.approval_id}
@@ -523,10 +530,10 @@ export default function ApprovalsView({ userInfo }) {
                     <div className="flex flex-col gap-1.5 shrink-0">
                       <button
                         disabled={busy}
-                        onClick={() => openForm(r)}
+                        onClick={() => setEmbedded(isEmbedded ? null : r.approval_id)}
                         className="px-3 py-1 rounded-md text-xs font-semibold bg-sky-600 text-white disabled:opacity-40"
                       >
-                        Open form
+                        {isEmbedded ? 'Close form' : 'Fill in here'}
                       </button>
                       <button
                         disabled={busy}
@@ -538,6 +545,57 @@ export default function ApprovalsView({ userInfo }) {
                     </div>
                   )}
                 </div>
+
+                {/* ── CBRE's form, in place ──────────────────────────────────
+                    Works on a phone, which a bookmarklet or browser extension
+                    does not. The frame loads CBRE's own page from their own
+                    domain, so everything inside it — including the Submit
+                    button and whatever bot check runs behind it — is theirs,
+                    untouched. We only choose the URL.
+
+                    Consequence worth knowing: because it is their domain, this
+                    page cannot read into the frame. We cannot fill a field the
+                    URL could not reach, and we cannot tell whether you pressed
+                    Submit. Hence the manual "Mark submitted" below rather than
+                    a status we pretend to know. */}
+                {tab === 'ready' && isEmbedded && (
+                  <div className="mt-3 border-t border-slate-700 pt-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <p className="text-xs text-slate-400 flex-1 min-w-[220px]">
+                        CBRE&apos;s form, prefilled. Check the fields, then press
+                        Submit <span className="text-slate-200">inside the frame</span> — that button is theirs.
+                      </p>
+                      <button
+                        onClick={() => openForm(r)}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-600 text-slate-400 hover:text-slate-200"
+                        title="If the frame stays blank, CBRE's page is refusing to be embedded — this opens it normally."
+                      >
+                        Open in a tab instead
+                      </button>
+                    </div>
+
+                    <iframe
+                      src={prefillUrl(r.payload) || CBRE_FORM_URL}
+                      title={`CBRE Vendor App form — ${r.wo_number || ''}`}
+                      className="w-full rounded-lg border border-slate-700 bg-white"
+                      style={{ height: 'min(78vh, 900px)' }}
+                      loading="lazy"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <p className="text-xs text-slate-500 flex-1 min-w-[220px]">
+                        Submitted it? Tell us — this page cannot see inside CBRE&apos;s form.
+                      </p>
+                      <button
+                        disabled={busy}
+                        onClick={() => { markSubmitted([r.approval_id]); setEmbedded(null); }}
+                        className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white disabled:opacity-40"
+                      >
+                        Done — mark submitted
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

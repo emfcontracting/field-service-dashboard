@@ -225,9 +225,16 @@ async function handle(request) {
           .in('role', ['admin', 'office_staff'])
           .eq('is_active', true);
 
+        // VERCEL_URL is the deployment-specific host, which Vercel's Deployment
+        // Protection answers with 401 — that is what broke the first run.
+        // VERCEL_PROJECT_PRODUCTION_URL is the public production domain.
         const base =
           process.env.NEXT_PUBLIC_BASE_URL ||
+          (process.env.VERCEL_PROJECT_PRODUCTION_URL
+            ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+            : null) ||
           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+        result.notifyBase = base;   // surfaced so a 401 is diagnosable
 
         const list = result.rows.map((r) => r.wo_number).filter(Boolean).join(', ');
         const message =

@@ -478,13 +478,13 @@ export async function GET(request) {
 
     // ========== PHASE 2: Apply the winning (newest) status per WO ==========
     for (const [woNumber, entry] of Object.entries(woEmailMap)) {
-      const { email: winningEmail, label, labelConfig } = entry;
+      const { email: winningEmail, label, labelConfig, date: winningEmailDate } = entry;
 
       try {
         // Find the work order
         const { data: workOrder, error: woError } = await supabase
           .from('work_orders')
-          .select('wo_id, wo_number, building, cbre_status, billing_status, comments, nte')
+          .select('wo_id, wo_number, building, cbre_status, cbre_status_updated_at, billing_status, comments, nte')
           .eq('wo_number', woNumber)
           .single();
 
@@ -533,7 +533,24 @@ export async function GET(request) {
         // incoming email as a comment instead so nothing is lost.
         const incomingRank = STATUS_RANK[labelConfig.cbre_status] ?? 0;
         const currentRank  = STATUS_RANK[workOrder.cbre_status] ?? 0;
-        if (PROTECTED_STATUSES.has(workOrder.cbre_status) && incomingRank < currentRank) {
+
+        // A lower-ranked email that is NEWER than the status it competes with is
+        // not a regression — it is the next cycle. NTE increase chains produce
+        // exactly this: a WO reaches quote_approved, the tech raises a follow-up
+        // increase, and CBRE sends a fresh "Quote Submitted". Ranking alone
+        // rejected that forever, so chained increases never registered and had
+        // to be set by hand. Compare timestamps, not just ranks.
+        const statusSetAt = workOrder.cbre_status_updated_at
+          ? new Date(workOrder.cbre_status_updated_at)
+          : null;
+        const emailIsNewerThanStatus =
+          statusSetAt && winningEmailDate ? winningEmailDate > statusSetAt : false;
+
+        if (
+          PROTECTED_STATUSES.has(workOrder.cbre_status) &&
+          incomingRank < currentRank &&
+          !emailIsNewerThanStatus
+        ) {
           if (!dryRun) {
             const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
             const note = `[CBRE ${labelConfig.cbre_status.toUpperCase()} — IGNORED, ${workOrder.cbre_status.toUpperCase()} is protected] ${ts}\nEmail: ${winningEmail.subject}`;

@@ -74,7 +74,7 @@ const PREFILL_COLUMN = {
   GY7jE7PwJ:   'Work Order #',
   aKvjgv3dl:   'Vendor',
   '6wAdpAQzv': 'UPS Building Code',
-  yZpQ0pqkp:   'Comment/Reason',
+  yZpQ0pqkp:   'Comment/Reason/File Description',
 };
 
 // Smartsheet's rules, from their own documentation:
@@ -87,8 +87,13 @@ const PREFILL_COLUMN = {
 function prefillUrl(payload) {
   if (!payload || typeof payload !== 'object') return null;
   const parts = [];
+  // A '/' is legal in a query-string key and this form has one in a label
+  // ("Comment/Reason/File Description"). encodeURIComponent would turn it into
+  // %2F, which we have no reason to believe Smartsheet decodes back. Encode
+  // everything else, leave the slash alone.
+  const encodeKey = (name) => encodeURIComponent(name).replace(/%2F/g, '/');
   const add = (name, value) =>
-    parts.push(`${encodeURIComponent(name)}=${encodeURIComponent(value)}`);
+    parts.push(`${encodeKey(name)}=${encodeURIComponent(value)}`);
 
   for (const [key, value] of Object.entries(payload)) {
     // Keys beginning with _ are our own readability mirror, not form fields.

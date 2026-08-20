@@ -13,8 +13,13 @@
 // Field keys are CBRE's own, captured from the Vendor App form definition:
 //   Action PbOqlOgpG · Requestor Email WaG1J2w0J · Work Order # GY7jE7PwJ
 //   Vendor aKvjgv3dl · UPS Building Code 6wAdpAQzv
-// Acknowledge Work needs no comment field and no file — the form's own
-// visibility rules exclude both for this action.
+// Acknowledge Work requires: Action, Requestor Email, Work Order #, Vendor,
+// UPS Building Code AND Comment/Reason. No file upload.
+//
+// NOTE: an earlier version omitted the comment because the form's visibility
+// logic appeared to exclude it for this action. That reading was wrong — the
+// rendered form marks it required. The nested predicates are not safe to infer
+// from; trust the rendered form.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js';
@@ -33,6 +38,7 @@ const FIELD = {
   workOrder: 'GY7jE7PwJ',
   vendor: 'aKvjgv3dl',
   buildingCode: '6wAdpAQzv',
+  comment: 'yZpQ0pqkp',
 };
 
 const ACTION_VALUE = 'Acknowledge Work';
@@ -45,6 +51,19 @@ const MAX_LIMIT = 50;
 // Set these in Vercel rather than hardcoding a person into the repo.
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';
 const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)';
+
+// Comment/Reason is required for Acknowledge Work. Keep it factual — it is a
+// permanent record on CBRE's side. Override with CBRE_ACK_COMMENT if you want
+// different wording; {WO} and {DATE} are substituted.
+const ACK_COMMENT_TEMPLATE =
+  process.env.CBRE_ACK_COMMENT ||
+  'Work order received and accepted by EMF Contracting LLC. Assigned to technician on {DATE}.';
+
+function ackComment(wo) {
+  const assigned = wo.assigned_to_field_at || wo.date_entered;
+  const date = assigned ? String(assigned).slice(0, 10) : 'receipt';
+  return ACK_COMMENT_TEMPLATE.replace('{WO}', wo.wo_number || '').replace('{DATE}', date);
+}
 
 // The FSM stores buildings as "GAAUG - AUGUSTA" or sometimes bare "SCFLO".
 // CBRE's dropdown expects its own exact string, so we keep the raw value AND
@@ -87,7 +106,7 @@ async function handle(request) {
     // Newest first: a fresh work order is the one CBRE is actually waiting on.
     const { data: candidates, error: qErr } = await supabase
       .from('cbre_acknowledgement_queue')
-      .select('wo_id, wo_number, ups_building_code, priority, status, date_entered, days_since_dispatch')
+      .select('wo_id, wo_number, ups_building_code, priority, status, date_entered, assigned_to_field_at, days_since_dispatch')
       .order('date_entered', { ascending: false })
       .limit(limit);
     if (qErr) throw new Error(`queue read failed: ${qErr.message}`);
@@ -105,6 +124,7 @@ async function handle(request) {
         [FIELD.workOrder]: wo.wo_number,
         [FIELD.vendor]: VENDOR_NAME,
         [FIELD.buildingCode]: code,
+        [FIELD.comment]: ackComment(wo),
         // Human-readable mirror, so the Approvals tab is legible without a
         // lookup table. The sender uses the keyed values above, not these.
         _readable: {
@@ -114,6 +134,7 @@ async function handle(request) {
           vendor: VENDOR_NAME,
           buildingCodeRaw: wo.ups_building_code,
           buildingCodeSent: code,
+          comment: ackComment(wo),
         },
       };
 

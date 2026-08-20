@@ -1,17 +1,18 @@
 // app/api/cbre-form/probe/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// DISCOVERY ONLY — reads the CBRE Vendor App form's definition to learn its
-// field keys. Submits nothing; sends no data to CBRE.
+// DISCOVERY ONLY — reads the CBRE Vendor App form's definition. Submits nothing.
 //
-// EMF has CBRE's permission to automate submissions through the Vendor App
-// form. CBRE's restriction is on API access into VAWS, which this never touches.
+// v5 answers the two questions left before a sender can be written:
+//   1. Is there an active CAPTCHA? (captchaSiteKey / settings)
+//   2. What are the exact option strings for the Vendor and UPS Building Code
+//      dropdowns? SELECT_INPUT values must match character for character.
 //
-// SCHEMA (learned in v3): every control carries a short `key` (e.g. "GY7jE7PwJ")
-// which is the identifier the payload uses. `logic` holds SHOW_COMPONENT rules
-// predicated on the Action control's key, which is how the form reveals
-// different fields per action.
+// Field keys already captured:
+//   Action PbOqlOgpG · Requestor Email WaG1J2w0J · Work Order # GY7jE7PwJ
+//   Vendor aKvjgv3dl · UPS Building Code 6wAdpAQzv · NTE Amount 5wAdLAyzm
+//   Comment yZpQ0pqkp · File Upload ATTACHMENT
 //
-// DELETE THIS ROUTE once the map is captured. It is scaffolding.
+// DELETE THIS ROUTE once captured. It is scaffolding.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const dynamic = 'force-dynamic';
@@ -20,34 +21,22 @@ export const maxDuration = 60;
 const FORM_ID = '019aa33a6ffd70a7983bbf4af282307a';
 const FORM_URL = `https://app.smartsheet.com/b/form/${FORM_ID}`;
 
+const VENDOR_KEY = 'aKvjgv3dl';
+const BUILDING_KEY = '6wAdpAQzv';
+
 function collectRaw(node, acc = [], depth = 0) {
   if (!node || depth > 14 || acc.length > 60) return acc;
-  if (Array.isArray(node)) {
-    for (const i of node) collectRaw(i, acc, depth + 1);
-    return acc;
-  }
+  if (Array.isArray(node)) { for (const i of node) collectRaw(i, acc, depth + 1); return acc; }
   if (typeof node !== 'object') return acc;
   if ('key' in node && ('label' in node || 'title' in node)) acc.push(node);
   for (const k of Object.keys(node)) collectRaw(node[k], acc, depth + 1);
   return acc;
 }
 
-// Pull the Action values that reveal a given control, so we know which fields
-// belong to which action without submitting anything to find out.
-function shownBy(control) {
-  const out = new Set();
-  const walk = (n) => {
-    if (!n || typeof n !== 'object') return;
-    if (Array.isArray(n)) return n.forEach(walk);
-    if (n.value && n.value.value) out.add(n.value.value);
-    if (n.values && Array.isArray(n.values.values)) {
-      n.values.values.forEach((v) => out.add(`NOT:${v}`));
-    }
-    Object.values(n).forEach(walk);
-  };
-  walk(control.logic);
-  return [...out];
-}
+const optStrings = (c) =>
+  Array.isArray(c?.options)
+    ? c.options.map((o) => (typeof o === 'string' ? o : o?.value ?? o?.label ?? JSON.stringify(o)))
+    : null;
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -59,6 +48,11 @@ export async function GET(request) {
   ) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  // Only return building options matching this filter, so the response stays
+  // small — CBRE's building list is long and we only serve a dozen sites.
+  const filter = (searchParams.get('filter') || 'GAAUG,SCSMV,SCCHA,SCMYR,SCFLO,SCSMT,SCLON,SCTON,SCAIK,SCCOL,SCCAH,GASNH')
+    .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
 
   try {
     const res = await fetch(FORM_URL, {
@@ -75,41 +69,35 @@ export async function GET(request) {
     if (!b64) return Response.json({ error: 'formDefinition not found', endpoint });
 
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-    const definition = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-    const raw = collectRaw(definition);
+    const def = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    const raw = collectRaw(def);
 
-    // Compact map: everything needed to build a payload, nothing else.
-    const fields = raw.map((c) => ({
-      label: c.label ?? c.title ?? null,
-      key: c.key,
-      type: c.type,
-      valueType: c.valueType ?? null,
-      required: !!c.required,
-      shownWhenActionIs: shownBy(c),
-    }));
+    const vendor = raw.find((c) => c.key === VENDOR_KEY);
+    const building = raw.find((c) => c.key === BUILDING_KEY);
+    const buildingOpts = optStrings(building) || [];
 
-    // The Action control's choices, verbatim — these strings must match exactly.
-    const action = raw.find((c) => (c.label ?? '') === 'Action');
-    const actionOptions = Array.isArray(action?.options)
-      ? action.options.map((o) => (typeof o === 'string' ? o : o?.value ?? o?.label ?? null))
-      : null;
-
-    // Anything the form posts alongside the answers.
-    const formKeyish = {
-      formId: definition?.formId ?? definition?.id ?? null,
-      version: definition?.version ?? null,
-      confirmationType: definition?.confirmation?.type ?? null,
-      topLevelKeys: Object.keys(definition || {}),
-    };
+    // Does the page actually load a captcha script, regardless of the config?
+    const captchaInPage = ['grecaptcha', 'recaptcha', 'hcaptcha', 'turnstile']
+      .filter((k) => html.toLowerCase().includes(k));
 
     return Response.json({
       note: 'Discovery only. Nothing submitted.',
       endpoint,
-      actionKey: action?.key ?? null,
-      actionOptions,
-      formKeyish,
-      fieldCount: fields.length,
-      fields,
+
+      // ── the gating question ──
+      captchaSiteKey: def?.captchaSiteKey ?? null,
+      captchaSiteKeyType: typeof def?.captchaSiteKey,
+      captchaScriptsReferencedInPage: captchaInPage,
+      settings: def?.settings ? JSON.stringify(def.settings).slice(0, 900) : null,
+      formStatus: def?.formStatus ?? null,
+
+      // ── the dropdown values ──
+      vendorOptions: optStrings(vendor),
+      buildingOptionCount: buildingOpts.length,
+      buildingOptionsMatchingOurSites: buildingOpts.filter((o) =>
+        filter.some((f) => String(o).toUpperCase().includes(f))
+      ),
+      buildingOptionsSample: buildingOpts.slice(0, 5),
     });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });

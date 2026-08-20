@@ -7,10 +7,10 @@
 // form. CBRE's restriction is on API access into VAWS behind their security,
 // which this does not touch.
 //
-// The form page is JavaScript-rendered, so the field ids aren't in the raw
-// HTML — they come from a config payload. This route fetches the form from the
-// server (Vercel can reach smartsheet.com; our tooling cannot) and reports
-// what it finds, so the real submitter can be written against facts.
+// HOW IT WORKS: the form page ships its whole schema inline as
+//   window.formDefinition = "<base64 of JSON>"
+// and posts to window.formEndpoint. We decode that definition and report the
+// field list, so the submitter can be written against the real ids.
 //
 // DELETE THIS ROUTE once the field map is captured. It is scaffolding.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,51 +21,40 @@ export const maxDuration = 60;
 const FORM_ID = '019aa33a6ffd70a7983bbf4af282307a';
 const FORM_URL = `https://app.smartsheet.com/b/form/${FORM_ID}`;
 
-// The labels we already know from the rendered form. Finding these in a
-// payload tells us we're looking at the right blob.
-const KNOWN_LABELS = [
-  'Action',
-  'Requestor Email',
-  'Work Order #',
-  'Vendor',
-  'UPS Building Code',
-  'NTE Request Amount',
-  'Arrival Date',
-  'Arrival Time',
-  'Comment/Reason/File Description',
-];
+// Recursively walk the decoded definition and pull out anything that looks
+// like a field, whatever the nesting turns out to be.
+function collectFields(node, acc = [], depth = 0) {
+  if (!node || depth > 12) return acc;
+  if (Array.isArray(node)) {
+    for (const item of node) collectFields(item, acc, depth + 1);
+    return acc;
+  }
+  if (typeof node !== 'object') return acc;
 
-// Extract anything that looks like a field definition, without assuming the
-// schema up front.
-function extract(text) {
-  if (!text) return null;
+  const looksLikeField =
+    'label' in node || 'title' in node || 'displayValue' in node || 'fieldId' in node;
 
-  const labelsPresent = KNOWN_LABELS.filter((l) => text.includes(l));
-
-  // Long digit strings are Smartsheet column/object ids.
-  const numericIds = [...new Set(text.match(/\b\d{15,19}\b/g) || [])].slice(0, 60);
-
-  // Key/value pairs that smell like form field metadata.
-  const pairs = [];
-  const re =
-    /"(fieldId|columnId|objectId|questionId|controlId|label|title|name|type)"\s*:\s*("(?:[^"\\]|\\.)*"|\d+|true|false)/g;
-  let m;
-  while ((m = re.exec(text)) !== null && pairs.length < 200) {
-    pairs.push(`${m[1]}:${m[2]}`);
+  if (looksLikeField) {
+    acc.push({
+      label: node.label ?? node.title ?? node.displayValue ?? null,
+      fieldId: node.fieldId ?? node.id ?? null,
+      columnId: node.columnId ?? null,
+      objectId: node.objectId ?? null,
+      type: node.type ?? node.fieldType ?? node.controlType ?? null,
+      required: node.required ?? node.isRequired ?? null,
+      // Dropdown choices, however they are spelled.
+      options:
+        node.options ?? node.choices ?? node.values ?? node.picklistOptions ?? null,
+      // Which other field/value reveals this one — the form is conditional.
+      conditional:
+        node.conditionalRule ?? node.condition ?? node.visibilityRule ?? null,
+    });
   }
 
-  // Any embedded JSON blobs — often the config is inlined in a script tag.
-  const blobs = [];
-  const blobRe = /<script[^>]*>([\s\S]{200,}?)<\/script>/g;
-  let b;
-  while ((b = blobRe.exec(text)) !== null && blobs.length < 6) {
-    const body = b[1];
-    if (KNOWN_LABELS.some((l) => body.includes(l))) {
-      blobs.push(body.slice(0, 4000));
-    }
+  for (const key of Object.keys(node)) {
+    collectFields(node[key], acc, depth + 1);
   }
-
-  return { labelsPresent, numericIds, pairs, matchingScriptBlobs: blobs };
+  return acc;
 }
 
 export async function GET(request) {
@@ -82,30 +71,62 @@ export async function GET(request) {
   try {
     const res = await fetch(FORM_URL, {
       headers: {
-        // Identify honestly rather than impersonating a browser.
         'User-Agent': 'EMF-Contracting-FSM/1.0 (authorised vendor form integration)',
         Accept: 'text/html,application/json,*/*',
       },
       redirect: 'follow',
     });
+    const html = await res.text();
 
-    const text = await res.text();
+    const endpoint = (html.match(/window\.formEndpoint\s*=\s*"([^"]+)"/) || [])[1] || null;
+    const b64 = (html.match(/window\.formDefinition\s*=\s*"([^"]+)"/) || [])[1] || null;
+
+    if (!b64) {
+      return Response.json({
+        note: 'Discovery only. Nothing was submitted.',
+        error: 'window.formDefinition not found',
+        endpoint,
+        bytes: html.length,
+        head: html.slice(0, 1200),
+      });
+    }
+
+    let definition = null;
+    let decodeError = null;
+    try {
+      const json = Buffer.from(b64, 'base64').toString('utf8');
+      definition = JSON.parse(json);
+    } catch (e) {
+      decodeError = e.message;
+      // Padding is sometimes stripped — retry with it restored.
+      try {
+        const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+        definition = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+        decodeError = null;
+      } catch (e2) {
+        decodeError = `${e.message} / retry: ${e2.message}`;
+      }
+    }
+
+    const fields = definition ? collectFields(definition) : [];
 
     return Response.json({
       note: 'Discovery only. Nothing was submitted to CBRE.',
-      formUrl: FORM_URL,
       probedAt: new Date().toISOString(),
-      status: res.status,
-      contentType: res.headers.get('content-type'),
-      bytes: text.length,
-      extracted: extract(text),
-      // Raw head, so the shape is visible even if the extractor misses.
-      head: text.slice(0, 1500),
+      formUrl: FORM_URL,
+      endpoint,
+      decodeError,
+      formName: definition?.name ?? null,
+      // Top-level keys, so we can see the overall shape at a glance.
+      topLevelKeys: definition ? Object.keys(definition) : [],
+      fieldCount: fields.length,
+      fields,
+      // Kept last and trimmed: full definition for anything the walker missed.
+      definitionSample: definition
+        ? JSON.stringify(definition).slice(0, 12000)
+        : null,
     });
   } catch (err) {
-    return Response.json(
-      { error: err.message, formUrl: FORM_URL, probedAt: new Date().toISOString() },
-      { status: 500 }
-    );
+    return Response.json({ error: err.message, formUrl: FORM_URL }, { status: 500 });
   }
 }

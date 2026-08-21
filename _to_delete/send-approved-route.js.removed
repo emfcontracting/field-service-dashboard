@@ -1,0 +1,278 @@
+// app/api/cbre/send-approved/route.js
+// ─────────────────────────────────────────────────────────────────────────────
+// SENDER — the only code in this project that transmits anything to CBRE.
+//
+// Reads approval_requests rows that a human set to 'approved', posts them to
+// the CBRE Vendor App form, and records the outcome. Nothing else may send.
+//
+// SAFETY, in order of importance:
+//   1. DRY RUN IS THE DEFAULT. It shows the exact HTTP request it would make
+//      and posts nothing. A real send requires ?confirm=send explicitly.
+//   2. DEFAULT LIMIT IS 1. The first real send must be a single work order,
+//      verified by hand in Smartsheet, before anything larger runs.
+//   3. Retries once on a network error or 5xx. NEVER retries a 4xx — that
+//      means our payload is wrong, and resending produces a second wrong
+//      submission rather than a right one.
+//   4. Marks 'sent' only on an unambiguous success. Anything else is 'failed'
+//      with the error recorded, so a silent half-send cannot look like a win.
+//   5. Claims each row before sending (pending -> sending) so two overlapping
+//      runs cannot both submit the same work order.
+//
+// ⛔ AUTOMATIC SUBMISSION IS PERMANENTLY DISABLED. DO NOT RE-ENABLE.
+//
+// The CBRE Vendor App form carries an ACTIVE reCAPTCHA:
+//     "captchaSiteKey": "6LfbDqAUAAAAAPc856qavjKSEVbYbOIj3lAb2x3l"
+//     "honeypot": { "enabledPublished": true }
+// It is reCAPTCHA v3 (invisible), which is why a human submitting by hand never
+// sees a challenge. A server-side POST without a valid token gets rejected, and
+// obtaining a token programmatically means defeating bot detection. That is not
+// something this codebase will do — not via direct POST, and not via a headless
+// browser dressed up to look like a person.
+//
+// This route is retained ONLY as a preparation step: it renders the exact field
+// values for a human to paste into the form. The POST path is removed.
+//
+// If CBRE offers a sanctioned automated channel later, build that instead.
+//
+// ⚠️ THE SUBMIT CONTRACT BELOW IS UNVERIFIED.
+//    The form's field keys are known and correct. The submit URL, method and
+//    body encoding are NOT — they were not discoverable from the form
+//    definition. Capture one real submission from the browser's Network tab
+//    and set SUBMIT_* to match before removing the guard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { createClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+// ── Submit contract ─────────────────────────────────────────────────────────
+// Set these from a captured submission. Until CBRE_SUBMIT_URL is set, the
+// route refuses to send at all — it will still dry-run so you can inspect it.
+const SUBMIT_URL = process.env.CBRE_SUBMIT_URL || null;
+const SUBMIT_METHOD = process.env.CBRE_SUBMIT_METHOD || 'POST';
+// 'json' | 'form' | 'multipart' — how the body is encoded.
+const SUBMIT_ENCODING = process.env.CBRE_SUBMIT_ENCODING || 'json';
+// If the real payload nests the answers, e.g. {"fields": {...}}, set the key.
+const SUBMIT_WRAP_KEY = process.env.CBRE_SUBMIT_WRAP_KEY || '';
+
+const MAX_LIMIT = 5;
+
+function buildBody(payload) {
+  // Strip our own readability mirror — it is not part of the submission.
+  const fields = Object.fromEntries(
+    Object.entries(payload).filter(([k]) => !k.startsWith('_'))
+  );
+  const shaped = SUBMIT_WRAP_KEY ? { [SUBMIT_WRAP_KEY]: fields } : fields;
+
+  if (SUBMIT_ENCODING === 'form') {
+    return {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(
+        Object.entries(fields).map(([k, v]) => [k, String(v ?? '')])
+      ).toString(),
+    };
+  }
+  if (SUBMIT_ENCODING === 'multipart') {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.append(k, String(v ?? ''));
+    return { headers: {}, body: fd };   // fetch sets the boundary itself
+  }
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(shaped),
+  };
+}
+
+// A 2xx is necessary but not sufficient — some form endpoints return 200 with
+// an error in the body. Treat anything that smells wrong as a failure.
+function judge(status, text) {
+  if (status < 200 || status >= 300) return { ok: false, why: `HTTP ${status}` };
+  const lower = String(text || '').toLowerCase().slice(0, 2000);
+  for (const bad of ['"error"', 'validation', 'required', 'invalid', 'not authorized', 'captcha']) {
+    if (lower.includes(bad)) return { ok: false, why: `HTTP ${status} but body contains "${bad}"` };
+  }
+  return { ok: true, why: `HTTP ${status}` };
+}
+
+export async function GET(request) { return handle(request); }
+export async function POST(request) { return handle(request); }
+
+async function handle(request) {
+  const { searchParams } = new URL(request.url);
+  const authHeader = request.headers.get('authorization');
+  if (
+    process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}` &&
+    searchParams.get('key') !== process.env.CRON_SECRET
+  ) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Sending is opt-in, every single time. No default, no remembered consent.
+  const reallySend = searchParams.get('confirm') === 'send';
+  const limit = Math.min(
+    Math.max(parseInt(searchParams.get('limit') || '1', 10) || 1, 1),
+    MAX_LIMIT
+  );
+  const onlyWo = searchParams.get('wo') || null;
+
+  const out = {
+    mode: reallySend ? 'SEND' : 'dryRun',
+    limit,
+    submitUrlConfigured: !!SUBMIT_URL,
+    encoding: SUBMIT_ENCODING,
+    processed: 0,
+    sent: 0,
+    failed: 0,
+    results: [],
+  };
+
+  // Hard stop: the target form is CAPTCHA-protected. No configuration re-enables
+  // this. See the header. Preparation (dry run) still works.
+  if (reallySend) {
+    return Response.json(
+      {
+        ...out,
+        mode: 'BLOCKED',
+        error:
+          'Automatic submission is disabled: the CBRE Vendor App form uses reCAPTCHA. ' +
+          'Use this endpoint without ?confirm=send to prepare values for manual entry.',
+      },
+      { status: 403 }
+    );
+  }
+
+  if (reallySend && !SUBMIT_URL) {
+    return Response.json(
+      { ...out, error: 'CBRE_SUBMIT_URL is not set. Capture a real submission first; refusing to guess.' },
+      { status: 400 }
+    );
+  }
+
+  let q = supabase
+    .from('approval_requests')
+    .select('approval_id, wo_id, wo_number, kind, payload, status')
+    .eq('status', 'approved')
+    .is('sent_at', null)
+    .order('decided_at', { ascending: true })
+    .limit(limit);
+  if (onlyWo) q = q.eq('wo_number', onlyWo);
+
+  const { data: rows, error: readErr } = await q;
+  if (readErr) return Response.json({ ...out, error: readErr.message }, { status: 500 });
+  if (!rows?.length) return Response.json({ ...out, message: 'Nothing approved and unsent.' });
+
+  for (const row of rows) {
+    out.processed++;
+    const { headers, body } = buildBody(row.payload || {});
+
+    if (!reallySend) {
+      out.results.push({
+        wo_number: row.wo_number,
+        wouldSend: {
+          url: SUBMIT_URL || '(CBRE_SUBMIT_URL not set)',
+          method: SUBMIT_METHOD,
+          headers,
+          body: typeof body === 'string' ? body : '[FormData]',
+        },
+      });
+      continue;
+    }
+
+    // ── Claim the row so a concurrent run cannot send it too ────────────────
+    const { data: claimed, error: claimErr } = await supabase
+      .from('approval_requests')
+      .update({ status: 'sending' })
+      .eq('approval_id', row.approval_id)
+      .eq('status', 'approved')          // only if still approved
+      .select('approval_id')
+      .maybeSingle();
+    if (claimErr || !claimed) {
+      out.results.push({ wo_number: row.wo_number, skipped: 'already claimed by another run' });
+      continue;
+    }
+
+    let verdict = null;
+    let lastText = '';
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(SUBMIT_URL, { method: SUBMIT_METHOD, headers, body });
+        lastText = await res.text();
+        verdict = judge(res.status, lastText);
+        // Only a network error or 5xx earns a second try. A 4xx means the
+        // payload is wrong; sending it again just repeats the mistake.
+        if (verdict.ok || res.status < 500) break;
+      } catch (err) {
+        verdict = { ok: false, why: `network: ${err.message}` };
+      }
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    if (verdict?.ok) {
+      const now = new Date().toISOString();
+      await supabase
+        .from('approval_requests')
+        .update({ status: 'sent', sent_at: now, send_error: null })
+        .eq('approval_id', row.approval_id);
+
+      // Close the loop so this work order leaves the queue for good.
+      if (row.kind === 'cbre_acknowledge' && row.wo_id) {
+        await supabase
+          .from('work_orders')
+          .update({
+            cbre_acknowledged_at: now,
+            cbre_acknowledged_via: 'vendor_app_form',
+          })
+          .eq('wo_id', row.wo_id)
+          .is('cbre_acknowledged_at', null);
+      }
+      out.sent++;
+      out.results.push({ wo_number: row.wo_number, ok: true, detail: verdict.why });
+    } else {
+      await supabase
+        .from('approval_requests')
+        .update({
+          status: 'failed',
+          send_error: `${verdict?.why || 'unknown'} — ${lastText.slice(0, 400)}`,
+        })
+        .eq('approval_id', row.approval_id);
+      out.failed++;
+      out.results.push({ wo_number: row.wo_number, ok: false, detail: verdict?.why });
+    }
+  }
+
+  // Tell someone when a send fails. Silence after a failure is the worst case.
+  if (out.failed > 0) {
+    try {
+      const base =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        (process.env.VERCEL_PROJECT_PRODUCTION_URL
+          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+          : '');
+      const { data: staff } = await supabase
+        .from('users')
+        .select('user_id, email, phone, sms_carrier, first_name, last_name, role')
+        .in('role', ['admin', 'office_staff'])
+        .eq('is_active', true);
+      const failedList = out.results.filter((r) => r.ok === false).map((r) => r.wo_number).join(', ');
+      await fetch(`${base}/api/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'cbre_send_failed',
+          recipients: staff || [],
+          customMessage: `CBRE submission failed for ${failedList}. Nothing was resent. Review in ${base}/dashboard?view=approvals`,
+          deliveryMethod: 'email',
+        }),
+      });
+    } catch { /* the failure is already recorded on the row */ }
+  }
+
+  return Response.json(out);
+}

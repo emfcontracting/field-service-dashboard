@@ -24,6 +24,7 @@ import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_
 import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
+import SendToCbreModal from './SendToCbreModal';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -208,6 +209,7 @@ export default function WorkOrderDetailModal({
   const [savingNTE, setSavingNTE] = useState(false);
   const [showNTEModal, setShowNTEModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showCbreModal, setShowCbreModal] = useState(false);
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
@@ -1848,6 +1850,13 @@ const sendAssignmentNotifications = async () => {
               📜 Activity Log
             </button>
             <button
+              onClick={() => setShowCbreModal(true)}
+              className="bg-sky-600 hover:bg-sky-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
+              title="Queue a CBRE Vendor App action for this work order"
+            >
+              📤 Send to CBRE
+            </button>
+            <button
               onClick={downloadCompletionCertificate}
               className="bg-green-600 hover:bg-green-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
             >
@@ -3477,6 +3486,15 @@ const sendAssignmentNotifications = async () => {
           woIds={[selectedWO.wo_id]}
           supabase={supabase}
           onClose={() => setShowActivityLog(false)}
+        />
+      )}
+
+      {showCbreModal && (
+        <SendToCbreModal
+          workOrder={selectedWO}
+          supabase={supabase}
+          currentUser={currentUser}
+          onClose={() => setShowCbreModal(false)}
         />
       )}
 

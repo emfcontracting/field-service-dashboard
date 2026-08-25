@@ -29,6 +29,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { FIELD_LABEL } from '@/lib/cbreVendorForm';
 
 const supabase = getSupabase();
 
@@ -37,6 +38,10 @@ const KIND_META = {
   cbre_nte:         { label: 'NTE Request',      tone: 'amber',  hint: 'Submits an NTE increase. Carries a dollar amount.' },
   cbre_eta:         { label: 'Arrival Time',     tone: 'violet', hint: 'Updates the next arrival time on the work order.' },
   cbre_comment:     { label: 'Comment',          tone: 'slate',  hint: 'Adds a comment to the work order.' },
+  cbre_decline:     { label: 'Decline',        tone: 'rose',    hint: 'Declines the work order to CBRE.' },
+  cbre_complete:    { label: 'Complete',       tone: 'emerald', hint: 'Reports completion (start/end times) to CBRE.' },
+  cbre_target_date: { label: 'Target Date',    tone: 'cyan',    hint: 'Changes the completion target date.' },
+  cbre_tag_equipment:{ label: 'Tag Equipment', tone: 'indigo',  hint: 'Tags an equipment barcode to the work order.' },
   other:            { label: 'Other',            tone: 'slate',  hint: '' },
 };
 
@@ -45,6 +50,10 @@ const TONE = {
   amber:  'bg-amber-500/20 text-amber-400 border-amber-500/30',
   violet: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
   slate:  'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  emerald:'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  rose:   'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  cyan:   'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  indigo: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
 };
 
 const STATUS_TONE = {
@@ -68,14 +77,7 @@ const CBRE_FORM_URL = 'https://app.smartsheet.com/b/form/019aa33a6ffd70a7983bbf4
 //
 // We send the internal key as well. Unknown query parameters are ignored, so
 // covering both spellings costs nothing and survives one of them being wrong.
-const PREFILL_COLUMN = {
-  PbOqlOgpG:   'Action',
-  WaG1J2w0J:   'Requestor Email',
-  GY7jE7PwJ:   'Work Order #',
-  aKvjgv3dl:   'Vendor',
-  '6wAdpAQzv': 'UPS Building Code',
-  yZpQ0pqkp:   'Comment/Reason/File Description',
-};
+const PREFILL_COLUMN = FIELD_LABEL;  // full field map (all Actions) lives in lib/cbreVendorForm.js
 
 // Smartsheet's rules, from their own documentation:
 //   - the parameter is the FORM FIELD LABEL, not the sheet column name
@@ -292,6 +294,28 @@ export default function ApprovalsView({ userInfo }) {
         // A failure here is worth seeing: the request says sent but the work
         // order does not, so it would be queued again tomorrow.
         if (woErr) setError(`Marked sent, but the work order stamp failed: ${woErr.message}`);
+      }
+
+      // NTE requests: stamp so the NTE producer stops queueing this WO.
+      const nteWoIds = affected.filter((r) => r.kind === 'cbre_nte' && r.wo_id).map((r) => r.wo_id);
+      if (nteWoIds.length) {
+        const { error: nteErr } = await supabase
+          .from('work_orders')
+          .update({ cbre_nte_submitted_at: now, cbre_nte_submitted_by: userInfo?.user_id ?? null })
+          .in('wo_id', nteWoIds)
+          .is('cbre_nte_submitted_at', null);
+        if (nteErr) setError(`Marked sent, but the NTE stamp failed: ${nteErr.message}`);
+      }
+
+      // Completions: stamp so it is recorded as reported to CBRE.
+      const compWoIds = affected.filter((r) => r.kind === 'cbre_complete' && r.wo_id).map((r) => r.wo_id);
+      if (compWoIds.length) {
+        const { error: compErr } = await supabase
+          .from('work_orders')
+          .update({ cbre_completion_submitted_at: now, cbre_completion_submitted_by: userInfo?.user_id ?? null })
+          .in('wo_id', compWoIds)
+          .is('cbre_completion_submitted_at', null);
+        if (compErr) setError(`Marked sent, but the completion stamp failed: ${compErr.message}`);
       }
 
       setSelected(new Set());

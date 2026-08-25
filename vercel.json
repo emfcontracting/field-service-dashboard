@@ -11,6 +11,14 @@
     {
       "path": "/api/email-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cbre/queue-acknowledgements?limit=50&notify=false",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cbre/queue-nte-requests?limit=50",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

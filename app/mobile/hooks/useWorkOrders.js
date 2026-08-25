@@ -932,7 +932,8 @@ export function useWorkOrders(currentUser) {
         
         const updateData = {
           comments: updatedComments,
-          status: 'in_progress'
+          status: 'in_progress',
+          time_out: null
         };
         
         if (!wo?.time_in) {
@@ -966,6 +967,7 @@ export function useWorkOrders(currentUser) {
           ...selectedWO,
           comments: updatedComments,
           status: 'in_progress',
+          time_out: null,
           time_in: selectedWO?.time_in || isoTime
         };
         
@@ -980,6 +982,7 @@ export function useWorkOrders(currentUser) {
         await updateCachedWorkOrder(woId, {
           comments: updatedComments,
           status: 'in_progress',
+          time_out: null,
           time_in: selectedWO?.time_in || isoTime
         });
         

@@ -373,6 +373,7 @@ export function useOffline(currentUser) {
       const existingComments = cachedWO.comments || '';
       await updateCachedWorkOrder(woId, {
         status: 'in_progress',
+        time_out: null,
         time_in: cachedWO.time_in || isoTime,
         comments: existingComments ? `${existingComments}\n\n${checkInNote}` : checkInNote
       });
@@ -390,6 +391,7 @@ export function useOffline(currentUser) {
           .from('work_orders')
           .update({
             status: 'in_progress',
+            time_out: null,
             time_in: wo?.time_in || isoTime,
             comments: wo?.comments ? `${wo.comments}\n\n${checkInNote}` : checkInNote
           })

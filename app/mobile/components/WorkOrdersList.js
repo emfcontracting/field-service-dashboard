@@ -92,6 +92,12 @@ export default function WorkOrdersList({
 
     // Sort
     filtered.sort((a, b) => {
+      // *** CHECKED-IN job pinned to the very top (stays until check-out) ***
+      const aCk = !!a.time_in && !a.time_out;
+      const bCk = !!b.time_in && !b.time_out;
+      if (aCk && !bCk) return -1;
+      if (!aCk && bCk) return 1;
+
       // *** MISSING_DATA WOs always pinned to top, regardless of user-selected sort ***
       const aMissing = a.status === 'missing_data';
       const bMissing = b.status === 'missing_data';
@@ -697,6 +703,11 @@ export default function WorkOrdersList({
                   </div>
                 )}
                 
+                {(!!wo.time_in && !wo.time_out) && (
+                  <div className="bg-green-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
+                    🟢 {language === 'es' ? 'INGRESADO — EN EL TRABAJO' : 'CHECKED IN — ON THE JOB'}
+                  </div>
+                )}
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1 min-w-0">
                     <span className="font-bold text-lg">{wo.wo_number}</span>

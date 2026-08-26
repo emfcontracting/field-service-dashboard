@@ -35,6 +35,7 @@ const safeUuid = (v) => (typeof v === 'string' && UUID_REGEX.test(v) ? v : null)
 // (they are produced automatically).
 const CHOICES = [
   { kind: 'cbre_complete',      label: '✅ Complete Work Order',   desc: 'Report completion (start/end) to CBRE.' },
+  { kind: 'cbre_nte',           label: '💵 Submit NTE Request',    desc: 'Request an NTE increase (carries a dollar amount).' },
   { kind: 'cbre_comment',       label: '💬 Add Comment',           desc: 'Add a comment to the work order.' },
   { kind: 'cbre_decline',       label: '🚫 Decline Work Order',    desc: 'Tell CBRE we decline this work order.' },
   { kind: 'cbre_target_date',   label: '🗓️ Change Target Date',    desc: 'Change the completion target date.' },
@@ -72,6 +73,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
   const [kind, setKind] = useState('cbre_complete');
   const [comment, setComment] = useState('');
   const [assetBarcode, setAssetBarcode] = useState(wo.asset_barcode || '');
+  const [nteAmount, setNteAmount] = useState(wo.nte != null ? String(wo.nte) : '');
 
   // one date/time/ampm triple, reused for target & arrival
   const [d1, setD1] = useState({ ymd: '', time: '9:00', ampm: 'AM' });
@@ -110,6 +112,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
       base.endAt = partsToDate(end.ymd, end.time, end.ampm);
     }
     if (kind === 'cbre_tag_equipment') base.assetBarcode = assetBarcode.trim();
+    if (kind === 'cbre_nte') base.nteAmount = nteAmount;
     return base;
   }
 
@@ -121,6 +124,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
     if ((kind === 'cbre_comment' || kind === 'cbre_decline') && !comment.trim())
       p.push('A comment / reason is required.');
     if (kind === 'cbre_tag_equipment' && !assetBarcode.trim()) p.push('Asset barcode is required.');
+    if (kind === 'cbre_nte' && !(parseFloat(nteAmount) > 0)) p.push('Enter a valid NTE amount.');
     if (kind === 'cbre_target_date' && !d1.ymd) p.push('Pick a target date.');
     if (kind === 'cbre_eta' && !d1.ymd) p.push('Pick an arrival date.');
     if (kind === 'cbre_complete' && (!start.ymd || !end.ymd)) p.push('Both start and end dates are required.');
@@ -246,6 +250,22 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
 
             {kind === 'cbre_target_date' && <DateTimeRow v={d1} set={setD1} label="New Target Completion" />}
             {kind === 'cbre_eta' && <DateTimeRow v={d1} set={setD1} label="Next Arrival" />}
+
+            {kind === 'cbre_nte' && (
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-400">NTE Request Amount ($)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={nteAmount}
+                  onChange={(e) => setNteAmount(e.target.value)}
+                  className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-3 py-2 text-sm text-slate-100"
+                  placeholder="e.g. 1500.00"
+                />
+              </div>
+            )}
 
             {kind === 'cbre_tag_equipment' && (
               <div className="space-y-1">

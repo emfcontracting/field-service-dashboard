@@ -68,6 +68,40 @@ function partsToDate(ymd, time, ampm) {
   return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
 
+// Module-level so its identity is stable across re-renders — a nested
+// component would remount on every keystroke and break native date entry
+// (you could never type all 4 year digits).
+function DateTimeRow({ v, set, label }) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-semibold text-slate-400">{label}</label>
+      <div className="flex gap-2">
+        <input
+          type="date"
+          value={v.ymd}
+          onChange={(e) => set({ ...v, ymd: e.target.value })}
+          className="flex-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
+        />
+        <select
+          value={v.time}
+          onChange={(e) => set({ ...v, time: e.target.value })}
+          className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
+        >
+          {TIMES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select
+          value={v.ampm}
+          onChange={(e) => set({ ...v, ampm: e.target.value })}
+          className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
+        >
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export default function SendToCbreModal({ workOrder, supabase, currentUser, onClose }) {
   const wo = workOrder || {};
   const [kind, setKind] = useState('cbre_complete');
@@ -168,34 +202,6 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
     }
   }
 
-  const DateTimeRow = ({ v, set, label }) => (
-    <div className="space-y-1">
-      <label className="block text-xs font-semibold text-slate-400">{label}</label>
-      <div className="flex gap-2">
-        <input
-          type="date"
-          value={v.ymd}
-          onChange={(e) => set({ ...v, ymd: e.target.value })}
-          className="flex-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
-        />
-        <select
-          value={v.time}
-          onChange={(e) => set({ ...v, time: e.target.value })}
-          className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
-        >
-          {TIMES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select
-          value={v.ampm}
-          onChange={(e) => set({ ...v, ampm: e.target.value })}
-          className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-2 py-1.5 text-sm text-slate-100"
-        >
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
-        </select>
-      </div>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>

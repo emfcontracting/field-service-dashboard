@@ -72,10 +72,20 @@ const ACK_COMMENT_TEMPLATE =
   process.env.CBRE_ACK_COMMENT ||
   'Work order received and accepted by EMF Contracting LLC. Assigned to technician on {DATE}.';
 
+// Wording for a work order that has NOT been dispatched yet. Since the queue
+// now includes unassigned work orders (acknowledgement happens at intake), the
+// default template's "Assigned to technician" would be a false statement on
+// CBRE's permanent record.
+const ACK_COMMENT_UNASSIGNED =
+  process.env.CBRE_ACK_COMMENT_UNASSIGNED ||
+  'Work order received and accepted by EMF Contracting LLC on {DATE}. Technician assignment to follow.';
+
 function ackComment(wo) {
-  const assigned = wo.assigned_to_field_at || wo.date_entered;
-  const date = assigned ? String(assigned).slice(0, 10) : 'receipt';
-  return ACK_COMMENT_TEMPLATE.replace('{WO}', wo.wo_number || '').replace('{DATE}', date);
+  const assigned = wo.assigned_to_field_at;
+  const template = assigned ? ACK_COMMENT_TEMPLATE : ACK_COMMENT_UNASSIGNED;
+  const basis = assigned || wo.date_entered;
+  const date = basis ? String(basis).slice(0, 10) : 'receipt';
+  return template.replace('{WO}', wo.wo_number || '').replace('{DATE}', date);
 }
 
 // The FSM stores buildings as "GAAUG - AUGUSTA" or sometimes bare "SCFLO".

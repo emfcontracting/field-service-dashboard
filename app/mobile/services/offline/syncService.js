@@ -218,20 +218,20 @@ async function syncComment(supabase, data, currentUser) {
 
   const { data: wo, error: getError } = await supabase
     .from('work_orders')
-    .select('comments')
+    .select('tech_comments')
     .eq('wo_id', woId)
     .single();
 
   if (getError) throw getError;
 
-  const existingComments = wo.comments || '';
+  const existingComments = wo.tech_comments || '';
   const updatedComments = existingComments 
     ? `${existingComments}\n\n[${timestamp}] ${currentUser.first_name}: ${commentText}`
     : `[${timestamp}] ${currentUser.first_name}: ${commentText}`;
 
   const { error } = await supabase
     .from('work_orders')
-    .update({ comments: updatedComments })
+    .update({ tech_comments: updatedComments })
     .eq('wo_id', woId);
 
   if (error) throw error;

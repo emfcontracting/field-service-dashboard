@@ -27,6 +27,7 @@ import ActivityLogExportModal from './ActivityLogExportModal';
 import SendToCbreModal from './SendToCbreModal';
 import CbreConfirmations from './CbreConfirmations';
 import MessageTechModal from './MessageTechModal';
+import { canEditField, whyBlocked, ADMIN_ONLY_FIELDS } from '@/lib/woFieldPermissions';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -222,6 +223,8 @@ export default function WorkOrderDetailModal({
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
   const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
+  // Field-level permission for the controls below (admin overrides the freeze).
+  const lockField = (f) => !canEditField(f, currentUser, selectedWO);
 
   useEffect(() => {
     checkCanGenerateInvoice();
@@ -942,6 +945,12 @@ export default function WorkOrderDetailModal({
   };
 
   const handleUpdateField = async (field, value) => {
+    // Never write a field this user is not allowed to change, even if the
+    // control somehow stayed enabled.
+    if (!canEditField(field, currentUser, selectedWO)) {
+      alert(`You cannot edit this field: ${whyBlocked(field, currentUser, selectedWO)}`);
+      return;
+    }
     try {
       await updateWorkOrder(supabase, selectedWO.wo_id, { [field]: value });
       setSelectedWO({ ...selectedWO, [field]: value });
@@ -1059,6 +1068,10 @@ export default function WorkOrderDetailModal({
   };
 
   const handleUpdateStatus = async (newStatus) => {
+    if (!canEditField('status', currentUser, selectedWO)) {
+      alert(`You cannot change the status: ${whyBlocked('status', currentUser, selectedWO)}`);
+      return;
+    }
     // Special handling for 'missing_data' — don't write directly, open the modal instead.
     // The dropdown value will visually snap back to the real status because we don't update state.
     if (newStatus === 'missing_data') {
@@ -1940,6 +1953,8 @@ const sendAssignmentNotifications = async () => {
                 onChange={(e) => setSelectedWO({ ...selectedWO, wo_number: e.target.value })}
                 onBlur={() => handleUpdateField('wo_number', selectedWO.wo_number)}
                 className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
+                disabled={lockField('wo_number')}
+                title={whyBlocked('wo_number', currentUser, selectedWO)}
               />
             </div>
             <div>
@@ -1955,6 +1970,8 @@ const sendAssignmentNotifications = async () => {
                 onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: new Date(e.target.value).toISOString() })}
                 onBlur={() => handleUpdateField('date_entered', selectedWO.date_entered)}
                 className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
+                disabled={lockField('date_entered')}
+                title={whyBlocked('date_entered', currentUser, selectedWO)}
               />
             </div>
           </div>
@@ -1967,6 +1984,8 @@ const sendAssignmentNotifications = async () => {
               onChange={(e) => setSelectedWO({ ...selectedWO, building: e.target.value })}
               onBlur={() => handleUpdateField('building', selectedWO.building)}
               className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
+              disabled={lockField('building')}
+              title={whyBlocked('building', currentUser, selectedWO)}
             />
           </div>
 
@@ -1978,6 +1997,8 @@ const sendAssignmentNotifications = async () => {
               onBlur={() => handleUpdateField('work_order_description', selectedWO.work_order_description)}
               className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
               rows="3"
+              disabled={lockField('work_order_description')}
+              title={whyBlocked('work_order_description', currentUser, selectedWO)}
             />
           </div>
 
@@ -1989,6 +2010,8 @@ const sendAssignmentNotifications = async () => {
               onChange={(e) => setSelectedWO({ ...selectedWO, requestor: e.target.value })}
               onBlur={() => handleUpdateField('requestor', selectedWO.requestor)}
               className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
+              disabled={lockField('requestor')}
+              title={whyBlocked('requestor', currentUser, selectedWO)}
             />
           </div>
 
@@ -1999,12 +2022,12 @@ const sendAssignmentNotifications = async () => {
               <select
                 value={selectedWO.status}
                 onChange={(e) => handleUpdateStatus(e.target.value)}
-                disabled={selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data'}
+                disabled={lockField('status')}
                 className={`w-full px-4 py-2 rounded-lg font-semibold ${
                   selectedWO.status === 'missing_data' ? 'bg-red-600 text-white animate-pulse'
                     : getStatusColor(selectedWO.status)
                 } ${
-                  (selectedWO.is_locked || selectedWO.acknowledged || selectedWO.status === 'missing_data') ? 'opacity-90 cursor-not-allowed' : ''
+                  lockField('status') ? 'opacity-90 cursor-not-allowed' : ''
                 }`}
               >
                 <option value="pending" className="bg-[#0d0d14] text-slate-200">Pending</option>
@@ -3366,19 +3389,32 @@ const sendAssignmentNotifications = async () => {
             )}
           </div>
 
-          {/* Comments */}
+          {/* Comments — human-written only. This is what invoices bill from. */}
           <div>
-            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Comments / Notes</label>
+            <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+              Comments <span className="text-slate-600 normal-case tracking-normal">· billed as “Work Performed”</span>
+            </label>
             <textarea
-              value={selectedWO.comments || ''}
-              onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
-              onBlur={() => handleUpdateField('comments', selectedWO.comments)}
+              value={selectedWO.tech_comments || ''}
+              onChange={(e) => setSelectedWO({ ...selectedWO, tech_comments: e.target.value })}
+              onBlur={() => handleUpdateField('tech_comments', selectedWO.tech_comments)}
               className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition font-mono text-sm leading-relaxed min-h-[120px] md:min-h-[400px] resize-y"
               rows="4"
-              placeholder="Add any notes or comments..."
+              placeholder="What was done on this job…"
             />
             <p className="text-[10px] text-slate-600 mt-1 hidden md:block">Drag the bottom-right corner to resize</p>
           </div>
+
+          {/* System activity — check-in/out, CBRE updates, sync. Read-only and
+              kept out of the comments above so invoices stay clean. */}
+          {selectedWO.comments && (
+            <div>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">🔧 Activity / System notes</label>
+              <div className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-4 py-2 max-h-48 overflow-y-auto">
+                <pre className="text-xs text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">{selectedWO.comments}</pre>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex flex-col gap-3 pt-4 border-t border-[#2d2d44]">

@@ -1432,7 +1432,7 @@ export function useWorkOrders(currentUser) {
       const formattedComment = `[${timestamp}] ${currentUser.first_name}: ${commentText}${!navigator.onLine ? ' [PENDING SYNC]' : ''}`;
       
       // Use existing comments from selectedWO (works offline too)
-      const existingComments = selectedWO.comments || '';
+      const existingComments = selectedWO.tech_comments || '';
       const updatedComments = existingComments 
         ? `${existingComments}\n\n${formattedComment}`
         : formattedComment;
@@ -1442,7 +1442,7 @@ export function useWorkOrders(currentUser) {
         // Try to save to server
         const { error } = await supabase
           .from('work_orders')
-          .update({ comments: updatedComments })
+          .update({ tech_comments: updatedComments })
           .eq('wo_id', selectedWO.wo_id);
 
         if (error) throw error;
@@ -1459,7 +1459,7 @@ export function useWorkOrders(currentUser) {
         setSelectedWO(updated);
       } else {
         // OFFLINE: Update local state and cache
-        const updatedWO = { ...selectedWO, comments: updatedComments };
+        const updatedWO = { ...selectedWO, tech_comments: updatedComments };
         setSelectedWO(updatedWO);
         setNewComment('');
         
@@ -1469,7 +1469,7 @@ export function useWorkOrders(currentUser) {
         ));
         
         // Update cache
-        await updateCachedWorkOrder(selectedWO.wo_id, { comments: updatedComments });
+        await updateCachedWorkOrder(selectedWO.wo_id, { tech_comments: updatedComments });
         
         // Queue for sync
         await addToSyncQueue('add_comment', { 
@@ -1485,13 +1485,13 @@ export function useWorkOrders(currentUser) {
       // If online request fails, try to save locally
       if (!navigator.onLine) {
         const timestamp = new Date().toLocaleString();
-        const existingComments = selectedWO.comments || '';
+        const existingComments = selectedWO.tech_comments || '';
         const offlineComment = `[${timestamp}] ${currentUser.first_name}: ${commentText} [PENDING SYNC]`;
         const updatedComments = existingComments 
           ? `${existingComments}\n\n${offlineComment}`
           : offlineComment;
         
-        setSelectedWO({ ...selectedWO, comments: updatedComments });
+        setSelectedWO({ ...selectedWO, tech_comments: updatedComments });
         setNewComment('');
         alert('Comment saved locally. Will sync when back online.');
       } else {

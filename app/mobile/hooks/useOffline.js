@@ -461,9 +461,9 @@ export function useOffline(currentUser) {
     const cachedWO = cachedWOs.find(w => w.wo_id === woId);
     
     if (cachedWO) {
-      const existingComments = cachedWO.comments || '';
+      const existingComments = cachedWO.tech_comments || '';
       await updateCachedWorkOrder(woId, {
-        comments: existingComments ? `${existingComments}\n\n${formattedComment}` : formattedComment
+        tech_comments: existingComments ? `${existingComments}\n\n${formattedComment}` : formattedComment
       });
     }
 
@@ -471,14 +471,14 @@ export function useOffline(currentUser) {
       try {
         const { data: wo } = await supabase
           .from('work_orders')
-          .select('comments')
+          .select('tech_comments')
           .eq('wo_id', woId)
           .single();
         
         await supabase
           .from('work_orders')
           .update({
-            comments: wo?.comments ? `${wo.comments}\n\n${formattedComment}` : formattedComment
+            tech_comments: wo?.tech_comments ? `${wo.tech_comments}\n\n${formattedComment}` : formattedComment
           })
           .eq('wo_id', woId);
         return { success: true, synced: true };

@@ -20,6 +20,7 @@
 
 import { useState, useEffect } from 'react';
 import { buildCbrePayload, ACTIONS, to12h } from '@/lib/cbreVendorForm';
+import { billableComments } from '@/lib/commentsSplit';
 
 // Mirrors the producer defaults (app/api/cbre/*). Override with NEXT_PUBLIC_* if
 // the requestor/vendor ever change.
@@ -236,9 +237,20 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
               {wo.lead_tech && (
                 <div className="text-slate-400"><span className="text-slate-500">Tech:</span> {`${wo.lead_tech.first_name || ''} ${wo.lead_tech.last_name || ''}`.trim() || '—'}</div>
               )}
-              {wo.work_order_description && (
-                <div className="text-slate-400"><span className="text-slate-500">Job:</span> {String(wo.work_order_description).slice(0, 140)}</div>
-              )}
+              {/* Comments, not the job description — what the crew actually
+                  reported is what you need when filling CBRE's form. */}
+              {(() => {
+                const c = billableComments(wo);
+                if (!c) return null;
+                return (
+                  <div>
+                    <span className="text-slate-500">Comments:</span>
+                    <div className="mt-1 max-h-40 overflow-y-auto rounded border border-[#2d2d44] bg-[#111122] p-2">
+                      <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">{c}</pre>
+                    </div>
+                  </div>
+                );
+              })()}
               {(wo.time_in || wo.time_out) && (
                 <div className="text-slate-400">
                   <span className="text-slate-500">Check-in:</span> {wo.time_in ? new Date(wo.time_in).toLocaleString() : '—'}

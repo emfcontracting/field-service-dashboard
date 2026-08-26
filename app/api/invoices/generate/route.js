@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 import { getEffectiveAdminHours } from '@/lib/clientType';
+import { billableComments } from '@/lib/commentsSplit';
 
 // Rate constants - MUST match CostSummarySection / Invoicing page logic
 const RT_RATE       = 64;
@@ -12,22 +13,6 @@ const MARKUP        = 1.25;          // 25% markup on materials/equipment/rental
 const ADMIN_HOURS   = 2;             // DEFAULT admin hours (UPS); CBRE defaults to 0 — see getEffectiveAdminHours
 const ADMIN_FEE     = ADMIN_HOURS * RT_RATE; // default admin fee (UPS)
 
-// Filter check-in/out lines from comments (mirrors /app/invoices/page.js)
-function filterWorkComments(comments) {
-  if (!comments) return '';
-  const lines = comments.split('\n').filter(line => {
-    const t = line.trim();
-    if (!t) return true;
-    if (/- ✓ CHECKED IN$/i.test(t))       return false;
-    if (/- ✓ ENTRADA$/i.test(t))           return false;
-    if (/- ⏸ CHECKED OUT$/i.test(t))       return false;
-    if (/- ⏸ SALIDA$/i.test(t))            return false;
-    if (/- ✅ MARKED COMPLETE$/i.test(t))  return false;
-    if (/- ✅ MARCADO COMPLETO$/i.test(t)) return false;
-    return true;
-  });
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-}
 
 export async function POST(request) {
   const supabase = createRouteHandlerClient({ cookies });
@@ -174,10 +159,10 @@ export async function POST(request) {
     const tax      = 0;
     const total    = subtotal + tax;
 
-    // Work Performed text (mirror invoicing page priority: comments → comments_english → description)
+    // Work Performed text — human-written comments only (tech_comments; older
+    // work orders fall back to the human part of the legacy comments log).
     const workPerformedDescription =
-      filterWorkComments(workOrder.comments) ||
-      filterWorkComments(workOrder.comments_english) ||
+      billableComments(workOrder) ||
       workOrder.work_order_description ||
       'Work completed as requested.';
 

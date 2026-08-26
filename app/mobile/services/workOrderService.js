@@ -220,11 +220,11 @@ export async function updateField(supabase, woId, field, value) {
 export async function addComment(supabase, woId, commentText, currentUser) {
   const { data: wo } = await supabase
     .from('work_orders')
-    .select('comments')
+    .select('tech_comments')
     .eq('wo_id', woId)
     .single();
     
-  const existingComments = wo.comments || '';
+  const existingComments = wo.tech_comments || '';
   const timestamp = new Date().toLocaleString();
   const updatedComments = existingComments 
     ? `${existingComments}\n\n[${timestamp}] ${currentUser.first_name}: ${commentText}`
@@ -232,7 +232,7 @@ export async function addComment(supabase, woId, commentText, currentUser) {
 
   const { error } = await supabase
     .from('work_orders')
-    .update({ comments: updatedComments })
+    .update({ tech_comments: updatedComments })
     .eq('wo_id', woId);
 
   if (error) throw error;

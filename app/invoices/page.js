@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
+import { billableComments } from '@/lib/commentsSplit';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
@@ -56,22 +57,6 @@ const isUnacknowledged = (item) => {
   return new Date(item.cbre_status_updated_at) > new Date(item.cbre_status_acknowledged_at);
 };
 
-// ── Filter check-in/out lines from comments ─────────────────────────────────
-const filterWorkComments = (comments) => {
-  if (!comments) return '';
-  const lines = comments.split('\n').filter(line => {
-    const t = line.trim();
-    if (!t) return true;
-    if (/- ✓ CHECKED IN$/i.test(t))       return false;
-    if (/- ✓ ENTRADA$/i.test(t))           return false;
-    if (/- ⏸ CHECKED OUT$/i.test(t))       return false;
-    if (/- ⏸ SALIDA$/i.test(t))            return false;
-    if (/- ✅ MARKED COMPLETE$/i.test(t))  return false;
-    if (/- ✅ MARCADO COMPLETO$/i.test(t)) return false;
-    return true;
-  });
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-};
 
 // ── Obsidian UI primitives ───────────────────────────────────────────────────
 const Card = ({ children, className = '' }) => (
@@ -342,7 +327,7 @@ export default function InvoicingPage() {
 
   const fetchInvoices = async () => {
     const { data } = await supabase.from('invoices')
-      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
+      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, tech_comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
       .order('created_at', { ascending: false });
     setInvoices(data || []);
   };
@@ -408,7 +393,7 @@ export default function InvoicingPage() {
 
       } // end actual-cost line items (skipped for fixed-price quotes)
 
-      let wp = filterWorkComments(wo.comments) || filterWorkComments(wo.comments_english) || wo.work_order_description || 'Work completed as requested.';
+      let wp = billableComments(wo) || wo.work_order_description || 'Work completed as requested.';
       setWorkPerformedText(wp);
       setPreviewWO(wo);
       setPreviewLineItems(items);
@@ -947,11 +932,11 @@ export default function InvoicingPage() {
                 <Field label="Description">{selectedItem.data.work_order_description}</Field>
               )}
 
-              {selectedItem.data.comments && (
+              {(selectedItem.data.tech_comments || selectedItem.data.comments) && (
                 <div>
                   <p className="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Tech's Work Notes</p>
                   <div className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-3 text-sm text-slate-300 whitespace-pre-wrap max-h-36 overflow-y-auto font-mono leading-relaxed">
-                    {selectedItem.data.comments}
+                    {billableComments(selectedItem.data)}
                   </div>
                 </div>
               )}

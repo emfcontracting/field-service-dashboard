@@ -306,8 +306,9 @@ export default function WorkOrderDetail({
       locationDisplay = `${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`;
     }
     
-    // Escape HTML in comments to prevent XSS
-    const escapedComments = (wo.comments || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    // Escape HTML in comments to prevent XSS. Human-written comments only —
+    // system events (check-in/out, CBRE) live in wo.comments and are not printed.
+    const escapedComments = (wo.tech_comments || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
     const escapedDescription = (description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     
     const htmlContent = `
@@ -394,7 +395,7 @@ export default function WorkOrderDetail({
           </div>
           
           <!-- Comments/Notes -->
-          ${wo.comments ? `
+          ${wo.tech_comments ? `
           <div class="section">
             <div class="section-title">${language === 'en' ? 'Work Notes & Comments' : 'Notas y Comentarios del Trabajo'}</div>
             <div class="comments-box">
@@ -1023,14 +1024,25 @@ export default function WorkOrderDetail({
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="font-bold mb-3">{t('commentsAndNotes')}</h3>
             <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
-              {wo.comments ? (
+              {wo.tech_comments ? (
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
-                  {wo.comments}
+                  {wo.tech_comments}
                 </pre>
               ) : (
                 <p className="text-gray-500 text-sm">{t('noCommentsYet')}</p>
               )}
             </div>
+
+            {/* System activity (check-in/out, CBRE, sync) — read-only, separate
+                from the comments above so the comment log stays clean. */}
+            {wo.comments && (
+              <details className="mb-3">
+                <summary className="text-xs text-gray-400 cursor-pointer select-none">🔧 Activity log</summary>
+                <div className="mt-2 max-h-40 overflow-y-auto bg-gray-900 rounded-lg p-3">
+                  <pre className="text-xs text-gray-400 whitespace-pre-wrap font-sans">{wo.comments}</pre>
+                </div>
+              </details>
+            )}
             {status !== 'completed' && (
               <>
                 <textarea

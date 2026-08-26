@@ -3407,12 +3407,26 @@ const sendAssignmentNotifications = async () => {
 
           {/* System activity — check-in/out, CBRE updates, sync. Read-only and
               kept out of the comments above so invoices stay clean. */}
-          {selectedWO.comments && (
+          {(selectedWO.comments || isAdmin) && (
             <div>
-              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">🔧 Activity / System notes</label>
-              <div className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-4 py-2 max-h-48 overflow-y-auto">
-                <pre className="text-xs text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">{selectedWO.comments}</pre>
-              </div>
+              <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">
+                🔧 Activity / System notes
+                {isAdmin && <span className="text-slate-600 normal-case tracking-normal"> · admin editable</span>}
+              </label>
+              {isAdmin ? (
+                <textarea
+                  value={selectedWO.comments || ''}
+                  onChange={(e) => setSelectedWO({ ...selectedWO, comments: e.target.value })}
+                  onBlur={() => handleUpdateField('comments', selectedWO.comments)}
+                  className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-400 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition font-mono text-xs leading-relaxed min-h-[120px] resize-y"
+                  rows="5"
+                  placeholder="System activity log — check-in/out, CBRE updates, sync…"
+                />
+              ) : (
+                <div className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-4 py-2 max-h-48 overflow-y-auto">
+                  <pre className="text-xs text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">{selectedWO.comments}</pre>
+                </div>
+              )}
             </div>
           )}
 

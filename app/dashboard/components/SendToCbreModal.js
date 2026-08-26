@@ -103,6 +103,44 @@ function DateTimeRow({ v, set, label }) {
   );
 }
 
+// When a work order carries no check-in / check-out, CBRE still needs a start and
+// an end. Default to a standard start with the work order's regular hours, or
+// DEFAULT_RT_HOURS if none are logged — so the form is never left empty and the
+// window matches what is actually billed.
+const DEFAULT_RT_HOURS = 2;
+const DEFAULT_START_HOUR = 8;            // 8:00 AM
+
+function defaultWindow(wo) {
+  const base = wo?.date_completed || wo?.time_in || wo?.date_entered;
+  const d = base ? new Date(base) : new Date();
+  const day = isNaN(d.getTime()) ? new Date() : d;
+  const ymd = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+
+  // Logged regular hours win; otherwise the 2 RT default. Snap to the form's
+  // 15-minute grid and keep the window inside one day.
+  let hours = parseFloat(wo?.hours_regular);
+  if (!Number.isFinite(hours) || hours <= 0) hours = DEFAULT_RT_HOURS;
+  hours = Math.min(Math.max(Math.round(hours * 4) / 4, 0.25), 12);
+
+  const startMin = DEFAULT_START_HOUR * 60;
+  const endMin = startMin + hours * 60;
+  const fmt = (mins) => {
+    let h = Math.floor(mins / 60) % 24;
+    const m = mins % 60;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return { time: `${h}:${pad(m)}`, ampm };
+  };
+  const s = fmt(startMin);
+  const e = fmt(endMin);
+  return {
+    start: { ymd, time: s.time, ampm: s.ampm },
+    end: { ymd, time: e.time, ampm: e.ampm },
+    hours,
+    fromDefaults: true,
+  };
+}
+
 export default function SendToCbreModal({ workOrder, supabase, currentUser, onClose }) {
   const wo = workOrder || {};
   const [kind, setKind] = useState('cbre_complete');
@@ -119,13 +157,25 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+  const [usedDefaults, setUsedDefaults] = useState(null);   // {hours} when times were guessed
 
   // Prefill Complete's start/end from the WO's check-in / check-out timestamps.
   useEffect(() => {
     const s = tsToParts(wo.time_in);
     const e = tsToParts(wo.time_out || wo.date_completed);
-    if (s.ymd) setStart({ ymd: s.ymd, time: s.time || '9:00', ampm: s.ampm });
-    if (e.ymd) setEnd({ ymd: e.ymd, time: e.time || '2:00', ampm: e.ampm });
+    if (s.ymd && e.ymd) {
+      // Real check-in / check-out — use them as they are.
+      setStart({ ymd: s.ymd, time: s.time || '8:00', ampm: s.ampm });
+      setEnd({ ymd: e.ymd, time: e.time || '10:00', ampm: e.ampm });
+      setUsedDefaults(null);
+    } else {
+      // No usable times on the work order — prefill a standard window so CBRE's
+      // required Start/End are never blank.
+      const d = defaultWindow(wo);
+      setStart(s.ymd ? { ymd: s.ymd, time: s.time || d.start.time, ampm: s.ampm } : d.start);
+      setEnd(d.end);
+      setUsedDefaults({ hours: d.hours });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wo.wo_id]);
 
@@ -281,6 +331,11 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
               <>
                 <DateTimeRow v={start} set={setStart} label="Completion Start (from check-in)" />
                 <DateTimeRow v={end} set={setEnd} label="Completion End (from check-out)" />
+                {usedDefaults && (
+                  <p className="text-xs text-sky-400/90">
+                    No check-in/out on this work order — prefilled a standard window of {usedDefaults.hours} RT hour{usedDefaults.hours === 1 ? '' : 's'}. Adjust if needed.
+                  </p>
+                )}
                 <p className="text-xs text-amber-400/80">
                   On CBRE's form you'll still pick the two times and tick “Vendor Confirmation” — the times are written
                   into the comment for you.

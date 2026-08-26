@@ -26,6 +26,7 @@ import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
 import SendToCbreModal from './SendToCbreModal';
 import CbreConfirmations from './CbreConfirmations';
+import MessageTechModal from './MessageTechModal';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -211,6 +212,7 @@ export default function WorkOrderDetailModal({
   const [showNTEModal, setShowNTEModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showCbreModal, setShowCbreModal] = useState(false);
+  const [showMsgTech, setShowMsgTech] = useState(false);
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
@@ -1859,6 +1861,13 @@ const sendAssignmentNotifications = async () => {
               📤 Send to CBRE
             </button>
             <button
+              onClick={() => setShowMsgTech(true)}
+              className="bg-teal-600 hover:bg-teal-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
+              title="Nachricht an den zugewiesenen Techniker senden"
+            >
+              ✉️ Nachricht an Tech
+            </button>
+            <button
               onClick={downloadCompletionCertificate}
               className="bg-green-600 hover:bg-green-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
             >
@@ -3497,6 +3506,15 @@ const sendAssignmentNotifications = async () => {
           supabase={supabase}
           currentUser={currentUser}
           onClose={() => setShowCbreModal(false)}
+        />
+      )}
+
+      {showMsgTech && (
+        <MessageTechModal
+          workOrder={selectedWO}
+          supabase={supabase}
+          currentUser={currentUser}
+          onClose={() => setShowMsgTech(false)}
         />
       )}
 

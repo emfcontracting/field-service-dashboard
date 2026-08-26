@@ -221,8 +221,30 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
           </div>
         ) : (
           <div className="p-5 space-y-4">
-            <div className="text-sm text-slate-400">
-              {wo.wo_number || '—'} · {wo.ups_building_code || 'no building code'}
+            {/* WO context — so the covered work order behind this dialog is not needed */}
+            <div className="rounded-lg border border-[#2d2d44] bg-[#0a0a0f] p-3 space-y-1.5 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-100 font-semibold">{wo.wo_number || '—'}</span>
+                <span className="text-slate-400">{wo.ups_building_code || wo.building || 'no building'}</span>
+              </div>
+              {wo.lead_tech && (
+                <div className="text-slate-400"><span className="text-slate-500">Tech:</span> {`${wo.lead_tech.first_name || ''} ${wo.lead_tech.last_name || ''}`.trim() || '—'}</div>
+              )}
+              {wo.work_order_description && (
+                <div className="text-slate-400"><span className="text-slate-500">Job:</span> {String(wo.work_order_description).slice(0, 140)}</div>
+              )}
+              {(wo.time_in || wo.time_out) && (
+                <div className="text-slate-400">
+                  <span className="text-slate-500">Check-in:</span> {wo.time_in ? new Date(wo.time_in).toLocaleString() : '—'}
+                  {'  ·  '}<span className="text-slate-500">out:</span> {wo.time_out ? new Date(wo.time_out).toLocaleString() : '—'}
+                </div>
+              )}
+              {wo.nte != null && wo.nte !== '' && (
+                <div className="text-slate-400"><span className="text-slate-500">NTE:</span> ${wo.nte}</div>
+              )}
+              {Array.isArray(wo.missing_data_items) && wo.missing_data_items.length > 0 && (
+                <div className="text-amber-400/90"><span className="text-slate-500">Fehlt:</span> {wo.missing_data_items.join(', ')}</div>
+              )}
             </div>
 
             <div className="space-y-1">

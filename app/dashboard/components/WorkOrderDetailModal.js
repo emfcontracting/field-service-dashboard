@@ -1863,9 +1863,9 @@ const sendAssignmentNotifications = async () => {
             <button
               onClick={() => setShowMsgTech(true)}
               className="bg-teal-600 hover:bg-teal-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
-              title="Nachricht an den zugewiesenen Techniker senden"
+              title="Message the crew assigned to this work order"
             >
-              ✉️ Nachricht an Tech
+              ✉️ Message Crew
             </button>
             <button
               onClick={downloadCompletionCertificate}

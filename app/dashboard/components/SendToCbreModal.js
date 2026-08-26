@@ -243,7 +243,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
                 <div className="text-slate-400"><span className="text-slate-500">NTE:</span> ${wo.nte}</div>
               )}
               {Array.isArray(wo.missing_data_items) && wo.missing_data_items.length > 0 && (
-                <div className="text-amber-400/90"><span className="text-slate-500">Fehlt:</span> {wo.missing_data_items.join(', ')}</div>
+                <div className="text-amber-400/90"><span className="text-slate-500">Missing:</span> {wo.missing_data_items.join(', ')}</div>
               )}
             </div>
 

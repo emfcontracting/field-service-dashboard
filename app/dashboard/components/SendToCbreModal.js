@@ -134,7 +134,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
     const base = {
       kind,
       woNumber: wo.wo_number,
-      buildingRaw: wo.ups_building_code,
+      buildingRaw: wo.ups_building_code || wo.building,
       requestorEmail: REQUESTOR_EMAIL,
       vendor: VENDOR_NAME,
       comment: comment.trim(),
@@ -179,7 +179,7 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
       wo_id: wo.wo_id,
       wo_number: wo.wo_number,
       title: `${label} · ${wo.wo_number} → CBRE`,
-      summary: `${wo.ups_building_code || 'unknown site'}${wo.building ? ' · ' + wo.building : ''}`,
+      summary: `${wo.ups_building_code || wo.building || 'unknown site'}`,
       payload: { ...built.payload, _readable: built.readable },
       status: 'pending',
       created_by: safeUuid(currentUser?.user_id),

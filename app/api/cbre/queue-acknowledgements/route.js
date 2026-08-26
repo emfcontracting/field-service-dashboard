@@ -141,6 +141,15 @@ async function handle(request) {
       return Response.json({ ...result, message: 'Nothing to acknowledge.' });
     }
 
+    // Some work orders carry the site code only in `building`, not
+    // ups_building_code. Fetch it so we fall back instead of excluding them.
+    const woIds = candidates.map((c) => c.wo_id).filter(Boolean);
+    const buildingByWo = {};
+    if (woIds.length) {
+      const { data: bset } = await supabase.from('work_orders').select('wo_id, building').in('wo_id', woIds);
+      (bset || []).forEach((b) => { buildingByWo[b.wo_id] = b.building; });
+    }
+
     for (const wo of candidates) {
       // ── Guards. Each exclusion is reported, never silent. ────────────────
       const age = wo.days_since_dispatch ?? 0;
@@ -153,9 +162,10 @@ async function handle(request) {
         continue;
       }
 
-      const code = buildingCode(wo.ups_building_code);
+      const rawBldg = wo.ups_building_code || buildingByWo[wo.wo_id];
+      const code = buildingCode(rawBldg);
       if (!code || !/^[A-Z]{5}$/.test(code)) {
-        result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.ups_building_code || 'null'})`);
+        result.excluded.noBuildingCode.push(`${wo.wo_number} (${rawBldg || 'null'})`);
         continue;
       }
       const payload = {
@@ -173,7 +183,7 @@ async function handle(request) {
           requestorEmail: REQUESTOR_EMAIL,
           workOrder: wo.wo_number,
           vendor: VENDOR_NAME,
-          buildingCodeRaw: wo.ups_building_code,
+          buildingCodeRaw: rawBldg,
           buildingCodeSent: code,
           comment: ackComment(wo),
         },

@@ -90,7 +90,7 @@ async function handle(request) {
       const built = buildCbrePayload({
         kind: 'cbre_nte',
         woNumber: wo.wo_number,
-        buildingRaw: wo.ups_building_code,
+        buildingRaw: wo.ups_building_code || wo.building,
         requestorEmail: REQUESTOR_EMAIL,
         vendor: VENDOR_NAME,
         nteAmount: wo.nte,
@@ -98,7 +98,7 @@ async function handle(request) {
       });
       if (built.problems.length) {
         if (built.problems.some((p) => /building/.test(p)))
-          result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.ups_building_code || 'null'})`);
+          result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.ups_building_code || wo.building || 'null'})`);
         else result.excluded.problems.push(`${wo.wo_number}: ${built.problems.join('; ')}`);
         continue;
       }
@@ -108,7 +108,7 @@ async function handle(request) {
         wo_id: wo.wo_id,
         wo_number: wo.wo_number,
         title: `Submit NTE $${built.readable.nteAmount} for ${wo.wo_number} to CBRE`,
-        summary: `${wo.ups_building_code || 'unknown site'} · ${wo.building || ''} · NTE $${built.readable.nteAmount}`,
+        summary: `${wo.ups_building_code || wo.building || 'unknown site'} · NTE $${built.readable.nteAmount}`,
         payload: { ...built.payload, _readable: built.readable },
         status: 'pending',
       };

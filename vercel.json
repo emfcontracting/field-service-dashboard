@@ -19,6 +19,10 @@
     {
       "path": "/api/cbre/queue-nte-requests?limit=50",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cbre/sync-vendor-confirmations?searchDays=14",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

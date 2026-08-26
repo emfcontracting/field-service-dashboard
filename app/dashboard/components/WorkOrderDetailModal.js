@@ -25,6 +25,7 @@ import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
 import SendToCbreModal from './SendToCbreModal';
+import CbreConfirmations from './CbreConfirmations';
 import { 
   getLocalDateString, 
   parseLocalDate, 
@@ -1832,6 +1833,7 @@ const sendAssignmentNotifications = async () => {
                   </div>
                 );
               })()}
+              <CbreConfirmations workOrder={selectedWO} supabase={supabase} />
             </div>
           </div>
           <div className="flex gap-2 flex-wrap w-full md:w-auto justify-start md:justify-end">

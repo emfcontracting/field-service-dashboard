@@ -491,6 +491,14 @@ export default function ApprovalsView({ userInfo }) {
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_TONE[r.status]}`}>
                         {r.status}
                       </span>
+                      {r.confirmed_at && (
+                        <span
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          title={`CBRE confirmed ${new Date(r.confirmed_at).toLocaleString()}`}
+                        >
+                          ✓ CBRE confirmed
+                        </span>
+                      )}
                       {wasOpened && r.status === 'approved' && !r.sent_at && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-sky-500/20 text-sky-400 border-sky-500/30">
                           form opened

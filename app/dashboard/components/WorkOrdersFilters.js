@@ -189,7 +189,8 @@ export default function WorkOrdersFilters({
     setSyncing(true);
     setSyncResult(null);
     try {
-      const response = await fetch('/api/email-sync');
+      // manual=true: the route's CRON_SECRET guard only waves through manual runs
+      const response = await fetch('/api/email-sync?manual=true');
       const result = await response.json();
       setSyncResult(result);
       if (result.success && result.updated > 0) {

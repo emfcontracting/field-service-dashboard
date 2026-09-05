@@ -221,7 +221,8 @@ async function syncEmailStatus() {
     const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/email-sync`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {})
       }
     });
 

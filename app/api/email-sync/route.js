@@ -808,7 +808,10 @@ export async function POST(request) {
     const url = new URL(request.url);
     if (label) url.searchParams.set('label', label);
     
-    const response = await GET(new Request(url.toString()));
+    const authHeader = request.headers.get('authorization');
+    const response = await GET(
+      new Request(url.toString(), authHeader ? { headers: { authorization: authHeader } } : undefined)
+    );
     return response;
 
   } catch (error) {

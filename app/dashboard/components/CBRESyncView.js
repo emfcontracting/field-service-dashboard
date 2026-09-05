@@ -340,6 +340,53 @@ export default function CBRESyncView({ currentUser }) {
         }
       }
 
+      // 2b. EBO stop-the-clock sync — "Equipment on back order" must not count
+      // against EMF KPIs. Open a pause for every WO the sheet shows as EBO;
+      // close open EBO pauses for WOs the sheet now shows in another status.
+      // Absence from the sheet is NOT evidence (completed WOs drop off it).
+      try {
+        const eboNumbers = new Set(parsedRows.filter(r => r.status_code === 'EBO').map(r => r.wo_number));
+        const sheetNumbers = new Set(parsedRows.map(r => r.wo_number));
+        const dbWoByNum = new Map(dbWOs.map(w => [w.wo_number, w]));
+        const { data: openPauses } = await supabaseClient
+          .from('work_order_clock_pauses')
+          .select('pause_id, wo_id')
+          .eq('reason', 'equipment_backorder')
+          .is('ended_at', null);
+        const openByWoId = new Map((openPauses || []).map(p => [p.wo_id, p]));
+        let eboOpened = 0, eboClosed = 0;
+        for (const num of eboNumbers) {
+          const wo = dbWoByNum.get(num);
+          if (!wo || openByWoId.has(wo.wo_id)) continue;
+          const { error: pErr } = await supabaseClient.from('work_order_clock_pauses').insert({
+            wo_id: wo.wo_id, reason: 'equipment_backorder', source: 'csv_sync',
+            note: `EBO in ${file?.name || 'CBRE sheet'}`, started_at: now,
+          });
+          if (!pErr) {
+            eboOpened++;
+            await supabaseClient.from('work_orders')
+              .update({ waiting_reason: 'equipment_backorder', waiting_since: now })
+              .eq('wo_id', wo.wo_id);
+          }
+        }
+        const dbWoById = new Map(dbWOs.map(w => [w.wo_id, w]));
+        for (const p of openPauses || []) {
+          const wo = dbWoById.get(p.wo_id);
+          if (!wo) continue;
+          if (sheetNumbers.has(wo.wo_number) && !eboNumbers.has(wo.wo_number)) {
+            await supabaseClient.from('work_order_clock_pauses')
+              .update({ ended_at: now }).eq('pause_id', p.pause_id);
+            await supabaseClient.from('work_orders')
+              .update({ waiting_reason: null, waiting_since: null })
+              .eq('wo_id', wo.wo_id).eq('waiting_reason', 'equipment_backorder');
+            eboClosed++;
+          }
+        }
+        if (eboOpened || eboClosed) console.log(`EBO pauses: ${eboOpened} opened, ${eboClosed} closed`);
+      } catch (eboErr) {
+        console.error('EBO pause sync failed:', eboErr);
+      }
+
       // 3. Log all changes
       if (changesToLog.length) {
         await supabaseClient.from('cbre_sync_changes').insert(changesToLog);

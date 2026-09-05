@@ -428,6 +428,38 @@ async function sendNotFoundNotification(woNumber, label, emailSubject) {
   }
 }
 
+// Stop-the-clock: while a quote sits with CBRE's approver, time must not count
+// against EMF KPIs. Opens a pause when quote_submitted is applied and closes it
+// when quote_approved/quote_rejected lands. Idempotent (partial unique index
+// allows only one open pause per WO+reason).
+async function syncQuotePause(woId, newStatus, atIso) {
+  try {
+    if (newStatus === 'quote_submitted') {
+      const { error } = await supabase.from('work_order_clock_pauses').insert({
+        wo_id: woId, reason: 'cbre_approval', source: 'email_sync',
+        note: 'Quote submitted — awaiting CBRE approver', started_at: atIso,
+      });
+      if (!error) {
+        await supabase.from('work_orders')
+          .update({ waiting_reason: 'cbre_approval', waiting_since: atIso })
+          .eq('wo_id', woId)
+          .is('waiting_reason', null);
+      } else if (!`${error.code}`.startsWith('23')) {
+        console.error('open quote pause:', error.message);
+      }
+    } else if (newStatus === 'quote_approved' || newStatus === 'quote_rejected') {
+      await supabase.from('work_order_clock_pauses')
+        .update({ ended_at: atIso })
+        .eq('wo_id', woId).eq('reason', 'cbre_approval').is('ended_at', null);
+      await supabase.from('work_orders')
+        .update({ waiting_reason: null, waiting_since: null })
+        .eq('wo_id', woId).eq('waiting_reason', 'cbre_approval');
+    }
+  } catch (e) {
+    console.error('syncQuotePause:', e.message);
+  }
+}
+
 // GET: Fetch and process status update emails from all CBRE labels
 export async function GET(request) {
   try {
@@ -694,6 +726,13 @@ export async function GET(request) {
             results.errors.push(`Failed to update ${woNumber}: ${updateError.message}`);
             continue;
           }
+
+          // Stop-the-clock bookkeeping for the quote-approval wait.
+          await syncQuotePause(
+            workOrder.wo_id,
+            labelConfig.cbre_status,
+            winningEmailDate ? new Date(winningEmailDate).toISOString() : new Date().toISOString()
+          );
 
           // Update invoice status if specified
           if (labelConfig.invoice_status) {

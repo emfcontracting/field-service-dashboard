@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { buildContactLines } from '../contactParser';
-import { parseCbreDateEntered } from '../parseCbreDate';
+import { parseCbreDateEntered, parseCbreTargetResponse, parseCbreTargetCompletion } from '../parseCbreDate';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -235,6 +235,7 @@ function parseCBREEmail(subject, body) {
                         (subject || '').match(/Priority[:\s_]*(P\d+)/i);
   if (priorityMatch) {
     const pCode = priorityMatch[1].toUpperCase();
+    workOrder.priority_code = pCode;   // canonical P-code (for target history)
     const pText = (priorityMatch[2] || '').toLowerCase();
     const pNum = parseInt(pCode.replace('P', ''));
     
@@ -257,6 +258,10 @@ function parseCBREEmail(subject, body) {
   if (dateEntered) {
     workOrder.date_entered = dateEntered;
   }
+
+  // CBRE targets (KPI clock basis) — structured, with time + UTC offset.
+  workOrder.target_response_at   = parseCbreTargetResponse(cleanBody);
+  workOrder.target_completion_at = parseCbreTargetCompletion(cleanBody);
 
   // Extract Building
   const buildingMatch = cleanBody.match(/Building:\s*([^<\n]+?)(?=\s*Floor|\s*Area|\s*Country|$)/i);
@@ -554,9 +559,52 @@ export async function GET(request) {
           continue;
         }
 
-        // Check if duplicate
+        // Check if duplicate. A re-dispatch of an EXISTING WO is how CBRE
+        // communicates priority/target changes — capture those instead of
+        // skipping blindly, so the KPI clock follows the LATEST target.
         if (existingWONumbers.has(workOrder.wo_number)) {
-          console.log(`WO ${workOrder.wo_number} already exists, skipping`);
+          try {
+            if (workOrder.target_completion_at || workOrder.target_response_at) {
+              const { data: existing } = await supabase
+                .from('work_orders')
+                .select('wo_id, priority, target_response_at, target_completion_at, comments')
+                .eq('wo_number', workOrder.wo_number)
+                .single();
+              const diffs = (a, b) => {
+                if (!a && !b) return false;
+                if (!a || !b) return true;
+                return Math.abs(new Date(a) - new Date(b)) > 60000;
+              };
+              if (existing && (
+                    diffs(existing.target_completion_at, workOrder.target_completion_at) ||
+                    diffs(existing.target_response_at, workOrder.target_response_at))) {
+                const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+                const note = `[CBRE RE-DISPATCH — targets updated] ${ts}\n` +
+                  `Priority: ${workOrder.priority_code || '—'} · Target Completion: ${workOrder.target_completion_at || '—'}`;
+                await supabase
+                  .from('work_orders')
+                  .update({
+                    target_response_at: workOrder.target_response_at,
+                    target_completion_at: workOrder.target_completion_at,
+                    comments: existing.comments ? `${existing.comments}\n\n${note}` : note,
+                  })
+                  .eq('wo_id', existing.wo_id);
+                await supabase.from('work_order_target_history').insert({
+                  wo_id: existing.wo_id,
+                  priority: workOrder.priority_code || null,
+                  target_response_at: workOrder.target_response_at,
+                  target_completion_at: workOrder.target_completion_at,
+                  source: 'redispatch_email',
+                  note: email.subject?.substring(0, 200) || null,
+                  effective_at: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),
+                });
+                results.targetUpdates = (results.targetUpdates || 0) + 1;
+                console.log(`↻ WO ${workOrder.wo_number}: targets updated from re-dispatch`);
+              }
+            }
+          } catch (tErr) {
+            console.error(`Target update failed for ${workOrder.wo_number}:`, tErr.message);
+          }
           results.duplicates++;
           await markAsRead(email.uid);
           continue;
@@ -576,7 +624,9 @@ export async function GET(request) {
             requestor_phone: workOrder.requestor_phone || null,
             status: 'pending',
             comments: workOrder.comments,
-            nte: workOrder.nte || 0
+            nte: workOrder.nte || 0,
+            target_response_at: workOrder.target_response_at || null,
+            target_completion_at: workOrder.target_completion_at || null
           }, { onConflict: 'wo_number', ignoreDuplicates: true })
           .select();
 
@@ -596,6 +646,20 @@ export async function GET(request) {
         }
 
         const insertedWO = insertedRows[0];
+
+        // First target-history entry (the dispatch baseline).
+        if (workOrder.target_completion_at || workOrder.target_response_at) {
+          await supabase.from('work_order_target_history').insert({
+            wo_id: insertedWO.wo_id,
+            priority: workOrder.priority_code || null,
+            target_response_at: workOrder.target_response_at,
+            target_completion_at: workOrder.target_completion_at,
+            source: 'dispatch_email',
+            note: email.subject?.substring(0, 200) || null,
+            effective_at: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),
+          }).then(({ error }) => { if (error) console.error('target_history insert:', error.message); });
+        }
+
         console.log(`✓ Imported WO ${workOrder.wo_number}`);
         results.imported++;
         results.workOrders.push({

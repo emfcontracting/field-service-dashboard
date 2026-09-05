@@ -52,17 +52,19 @@ function easternOffsetMinutes(year, month, day, hour, minute) {
   return Math.round((zoned - asUTC) / 60000);
 }
 
-// Parse an already-cleaned email body (whitespace normalized, HTML stripped) and
-// return date_entered as a UTC ISO string, or null if absent/unparseable.
-export function parseCbreDateEntered(cleanBody) {
+// Generic: parse one "<label>: Mon D YYYY h:mmAM UTC-05" field from an
+// already-cleaned body. labelPattern is the regex SOURCE for the label part.
+// Returns a UTC ISO string or null.
+function parseCbreDateTimeField(cleanBody, labelPattern) {
   if (!cleanBody) return null;
 
   // Capture the date-time AND an optional trailing zone token.
   //   group 1: "Dec 2 2025 8:17AM"     (month day year h:mm AM/PM)
   //   group 2: "UTC-05" | "UTC-5" | "EST" | "EDT"   (optional)
-  const m = cleanBody.match(
-    /Date Entered:\s*([A-Za-z]+\s+\d{1,2}\s+\d{4}\s+\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s*(UTC[+-]\d{1,2}(?::?\d{2})?|E[SD]T)?/i
-  );
+  const m = cleanBody.match(new RegExp(
+    labelPattern + String.raw`\s*([A-Za-z]+\s+\d{1,2}\s+\d{4}\s+\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s*(UTC[+-]\d{1,2}(?::?\d{2})?|E[SD]T)?`,
+    'i'
+  ));
   if (!m) return null;
 
   const parts = m[1]
@@ -102,4 +104,20 @@ export function parseCbreDateEntered(cleanBody) {
   const utcMs = Date.UTC(year, month, day, hour, minute) - offsetMin * 60000;
   const d = new Date(utcMs);
   return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// Parse an already-cleaned email body (whitespace normalized, HTML stripped) and
+// return date_entered as a UTC ISO string, or null if absent/unparseable.
+export function parseCbreDateEntered(cleanBody) {
+  return parseCbreDateTimeField(cleanBody, String.raw`Date Entered:`);
+}
+
+// CBRE targets from dispatch mails — the basis of the KPI clock.
+//   "Target Response/On-Site Arrival: Sep 4 2026 10:22AM UTC-05"
+//   "Target Completion: Sep 4 2026 4:25PM UTC-05"
+export function parseCbreTargetResponse(cleanBody) {
+  return parseCbreDateTimeField(cleanBody, String.raw`Target Response(?:\s*\/\s*On-?Site Arrival)?:`);
+}
+export function parseCbreTargetCompletion(cleanBody) {
+  return parseCbreDateTimeField(cleanBody, String.raw`Target Completion:`);
 }

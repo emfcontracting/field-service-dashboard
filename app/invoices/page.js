@@ -453,8 +453,10 @@ export default function InvoicingPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Push failed');
+      if (json.pdfUrl) window.open(json.pdfUrl, '_blank');
       alert(`\u2705 Created in QuickBooks as invoice #${json.qbInvoiceNumber}` +
-        (json.pdfUrl ? '\n\nQB PDF attached \u2014 use the "QB PDF" button to download it for the CBRE upload.' : '\n\n\u26a0\ufe0f PDF could not be attached \u2014 check QuickBooks directly.'));
+        (json.emailSent ? '\n\u2709\ufe0f Invoice email sent via QuickBooks.' : '\n\u26a0\ufe0f Invoice email could NOT be sent \u2014 send it from QuickBooks.') +
+        (json.pdfUrl ? '\n\ud83d\udcc4 QB PDF opened in a new tab (also attached via the "QB PDF" button).' : '\n\u26a0\ufe0f PDF could not be attached \u2014 check QuickBooks directly.'));
       setSelectedItem(prev => prev?.type === 'invoice'
         ? { ...prev, data: { ...prev.data, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl } }
         : prev);

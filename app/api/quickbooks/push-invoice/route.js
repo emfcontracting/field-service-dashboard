@@ -185,6 +185,8 @@ export async function POST(request) {
       DueDate: toDateOnly(invoice.due_date),
       Line: qbLines,
       PrivateNote: `FSM ${invoice.invoice_number}${wo?.wo_number ? ' — WO ' + wo.wo_number : ''}`,
+      BillEmail: { Address: QB_BILL_EMAIL },
+      EmailStatus: 'NeedToSend',
     };
 
     if (dryRun) {
@@ -199,6 +201,15 @@ export async function POST(request) {
     const created = (await createRes.json()).Invoice;
     const qbId = created.Id;
     const docNumber = created.DocNumber;
+
+    // Send the invoice email from QB (to our own inbox)
+    let emailSent = false;
+    try {
+      await qbFetch(accessToken, realmId, `/invoice/${qbId}/send?minorversion=73`, { method: 'POST' });
+      emailSent = true;
+    } catch (sendErr) {
+      console.error('QB invoice send error:', sendErr);
+    }
 
     // ── Download the official QB PDF and store it ───────────────────────────
     let pdfUrl = null;
@@ -228,12 +239,20 @@ export async function POST(request) {
     }
 
     // ── Persist QB linkage on invoice + work order ──────────────────────────
-    await supabase.from('invoices').update({
+    // Critical linkage first (existing columns), extras separately so a
+    // missing column can never cost us the QB number.
+    const { error: linkErr } = await supabase.from('invoices').update({
       qb_invoice_number: docNumber,
-      qb_invoice_qbid: qbId,
-      qb_pdf_url: pdfUrl,
-      qb_synced_at: new Date().toISOString(),
+      qb_invoice_id: qbId,
+      synced_to_qb_at: new Date().toISOString(),
     }).eq('invoice_id', invoiceId);
+    if (linkErr) console.error('QB linkage update error:', linkErr);
+
+    if (pdfUrl) {
+      const { error: pdfColErr } = await supabase.from('invoices')
+        .update({ qb_pdf_url: pdfUrl }).eq('invoice_id', invoiceId);
+      if (pdfColErr) console.error('qb_pdf_url update error (run migration?):', pdfColErr);
+    }
 
     if (invoice.wo_id) {
       await supabase.from('work_orders').update({ qb_invoice_number: docNumber }).eq('wo_id', invoice.wo_id);
@@ -245,6 +264,7 @@ export async function POST(request) {
       qbInvoiceId: qbId,
       total: created.TotalAmt,
       pdfUrl,
+      emailSent,
     });
   } catch (error) {
     console.error('QB push-invoice error:', error);

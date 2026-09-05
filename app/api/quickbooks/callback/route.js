@@ -15,9 +15,16 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const realmId = searchParams.get('realmId');
+    const state = searchParams.get('state');
 
     if (!code || !realmId) {
       return NextResponse.redirect(new URL('/settings?qb_error=missing_params', request.url));
+    }
+
+    // CSRF protection: state must match the value we set when starting the flow
+    const expectedState = request.cookies.get('qb_oauth_state')?.value;
+    if (!expectedState || state !== expectedState) {
+      return NextResponse.redirect(new URL('/settings?qb_error=state_mismatch', request.url));
     }
 
     const oauthClient = new OAuthClient({
@@ -44,7 +51,9 @@ export async function GET(request) {
 
     if (error) throw error;
 
-    return NextResponse.redirect(new URL('/settings?qb_success=true', request.url));
+    const res = NextResponse.redirect(new URL('/settings?qb_success=true', request.url));
+    res.cookies.set('qb_oauth_state', '', { path: '/', maxAge: 0 });
+    return res;
   } catch (error) {
     console.error('QuickBooks callback error:', error);
     return NextResponse.redirect(new URL('/settings?qb_error=callback_failed', request.url));

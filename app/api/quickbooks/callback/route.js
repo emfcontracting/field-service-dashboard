@@ -34,7 +34,8 @@ export async function GET(request) {
       redirectUri: process.env.QUICKBOOKS_REDIRECT_URI
     });
 
-    const authResponse = await oauthClient.createToken(code);
+    // intuit-oauth expects the FULL redirect URL (it parses code/state itself)
+    const authResponse = await oauthClient.createToken(request.url);
     const token = authResponse.getJson();
 
     // Save to database

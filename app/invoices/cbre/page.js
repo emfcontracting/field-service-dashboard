@@ -143,6 +143,7 @@ export default function CBREInvoicingPage() {
   const [photosRetrieved, setPhotosRetrieved] = useState(false);
   const [qbInvoiceCreated, setQbInvoiceCreated] = useState(false);
   const [vwasUploaded, setVwasUploaded] = useState(false);
+  const [pushingToQB, setPushingToQB]   = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -178,7 +179,7 @@ export default function CBREInvoicingPage() {
     setSelectedInvoice(invoice); setSelectedWO(null);
     if (invoice.vwas_submitted || invoice.cbre_status === 'paid' || invoice.status === 'synced') {
       setWorkflowStep(6); setNteVerified(true); setPhotosRetrieved(true); setQbInvoiceCreated(true); setVwasUploaded(true);
-    } else if (invoice.quickbooks_invoice_id) {
+    } else if (invoice.qb_invoice_number) {
       setWorkflowStep(5); setNteVerified(true); setPhotosRetrieved(false); setQbInvoiceCreated(true); setVwasUploaded(false);
     } else if (invoice.status === 'approved') {
       setWorkflowStep(4); setNteVerified(true); setPhotosRetrieved(false); setQbInvoiceCreated(false); setVwasUploaded(false);
@@ -210,13 +211,32 @@ export default function CBREInvoicingPage() {
     setVwasUploaded(true); setWorkflowStep(6); await fetchData();
   };
 
+  const pushToQuickBooks = async (invoice) => {
+    if (!invoice) return;
+    if (!confirm(`Send invoice ${invoice.invoice_number} to QuickBooks?\n\nThis creates the invoice in QB (customer CBRE-UPS), emails it, and attaches the official QB PDF here.`)) return;
+    setPushingToQB(true);
+    try {
+      const res = await fetch('/api/quickbooks/push-invoice', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoice.invoice_id }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Push failed');
+      if (json.pdfUrl) window.open(json.pdfUrl, '_blank');
+      setSelectedInvoice({ ...invoice, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl });
+      setQbInvoiceCreated(true);
+      await fetchData();
+    } catch (err) { alert('\u274c ' + err.message); }
+    finally { setPushingToQB(false); }
+  };
+
   // ── Workflow steps tracker ────────────────────────────────────────────────
   const STEPS = [
     { num: 1, title: 'Open RFI Ticket', sub: 'EMF FSM' },
     { num: 2, title: 'Verify NTE',      sub: 'VWAS Check' },
     { num: 3, title: 'Finalize',        sub: 'Generate Invoice' },
-    { num: 4, title: 'QuickBooks',      sub: 'Create Invoice' },
-    { num: 5, title: 'Upload VWAS',     sub: 'Invoice + Photos' },
+    { num: 4, title: 'QuickBooks',      sub: 'Send from FSM' },
+    { num: 5, title: 'Upload VWAS',     sub: 'QB PDF + Photos' },
     { num: 6, title: 'Complete',        sub: 'Mark Done' },
   ];
 
@@ -253,7 +273,8 @@ export default function CBREInvoicingPage() {
   // ── Step content ──────────────────────────────────────────────────────────
   const StepContent = () => {
     const wo       = selectedWO;
-    const invoice  = selectedInvoice;
+    const invoice  = selectedInvoice || (wo ? invoices.find(i => i.wo_id === wo.wo_id) : null) || null;
+    const inQB     = !!invoice?.qb_invoice_number;
     const woNumber = wo?.wo_number || invoice?.work_order?.wo_number;
     const building = wo?.building  || invoice?.work_order?.building;
     const vwasWO   = wo?.vwas_wo_number || invoice?.work_order?.vwas_wo_number;
@@ -335,46 +356,66 @@ export default function CBREInvoicingPage() {
       // ── Step 4 ──
       case 4: return (
         <div className="space-y-4">
-          <InfoBox variant="blue" title="Create invoice in QuickBooks">
-            Match amounts from the EMF invoice. Export the QB invoice as a PDF.
+          <InfoBox variant="blue" title="Send the invoice to QuickBooks — one click">
+            FSM creates the QuickBooks invoice for you (customer CBRE-UPS, next invoice number, all line items),
+            emails it from QuickBooks to emfcontractingsc@gmail.com and attaches the official QB PDF here.
+            No manual entry in QuickBooks anymore.
           </InfoBox>
-          <div className="flex gap-3 flex-wrap">
-            <ExternalLink href="https://qbo.intuit.com" variant="success" size="lg">💰 Open QuickBooks</ExternalLink>
-            {invoice && (
-              <Btn onClick={() => window.open(`/invoices/${invoice.invoice_id}/print`, '_blank')} variant="default" size="lg">🖨️ View EMF Invoice</Btn>
-            )}
-          </div>
+
+          {!invoice ? (
+            <InfoBox variant="yellow" title="Invoice not found yet">
+              Finalize the invoice in FSM first (Step 3), then refresh.
+              <div className="mt-3"><Btn onClick={fetchData} variant="default" size="md">🔄 Refresh</Btn></div>
+            </InfoBox>
+          ) : inQB ? (
+            <div className="bg-purple-500/10 border border-purple-500/25 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs text-purple-300 uppercase tracking-wider font-semibold">In QuickBooks</p>
+                <p className="text-lg text-slate-100 font-mono font-bold mt-0.5">QB #{invoice.qb_invoice_number}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{invoice.invoice_number} · ${invoice.total?.toFixed(2)}</p>
+              </div>
+              {invoice.qb_pdf_url
+                ? <ExternalLink href={invoice.qb_pdf_url} variant="purple" size="lg">⬇ QB PDF</ExternalLink>
+                : <ExternalLink href="https://qbo.intuit.com" variant="default" size="md">Open QuickBooks</ExternalLink>}
+            </div>
+          ) : (
+            <Btn onClick={() => pushToQuickBooks(invoice)} disabled={pushingToQB} variant="success" size="xl" className="w-full">
+              {pushingToQB ? '⏳ Sending to QuickBooks…' : '📗 Send to QuickBooks'}
+            </Btn>
+          )}
+
           <InfoBox variant="blue">
             <ol className="list-decimal list-inside space-y-1.5">
-              <li>Open QuickBooks → Create new invoice</li>
-              <li>Include all billable labor, materials, charges</li>
-              <li>Match amounts from the EMF invoice</li>
-              <li>Save and export as PDF</li>
+              <li>Click "Send to QuickBooks" (or use the same button in the invoice on the Invoicing page)</li>
+              <li>The QB PDF opens in a new tab — this is the file you upload to VWAS in Step 5</li>
+              <li>The QB number appears on the invoice and the work order automatically</li>
+              <li>The invoice email from QuickBooks lands in emfcontractingsc@gmail.com as usual</li>
             </ol>
           </InfoBox>
-          <CheckRow id="qbCreated" checked={qbInvoiceCreated} onChange={e => setQbInvoiceCreated(e.target.checked)}>
-            I have created the invoice in QuickBooks and saved the PDF
-          </CheckRow>
           <NavBtns
             onBack={() => setWorkflowStep(3)}
             onNext={() => { if (invoice) updateInvoiceStatus(invoice.invoice_id, 'approved'); setWorkflowStep(5); }}
-            nextDisabled={!qbInvoiceCreated}
-            nextLabel="✅ QB Invoice Created – Continue to Step 5" />
+            nextDisabled={!inQB}
+            nextLabel={inQB ? '✅ In QuickBooks – Continue to Step 5' : 'Send to QuickBooks first'} />
         </div>
       );
 
       // ── Step 5 ──
       case 5: return (
         <div className="space-y-4">
-          <InfoBox variant="blue" title="Upload invoice &amp; photos to VWAS">
-            Upload the QB invoice PDF and all job photos. Then submit through VWAS to CBRE.
+          <InfoBox variant="blue" title="Upload the QB invoice PDF &amp; photos to VWAS">
+            Use the QB PDF that FSM attached in Step 4 (not the FSM print view). Add all job photos, then submit through VWAS to CBRE.
           </InfoBox>
           <div className="flex gap-3 flex-wrap">
-            <ExternalLink href="https://enterprise.serviceinsight.cbre.com/PRD40177VWS" variant="purple" size="lg">🔗 Open VWAS</ExternalLink>
+            {invoice?.qb_pdf_url && (
+              <ExternalLink href={invoice.qb_pdf_url} variant="purple" size="lg">⬇ QB PDF{invoice.qb_invoice_number ? ` #${invoice.qb_invoice_number}` : ''}</ExternalLink>
+            )}
+            <ExternalLink href="https://enterprise.serviceinsight.cbre.com/PRD40177VWS" variant="default" size="lg">🔗 Open VWAS</ExternalLink>
             <ExternalLink href={`https://mail.google.com/mail/u/0/#search/in:anywhere+${woNumber}`} variant="danger" size="lg">📧 Gmail (emfcbre@)</ExternalLink>
           </div>
           <InfoBox variant="blue">
             <ol className="list-decimal list-inside space-y-1.5">
+              <li>Download the QB PDF (button above) — it is also on the invoice as "QB PDF"</li>
               <li>Open VWAS and find the work order</li>
               <li>Attach the QuickBooks invoice PDF</li>
               <li>Open Gmail (emfcbre@gmail.com) and find job photos</li>
@@ -698,7 +739,7 @@ export default function CBREInvoicingPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {[
                       { label: 'Steps 1–3: EMF FSM', color: 'text-emerald-400', items: ['Open RFI ticket', 'Click "Generate Invoice"', 'Preview & Finalize'] },
-                      { label: 'Step 4: QuickBooks',  color: 'text-blue-400',    items: ['Create matching invoice', 'Export as PDF'] },
+                      { label: 'Step 4: QuickBooks',  color: 'text-blue-400',    items: ['Click "Send to QuickBooks" in FSM', 'QB number + email + PDF are automatic', 'PDF opens in a new tab'] },
                       { label: 'Steps 5–6: VWAS',     color: 'text-purple-400',  items: ['Upload QB invoice PDF', 'Get photos from emfcbre@gmail.com', 'Submit to CBRE'] },
                     ].map(col => (
                       <div key={col.label} className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-xl p-4">

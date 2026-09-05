@@ -29,9 +29,9 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'sh
 const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 
 const PERIODS = [
-  { key: 30, label: '30 Tage' },
-  { key: 90, label: '90 Tage' },
-  { key: 365, label: '12 Monate' },
+  { key: 30, label: '30 days' },
+  { key: 90, label: '90 days' },
+  { key: 365, label: '12 months' },
 ];
 
 export default function PerformanceView({ currentUser }) {
@@ -209,7 +209,7 @@ export default function PerformanceView({ currentUser }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-100">📊 Performance</h1>
-          <p className="text-xs text-slate-500 mt-0.5">CBRE-Effektivität — Targets, Pausen und Prozess-Geschwindigkeit</p>
+          <p className="text-xs text-slate-500 mt-0.5">CBRE effectiveness — targets, pauses, process speed</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1">
@@ -222,18 +222,18 @@ export default function PerformanceView({ currentUser }) {
           </div>
           <select value={facility} onChange={(e) => setFacility(e.target.value)}
             className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-3 py-1.5 text-xs text-slate-300">
-            <option value="all">Alle Facilities</option>
+            <option value="all">All facilities</option>
             {facilities.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
           <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1"
-            title="CBRE-Sicht = roh gegen das aktuelle Target. Bereinigt = Stop-the-Clock-Pausen (Approver-Wartezeit, EBO …) abgezogen.">
+            title="CBRE view = raw against the current target. Adjusted = stop-the-clock pauses (approver wait, EBO …) subtracted.">
             <button onClick={() => setAdjusted(false)}
               className={`px-3 py-1 rounded-md text-xs ${!adjusted ? 'bg-amber-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
-              CBRE-Sicht
+              CBRE view
             </button>
             <button onClick={() => setAdjusted(true)}
               className={`px-3 py-1 rounded-md text-xs ${adjusted ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
-              Bereinigt
+              Adjusted
             </button>
           </div>
         </div>
@@ -241,7 +241,7 @@ export default function PerformanceView({ currentUser }) {
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Anteil abgeschlossener WOs vor (ggf. bereinigtem) Target Completion">
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Share of completed WOs finished before the (adjusted) target completion">
           <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">On-Time Completion</div>
           <div className={`text-3xl font-extrabold mt-1 ${kpi.cur.rate !== null && kpi.cur.rate >= 0.9 ? 'text-emerald-400' : kpi.cur.rate >= 0.75 ? 'text-yellow-400' : 'text-red-400'}`}>
             {fmtPct(kpi.cur.rate)}
@@ -252,15 +252,15 @@ export default function PerformanceView({ currentUser }) {
                 {kpi.deltaPt >= 0 ? '▲' : '▼'} {Math.abs(kpi.deltaPt)} pt{' '}
               </span>
             )}
-            {kpi.cur.ok}/{kpi.cur.n} WOs · {adjusted ? 'bereinigt' : 'CBRE-roh'}
+            {kpi.cur.ok}/{kpi.cur.n} WOs · {adjusted ? 'adjusted' : 'CBRE raw'}
           </div>
         </div>
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Median: Dispatch → erster Tech-Check-in">
-          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Ø Response-Zeit</div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Median: dispatch → first tech check-in">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Median Response Time</div>
           <div className="text-3xl font-extrabold mt-1 text-slate-100">{fmtH(kpi.respMed)}</div>
           <div className="text-xs text-slate-500 mt-1">P1: <strong className="text-slate-300">{fmtH(kpi.respP1Med)}</strong></div>
         </div>
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="CBRE-Escalation-Mails (Target überschritten) im Zeitraum">
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="CBRE escalation mails (target surpassed) in the period">
           <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Escalations</div>
           <div className={`text-3xl font-extrabold mt-1 ${kpi.escal === 0 ? 'text-emerald-400' : 'text-yellow-400'}`}>{kpi.escal}</div>
           <div className="text-xs text-slate-500 mt-1">
@@ -269,13 +269,13 @@ export default function PerformanceView({ currentUser }) {
                 {kpi.escal <= kpi.escalPrev ? '▼' : '▲'} {Math.abs(kpi.escal - kpi.escalPrev)}{' '}
               </span>
             )}
-            vs. Vorperiode
+            vs. previous period
           </div>
         </div>
-        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Offene WOs über (bereinigtem) Target — ohne pausierte">
-          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Überfällig (offen)</div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Open WOs past the (adjusted) target — paused WOs excluded">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Overdue (open)</div>
           <div className={`text-3xl font-extrabold mt-1 ${kpi.overdue.length === 0 ? 'text-emerald-400' : 'text-red-400'}`}>{kpi.overdue.length}</div>
-          <div className="text-xs text-slate-500 mt-1">von {kpi.openN} offenen WOs</div>
+          <div className="text-xs text-slate-500 mt-1">of {kpi.openN} open WOs</div>
         </div>
       </div>
 
@@ -283,7 +283,7 @@ export default function PerformanceView({ currentUser }) {
         {/* Weekly trend */}
         <div className="lg:col-span-7 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
           <h2 className="text-sm font-semibold text-slate-300 mb-3">
-            On-Time-Rate pro Woche <span className="text-[11px] text-slate-600 font-normal">— Ziel-Linie 90% · {adjusted ? 'bereinigt' : 'CBRE-roh'}</span>
+            On-time rate per week <span className="text-[11px] text-slate-600 font-normal">— goal line 90% · {adjusted ? 'adjusted' : 'CBRE raw'}</span>
           </h2>
           <div className="relative">
             <div className="absolute left-0 right-0 border-t-2 border-dashed border-slate-600" style={{ top: '10%' }} />
@@ -291,7 +291,7 @@ export default function PerformanceView({ currentUser }) {
             <div className="flex items-end gap-1.5 h-36 border-b border-[#2d2d44] pt-2">
               {weekly.map((w, i) => (
                 <div key={w.week} className="flex-1 min-w-[10px] relative group"
-                  title={`KW ab ${fmtDate(w.week)} · ${fmtPct(w.rate)} (${w.ok}/${w.n})`}>
+                  title={`Week of ${fmtDate(w.week)} · ${fmtPct(w.rate)} (${w.ok}/${w.n})`}>
                   <div className={`w-full rounded-t ${i === weekly.length - 1 ? 'bg-sky-400' : 'bg-blue-700'} group-hover:bg-sky-300 transition`}
                     style={{ height: `${Math.max(4, (w.rate || 0) * 136)}px` }} />
                   {i === weekly.length - 1 && w.rate !== null && (
@@ -299,7 +299,7 @@ export default function PerformanceView({ currentUser }) {
                   )}
                 </div>
               ))}
-              {weekly.length === 0 && <div className="text-slate-600 text-xs py-12 mx-auto">Noch keine Abschlüsse mit Target in den letzten 12 Wochen</div>}
+              {weekly.length === 0 && <div className="text-slate-600 text-xs py-12 mx-auto">No completions with a target in the last 12 weeks yet</div>}
             </div>
             <div className="flex gap-1.5 mt-1">
               {weekly.map((w) => (
@@ -312,7 +312,7 @@ export default function PerformanceView({ currentUser }) {
         {/* Countdown table */}
         <div className="lg:col-span-5 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
           <h2 className="text-sm font-semibold text-slate-300 mb-2">
-            Offene WOs vs. Target <span className="text-[11px] text-slate-600 font-normal">— dringendste zuerst</span>
+            Open WOs vs. Target <span className="text-[11px] text-slate-600 font-normal">— most urgent first</span>
           </h2>
           <div className="overflow-y-auto max-h-72">
             <table className="w-full text-xs">
@@ -322,7 +322,7 @@ export default function PerformanceView({ currentUser }) {
                   <th className="text-left py-1.5 pr-2">Facility</th>
                   <th className="text-left py-1.5 pr-2">Prio</th>
                   <th className="text-left py-1.5 pr-2">Target</th>
-                  <th className="text-right py-1.5">Rest</th>
+                  <th className="text-right py-1.5">Left</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,12 +336,12 @@ export default function PerformanceView({ currentUser }) {
                   </tr>
                 ))}
                 {countdown.length === 0 && (
-                  <tr><td colSpan="5" className="py-8 text-center text-slate-600">Keine offenen WOs mit Target — läuft der Import schon mit Targets?</td></tr>
+                  <tr><td colSpan="5" className="py-8 text-center text-slate-600">No open WOs with a target yet — waiting for the import/backfill.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-          {countdown.length > 20 && <div className="text-[11px] text-slate-600 mt-2">+ {countdown.length - 20} weitere</div>}
+          {countdown.length > 20 && <div className="text-[11px] text-slate-600 mt-2">+ {countdown.length - 20} more</div>}
         </div>
       </div>
 
@@ -349,7 +349,7 @@ export default function PerformanceView({ currentUser }) {
         {/* Breakdown */}
         <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-300">On-Time nach…</h2>
+            <h2 className="text-sm font-semibold text-slate-300">On-time by…</h2>
             <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-0.5">
               {[['priority', 'Prio'], ['facility', 'Facility'], ['tech', 'Tech']].map(([m, l]) => (
                 <button key={m} onClick={() => setBreakdownMode(m)}
@@ -368,50 +368,50 @@ export default function PerformanceView({ currentUser }) {
               <div className="text-xs text-right font-semibold text-slate-200">{fmtPct(g.rate)} <span className="text-slate-600">({g.n})</span></div>
             </div>
           ))}
-          {breakdown.length === 0 && <div className="text-slate-600 text-xs py-6 text-center">Keine bewertbaren Abschlüsse im Zeitraum</div>}
+          {breakdown.length === 0 && <div className="text-slate-600 text-xs py-6 text-center">No rateable completions in this period</div>}
         </div>
 
         {/* Process lags */}
         <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3">Prozess-Geschwindigkeit <span className="text-[11px] text-slate-600 font-normal">— Median</span></h2>
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">Process Speed <span className="text-[11px] text-slate-600 font-normal">— median</span></h2>
           <div className="space-y-2">
-            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="Dauer der cbre_approval-Pausen (Quote eingereicht → Approver-Antwort)">
-              <div className="text-[11px] text-slate-500 font-semibold">💬 Approver-Wartezeit (Quote)</div>
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="Duration of cbre_approval pauses (quote submitted → approver answer)">
+              <div className="text-[11px] text-slate-500 font-semibold">💬 Approver Wait (Quote)</div>
               <div className="text-xl font-extrabold text-slate-100">{fmtD(lags.approverWait)}</div>
-              <div className="text-[11px] text-slate-600">läuft NICHT gegen euch (Pause)</div>
+              <div className="text-[11px] text-slate-600">does NOT count against you (pause)</div>
             </div>
-            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="date_completed → FSM-Rechnung erstellt">
-              <div className="text-[11px] text-slate-500 font-semibold">🧾 Invoicing-Lag <em>(euer Hebel)</em></div>
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="date_completed → FSM invoice generated">
+              <div className="text-[11px] text-slate-500 font-semibold">🧾 Invoicing Lag <em>(your lever)</em></div>
               <div className={`text-xl font-extrabold ${lags.invoicing !== null && lags.invoicing > 5 ? 'text-yellow-400' : 'text-slate-100'}`}>{fmtD(lags.invoicing)}</div>
-              <div className="text-[11px] text-slate-600">completed → Rechnung erstellt</div>
+              <div className="text-[11px] text-slate-600">completed → invoice generated</div>
             </div>
-            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="erstes CIR/CMP → als bezahlt markiert">
-              <div className="text-[11px] text-slate-500 font-semibold">💰 Payment-Lag (CBRE)</div>
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="first CIR/CMP → marked paid">
+              <div className="text-[11px] text-slate-500 font-semibold">💰 Payment Lag (CBRE)</div>
               <div className="text-xl font-extrabold text-slate-100">{fmtD(lags.payment)}</div>
-              <div className="text-[11px] text-slate-600">CIR/CMP → paid · Uhr: 75d</div>
+              <div className="text-[11px] text-slate-600">CIR/CMP → paid · clock: 75d</div>
             </div>
           </div>
         </div>
 
         {/* Signals */}
         <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3">Störungssignale <span className="text-[11px] text-slate-600 font-normal">— im Zeitraum</span></h2>
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">Disruption Signals <span className="text-[11px] text-slate-600 font-normal">— in period</span></h2>
           <table className="w-full text-sm">
             <tbody>
               <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">🚨 Escalations</td><td className="py-2 text-right font-bold text-slate-100">{signals.escalations}</td></tr>
-              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">🚩 Missing-Data-Flags</td><td className="py-2 text-right font-bold text-slate-100">{signals.missingData}</td></tr>
-              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">❌ Quote rejected (aktuell)</td><td className="py-2 text-right font-bold text-slate-100">{signals.quoteRejected}</td></tr>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">🚩 Missing-data flags</td><td className="py-2 text-right font-bold text-slate-100">{signals.missingData}</td></tr>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">❌ Quote rejected (current)</td><td className="py-2 text-right font-bold text-slate-100">{signals.quoteRejected}</td></tr>
               <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">❌ Invoice rejected</td><td className="py-2 text-right font-bold text-slate-100">{signals.invoiceRejected}</td></tr>
-              <tr><td className="py-2 text-slate-500">🔄 Reassignments <span className="text-[10px]">(nur Info, keine Wertung)</span></td><td className="py-2 text-right font-bold text-slate-500">{signals.reassigned}</td></tr>
+              <tr><td className="py-2 text-slate-500">🔄 Reassignments <span className="text-[10px]">(info only, not a fault metric)</span></td><td className="py-2 text-right font-bold text-slate-500">{signals.reassigned}</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
       <div className="text-[11px] text-slate-600 leading-relaxed px-1">
-        • <strong className="text-amber-500">CBRE-Sicht</strong> = roh gegen das aktuelle Target (Re-Dispatch/Grid-Änderungen eingerechnet) — so misst CBRE.{' '}
-        • <strong className="text-emerald-500">Bereinigt</strong> = Stop-the-Clock-Pausen abgezogen (Approver-Wartezeit, Equipment-Backorder …) — jede Pause ist mit Grund und Zeitraum dokumentiert (Compliance-Nachweis).{' '}
-        • Targets kommen strukturiert aus den Dispatch-Mails; ältere WOs ohne Target zählen nicht in die On-Time-Rate.
+        • <strong className="text-amber-500">CBRE view</strong> = raw against the current target (re-dispatch/grid changes included) — this is how CBRE measures.{' '}
+        • <strong className="text-emerald-500">Adjusted</strong> = stop-the-clock pauses subtracted (approver wait, equipment backorder …) — every pause is documented with reason and window (compliance defense).{' '}
+        • Targets come structured from the dispatch mails; older WOs without a target don't count toward the on-time rate.
       </div>
     </div>
   );

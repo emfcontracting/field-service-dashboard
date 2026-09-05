@@ -16,6 +16,9 @@ export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
 
 const QB_CUSTOMER_NAME = 'CBRE-UPS';
+// Invoice emails go to our own inbox: that is how the office receives the QB
+// invoice mail (also feeds the invoice-sent email parser) for the CBRE upload.
+const QB_BILL_EMAIL = 'emfcontractingsc@gmail.com';
 const ITEM_BY_LINE_TYPE = {
   labor:     'Labor',
   mileage:   'Mileage',

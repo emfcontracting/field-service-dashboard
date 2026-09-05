@@ -1,6 +1,7 @@
 // useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS, SIGNATURE & OFFLINE SUPPORT)
 
 import { useState, useEffect } from 'react';
+import { markCheckedIn, markCheckedOut } from '../utils/checkedInStore';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   getCachedWorkOrders,
@@ -990,6 +991,10 @@ export function useWorkOrders(currentUser) {
         
         alert('Check-in saved locally. Will sync when back online.');
       }
+
+      // Remember on THIS device that THIS user checked in here — drives the
+      // per-tech pin/banner (time_in/time_out are shared by all techs on a WO).
+      markCheckedIn(currentUser?.user_id, woId);
     } catch (err) {
       console.error('Check-in error:', err);
       alert('Error checking in: ' + err.message);
@@ -1074,6 +1079,8 @@ export function useWorkOrders(currentUser) {
         
         alert('Check-out saved locally. Will sync when back online.');
       }
+
+      markCheckedOut(currentUser?.user_id, woId);
     } catch (err) {
       console.error('Check-out error:', err);
       alert('Error checking out: ' + err.message);

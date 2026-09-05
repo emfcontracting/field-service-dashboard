@@ -1,5 +1,6 @@
 // components/WorkOrdersList.js - Bilingual Work Orders List (Mobile Responsive) - WITH OFFLINE SUPPORT + SORT/FILTER/SELECT
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { getCheckedInWos, subscribeCheckedIn } from '../utils/checkedInStore';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
@@ -69,6 +70,14 @@ export default function WorkOrdersList({
   };
 
   // FILTERED AND SORTED WORK ORDERS
+  // WOs THIS user is checked in on (device-local; per-tech, unlike time_in/time_out).
+  const [ckVersion, setCkVersion] = useState(0);
+  useEffect(() => subscribeCheckedIn(() => setCkVersion((v) => v + 1)), []);
+  const myCheckedIn = useMemo(
+    () => getCheckedInWos(currentUser?.user_id),
+    [currentUser, ckVersion]
+  );
+
   const filteredAndSortedWOs = useMemo(() => {
     let filtered = [...workOrders];
 
@@ -93,8 +102,9 @@ export default function WorkOrdersList({
     // Sort
     filtered.sort((a, b) => {
       // *** CHECKED-IN job pinned to the very top (stays until check-out) ***
-      const aCk = !!a.time_in && !a.time_out;
-      const bCk = !!b.time_in && !b.time_out;
+      // Per-tech: only the tech who checked in (device-local store) gets the pin.
+      const aCk = !!a.time_in && !a.time_out && myCheckedIn.has(String(a.wo_id));
+      const bCk = !!b.time_in && !b.time_out && myCheckedIn.has(String(b.wo_id));
       if (aCk && !bCk) return -1;
       if (!aCk && bCk) return 1;
 
@@ -150,7 +160,7 @@ export default function WorkOrdersList({
     });
 
     return filtered;
-  }, [workOrders, sortBy, sortOrder, selStatuses, selCbre, searchTerm]);
+  }, [workOrders, sortBy, sortOrder, selStatuses, selCbre, searchTerm, myCheckedIn]);
 
   // Count of active missing_data WOs (for the sticky banner)
   const missingDataCount = useMemo(
@@ -703,7 +713,7 @@ export default function WorkOrdersList({
                   </div>
                 )}
                 
-                {(!!wo.time_in && !wo.time_out) && (
+                {(!!wo.time_in && !wo.time_out && myCheckedIn.has(String(wo.wo_id))) && (
                   <div className="bg-green-600 text-white text-center py-2 px-3 rounded-lg mb-3 font-bold text-sm">
                     🟢 {language === 'es' ? 'INGRESADO — EN EL TRABAJO' : 'CHECKED IN — ON THE JOB'}
                   </div>

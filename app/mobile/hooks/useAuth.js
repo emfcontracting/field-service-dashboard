@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import * as authService from '../services/authService';
+import { clearCheckedIn } from '../utils/checkedInStore';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,6 +37,7 @@ export function useAuth() {
   }
 
   function logout() {
+    clearCheckedIn(currentUser?.user_id); // per-tech pin ends at logout
     authService.clearCredentials();
     authService.clearCachedUser(); // Also clear cached user data
     // Force page reload to ensure clean state

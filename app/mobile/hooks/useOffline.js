@@ -2,6 +2,7 @@
 // Manages online/offline state, sync queue, and cached data
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { markCheckedIn, markCheckedOut } from '../utils/checkedInStore';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   initOfflineDB,
@@ -365,6 +366,10 @@ export function useOffline(currentUser) {
     const isoTime = now.toISOString();
 
     const checkInNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ✓ CHECKED IN${!isOnline ? ' [PENDING SYNC]' : ''}`;
+
+    // Remember on THIS device that THIS user checked in here — drives the
+    // per-tech pin/banner (time_in/time_out are shared by all techs on a WO).
+    markCheckedIn(currentUser?.user_id, woId);
     
     const cachedWOs = await getCachedWorkOrders();
     const cachedWO = cachedWOs.find(w => w.wo_id === woId);
@@ -414,6 +419,8 @@ export function useOffline(currentUser) {
     const isoTime = now.toISOString();
 
     const checkOutNote = `[${timestamp}] ${currentUser.first_name} ${currentUser.last_name} - ⏸ CHECKED OUT${!isOnline ? ' [PENDING SYNC]' : ''}`;
+
+    markCheckedOut(currentUser?.user_id, woId);
     
     const cachedWOs = await getCachedWorkOrders();
     const cachedWO = cachedWOs.find(w => w.wo_id === woId);

@@ -36,8 +36,13 @@ const supabase = createClient(
 );
 
 function connectIMAP() {
-  const email = process.env.EMAIL_IMPORT_USER;
-  const password = process.env.EMAIL_IMPORT_PASSWORD;
+  // This route reads the MAIN mailbox (emfcontractingsc@gmail.com): the QB
+  // invoice mails and the Coupa paid mails only arrive there. EMAIL_IMPORT_*
+  // points at the wo.@ import mailbox (whose read-status is load-bearing for
+  // the dispatch import), so use dedicated credentials with a fallback.
+  // NOTE: this route never marks anything as read, in any mailbox.
+  const email = process.env.INVOICE_EMAIL_USER || process.env.EMAIL_IMPORT_USER;
+  const password = process.env.INVOICE_EMAIL_PASSWORD || process.env.EMAIL_IMPORT_PASSWORD;
   if (!email || !password) throw new Error('IMAP credentials not configured');
   return new Imap({
     user: email,

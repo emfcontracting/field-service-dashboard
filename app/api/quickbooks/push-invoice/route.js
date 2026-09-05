@@ -178,8 +178,21 @@ export async function POST(request) {
       });
     }
 
+    // QB has custom transaction numbers enabled, so the API must assign the
+    // next sequential DocNumber itself (otherwise the invoice stays unnumbered).
+    const recent = await qbQuery(accessToken, realmId,
+      'select DocNumber from Invoice orderby MetaData.CreateTime desc maxresults 30');
+    let maxDoc = 0;
+    (recent.QueryResponse?.Invoice || []).forEach((iv) => {
+      const n = parseInt(iv.DocNumber, 10);
+      if (Number.isFinite(n) && n > maxDoc) maxDoc = n;
+    });
+    if (!maxDoc) throw new Error('Could not determine next QB invoice number');
+    const nextDocNumber = String(maxDoc + 1);
+
     const toDateOnly = (d) => (d ? new Date(d).toISOString().slice(0, 10) : undefined);
     const qbInvoice = {
+      DocNumber: nextDocNumber,
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
       TxnDate: toDateOnly(invoice.invoice_date),
       DueDate: toDateOnly(invoice.due_date),

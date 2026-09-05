@@ -19,6 +19,15 @@ ALTER TABLE work_orders
   ADD COLUMN IF NOT EXISTS waiting_reason       TEXT,        -- open pause mirror (equipment_backorder, cbre_approval, parts, site_access)
   ADD COLUMN IF NOT EXISTS waiting_since        TIMESTAMPTZ;
 
+-- ── Manual KPI exclusion ────────────────────────────────────────────────────
+-- Some tickets must not distort the statistics (CBRE errors, duplicates,
+-- disputes, billable:no). Excluding always requires a reason (audit trail).
+ALTER TABLE work_orders
+  ADD COLUMN IF NOT EXISTS kpi_excluded        BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS kpi_excluded_reason TEXT,
+  ADD COLUMN IF NOT EXISTS kpi_excluded_at     TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS kpi_excluded_by     TEXT;
+
 -- ── Every target/priority change, in order ──────────────────────────────────
 create table if not exists public.work_order_target_history (
   history_id           uuid primary key default gen_random_uuid(),

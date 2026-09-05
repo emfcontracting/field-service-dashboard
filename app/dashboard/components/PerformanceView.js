@@ -59,6 +59,7 @@ export default function PerformanceView({ currentUser }) {
           target_response_at, target_completion_at, time_in, waiting_reason,
           escalation, escalation_updated_at, missing_data_flagged_at, cbre_status,
           lead_tech_id, work_order_description,
+          kpi_excluded, kpi_excluded_reason, kpi_excluded_at, kpi_excluded_by,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `).gte('date_entered', since).limit(5000),
         supabaseClient.from('work_order_clock_pauses')
@@ -89,10 +90,41 @@ export default function PerformanceView({ currentUser }) {
     return [...set].sort();
   }, [wos]);
 
+  const excluded = useMemo(() => wos.filter((w) => w.kpi_excluded), [wos]);
+
   const inFacility = useMemo(
-    () => (facility === 'all' ? wos : wos.filter((w) => facilityOf(w) === facility)),
+    () => (facility === 'all' ? wos : wos.filter((w) => facilityOf(w) === facility))
+      .filter((w) => !w.kpi_excluded),
     [wos, facility]
   );
+
+  const [showExcluded, setShowExcluded] = useState(false);
+
+  const excludeWo = async (wo) => {
+    const reason = prompt(`Exclude ${wo.wo_number} from all KPIs?\n\nReason (required — audit trail):`);
+    if (!reason || !reason.trim()) return;
+    const who = currentUser ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() : 'admin';
+    const { error } = await supabaseClient.from('work_orders').update({
+      kpi_excluded: true,
+      kpi_excluded_reason: reason.trim(),
+      kpi_excluded_at: new Date().toISOString(),
+      kpi_excluded_by: who,
+    }).eq('wo_id', wo.wo_id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    setWos((prev) => prev.map((w) => (w.wo_id === wo.wo_id
+      ? { ...w, kpi_excluded: true, kpi_excluded_reason: reason.trim(), kpi_excluded_by: who, kpi_excluded_at: new Date().toISOString() }
+      : w)));
+  };
+
+  const includeWo = async (wo) => {
+    const { error } = await supabaseClient.from('work_orders').update({
+      kpi_excluded: false, kpi_excluded_reason: null, kpi_excluded_at: null, kpi_excluded_by: null,
+    }).eq('wo_id', wo.wo_id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    setWos((prev) => prev.map((w) => (w.wo_id === wo.wo_id
+      ? { ...w, kpi_excluded: false, kpi_excluded_reason: null, kpi_excluded_at: null, kpi_excluded_by: null }
+      : w)));
+  };
 
   const now = new Date();
   const periodStart = new Date(now.getTime() - periodDays * MS_D);
@@ -372,6 +404,7 @@ export default function PerformanceView({ currentUser }) {
                   <th className="text-left py-1.5 pr-2">Prio</th>
                   <th className="text-left py-1.5 pr-2">Target</th>
                   <th className="text-right py-1.5">Left</th>
+                  <th className="w-6"></th>
                 </tr>
               </thead>
               <tbody>
@@ -382,10 +415,15 @@ export default function PerformanceView({ currentUser }) {
                     <td className="py-2 pr-2 font-bold text-slate-300">{`${wo.priority || '—'}`.toUpperCase().slice(0, 3)}</td>
                     <td className="py-2 pr-2 text-slate-500">{fmtDateTime(t.target)}</td>
                     <td className="py-2 text-right">{chipFor(t)}</td>
+                    <td className="py-2 pl-1 text-right w-6">
+                      <button onClick={() => excludeWo(wo)}
+                        title="Exclude this WO from all KPIs (reason required)"
+                        className="text-slate-700 hover:text-red-400 text-sm leading-none">✕</button>
+                    </td>
                   </tr>
                 ))}
                 {countdown.length === 0 && (
-                  <tr><td colSpan="5" className="py-8 text-center text-slate-600">No open WOs with a target yet — waiting for the import/backfill.</td></tr>
+                  <tr><td colSpan="6" className="py-8 text-center text-slate-600">No open WOs with a target yet — waiting for the import/backfill.</td></tr>
                 )}
               </tbody>
             </table>
@@ -456,6 +494,32 @@ export default function PerformanceView({ currentUser }) {
           </table>
         </div>
       </div>
+
+      {excluded.length > 0 && (
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <button onClick={() => setShowExcluded((v) => !v)} className="text-sm font-semibold text-slate-400 hover:text-slate-200">
+            {showExcluded ? '▾' : '▸'} Excluded from KPIs ({excluded.length})
+          </button>
+          {showExcluded && (
+            <table className="w-full text-xs mt-3">
+              <tbody>
+                {excluded.map((wo) => (
+                  <tr key={wo.wo_id} className="border-b border-[#1e1e2e]">
+                    <td className="py-2 pr-2 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                    <td className="py-2 pr-2 text-slate-400">{facilityOf(wo)}</td>
+                    <td className="py-2 pr-2 text-slate-500 italic">"{wo.kpi_excluded_reason}"</td>
+                    <td className="py-2 pr-2 text-slate-600">{wo.kpi_excluded_by} · {wo.kpi_excluded_at ? new Date(wo.kpi_excluded_at).toLocaleDateString() : ''}</td>
+                    <td className="py-2 text-right">
+                      <button onClick={() => includeWo(wo)}
+                        className="text-[11px] px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">re-include</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {showAlertModal && (
         <SendAlertModal

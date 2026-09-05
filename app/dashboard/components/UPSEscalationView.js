@@ -84,7 +84,7 @@ export default function UPSEscalationView({ currentUser }) {
   };
 
   // ── Load disputes ──────────────────────────────────────────────────────────
-  useEffect(() => { if (isAdmin) loadData(); /* eslint-disable-next-line */ }, [isAdmin]);
+  useEffect(() => { if (isAdmin) loadData(); else if (currentUser) setLoading(false); /* eslint-disable-next-line */ }, [isAdmin, currentUser]);
 
   const loadData = async () => {
     setLoading(true);
@@ -103,6 +103,9 @@ export default function UPSEscalationView({ currentUser }) {
         .order('dispute_opened_at', { ascending: false });
 
       setDisputes(wos || []);
+      // Show the list as soon as disputes are in; the invoice cross-reference
+      // below is decorative and must never keep the view on "Loading".
+      setLoading(false);
 
       // Pull related invoices for cross-reference badge
       if (wos?.length) {

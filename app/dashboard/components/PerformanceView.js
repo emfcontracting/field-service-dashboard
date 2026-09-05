@@ -25,7 +25,7 @@ const supabaseClient = createClient(
 const MS_D = 86400000;
 const fmtPct = (r) => (r === null ? '—' : `${Math.round(r * 100)}%`);
 const fmtH = (h) => (h === null ? '—' : h >= 48 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`);
-const fmtD = (d) => (d === null ? '—' : `${d.toFixed(1)} Tage`);
+const fmtD = (d) => (d === null ? '—' : `${d.toFixed(1)} days`);
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
 const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 
@@ -285,8 +285,8 @@ export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
       </span>;
     }
     const d = t.daysLeft;
-    if (d < 0) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-red-400 border-red-500/40 bg-red-500/10">⚫ {Math.abs(d).toFixed(0)}d drüber</span>;
-    if (d < 1) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-orange-400 border-orange-500/40 bg-orange-500/10">🔴 heute</span>;
+    if (d < 0) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-red-400 border-red-500/40 bg-red-500/10">⚫ {Math.abs(d).toFixed(0)}d overdue</span>;
+    if (d < 1) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-orange-400 border-orange-500/40 bg-orange-500/10">🔴 today</span>;
     if (d < 3) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-yellow-400 border-yellow-500/40 bg-yellow-500/10">🟡 {d.toFixed(0)}d</span>;
     return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-emerald-400 border-emerald-500/40 bg-emerald-500/10">🟢 {d.toFixed(0)}d</span>;
   };

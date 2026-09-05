@@ -32,6 +32,11 @@ const MILEAGE_RATE = 1.0;
 const DEFAULT_PAYOUT_DAYS = 90;
 const PAYOUT_STORAGE_KEY  = 'cashflow.payoutDays';
 
+// Coupa "Approved to Pay" → actual payment lag. First observed pairs
+// (Sep 2026: approved Aug 26 → paid Sep 5) suggest ~10 days; 14 is a
+// conservative default. Strongest payout signal we have before "paid".
+const APPROVED_TO_PAY_TO_PAYOUT_DAYS = 14;
+
 // Statuses that count as "in flight" — invoice exists, not yet paid/rejected
 const INFLIGHT_STATUSES = ['draft', 'approved', 'accepted', 'synced'];
 
@@ -195,7 +200,7 @@ export default function CashFlowView({ currentUser }) {
       .from('invoices')
       .select(`
         invoice_id, invoice_number, wo_id, invoice_date, total, status, created_at,
-        cbre_status, cbre_status_label, cmp_date,
+        cbre_status, cbre_status_label, cmp_date, qb_invoice_number, approved_to_pay_at,
         work_order:work_orders(wo_number, building, dispute_status,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name))
       `)
@@ -279,6 +284,7 @@ export default function CashFlowView({ currentUser }) {
         const s = search.toLowerCase();
         return (
           inv.invoice_number?.toLowerCase().includes(s) ||
+          inv.qb_invoice_number?.toLowerCase().includes(s) ||
           inv.work_order?.wo_number?.toLowerCase().includes(s) ||
           inv.work_order?.building?.toLowerCase().includes(s)
         );
@@ -286,19 +292,25 @@ export default function CashFlowView({ currentUser }) {
       .map(inv => {
         const invDate = parseDateLocal(inv.invoice_date);
         const cmpDate = parseDateLocal(inv.cmp_date);
+        const approvedAt = parseDateLocal(inv.approved_to_pay_at);
 
         // Estimate (invoice + N days) — always present
         const estimateDate = invDate ? addDays(invDate, payoutDays) : null;
         const estimateDays = estimateDate ? daysBetween(new Date(), estimateDate) : null;
 
-        // Confirmed (cmp_date + 75 days) — only if CBRE has posted
+        // Confirmed (cmp_date + 75 days) — payout clock runs from first CIR/CMP
         const confirmedDate = cmpDate ? addDays(cmpDate, 75) : null;
         const confirmedDays = confirmedDate ? daysBetween(new Date(), confirmedDate) : null;
 
-        // "Best" payout date — prefer confirmed if available, else estimate
-        const payoutDate = confirmedDate || estimateDate;
-        const daysUntil  = confirmedDate ? confirmedDays : estimateDays;
-        const payoutSource = confirmedDate ? 'confirmed' : 'estimate';
+        // Approved to Pay (Coupa mail) — strongest signal before "paid":
+        // payment follows within days, regardless of the 75-day clock.
+        const approvedDate = approvedAt ? addDays(approvedAt, APPROVED_TO_PAY_TO_PAYOUT_DAYS) : null;
+        const approvedDays = approvedDate ? daysBetween(new Date(), approvedDate) : null;
+
+        // "Best" payout date — approved beats confirmed beats estimate
+        const payoutDate = approvedDate || confirmedDate || estimateDate;
+        const daysUntil  = approvedDate ? approvedDays : confirmedDate ? confirmedDays : estimateDays;
+        const payoutSource = approvedDate ? 'approved' : confirmedDate ? 'confirmed' : 'estimate';
 
         return {
           ...inv,
@@ -308,6 +320,9 @@ export default function CashFlowView({ currentUser }) {
           _estimateDays: estimateDays,
           _confirmedDate: confirmedDate,
           _confirmedDays: confirmedDays,
+          _approvedAt: approvedAt,
+          _approvedDate: approvedDate,
+          _approvedDays: approvedDays,
           _payoutDate: payoutDate,
           _daysUntil: daysUntil,
           _payoutSource: payoutSource,
@@ -577,7 +592,8 @@ export default function CashFlowView({ currentUser }) {
       {/* ── Legend ── */}
       <div className="text-xs text-slate-600 px-1 space-y-0.5">
         <div>• <strong className="text-slate-500">Estimate</strong> = invoice_date + {payoutDays} days (our rough projection)</div>
-        <div>• <strong className="text-emerald-500">✓ Confirmed</strong> = CMP date + 75 days (CBRE's official posting → payment timeline)</div>
+        <div>• <strong className="text-emerald-500">✓ Confirmed</strong> = first CIR/CMP date + 75 days (CBRE's official posting → payment timeline)</div>
+        <div>• <strong className="text-sky-400">💳 Approved</strong> = Coupa "Approved to Pay" + {APPROVED_TO_PAY_TO_PAYOUT_DAYS} days — strongest signal, payment is imminent</div>
         <div>• <strong className="text-slate-500">Pending Invoicing</strong> = Completed WOs ready to invoice but not yet generated — clock isn't running yet</div>
         <div>• <strong className="text-slate-500">Open Tickets</strong> = WOs still in progress — NTE = ceiling, Running = current logged value</div>
         <div className="text-slate-700 mt-1">💡 Run CBRE Sync weekly to get more Confirmed dates</div>
@@ -688,6 +704,9 @@ function ExpectedPayoutsTab({ groups, groupBy, statusBadge, payoutColorClass }) 
               <div key={row.invoice_id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-[#1e1e2e]/50 transition items-center text-sm">
                 <div className="col-span-2">
                   <div className="text-blue-400 font-semibold">{row.invoice_number}</div>
+                  {row.qb_invoice_number && (
+                    <div className="text-purple-400 text-[10px] font-mono font-bold">QB #{row.qb_invoice_number}</div>
+                  )}
                   <div className="text-slate-500 text-xs">WO {row.work_order?.wo_number || '—'}</div>
                 </div>
                 <div className="col-span-3 text-slate-400 text-xs truncate">{row.work_order?.building || '—'}</div>
@@ -696,13 +715,19 @@ function ExpectedPayoutsTab({ groups, groupBy, statusBadge, payoutColorClass }) 
                     <span className="text-slate-600 text-[10px] uppercase tracking-wider">Est:</span>
                     <span className="text-slate-400">{formatDate(row._estimateDate)}</span>
                   </div>
-                  {row._confirmedDate ? (
+                  {row._confirmedDate && (
                     <div className="flex items-baseline gap-1">
                       <span className="text-emerald-500 text-[10px] uppercase tracking-wider font-bold">✓ Confirmed:</span>
                       <span className={`font-semibold ${payoutColorClass(row._confirmedDays)}`}>{formatDate(row._confirmedDate)}</span>
                     </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-700 italic">No CMP yet</div>
+                  )}
+                  {row._approvedDate ? (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sky-400 text-[10px] uppercase tracking-wider font-bold">💳 Approved:</span>
+                      <span className={`font-semibold ${payoutColorClass(row._approvedDays)}`}>~{formatDate(row._approvedDate)}</span>
+                    </div>
+                  ) : !row._confirmedDate && (
+                    <div className="text-[10px] text-slate-700 italic">No CIR/CMP yet</div>
                   )}
                 </div>
                 <div className="col-span-2 text-center">

@@ -263,15 +263,59 @@ export async function GET(request) {
         });
         results.paid.source = usedFolder;
 
-        // Newest mail per QB number wins the paid date.
+        // Newest mail per QB number wins. Two Coupa mail types:
+        // "marked as Paid" (final) and "is Approved to Pay" (intermediate).
         const paidMap = {};
+        const approvedMap = {};
         for (const mail of emails) {
-          const m = (mail.subject || '').match(/Invoice\s+#?(\d+)(?:_[A-Za-z]+)?\s+marked\s+as\s+Paid/i);
-          if (!m) continue;
-          results.paid.processed++;
-          const qbNumber = m[1];
-          if (!paidMap[qbNumber] || new Date(mail.date) > new Date(paidMap[qbNumber].date)) {
-            paidMap[qbNumber] = mail;
+          const subj = mail.subject || '';
+          const paidM = subj.match(/Invoice\s+#?(\d+)(?:_[A-Za-z]+)?\s+marked\s+as\s+Paid/i);
+          const apprM = subj.match(/Invoice\s+#?(\d+)(?:_[A-Za-z]+)?\s+is\s+Approved\s+to\s+Pay/i);
+          if (paidM) {
+            results.paid.processed++;
+            const qbNumber = paidM[1];
+            if (!paidMap[qbNumber] || new Date(mail.date) > new Date(paidMap[qbNumber].date)) {
+              paidMap[qbNumber] = mail;
+            }
+          } else if (apprM) {
+            results.paid.approvedToPayProcessed = (results.paid.approvedToPayProcessed || 0) + 1;
+            const qbNumber = apprM[1];
+            if (!approvedMap[qbNumber] || new Date(mail.date) > new Date(approvedMap[qbNumber].date)) {
+              approvedMap[qbNumber] = mail;
+            }
+          }
+        }
+
+        // Approved-to-Pay: timestamp only (status stays), idempotent WO note.
+        for (const [qbNumber, mail] of Object.entries(approvedMap)) {
+          const approvedAt = new Date(mail.date).toISOString();
+          const { data: invs } = await supabase
+            .from('invoices')
+            .select('invoice_id, approved_to_pay_at')
+            .eq('qb_invoice_number', qbNumber);
+          for (const inv of invs || []) {
+            if (inv.approved_to_pay_at) continue;
+            if (!dryRun) {
+              await supabase
+                .from('invoices')
+                .update({ approved_to_pay_at: approvedAt })
+                .eq('invoice_id', inv.invoice_id);
+            }
+            results.paid.approvedToPay = (results.paid.approvedToPay || 0) + 1;
+          }
+          const { data: wos } = await supabase
+            .from('work_orders')
+            .select('wo_id, wo_number, comments')
+            .eq('qb_invoice_number', qbNumber);
+          for (const wo of wos || []) {
+            const marker = `[QB Invoice #${qbNumber} APPROVED TO PAY by CBRE`;
+            if ((wo.comments || '').includes(marker)) continue;
+            if (!dryRun) {
+              const ts = new Date(mail.date).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+              const note = `${marker} — ${ts}]`;
+              const merged = wo.comments ? `${wo.comments}\n\n${note}` : note;
+              await supabase.from('work_orders').update({ comments: merged }).eq('wo_id', wo.wo_id);
+            }
           }
         }
 

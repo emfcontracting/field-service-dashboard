@@ -9,6 +9,11 @@
 ALTER TABLE invoices
   ADD COLUMN IF NOT EXISTS qb_invoice_number TEXT;
 
+-- CBRE/Coupa sends "Invoice #N_UPS is Approved to Pay by CBRE" before the
+-- final "marked as Paid" — track that intermediate stage too.
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS approved_to_pay_at TIMESTAMPTZ;
+
 ALTER TABLE work_orders
   ADD COLUMN IF NOT EXISTS qb_invoice_number TEXT;
 

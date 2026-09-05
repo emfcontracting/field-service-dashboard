@@ -871,6 +871,12 @@ export default function InvoicingPage() {
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">
                               {statusBadge(inv.status)}
+                              {inv.approved_to_pay_at && inv.status !== 'paid' && (
+                                <span title={`CBRE approved to pay on ${new Date(inv.approved_to_pay_at).toLocaleDateString()}`}
+                                  className="inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold border bg-sky-500/15 text-sky-300 border-sky-500/30">
+                                  💳 Approved to Pay · {new Date(inv.approved_to_pay_at).toLocaleDateString()}
+                                </span>
+                              )}
                               {inv.work_order?.cbre_posting_status && (() => {
                                 const cfg = postingBadgeConfig(inv.work_order.cbre_posting_status);
                                 if (!cfg) return null;

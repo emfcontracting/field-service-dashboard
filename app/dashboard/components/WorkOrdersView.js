@@ -120,6 +120,7 @@ export default function WorkOrdersView({
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter(wo =>
         wo.wo_number?.toLowerCase().includes(search) ||
+        wo.qb_invoice_number?.toLowerCase().includes(search) ||
         wo.building?.toLowerCase().includes(search) ||
         wo.work_order_description?.toLowerCase().includes(search) ||
         wo.requestor?.toLowerCase().includes(search) ||

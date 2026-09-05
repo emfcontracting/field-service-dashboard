@@ -23,6 +23,10 @@
     {
       "path": "/api/cbre/sync-vendor-confirmations?searchDays=14",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/invoice-payments/cron",
+      "schedule": "10 * * * *"
     }
   ]
 }

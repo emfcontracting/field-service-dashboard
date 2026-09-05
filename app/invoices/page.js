@@ -214,6 +214,7 @@ export default function InvoicingPage() {
       const s = invoiceSearchTerm.toLowerCase();
       list = list.filter(inv =>
         inv.invoice_number?.toLowerCase().includes(s) ||
+        inv.qb_invoice_number?.toLowerCase().includes(s) ||
         inv.work_order?.wo_number?.toLowerCase().includes(s) ||
         inv.work_order?.building?.toLowerCase().includes(s)
       );
@@ -699,6 +700,15 @@ export default function InvoicingPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-base font-semibold text-slate-200">Generated Invoices</h2>
+                    {filteredInvoices.length > 0 && (
+                      <span className="text-xs text-slate-500">
+                        {filteredInvoices.length} shown ·{' '}
+                        <span className="font-mono font-bold text-emerald-400">
+                          ${filteredInvoices.reduce((s, inv) => s + (inv.total || 0), 0).toFixed(2)}
+                        </span>
+                        {statusFilter === 'awaiting' && ' open'}
+                      </span>
+                    )}
                     {/* Invoice status filter pills */}
                     <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1 ml-2">
                       <button onClick={() => setStatusFilter('awaiting')}
@@ -846,6 +856,12 @@ export default function InvoicingPage() {
                             <div className="flex items-center gap-2">
                               {unack && <span title="New CBRE update — click to acknowledge" className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />}
                               {inv.invoice_number}
+                              {inv.qb_invoice_number && (
+                                <span title="QuickBooks invoice number"
+                                  className="text-[10px] font-mono font-bold text-purple-300 bg-purple-500/10 border border-purple-500/30 rounded px-1.5 py-0.5">
+                                  QB #{inv.qb_invoice_number}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 font-mono text-blue-400 text-xs">{inv.work_order?.wo_number}</td>
@@ -1111,7 +1127,7 @@ export default function InvoicingPage() {
         {selectedItem?.type === 'invoice' && (
           <Modal onClose={() => setSelectedItem(null)}>
             <ModalHeader
-              title={`Invoice #${selectedItem.data.invoice_number}`}
+              title={`Invoice #${selectedItem.data.invoice_number}${selectedItem.data.qb_invoice_number ? ` · QB #${selectedItem.data.qb_invoice_number}` : ''}`}
               subtitle={`WO #${selectedItem.data.work_order?.wo_number} — ${selectedItem.data.work_order?.building}`}
               onClose={() => setSelectedItem(null)} />
             <ModalBody>

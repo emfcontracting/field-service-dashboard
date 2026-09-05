@@ -153,6 +153,7 @@ export default function InvoicingPage() {
   const [filteredInvoices, setFilteredInvoices]         = useState([]);
   const [selectedItem, setSelectedItem]                 = useState(null);
   const [lineItems, setLineItems]                       = useState([]);
+  const [pushingToQB, setPushingToQB]                   = useState(false);
   const [loading, setLoading]                           = useState(true);
   const [activeTab, setActiveTab]                       = useState('ready');
   const [generatingInvoice, setGeneratingInvoice]       = useState(false);
@@ -439,6 +440,27 @@ export default function InvoicingPage() {
       await fetchData(); setActiveTab('invoiced');
     } catch (err) { alert('❌ ' + err.message); }
     finally { setGeneratingInvoice(false); }
+  };
+
+  const pushToQuickBooks = async (invoice) => {
+    if (!confirm(`Send invoice ${invoice.invoice_number} to QuickBooks?\n\nThis creates the invoice in QB (customer CBRE-UPS) and attaches the official QB PDF here for the CBRE upload.`)) return;
+    setPushingToQB(true);
+    try {
+      const res = await fetch('/api/quickbooks/push-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoice.invoice_id }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Push failed');
+      alert(`\u2705 Created in QuickBooks as invoice #${json.qbInvoiceNumber}` +
+        (json.pdfUrl ? '\n\nQB PDF attached \u2014 use the "QB PDF" button to download it for the CBRE upload.' : '\n\n\u26a0\ufe0f PDF could not be attached \u2014 check QuickBooks directly.'));
+      setSelectedItem(prev => prev?.type === 'invoice'
+        ? { ...prev, data: { ...prev.data, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl } }
+        : prev);
+      await fetchData();
+    } catch (err) { alert('\u274c ' + err.message); }
+    finally { setPushingToQB(false); }
   };
 
   const returnToTech = async (woId, invoiceId) => {
@@ -1242,6 +1264,27 @@ export default function InvoicingPage() {
                 <Btn onClick={() => printInvoice(selectedItem.data)} variant="default">🖨️ Print</Btn>
                 <Btn onClick={() => shareInvoice(selectedItem.data)} variant="default">📤 Share</Btn>
               </div>
+
+              {/* QuickBooks */}
+              {selectedItem.data.qb_invoice_number ? (
+                <div className="flex items-center justify-between bg-purple-500/10 border border-purple-500/25 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-xs text-purple-300 uppercase tracking-wider font-semibold">QuickBooks</p>
+                    <p className="text-sm text-slate-200 font-mono mt-0.5">QB #{selectedItem.data.qb_invoice_number}</p>
+                  </div>
+                  {selectedItem.data.qb_pdf_url && (
+                    <a href={selectedItem.data.qb_pdf_url} target="_blank" rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold">
+                      ⬇ QB PDF
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <Btn onClick={() => pushToQuickBooks(selectedItem.data)} disabled={pushingToQB}
+                  variant="primary" size="lg" className="w-full">
+                  {pushingToQB ? '⏳ Sending to QuickBooks…' : '📗 Send to QuickBooks'}
+                </Btn>
+              )}
 
               <div className="space-y-2">
                 {selectedItem.data.status === 'draft' && (<>

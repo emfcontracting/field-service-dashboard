@@ -126,6 +126,11 @@ export const NAV_ITEMS = [
   { id: 'workorders',      label: 'Work Orders',   Icon: Icons.workorders },
   { id: 'calendar',        label: 'Calendar',       Icon: Icons.calendar },
   { id: 'aging',           label: 'Aging',          Icon: Icons.aging },
+  { id: 'performance',     label: 'Performance',    Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+    </svg>
+  ), adminOnly: true },
   { id: 'missing-hours',   label: 'Missing Hours',  Icon: Icons.missingHours, alert: true },
   { id: 'availability',    label: 'Availability',   Icon: Icons.availability },
   { id: 'profitability',   label: 'Profitability',  Icon: () => (

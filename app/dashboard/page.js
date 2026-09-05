@@ -15,6 +15,7 @@ import { CalendarView } from './components/calendar';
 import { AgingView } from './components/aging';
 import ProfitabilityView from './components/ProfitabilityView';
 import CashFlowView from './components/CashFlowView';
+import PerformanceView from './components/PerformanceView';
 import UPSEscalationView from './components/UPSEscalationView';
 import CBRESyncView from './components/CBRESyncView';
 import CBREDataEntryView from './components/CBREDataEntryView';
@@ -149,6 +150,8 @@ function DashboardContent() {
         return <ProfitabilityView currentUser={currentUser} />;
       case 'cash-flow':
         return <CashFlowView currentUser={currentUser} />;
+      case 'performance':
+        return <PerformanceView currentUser={currentUser} />;
       case 'ups-escalation':
         return <UPSEscalationView currentUser={currentUser} />;
       case 'cbre-sync':

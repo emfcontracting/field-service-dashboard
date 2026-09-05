@@ -1,0 +1,418 @@
+// app/dashboard/components/PerformanceView.js
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Performance / KPIs — how CBRE sees EMF, before CBRE sees it.
+//
+// Every time metric exists in two views (lib/kpi.js):
+//   CBRE-Sicht — raw against the latest target (what CBRE measures)
+//   Bereinigt  — stop-the-clock pauses subtracted (the fair view; the pause
+//                rows are the compliance defense trail)
+// ─────────────────────────────────────────────────────────────────────────────
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import {
+  toDate, pausesByWo, onTimeRate, onTimeRateBy, weeklyOnTime, responseHours,
+  timeToTarget, median, facilityOf, PAUSE_REASON_LABELS,
+} from '@/lib/kpi';
+
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+const MS_D = 86400000;
+const fmtPct = (r) => (r === null ? '—' : `${Math.round(r * 100)}%`);
+const fmtH = (h) => (h === null ? '—' : h >= 48 ? `${(h / 24).toFixed(1)}d` : `${h.toFixed(1)}h`);
+const fmtD = (d) => (d === null ? '—' : `${d.toFixed(1)} Tage`);
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
+const fmtDateTime = (d) => (d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
+
+const PERIODS = [
+  { key: 30, label: '30 Tage' },
+  { key: 90, label: '90 Tage' },
+  { key: 365, label: '12 Monate' },
+];
+
+export default function PerformanceView({ currentUser }) {
+  const [loading, setLoading] = useState(true);
+  const [wos, setWos] = useState([]);
+  const [pauseRows, setPauseRows] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [periodDays, setPeriodDays] = useState(30);
+  const [facility, setFacility] = useState('all');
+  const [adjusted, setAdjusted] = useState(true);
+  const [breakdownMode, setBreakdownMode] = useState('priority'); // priority | facility | tech
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const since = new Date(Date.now() - 400 * MS_D).toISOString();
+      const [woRes, pauseRes, invRes] = await Promise.all([
+        supabaseClient.from('work_orders').select(`
+          wo_id, wo_number, building, priority, status, date_entered, date_completed,
+          target_response_at, target_completion_at, time_in, waiting_reason,
+          escalation, escalation_updated_at, missing_data_flagged_at, cbre_status,
+          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
+        `).gte('date_entered', since).limit(5000),
+        supabaseClient.from('work_order_clock_pauses')
+          .select('wo_id, reason, started_at, ended_at').gte('started_at', since).limit(5000),
+        supabaseClient.from('invoices')
+          .select('wo_id, generated_at, cmp_date, paid_at, rejected_at, status')
+          .gte('created_at', since).limit(5000),
+      ]);
+      setWos(woRes.data || []);
+      setPauseRows(pauseRes.data || []);
+      setInvoices(invRes.data || []);
+    } catch (e) {
+      console.error('PerformanceView load:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pauseMap = useMemo(() => pausesByWo(pauseRows), [pauseRows]);
+
+  const facilities = useMemo(() => {
+    const set = new Set(wos.map(facilityOf).filter((f) => f && f !== '—'));
+    return [...set].sort();
+  }, [wos]);
+
+  const inFacility = useMemo(
+    () => (facility === 'all' ? wos : wos.filter((w) => facilityOf(w) === facility)),
+    [wos, facility]
+  );
+
+  const now = new Date();
+  const periodStart = new Date(now.getTime() - periodDays * MS_D);
+  const prevStart = new Date(now.getTime() - 2 * periodDays * MS_D);
+
+  const completedInPeriod = useMemo(
+    () => inFacility.filter((w) => { const d = toDate(w.date_completed); return d && d >= periodStart; }),
+    [inFacility, periodDays] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const completedPrev = useMemo(
+    () => inFacility.filter((w) => { const d = toDate(w.date_completed); return d && d >= prevStart && d < periodStart; }),
+    [inFacility, periodDays] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // ── Headline KPIs ──────────────────────────────────────────────────────────
+  const kpi = useMemo(() => {
+    const cur = onTimeRate(completedInPeriod, pauseMap, { adjusted, now });
+    const prev = onTimeRate(completedPrev, pauseMap, { adjusted, now });
+    const deltaPt = cur.rate !== null && prev.rate !== null ? Math.round((cur.rate - prev.rate) * 100) : null;
+
+    const respAll = completedInPeriod.map(responseHours).filter((h) => h !== null);
+    const respP1 = completedInPeriod.filter((w) => `${w.priority}`.toUpperCase().startsWith('P1'))
+      .map(responseHours).filter((h) => h !== null);
+
+    const escal = inFacility.filter((w) => { const d = toDate(w.escalation_updated_at); return w.escalation !== undefined && d && d >= periodStart; }).length;
+    const escalPrev = inFacility.filter((w) => { const d = toDate(w.escalation_updated_at); return d && d >= prevStart && d < periodStart; }).length;
+
+    const open = inFacility.filter((w) => !w.date_completed && w.status !== 'completed');
+    const overdue = open.filter((w) => {
+      const t = timeToTarget(w, pauseMap.get(w.wo_id) || [], now);
+      return t && !t.paused && t.msLeft < 0;
+    });
+
+    return { cur, deltaPt, respMed: median(respAll), respP1Med: median(respP1), escal, escalPrev, openN: open.length, overdue };
+  }, [completedInPeriod, completedPrev, inFacility, pauseMap, adjusted, periodDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Weekly trend (fixed 12 weeks) ──────────────────────────────────────────
+  const weekly = useMemo(
+    () => weeklyOnTime(inFacility, pauseMap, { weeks: 12, adjusted, now }),
+    [inFacility, pauseMap, adjusted] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // ── Open WOs vs target (countdown, most urgent first) ─────────────────────
+  const countdown = useMemo(() => {
+    return inFacility
+      .filter((w) => !w.date_completed && w.status !== 'completed' && w.target_completion_at)
+      .map((w) => ({ wo: w, t: timeToTarget(w, pauseMap.get(w.wo_id) || [], now) }))
+      .filter((x) => x.t)
+      .sort((a, b) => (a.t.paused === b.t.paused ? a.t.msLeft - b.t.msLeft : a.t.paused ? 1 : -1));
+  }, [inFacility, pauseMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Breakdown ─────────────────────────────────────────────────────────────
+  const breakdown = useMemo(() => {
+    const keyFn = breakdownMode === 'priority'
+      ? (w) => `${w.priority || '—'}`.toUpperCase()
+      : breakdownMode === 'facility'
+        ? facilityOf
+        : (w) => (w.lead_tech ? `${w.lead_tech.first_name} ${w.lead_tech.last_name}` : '—');
+    return onTimeRateBy(completedInPeriod, pauseMap, keyFn, { adjusted, now })
+      .filter((g) => g.n > 0).slice(0, 10);
+  }, [completedInPeriod, pauseMap, breakdownMode, adjusted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Process lags ──────────────────────────────────────────────────────────
+  const lags = useMemo(() => {
+    const approverWaits = pauseRows
+      .filter((p) => p.reason === 'cbre_approval' && p.ended_at && toDate(p.ended_at) >= periodStart)
+      .map((p) => (toDate(p.ended_at) - toDate(p.started_at)) / MS_D);
+
+    const woById = new Map(inFacility.map((w) => [w.wo_id, w]));
+    const invoicingLags = [];
+    const paymentLags = [];
+    for (const inv of invoices) {
+      const wo = woById.get(inv.wo_id);
+      if (wo && wo.date_completed && inv.generated_at) {
+        const lag = (toDate(inv.generated_at) - toDate(wo.date_completed)) / MS_D;
+        if (lag >= 0 && lag < 120 && toDate(inv.generated_at) >= periodStart) invoicingLags.push(lag);
+      }
+      if (inv.cmp_date && inv.paid_at) {
+        const lag = (toDate(inv.paid_at) - toDate(inv.cmp_date)) / MS_D;
+        if (lag >= 0 && toDate(inv.paid_at) >= periodStart) paymentLags.push(lag);
+      }
+    }
+    return {
+      approverWait: median(approverWaits),
+      invoicing: median(invoicingLags),
+      payment: median(paymentLags),
+    };
+  }, [pauseRows, invoices, inFacility, periodDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Signals ───────────────────────────────────────────────────────────────
+  const signals = useMemo(() => {
+    const inP = (d) => { const x = toDate(d); return x && x >= periodStart; };
+    return {
+      escalations: inFacility.filter((w) => inP(w.escalation_updated_at)).length,
+      missingData: inFacility.filter((w) => inP(w.missing_data_flagged_at)).length,
+      quoteRejected: inFacility.filter((w) => w.cbre_status === 'quote_rejected').length,
+      invoiceRejected: invoices.filter((i) => inP(i.rejected_at)).length,
+      reassigned: inFacility.filter((w) => w.cbre_status === 'reassigned').length,
+    };
+  }, [inFacility, invoices, periodDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chipFor = (t) => {
+    if (t.paused) {
+      return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-slate-300 border-slate-500/40 bg-slate-500/10"
+        title={PAUSE_REASON_LABELS[t.pauseReason] || 'Pausiert'}>
+        {PAUSE_REASON_LABELS[t.pauseReason] || '⏸ Pausiert'}
+      </span>;
+    }
+    const d = t.daysLeft;
+    if (d < 0) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-red-400 border-red-500/40 bg-red-500/10">⚫ {Math.abs(d).toFixed(0)}d drüber</span>;
+    if (d < 1) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-orange-400 border-orange-500/40 bg-orange-500/10">🔴 heute</span>;
+    if (d < 3) return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-yellow-400 border-yellow-500/40 bg-yellow-500/10">🟡 {d.toFixed(0)}d</span>;
+    return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold border text-emerald-400 border-emerald-500/40 bg-emerald-500/10">🟢 {d.toFixed(0)}d</span>;
+  };
+
+  if (loading) {
+    return <div className="text-center py-20 text-slate-500">Loading performance data…</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header + filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">📊 Performance</h1>
+          <p className="text-xs text-slate-500 mt-0.5">CBRE-Effektivität — Targets, Pausen und Prozess-Geschwindigkeit</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1">
+            {PERIODS.map((p) => (
+              <button key={p.key} onClick={() => setPeriodDays(p.key)}
+                className={`px-3 py-1 rounded-md text-xs ${periodDays === p.key ? 'bg-blue-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <select value={facility} onChange={(e) => setFacility(e.target.value)}
+            className="bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-3 py-1.5 text-xs text-slate-300">
+            <option value="all">Alle Facilities</option>
+            {facilities.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1"
+            title="CBRE-Sicht = roh gegen das aktuelle Target. Bereinigt = Stop-the-Clock-Pausen (Approver-Wartezeit, EBO …) abgezogen.">
+            <button onClick={() => setAdjusted(false)}
+              className={`px-3 py-1 rounded-md text-xs ${!adjusted ? 'bg-amber-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
+              CBRE-Sicht
+            </button>
+            <button onClick={() => setAdjusted(true)}
+              className={`px-3 py-1 rounded-md text-xs ${adjusted ? 'bg-emerald-600 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>
+              Bereinigt
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Anteil abgeschlossener WOs vor (ggf. bereinigtem) Target Completion">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">On-Time Completion</div>
+          <div className={`text-3xl font-extrabold mt-1 ${kpi.cur.rate !== null && kpi.cur.rate >= 0.9 ? 'text-emerald-400' : kpi.cur.rate >= 0.75 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {fmtPct(kpi.cur.rate)}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {kpi.deltaPt !== null && (
+              <span className={kpi.deltaPt >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                {kpi.deltaPt >= 0 ? '▲' : '▼'} {Math.abs(kpi.deltaPt)} pt{' '}
+              </span>
+            )}
+            {kpi.cur.ok}/{kpi.cur.n} WOs · {adjusted ? 'bereinigt' : 'CBRE-roh'}
+          </div>
+        </div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Median: Dispatch → erster Tech-Check-in">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Ø Response-Zeit</div>
+          <div className="text-3xl font-extrabold mt-1 text-slate-100">{fmtH(kpi.respMed)}</div>
+          <div className="text-xs text-slate-500 mt-1">P1: <strong className="text-slate-300">{fmtH(kpi.respP1Med)}</strong></div>
+        </div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="CBRE-Escalation-Mails (Target überschritten) im Zeitraum">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Escalations</div>
+          <div className={`text-3xl font-extrabold mt-1 ${kpi.escal === 0 ? 'text-emerald-400' : 'text-yellow-400'}`}>{kpi.escal}</div>
+          <div className="text-xs text-slate-500 mt-1">
+            {kpi.escalPrev - kpi.escal !== 0 && (
+              <span className={kpi.escal <= kpi.escalPrev ? 'text-emerald-400' : 'text-red-400'}>
+                {kpi.escal <= kpi.escalPrev ? '▼' : '▲'} {Math.abs(kpi.escal - kpi.escalPrev)}{' '}
+              </span>
+            )}
+            vs. Vorperiode
+          </div>
+        </div>
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4" title="Offene WOs über (bereinigtem) Target — ohne pausierte">
+          <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Überfällig (offen)</div>
+          <div className={`text-3xl font-extrabold mt-1 ${kpi.overdue.length === 0 ? 'text-emerald-400' : 'text-red-400'}`}>{kpi.overdue.length}</div>
+          <div className="text-xs text-slate-500 mt-1">von {kpi.openN} offenen WOs</div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-12 gap-3">
+        {/* Weekly trend */}
+        <div className="lg:col-span-7 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">
+            On-Time-Rate pro Woche <span className="text-[11px] text-slate-600 font-normal">— Ziel-Linie 90% · {adjusted ? 'bereinigt' : 'CBRE-roh'}</span>
+          </h2>
+          <div className="relative">
+            <div className="absolute left-0 right-0 border-t-2 border-dashed border-slate-600" style={{ top: '10%' }} />
+            <span className="absolute right-0 -top-1 text-[10px] text-slate-500">90%</span>
+            <div className="flex items-end gap-1.5 h-36 border-b border-[#2d2d44] pt-2">
+              {weekly.map((w, i) => (
+                <div key={w.week} className="flex-1 min-w-[10px] relative group"
+                  title={`KW ab ${fmtDate(w.week)} · ${fmtPct(w.rate)} (${w.ok}/${w.n})`}>
+                  <div className={`w-full rounded-t ${i === weekly.length - 1 ? 'bg-sky-400' : 'bg-blue-700'} group-hover:bg-sky-300 transition`}
+                    style={{ height: `${Math.max(4, (w.rate || 0) * 136)}px` }} />
+                  {i === weekly.length - 1 && w.rate !== null && (
+                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-slate-300 font-semibold">{fmtPct(w.rate)}</span>
+                  )}
+                </div>
+              ))}
+              {weekly.length === 0 && <div className="text-slate-600 text-xs py-12 mx-auto">Noch keine Abschlüsse mit Target in den letzten 12 Wochen</div>}
+            </div>
+            <div className="flex gap-1.5 mt-1">
+              {weekly.map((w) => (
+                <div key={w.week} className="flex-1 min-w-[10px] text-center text-[9px] text-slate-600">{fmtDate(w.week)}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Countdown table */}
+        <div className="lg:col-span-5 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-2">
+            Offene WOs vs. Target <span className="text-[11px] text-slate-600 font-normal">— dringendste zuerst</span>
+          </h2>
+          <div className="overflow-y-auto max-h-72">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-600 border-b border-[#2d2d44]">
+                  <th className="text-left py-1.5 pr-2">WO#</th>
+                  <th className="text-left py-1.5 pr-2">Facility</th>
+                  <th className="text-left py-1.5 pr-2">Prio</th>
+                  <th className="text-left py-1.5 pr-2">Target</th>
+                  <th className="text-right py-1.5">Rest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {countdown.slice(0, 20).map(({ wo, t }) => (
+                  <tr key={wo.wo_id} className="border-b border-[#1e1e2e] hover:bg-[#1e1e2e]/50">
+                    <td className="py-2 pr-2 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                    <td className="py-2 pr-2 text-slate-400">{facilityOf(wo)}</td>
+                    <td className="py-2 pr-2 font-bold text-slate-300">{`${wo.priority || '—'}`.toUpperCase().slice(0, 3)}</td>
+                    <td className="py-2 pr-2 text-slate-500">{fmtDateTime(t.target)}</td>
+                    <td className="py-2 text-right">{chipFor(t)}</td>
+                  </tr>
+                ))}
+                {countdown.length === 0 && (
+                  <tr><td colSpan="5" className="py-8 text-center text-slate-600">Keine offenen WOs mit Target — läuft der Import schon mit Targets?</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {countdown.length > 20 && <div className="text-[11px] text-slate-600 mt-2">+ {countdown.length - 20} weitere</div>}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-3">
+        {/* Breakdown */}
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-300">On-Time nach…</h2>
+            <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-0.5">
+              {[['priority', 'Prio'], ['facility', 'Facility'], ['tech', 'Tech']].map(([m, l]) => (
+                <button key={m} onClick={() => setBreakdownMode(m)}
+                  className={`px-2 py-0.5 rounded text-[11px] ${breakdownMode === m ? 'bg-blue-600 text-white font-semibold' : 'text-slate-500 hover:text-slate-300'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          {breakdown.map((g) => (
+            <div key={g.key} className="grid grid-cols-[70px_1fr_60px] gap-2 items-center mb-2" title={`${g.ok}/${g.n} on-time`}>
+              <div className="text-xs font-semibold text-slate-400 truncate">{g.key}</div>
+              <div className="h-3.5 bg-[#11131d] rounded overflow-hidden">
+                <div className="h-full bg-sky-500 rounded-r" style={{ width: `${(g.rate || 0) * 100}%` }} />
+              </div>
+              <div className="text-xs text-right font-semibold text-slate-200">{fmtPct(g.rate)} <span className="text-slate-600">({g.n})</span></div>
+            </div>
+          ))}
+          {breakdown.length === 0 && <div className="text-slate-600 text-xs py-6 text-center">Keine bewertbaren Abschlüsse im Zeitraum</div>}
+        </div>
+
+        {/* Process lags */}
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">Prozess-Geschwindigkeit <span className="text-[11px] text-slate-600 font-normal">— Median</span></h2>
+          <div className="space-y-2">
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="Dauer der cbre_approval-Pausen (Quote eingereicht → Approver-Antwort)">
+              <div className="text-[11px] text-slate-500 font-semibold">💬 Approver-Wartezeit (Quote)</div>
+              <div className="text-xl font-extrabold text-slate-100">{fmtD(lags.approverWait)}</div>
+              <div className="text-[11px] text-slate-600">läuft NICHT gegen euch (Pause)</div>
+            </div>
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="date_completed → FSM-Rechnung erstellt">
+              <div className="text-[11px] text-slate-500 font-semibold">🧾 Invoicing-Lag <em>(euer Hebel)</em></div>
+              <div className={`text-xl font-extrabold ${lags.invoicing !== null && lags.invoicing > 5 ? 'text-yellow-400' : 'text-slate-100'}`}>{fmtD(lags.invoicing)}</div>
+              <div className="text-[11px] text-slate-600">completed → Rechnung erstellt</div>
+            </div>
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3" title="erstes CIR/CMP → als bezahlt markiert">
+              <div className="text-[11px] text-slate-500 font-semibold">💰 Payment-Lag (CBRE)</div>
+              <div className="text-xl font-extrabold text-slate-100">{fmtD(lags.payment)}</div>
+              <div className="text-[11px] text-slate-600">CIR/CMP → paid · Uhr: 75d</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Signals */}
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">Störungssignale <span className="text-[11px] text-slate-600 font-normal">— im Zeitraum</span></h2>
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">🚨 Escalations</td><td className="py-2 text-right font-bold text-slate-100">{signals.escalations}</td></tr>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">🚩 Missing-Data-Flags</td><td className="py-2 text-right font-bold text-slate-100">{signals.missingData}</td></tr>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">❌ Quote rejected (aktuell)</td><td className="py-2 text-right font-bold text-slate-100">{signals.quoteRejected}</td></tr>
+              <tr className="border-b border-[#1e1e2e]"><td className="py-2 text-slate-300">❌ Invoice rejected</td><td className="py-2 text-right font-bold text-slate-100">{signals.invoiceRejected}</td></tr>
+              <tr><td className="py-2 text-slate-500">🔄 Reassignments <span className="text-[10px]">(nur Info, keine Wertung)</span></td><td className="py-2 text-right font-bold text-slate-500">{signals.reassigned}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="text-[11px] text-slate-600 leading-relaxed px-1">
+        • <strong className="text-amber-500">CBRE-Sicht</strong> = roh gegen das aktuelle Target (Re-Dispatch/Grid-Änderungen eingerechnet) — so misst CBRE.{' '}
+        • <strong className="text-emerald-500">Bereinigt</strong> = Stop-the-Clock-Pausen abgezogen (Approver-Wartezeit, Equipment-Backorder …) — jede Pause ist mit Grund und Zeitraum dokumentiert (Compliance-Nachweis).{' '}
+        • Targets kommen strukturiert aus den Dispatch-Mails; ältere WOs ohne Target zählen nicht in die On-Time-Rate.
+      </div>
+    </div>
+  );
+}

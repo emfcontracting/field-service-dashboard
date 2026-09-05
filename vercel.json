@@ -27,6 +27,10 @@
     {
       "path": "/api/invoice-payments/cron",
       "schedule": "10 * * * *"
+    },
+    {
+      "path": "/api/quickbooks/pull-payments",
+      "schedule": "40 6 * * *"
     }
   ]
 }

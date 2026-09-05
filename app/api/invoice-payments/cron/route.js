@@ -127,6 +127,7 @@ function fetchEmails({ folder, fromFilter, searchDays, beforeDays, withAttachmen
         before.setDate(before.getDate() - beforeDays);
         criteria.push(['BEFORE', formatIMAPDate(before)]);
       }
+      if (folder === 'INBOX' && fromFilter) criteria.push(['FROM', fromFilter]);
       run(folder, criteria);
     });
     imap.once('error', reject);
@@ -163,6 +164,30 @@ function extractPdfText(buf) {
 const extractWoNumbers = (text) => [...new Set((text.match(/\b(?:[A-Z]{1,2})?\d{7,}\b/g) || [])
   .filter((n) => /^[A-Z]/.test(n) || n.length >= 7))]
   .filter((n) => /^(?:[A-Z]{1,2})\d{7,}$/.test(n));
+
+// Parse a UPS Oracle "Remittance Advice" mail (oasisnotify@ups.com): a payment
+// batch listing QB invoice numbers with amount paid. Returns
+// { paymentDate, lines: [{ qbNumber, amount }] } or null.
+function parseRemittance(body) {
+  const text = (body || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+  const MONTHS = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+  const toISO = (d) => {
+    const m = d.match(/(\d{2})-([A-Z]{3})-(\d{4})/);
+    if (!m || MONTHS[m[2]] === undefined) return null;
+    return new Date(Date.UTC(parseInt(m[3]), MONTHS[m[2]], parseInt(m[1]))).toISOString();
+  };
+  const pd = text.match(/Payment Date\s*:?\s*\|?\s*(\d{2}-[A-Z]{3}-\d{4})/i);
+  const paymentDate = pd ? toISO(pd[1]) : null;
+  if (!paymentDate) return null;
+  // Row shape after tag stripping: "<invoice#> <dd-MMM-yyyy> <discount> <amount>"
+  const lines = [];
+  const re = /(?:^|[\s|])(\d{3,6})\s*\|?\s*(\d{2}-[A-Z]{3}-\d{4})\s*\|?\s*[\d,.]+\s*\|?\s*([\d,]+(?:\.\d+)?)(?=[\s|]|$)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    lines.push({ qbNumber: m[1], amount: parseFloat(m[3].replace(/,/g, '')) });
+  }
+  return lines.length ? { paymentDate, lines } : null;
+}
 
 export async function GET(request) {
   try {
@@ -368,6 +393,43 @@ export async function GET(request) {
         }
       } catch (e) {
         results.paid.errors.push(e.message);
+      }
+    }
+
+    // ── Phase C: UPS Oracle "Remittance Advice" (rare, but each mail lists a
+    // whole payment batch per QB invoice number — real payment data) ─────────
+    if (phase === 'both' || phase === 'paid') {
+      try {
+        const { emails } = await fetchEmails({
+          folder: 'INBOX',
+          fromFilter: 'oasisnotify@ups.com',
+          searchDays, beforeDays, withAttachments: false,
+        });
+        for (const mail of emails) {
+          if (!/Remittance Advice/i.test(mail.subject || '')) continue;
+          const remit = parseRemittance(mail.body);
+          if (!remit) continue;
+          results.paid.remittanceProcessed = (results.paid.remittanceProcessed || 0) + 1;
+          for (const line of remit.lines) {
+            const { data: invs } = await supabase
+              .from('invoices')
+              .select('invoice_id, status, paid_at')
+              .eq('qb_invoice_number', line.qbNumber);
+            for (const inv of invs || []) {
+              if (inv.status === 'paid' && inv.paid_at) continue;
+              if (!dryRun) {
+                const { error } = await supabase
+                  .from('invoices')
+                  .update({ status: 'paid', paid_at: remit.paymentDate })
+                  .eq('invoice_id', inv.invoice_id);
+                if (error) { results.paid.errors.push(`Remit ${line.qbNumber}: ${error.message}`); continue; }
+              }
+              results.paid.remittancePaid = (results.paid.remittancePaid || 0) + 1;
+            }
+          }
+        }
+      } catch (e) {
+        results.paid.errors.push(`Remittance: ${e.message}`);
       }
     }
 

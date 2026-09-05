@@ -706,8 +706,9 @@ function computeProposedChanges(row, woInDb, invInDb, map) {
         oldValue: woInDb.cbre_posting_status || '—',
         newValue: row.status_code,
       });
-      // First time we see CMP, capture the posting date for the 75-day payout clock
-      if (row.status_code === 'CMP' && !woInDb.cmp_date) {
+      // The 75-day payout clock starts the first time CIR or CMP shows
+      // (whichever comes first) — capture that date once.
+      if ((row.status_code === 'CMP' || row.status_code === 'CIR') && !woInDb.cmp_date) {
         changes.push({
           target: 'wo',
           field: 'cmp_date',

@@ -12,7 +12,6 @@ import NewWorkOrderModal from './components/NewWorkOrderModal';
 import ImportModal from '../components/ImportModal';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import { CalendarView } from './components/calendar';
-import { AgingView } from './components/aging';
 import ProfitabilityView from './components/ProfitabilityView';
 import CashFlowView from './components/CashFlowView';
 import PerformanceView from './components/PerformanceView';
@@ -140,8 +139,6 @@ function DashboardContent() {
     switch (activeView) {
       case 'calendar':
         return <CalendarView workOrders={workOrders} users={users} supabase={supabase} refreshWorkOrders={refreshWorkOrders} onSelectWorkOrder={setSelectedWO} />;
-      case 'aging':
-        return <AgingView workOrders={workOrders} users={users} supabase={supabase} refreshWorkOrders={refreshWorkOrders} onSelectWorkOrder={setSelectedWO} />;
       case 'missing-hours':
         return <MissingHoursView workOrders={workOrders} users={users} supabase={supabase} onSelectWorkOrder={setSelectedWO} refreshWorkOrders={refreshWorkOrders} />;
       case 'availability':

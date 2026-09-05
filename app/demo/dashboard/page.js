@@ -10,7 +10,6 @@ import MissingHoursView from '../../dashboard/components/MissingHoursView';
 import WorkOrderDetailModal from '../../dashboard/components/WorkOrderDetailModal';
 import NewWorkOrderModal from '../../dashboard/components/NewWorkOrderModal';
 import { CalendarView } from '../../dashboard/components/calendar';
-import { AgingView } from '../../dashboard/components/aging';
 import { calculateStats } from '../../dashboard/utils/calculations';
 import { getMockSupabase, resetMockSupabase } from '../mockSupabase';
 import { DEMO_USERS } from '../mockData';
@@ -245,17 +244,6 @@ export default function DemoDashboard() {
       case 'calendar':
         return (
           <CalendarView
-            workOrders={workOrders}
-            users={users}
-            supabase={supabase}
-            refreshWorkOrders={refreshWorkOrders}
-            onSelectWorkOrder={setSelectedWO}
-          />
-        );
-      
-      case 'aging':
-        return (
-          <AgingView
             workOrders={workOrders}
             users={users}
             supabase={supabase}

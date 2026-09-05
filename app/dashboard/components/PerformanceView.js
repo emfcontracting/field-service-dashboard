@@ -15,6 +15,7 @@ import {
   toDate, pausesByWo, onTimeRate, onTimeRateBy, weeklyOnTime, responseHours,
   timeToTarget, median, facilityOf, PAUSE_REASON_LABELS,
 } from '@/lib/kpi';
+import SendAlertModal from './aging/SendAlertModal';
 
 const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -43,6 +44,8 @@ export default function PerformanceView({ currentUser }) {
   const [facility, setFacility] = useState('all');
   const [adjusted, setAdjusted] = useState(true);
   const [breakdownMode, setBreakdownMode] = useState('priority'); // priority | facility | tech
+  const [users, setUsers] = useState([]);
+  const [showAlertModal, setShowAlertModal] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -55,6 +58,7 @@ export default function PerformanceView({ currentUser }) {
           wo_id, wo_number, building, priority, status, date_entered, date_completed,
           target_response_at, target_completion_at, time_in, waiting_reason,
           escalation, escalation_updated_at, missing_data_flagged_at, cbre_status,
+          lead_tech_id, work_order_description,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `).gte('date_entered', since).limit(5000),
         supabaseClient.from('work_order_clock_pauses')
@@ -63,6 +67,11 @@ export default function PerformanceView({ currentUser }) {
           .select('wo_id, generated_at, cmp_date, paid_at, rejected_at, status')
           .gte('created_at', since).limit(5000),
       ]);
+      const { data: userRows } = await supabaseClient
+        .from('users')
+        .select('user_id, first_name, last_name, email, role')
+        .eq('is_active', true);
+      setUsers(userRows || []);
       setWos(woRes.data || []);
       setPauseRows(pauseRes.data || []);
       setInvoices(invRes.data || []);
@@ -184,6 +193,37 @@ export default function PerformanceView({ currentUser }) {
       reassigned: inFacility.filter((w) => w.cbre_status === 'reassigned').length,
     };
   }, [inFacility, invoices, periodDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Merged from the old Aging tab: remind techs about urgent open WOs ─────
+  // (due within 3 days or already overdue vs. the ADJUSTED target — paused
+  // WOs are excluded, so nobody gets nagged about CBRE's approver time.)
+  const alertRows = useMemo(() => {
+    return countdown
+      .filter(({ wo, t }) => wo.lead_tech_id && !t.paused && t.daysLeft < 3)
+      .map(({ wo, t }) => ({
+        ...wo,
+        aging: {
+          severity: t.daysLeft < 0 ? 'critical' : t.daysLeft < 1 ? 'warning' : 'stale',
+          days: t.daysLeft < 0 ? Math.ceil(Math.abs(t.daysLeft)) : 0,
+        },
+      }));
+  }, [countdown]);
+
+  const alertStats = useMemo(() => {
+    const byTech = {};
+    for (const wo of alertRows) {
+      const id = wo.lead_tech_id;
+      if (!byTech[id]) {
+        byTech[id] = {
+          name: wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'Unknown',
+          total: 0, critical: 0, warning: 0, stale: 0,
+        };
+      }
+      byTech[id].total++;
+      byTech[id][wo.aging.severity]++;
+    }
+    return { byTech };
+  }, [alertRows]);
 
   const chipFor = (t) => {
     if (t.paused) {
@@ -311,9 +351,18 @@ export default function PerformanceView({ currentUser }) {
 
         {/* Countdown table */}
         <div className="lg:col-span-5 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-2">
-            Open WOs vs. Target <span className="text-[11px] text-slate-600 font-normal">— most urgent first</span>
-          </h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-slate-300">
+              Open WOs vs. Target <span className="text-[11px] text-slate-600 font-normal">— most urgent first</span>
+            </h2>
+            {alertRows.length > 0 && (
+              <button onClick={() => setShowAlertModal(true)}
+                title="Email each lead tech their urgent/overdue WOs (paused WOs excluded)"
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-orange-600/80 hover:bg-orange-600 text-white font-semibold">
+                📧 Remind techs ({alertRows.length})
+              </button>
+            )}
+          </div>
           <div className="overflow-y-auto max-h-72">
             <table className="w-full text-xs">
               <thead>
@@ -407,6 +456,18 @@ export default function PerformanceView({ currentUser }) {
           </table>
         </div>
       </div>
+
+      {showAlertModal && (
+        <SendAlertModal
+          stats={alertStats}
+          agingWorkOrders={alertRows}
+          leadTechs={users.filter((u) => u.role === 'lead_tech' || u.role === 'admin')}
+          users={users}
+          preselectedTechId={null}
+          onClose={() => setShowAlertModal(false)}
+          onAlertSent={() => {}}
+        />
+      )}
 
       <div className="text-[11px] text-slate-600 leading-relaxed px-1">
         • <strong className="text-amber-500">CBRE view</strong> = raw against the current target (re-dispatch/grid changes included) — this is how CBRE measures.{' '}

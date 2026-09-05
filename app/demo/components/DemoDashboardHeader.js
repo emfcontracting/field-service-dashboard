@@ -11,7 +11,6 @@ export default function DemoDashboardHeader({ activeView, setActiveView, missing
   const viewTabs = [
     { id: 'workorders', label: 'Work Orders', shortLabel: 'WOs', icon: '📋' },
     { id: 'calendar', label: 'Calendar', shortLabel: 'Cal', icon: '📅' },
-    { id: 'aging', label: 'Aging', shortLabel: 'Age', icon: '⚠️' },
     { id: 'missing-hours', label: 'Missing Hours', shortLabel: 'Hours', icon: '⏰', badge: missingHoursCount },
     { id: 'availability', label: 'Availability', shortLabel: 'Avail', icon: '👥' },
   ];

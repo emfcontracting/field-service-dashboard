@@ -22,7 +22,7 @@ const supabase = createClient(
 // overwrites cbre_status. Every other entry is a lifecycle status.
 const LABEL_STATUS_MAP = {
   'escalation': { type: 'flag', flag: 'escalation', notify: true, notifyRoles: ['admin', 'office'] },
-  'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: false, extractNTE: true },
+  'quote-approval': { cbre_status: 'quote_approved', billing_status: 'quote_approved', notify: true, notifyRoles: ['admin', 'office'], extractNTE: true },
   'quote-rejected': { cbre_status: 'quote_rejected', notify: true, notifyRoles: ['admin', 'office'] },
   'quote-submitted': { cbre_status: 'quote_submitted', billing_status: 'quoted', notify: false, extractQuoteAmount: true },
   'reassignment-of': { cbre_status: 'reassigned', notify: true, notifyRoles: ['admin', 'office'] },
@@ -123,6 +123,7 @@ async function fetchEmailsFromLabel(labelName, searchDays = 30) {
           fetch.on('message', (msg, seqno) => {
             let buffer = '';
             let uid;
+            let flags = [];
 
             msg.on('body', (stream) => {
               stream.on('data', (chunk) => {
@@ -132,6 +133,7 @@ async function fetchEmailsFromLabel(labelName, searchDays = 30) {
 
             msg.once('attributes', (attrs) => {
               uid = attrs.uid;
+              flags = attrs.flags || [];
             });
 
             msg.once('end', () => {
@@ -146,6 +148,7 @@ async function fetchEmailsFromLabel(labelName, searchDays = 30) {
 
                   emails.push({
                     uid,
+                    seen: flags.includes('\\Seen'),
                     subject: parsed.subject || '',
                     from: parsed.from?.text || '',
                     date: parsed.date || new Date(),
@@ -393,6 +396,38 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
   }
 }
 
+// Alert the office that a CBRE status email arrived for a WO that does not
+// exist in FSM (never imported — e.g. dispatch predates the email import, or
+// the dispatch mail is missing). Without this the miss only lives in the cron
+// response's notFound counter, which nobody reads. Deduped by the email's
+// \Seen flag: the caller marks the mail read after alerting once.
+async function sendNotFoundNotification(woNumber, label, emailSubject) {
+  try {
+    const { data: users } = await supabase
+      .from('users')
+      .select('user_id, first_name, last_name, phone, sms_carrier, email')
+      .eq('email', 'emfcontractingsc@gmail.com');
+
+    const recipients = (users || []).filter(u => u.phone && u.sms_carrier);
+    if (recipients.length === 0) return;
+
+    const message = `⚠️ CBRE ${label.toUpperCase()} email for WO ${woNumber} — WO NOT IN FSM! Import it manually. (${emailSubject.substring(0, 60)})`;
+
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'cbre_status_update',
+        recipients,
+        message,
+        workOrder: { wo_number: woNumber, building: '(not in FSM)', cbre_status: label }
+      })
+    });
+  } catch (error) {
+    console.error('Error sending not-found notification:', error);
+  }
+}
+
 // GET: Fetch and process status update emails from all CBRE labels
 export async function GET(request) {
   try {
@@ -491,11 +526,30 @@ export async function GET(request) {
         if (woError || !workOrder) {
           results.notFound++;
           results.errors.push(`WO ${woNumber} not found in system`);
+          // Surface the miss: notify once per email (dedup via \Seen flag).
+          if (!dryRun && !skipNotify && !winningEmail.seen) {
+            await sendNotFoundNotification(woNumber, label, winningEmail.subject);
+            await markAsRead(label, winningEmail.uid).catch(() => {});
+          }
           continue;
         }
 
-        // Skip if WO already has this status (duplicate prevention)
-        if (workOrder.cbre_status === labelConfig.cbre_status) {
+        // When was the current status applied? Needed both for duplicate
+        // prevention and for the sticky protection below.
+        const statusSetAt = workOrder.cbre_status_updated_at
+          ? new Date(workOrder.cbre_status_updated_at)
+          : null;
+        const emailIsNewerThanStatus =
+          statusSetAt && winningEmailDate ? winningEmailDate > statusSetAt : false;
+
+        // Skip if WO already has this status (duplicate prevention) — but ONLY
+        // when the email is not newer than the status. A NEWER email carrying
+        // the same status is a fresh cycle, not a duplicate: NTE increase
+        // chains end in a second "Quote Approval" while the WO still says
+        // quote_approved from round one. Swallowing that lost the new NTE
+        // whenever the intermediate "Quote Submitted" mail was missing or fell
+        // into the same cron window.
+        if (workOrder.cbre_status === labelConfig.cbre_status && !emailIsNewerThanStatus) {
           results.skipped++;
           continue;
         }
@@ -535,17 +589,8 @@ export async function GET(request) {
         const currentRank  = STATUS_RANK[workOrder.cbre_status] ?? 0;
 
         // A lower-ranked email that is NEWER than the status it competes with is
-        // not a regression — it is the next cycle. NTE increase chains produce
-        // exactly this: a WO reaches quote_approved, the tech raises a follow-up
-        // increase, and CBRE sends a fresh "Quote Submitted". Ranking alone
-        // rejected that forever, so chained increases never registered and had
-        // to be set by hand. Compare timestamps, not just ranks.
-        const statusSetAt = workOrder.cbre_status_updated_at
-          ? new Date(workOrder.cbre_status_updated_at)
-          : null;
-        const emailIsNewerThanStatus =
-          statusSetAt && winningEmailDate ? winningEmailDate > statusSetAt : false;
-
+        // not a regression — it is the next cycle (NTE increase chains: see the
+        // duplicate-prevention comment above). Compare timestamps, not just ranks.
         if (
           PROTECTED_STATUSES.has(workOrder.cbre_status) &&
           incomingRank < currentRank &&
@@ -721,6 +766,10 @@ export async function GET(request) {
         if (woError || !workOrder) {
           results.notFound++;
           results.errors.push(`WO ${woNumber} not found in system (escalation)`);
+          if (!dryRun && !skipNotify && !winningEmail.seen) {
+            await sendNotFoundNotification(woNumber, entry.label, winningEmail.subject);
+            await markAsRead(entry.label, winningEmail.uid).catch(() => {});
+          }
           continue;
         }
 

@@ -117,6 +117,21 @@ export default function WorkOrdersFilters({
     }
   }, [selectedCbreStatuses]);
 
+  // Sync DOWN: the CBRE stat cards above set cbreStatusFilter directly on the
+  // parent, bypassing this bar's local state — so the Clear button never knew
+  // about them and couldn't remove the filter. Mirror external changes into
+  // selectedCbreStatuses (no-op when already in sync, so no update loop).
+  useEffect(() => {
+    const external = !cbreStatusFilter || cbreStatusFilter === 'all'
+      ? []
+      : Array.isArray(cbreStatusFilter) ? cbreStatusFilter : [cbreStatusFilter];
+    setSelectedCbreStatuses(prev =>
+      prev.length === external.length && external.every(v => prev.includes(v))
+        ? prev
+        : external
+    );
+  }, [cbreStatusFilter]);
+
   const toggleStatus = (value) => setSelectedStatuses(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
   const toggleTech = (value) => setSelectedTechs(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
   const togglePriority = (value) => setSelectedPriorities(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);

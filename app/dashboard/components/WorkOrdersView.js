@@ -131,9 +131,16 @@ export default function WorkOrdersView({
     setFilteredWorkOrders(filtered);
   };
 
-  // Handle clicking on CBRE status cards
+  // Handle clicking on CBRE status cards. Clicking the active card again
+  // toggles the filter off; the filter bar mirrors this state, so its
+  // Clear button removes a card-set filter too.
   const handleFilterByCbreStatus = (status) => {
-    setCbreStatusFilter([status]);
+    setCbreStatusFilter(prev => {
+      const current = Array.isArray(prev) ? prev[0] : prev;
+      return current === status && (!Array.isArray(prev) || prev.length === 1)
+        ? 'all'
+        : [status];
+    });
   };
 
   const selectWorkOrderEnhanced = async (wo) => {

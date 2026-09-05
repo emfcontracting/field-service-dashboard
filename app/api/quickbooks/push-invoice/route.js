@@ -125,7 +125,7 @@ export async function POST(request) {
     }
 
     const { data: wo } = await supabase
-      .from('work_orders').select('wo_id, wo_number, facility')
+      .from('work_orders').select('wo_id, wo_number, building')
       .eq('wo_id', invoice.wo_id).single();
 
     // ── Resolve QB customer + items by name (robust against id changes) ─────
@@ -154,7 +154,7 @@ export async function POST(request) {
     // Header text (WO + work performed) as a description-only line, like the
     // office's existing QB invoices.
     const headerParts = [];
-    if (wo?.wo_number) headerParts.push(`${wo.wo_number}${wo.facility ? ' ' + wo.facility : ''}:`);
+    if (wo?.wo_number) headerParts.push(`${wo.wo_number}${wo.building ? ' ' + String(wo.building).split(' - ')[0].trim() : ''}:`);
     descriptionItems.forEach((li) => { if (li.description?.trim()) headerParts.push(li.description.trim()); });
     if (headerParts.length) {
       qbLines.push({

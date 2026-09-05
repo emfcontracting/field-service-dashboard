@@ -12,6 +12,7 @@ import SignatureDisplay from './SignatureDisplay';
 import SignatureModal from './modals/SignatureModal';
 import NTEIncreaseList from './quotes/NTEIncreaseList';
 import JurassicParkError from './JurassicParkError';
+import PauseControl from './PauseControl';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { calculateExistingCosts } from '../services/quoteService';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
@@ -897,6 +898,11 @@ export default function WorkOrderDetail({
                 </div>
               )}
             </>
+          )}
+
+          {/* Stop-the-clock: waiting for parts/equipment (KPI pause) */}
+          {status !== 'completed' && (
+            <PauseControl wo={wo} currentUser={currentUser} />
           )}
 
           {/* Primary Assignment */}

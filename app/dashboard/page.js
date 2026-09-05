@@ -148,7 +148,7 @@ function DashboardContent() {
       case 'cash-flow':
         return <CashFlowView currentUser={currentUser} />;
       case 'performance':
-        return <PerformanceView currentUser={currentUser} />;
+        return <PerformanceView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} />;
       case 'ups-escalation':
         return <UPSEscalationView currentUser={currentUser} />;
       case 'cbre-sync':

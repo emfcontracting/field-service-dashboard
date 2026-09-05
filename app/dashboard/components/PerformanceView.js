@@ -35,7 +35,7 @@ const PERIODS = [
   { key: 365, label: '12 months' },
 ];
 
-export default function PerformanceView({ currentUser }) {
+export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
   const [loading, setLoading] = useState(true);
   const [wos, setWos] = useState([]);
   const [pauseRows, setPauseRows] = useState([]);
@@ -99,6 +99,26 @@ export default function PerformanceView({ currentUser }) {
   );
 
   const [showExcluded, setShowExcluded] = useState(false);
+
+  // Open the same overlapping WO detail modal as the Work Orders dashboard.
+  const openWo = async (woId) => {
+    if (!onSelectWorkOrder) return;
+    try {
+      const { data: full } = await supabaseClient
+        .from('work_orders')
+        .select('*, lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name, email, phone)')
+        .eq('wo_id', woId)
+        .single();
+      if (!full) return;
+      const { data: teamMembers } = await supabaseClient
+        .from('work_order_assignments')
+        .select('*, user:users(first_name, last_name, email, role)')
+        .eq('wo_id', woId);
+      onSelectWorkOrder({ ...full, teamMembers: teamMembers || [] });
+    } catch (e) {
+      console.error('openWo:', e);
+    }
+  };
 
   const excludeWo = async (wo) => {
     const reason = prompt(`Exclude ${wo.wo_number} from all KPIs?\n\nReason (required — audit trail):`);
@@ -410,7 +430,12 @@ export default function PerformanceView({ currentUser }) {
               <tbody>
                 {countdown.slice(0, 20).map(({ wo, t }) => (
                   <tr key={wo.wo_id} className="border-b border-[#1e1e2e] hover:bg-[#1e1e2e]/50">
-                    <td className="py-2 pr-2 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                    <td className="py-2 pr-2">
+                      <button onClick={() => openWo(wo.wo_id)}
+                        className="font-mono font-semibold text-blue-400 hover:text-blue-300 hover:underline">
+                        {wo.wo_number}
+                      </button>
+                    </td>
                     <td className="py-2 pr-2 text-slate-400">{facilityOf(wo)}</td>
                     <td className="py-2 pr-2 font-bold text-slate-300">{`${wo.priority || '—'}`.toUpperCase().slice(0, 3)}</td>
                     <td className="py-2 pr-2 text-slate-500">{fmtDateTime(t.target)}</td>
@@ -505,7 +530,12 @@ export default function PerformanceView({ currentUser }) {
               <tbody>
                 {excluded.map((wo) => (
                   <tr key={wo.wo_id} className="border-b border-[#1e1e2e]">
-                    <td className="py-2 pr-2 font-mono font-semibold text-blue-400">{wo.wo_number}</td>
+                    <td className="py-2 pr-2">
+                      <button onClick={() => openWo(wo.wo_id)}
+                        className="font-mono font-semibold text-blue-400 hover:text-blue-300 hover:underline">
+                        {wo.wo_number}
+                      </button>
+                    </td>
                     <td className="py-2 pr-2 text-slate-400">{facilityOf(wo)}</td>
                     <td className="py-2 pr-2 text-slate-500 italic">"{wo.kpi_excluded_reason}"</td>
                     <td className="py-2 pr-2 text-slate-600">{wo.kpi_excluded_by} · {wo.kpi_excluded_at ? new Date(wo.kpi_excluded_at).toLocaleDateString() : ''}</td>

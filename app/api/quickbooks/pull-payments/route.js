@@ -70,7 +70,11 @@ async function qbQuery(accessToken, realmId, query) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`QB query failed (${res.status}): ${(await res.text()).substring(0, 300)}`);
+  if (!res.ok) {
+    // intuit_tid identifies the request for Intuit support when troubleshooting
+    const tid = res.headers.get('intuit_tid');
+    throw new Error(`QB query failed (${res.status}, intuit_tid=${tid}): ${(await res.text()).substring(0, 300)}`);
+  }
   return res.json();
 }
 

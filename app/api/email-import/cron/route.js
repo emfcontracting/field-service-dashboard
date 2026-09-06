@@ -474,6 +474,47 @@ async function logImportActivity(results) {
 }
 
 // Main cron handler
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub work order linking (UPS Escalation).
+// If the new WO's text mentions another WO number that is currently disputed
+// (open / escalated / sub_wo_requested) and has no sub-WO yet, record this WO
+// as its sub work order and leave a note on both sides. Returns the original
+// WO number when a link was made, otherwise null.
+// ─────────────────────────────────────────────────────────────────────────────
+const WO_REF_PATTERN = /\b(?:C|P|PJ|ST|COU)\d{7}\b/gi;
+
+async function linkSubWorkOrder(insertedWO, workOrder) {
+  const haystack = `${workOrder.work_order_description || ''}\n${workOrder.comments || ''}`;
+  const own = String(workOrder.wo_number || '').toUpperCase();
+  const refs = [...new Set((haystack.match(WO_REF_PATTERN) || []).map(x => x.toUpperCase()))].filter(x => x !== own);
+  if (!refs.length) return null;
+
+  const { data: originals, error } = await supabase
+    .from('work_orders')
+    .select('wo_id, wo_number, dispute_status, dispute_sub_wo, dispute_notes')
+    .in('wo_number', refs)
+    .in('dispute_status', ['open', 'escalated', 'sub_wo_requested'])
+    .is('dispute_sub_wo', null)
+    .limit(1);
+  if (error || !originals?.length) return null;
+
+  const orig = originals[0];
+  const stamp = new Date().toLocaleDateString('en-US');
+  const note = `${stamp} — Sub-WO ${own} received from CBRE (auto-linked by e-mail import)`;
+  await supabase
+    .from('work_orders')
+    .update({
+      dispute_sub_wo: own,
+      dispute_notes: orig.dispute_notes ? `${orig.dispute_notes}\n${note}` : note,
+    })
+    .eq('wo_id', orig.wo_id);
+  await supabase
+    .from('work_orders')
+    .update({ comments: `${workOrder.comments || ''}\n[Sub-WO for disputed ${orig.wo_number} — see UPS Escalation]`.trim() })
+    .eq('wo_id', insertedWO.wo_id);
+  return orig.wo_number;
+}
+
 export async function GET(request) {
   const startTime = Date.now();
   console.log('=== Auto Email Import Cron Started (IMAP) ===');
@@ -661,6 +702,20 @@ export async function GET(request) {
             note: email.subject?.substring(0, 200) || null,
             effective_at: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),
           }).then(({ error }) => { if (error) console.error('target_history insert:', error.message); });
+        }
+
+        // Sub work order for a disputed WO? CBRE usually names the original
+        // ("sub WO for C2756337", "replaces C2756337") in the description.
+        // Link it so the UPS Escalation tracker shows the money is on its way.
+        try {
+          const linked = await linkSubWorkOrder(insertedWO, workOrder);
+          if (linked) {
+            results.subWoLinks = results.subWoLinks || [];
+            results.subWoLinks.push(`${workOrder.wo_number} → ${linked}`);
+            console.log(`🔗 ${workOrder.wo_number} linked as sub-WO of disputed ${linked}`);
+          }
+        } catch (linkErr) {
+          console.error('sub-WO link check failed:', linkErr.message);
         }
 
         console.log(`✓ Imported WO ${workOrder.wo_number}`);

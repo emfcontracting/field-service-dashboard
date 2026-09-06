@@ -2,9 +2,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN-ONLY: UPS Escalation tracker for disputed CBRE work orders
 //
-// Lifecycle: Open → Escalated to UPS → Resolved / Written Off
+// Lifecycle: Open → Escalated to UPS / Sub-WO requested → Resolved / Written Off
 // Each WO has dispute_status, dispute_reason, dispute_notes, dispute_amount,
-// and timestamps for each transition.
+// and timestamps for each transition. "Sub-WO requested" is the state for WOs
+// that are dead at CBRE (cancelled / closed without invoice): the money comes
+// back through a sub work order, which is linked in dispute_sub_wo.
+//
+// The extra "Waiting on CBRE" tab is not a dispute list: it shows work orders
+// whose NTE request sits in quote_submitted at CBRE, oldest first, so a
+// request cannot silently age out again.
 // ─────────────────────────────────────────────────────────────────────────────
 'use client';
 
@@ -27,6 +33,11 @@ const supabaseClient = createClient(
 
 const fmt = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const daysSince = (d) => d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : null;
+
+// NTE requests older than this are overdue for a nudge to CBRE.
+const WAITING_WARN_DAYS = 14;
+const WAITING_TAB = 'waiting_cbre';
 
 // ═════════════════════════════════════════════════════════════════════════════
 export default function UPSEscalationView({ currentUser }) {
@@ -44,10 +55,16 @@ export default function UPSEscalationView({ currentUser }) {
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [subWoByWo, setSubWoByWo] = useState({});      // original wo_id -> { wo_number, status, invoice }
+  const [editingSubWoFor, setEditingSubWoFor] = useState(null);
+  const [subWoDraft, setSubWoDraft] = useState('');
+  const [waiting, setWaiting] = useState([]);           // quote_submitted WOs (Waiting on CBRE tab)
+  const [waitingLoading, setWaitingLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // ── Data for export (All Active = Open + Escalated by default) ──────────────────────────────────────────
   const exportableDisputes = useMemo(
-    () => disputes.filter(d => d.dispute_status === 'open' || d.dispute_status === 'escalated'),
+    () => disputes.filter(d => ['open', 'escalated', 'sub_wo_requested'].includes(d.dispute_status)),
     [disputes]
   );
 
@@ -96,7 +113,8 @@ export default function UPSEscalationView({ currentUser }) {
           date_completed, work_order_description,
           dispute_status, dispute_reason, dispute_notes,
           dispute_opened_at, dispute_escalated_at, dispute_resolved_at,
-          dispute_amount, dispute_recovered_amount,
+          dispute_requested_at, dispute_sub_wo,
+          dispute_amount, dispute_recovered_amount, cbre_status,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .not('dispute_status', 'is', null)
@@ -117,12 +135,95 @@ export default function UPSEscalationView({ currentUser }) {
         const map = {};
         (invs || []).forEach(inv => { map[inv.wo_id] = inv; });
         setInvoiceByWo(map);
+
+        // Sub work orders CBRE issued for these disputes — status + invoice,
+        // so the card shows whether the money is actually on its way.
+        const subNumbers = [...new Set(wos.map(w => w.dispute_sub_wo).filter(Boolean))];
+        if (subNumbers.length) {
+          const { data: subs } = await supabaseClient
+            .from('work_orders')
+            .select('wo_id, wo_number, status, cbre_status, nte')
+            .in('wo_number', subNumbers);
+          const subIds = (subs || []).map(x => x.wo_id);
+          const { data: subInvs } = subIds.length
+            ? await supabaseClient.from('invoices').select('invoice_id, invoice_number, total, status, wo_id').in('wo_id', subIds)
+            : { data: [] };
+          const byNumber = {};
+          (subs || []).forEach(x => { byNumber[x.wo_number] = { ...x, invoice: (subInvs || []).find(i => i.wo_id === x.wo_id) || null }; });
+          const subMap = {};
+          wos.forEach(w => { if (w.dispute_sub_wo && byNumber[w.dispute_sub_wo]) subMap[w.wo_id] = byNumber[w.dispute_sub_wo]; });
+          setSubWoByWo(subMap);
+        } else {
+          setSubWoByWo({});
+        }
       }
     } catch (e) {
       console.error('UPSEscalationView load error:', e);
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Waiting on CBRE: NTE requests sitting in quote_submitted ──────────────
+  useEffect(() => { if (isAdmin && activeTab === WAITING_TAB) loadWaiting(); /* eslint-disable-next-line */ }, [isAdmin, activeTab]);
+
+  const loadWaiting = async () => {
+    setWaitingLoading(true);
+    try {
+      const { data: wos } = await supabaseClient
+        .from('work_orders')
+        .select('wo_id, wo_number, building, status, nte, date_entered, cbre_status, cbre_status_updated_at, cbre_quote_submitted_at, dispute_status')
+        .eq('cbre_status', 'quote_submitted');
+      const list = wos || [];
+      // Amount requested = newest written quote on the WO (fallback: current NTE).
+      const ids = list.map(w => w.wo_id);
+      let latestQuote = {};
+      if (ids.length) {
+        const { data: quotes } = await supabaseClient
+          .from('work_order_quotes')
+          .select('wo_id, new_nte_amount, grand_total, nte_status, created_at')
+          .in('wo_id', ids)
+          .order('created_at', { ascending: false });
+        (quotes || []).forEach(q => { if (!latestQuote[q.wo_id]) latestQuote[q.wo_id] = q; });
+      }
+      const rows = list.map(w => {
+        const since = w.cbre_quote_submitted_at || w.cbre_status_updated_at || null;
+        const q = latestQuote[w.wo_id];
+        return {
+          ...w,
+          waiting_since: since,
+          days: daysSince(since),
+          requested: parseFloat(q?.new_nte_amount) || parseFloat(q?.grand_total) || parseFloat(w.nte) || 0,
+        };
+      }).sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
+      setWaiting(rows);
+    } catch (e) {
+      console.error('UPSEscalationView waiting load error:', e);
+    } finally {
+      setWaitingLoading(false);
+    }
+  };
+
+  const copyWaitingList = async () => {
+    const overdue = waiting.filter(w => (w.days ?? 0) >= WAITING_WARN_DAYS);
+    const lines = overdue.map(w =>
+      `${w.wo_number}\t${(w.building || '').split(' - ')[0]}\tsubmitted ${fmtDate(w.waiting_since)}\t${w.days} days\t${fmt(w.requested)}`
+    );
+    const text = `NTE increase requests waiting for a decision (${overdue.length}):\n` + lines.join('\n');
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500); }
+    catch { alert(text); }
+  };
+
+  const saveSubWo = async (woId) => {
+    const value = (subWoDraft || '').trim().toUpperCase() || null;
+    const { error } = await supabaseClient
+      .from('work_orders')
+      .update({ dispute_sub_wo: value })
+      .eq('wo_id', woId);
+    if (error) { alert('Failed: ' + error.message); return; }
+    setDisputes(prev => prev.map(d => d.wo_id === woId ? { ...d, dispute_sub_wo: value } : d));
+    setEditingSubWoFor(null);
+    loadData();
   };
 
   // ── Update functions ───────────────────────────────────────────────────────
@@ -172,6 +273,8 @@ export default function UPSEscalationView({ currentUser }) {
         dispute_opened_at: null,
         dispute_escalated_at: null,
         dispute_resolved_at: null,
+        dispute_requested_at: null,
+        dispute_sub_wo: null,
         dispute_amount: null,
         dispute_recovered_amount: null,
       })
@@ -205,12 +308,15 @@ export default function UPSEscalationView({ currentUser }) {
       .reduce((s, d) => s + (parseFloat(d.dispute_recovered_amount) || parseFloat(d.dispute_amount) || 0), 0);
 
     return {
-      open:        { count: disputes.filter(d => d.dispute_status === 'open').length,        total: calc('open') },
-      escalated:   { count: disputes.filter(d => d.dispute_status === 'escalated').length,   total: calc('escalated') },
-      resolved:    { count: disputes.filter(d => d.dispute_status === 'resolved').length,    total: calcRecovered() },
-      written_off: { count: disputes.filter(d => d.dispute_status === 'written_off').length, total: calc('written_off') },
+      open:             { count: disputes.filter(d => d.dispute_status === 'open').length,             total: calc('open') },
+      escalated:        { count: disputes.filter(d => d.dispute_status === 'escalated').length,        total: calc('escalated') },
+      sub_wo_requested: { count: disputes.filter(d => d.dispute_status === 'sub_wo_requested').length, total: calc('sub_wo_requested') },
+      resolved:         { count: disputes.filter(d => d.dispute_status === 'resolved').length,         total: calcRecovered() },
+      written_off:      { count: disputes.filter(d => d.dispute_status === 'written_off').length,      total: calc('written_off') },
     };
   }, [disputes]);
+
+  const waitingOverdue = useMemo(() => waiting.filter(w => (w.days ?? 0) >= WAITING_WARN_DAYS).length, [waiting]);
 
   // ── Admin gate ─────────────────────────────────────────────────────────────
   if (!isAdmin) return (
@@ -293,7 +399,7 @@ export default function UPSEscalationView({ currentUser }) {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {Object.entries(DISPUTE_STATUS).map(([key, cfg]) => (
           <div key={key} className={`border rounded-xl p-4 ${cfg.bg}`}>
             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
@@ -321,6 +427,15 @@ export default function UPSEscalationView({ currentUser }) {
             color={cfg.color}
           />
         ))}
+        <TabButton
+          active={activeTab === WAITING_TAB}
+          onClick={() => setActiveTab(WAITING_TAB)}
+          label="⏳ Waiting on CBRE"
+          count={waiting.length}
+          total={null}
+          color="text-amber-400"
+          hint={waitingOverdue ? `${waitingOverdue} overdue` : 'NTE requests in quote_submitted'}
+        />
       </div>
 
       {/* Search */}
@@ -333,8 +448,16 @@ export default function UPSEscalationView({ currentUser }) {
         />
       </div>
 
-      {/* Content */}
-      {loading ? (
+      {/* Waiting on CBRE — not disputes, but the list that turns into disputes when ignored */}
+      {activeTab === WAITING_TAB ? (
+        <WaitingOnCbre
+          rows={waiting}
+          loading={waitingLoading}
+          onRefresh={loadWaiting}
+          onCopy={copyWaitingList}
+          copied={copied}
+        />
+      ) : loading ? (
         <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
           <svg className="animate-spin w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
           Loading disputes...
@@ -343,6 +466,7 @@ export default function UPSEscalationView({ currentUser }) {
         <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl py-20 text-center text-slate-600">
           {activeTab === 'open'        && '🎉 No open disputes right now'}
           {activeTab === 'escalated'   && 'No disputes currently in escalation'}
+          {activeTab === 'sub_wo_requested' && 'No sub work orders requested'}
           {activeTab === 'resolved'    && 'No recoveries yet'}
           {activeTab === 'written_off' && 'No write-offs yet'}
         </div>
@@ -353,6 +477,13 @@ export default function UPSEscalationView({ currentUser }) {
               key={d.wo_id}
               dispute={d}
               invoice={invoiceByWo[d.wo_id]}
+              subWo={subWoByWo[d.wo_id]}
+              editingSubWo={editingSubWoFor === d.wo_id}
+              subWoDraft={editingSubWoFor === d.wo_id ? subWoDraft : (d.dispute_sub_wo || '')}
+              onStartEditSubWo={() => { setEditingSubWoFor(d.wo_id); setSubWoDraft(d.dispute_sub_wo || ''); }}
+              onChangeSubWo={(v) => setSubWoDraft(v)}
+              onSaveSubWo={() => saveSubWo(d.wo_id)}
+              onCancelSubWo={() => setEditingSubWoFor(null)}
               activeTab={activeTab}
               editingNotes={editingNotesFor === d.wo_id}
               notesDraft={editingNotesFor === d.wo_id ? notesDraft : d.dispute_notes}
@@ -363,7 +494,9 @@ export default function UPSEscalationView({ currentUser }) {
               onTransition={(to) => {
                 if (to === 'resolved') {
                   setTransitionFor(d.wo_id);
-                  setRecoveredAmount(prev => ({ ...prev, [d.wo_id]: (d.dispute_amount || 0).toString() }));
+                  // Prefill with what the sub-WO invoice says when there is one.
+                  const subTotal = subWoByWo[d.wo_id]?.invoice?.total;
+                  setRecoveredAmount(prev => ({ ...prev, [d.wo_id]: (subTotal ?? d.dispute_amount ?? 0).toString() }));
                 } else {
                   transitionStatus(d.wo_id, to);
                 }
@@ -383,6 +516,8 @@ export default function UPSEscalationView({ currentUser }) {
       <div className="text-xs text-slate-600 px-1 space-y-0.5 pt-4">
         <div>• <strong className="text-red-400">Open</strong> = Just marked as disputed, no UPS contact yet</div>
         <div>• <strong className="text-orange-400">Escalated</strong> = Contacted UPS (Deontye Archie), waiting on response</div>
+        <div>• <strong className="text-sky-400">Sub-WO requested</strong> = WO is dead at CBRE (cancelled / closed without invoice); sub work order requested from CBRE — link it here when it arrives (the e-mail import links it automatically when the sub-WO names the original)</div>
+        <div>• <strong className="text-amber-400">Waiting on CBRE</strong> = not a dispute: NTE requests still sitting in quote_submitted. Older than {WAITING_WARN_DAYS} days = send the list to CBRE before they age out</div>
         <div>• <strong className="text-emerald-400">Resolved</strong> = Got paid via UPS direct — money recovered</div>
         <div>• <strong className="text-slate-500">Written Off</strong> = Unable to recover, accept the loss</div>
         <div className="text-slate-700 mt-1">💡 Disputed WOs are automatically excluded from Cash Flow forecasts</div>
@@ -402,7 +537,7 @@ export default function UPSEscalationView({ currentUser }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-function TabButton({ active, onClick, label, count, total, color }) {
+function TabButton({ active, onClick, label, count, total, color, hint }) {
   return (
     <button
       onClick={onClick}
@@ -412,7 +547,7 @@ function TabButton({ active, onClick, label, count, total, color }) {
       {label}
       <span className="ml-2 text-xs text-slate-600">({count})</span>
       <div className={`text-xs font-normal mt-0.5 ${active ? color : 'text-slate-600'}`}>
-        ${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        {total == null ? (hint || '') : `$${total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
       </div>
     </button>
   );
@@ -420,7 +555,8 @@ function TabButton({ active, onClick, label, count, total, color }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 function DisputeCard({
-  dispute, invoice, activeTab,
+  dispute, invoice, subWo, activeTab,
+  editingSubWo, subWoDraft, onStartEditSubWo, onChangeSubWo, onSaveSubWo, onCancelSubWo,
   editingNotes, notesDraft, onStartEditNotes, onChangeNotes, onSaveNotes, onCancelNotes,
   onTransition, onRemove,
   transitionResolveOpen, recoveredAmountDraft, onChangeRecovered, onConfirmResolve, onCancelResolve,
@@ -432,6 +568,7 @@ function DisputeCard({
   const timeline = [];
   if (dispute.dispute_opened_at)    timeline.push({ label: 'Opened',    date: dispute.dispute_opened_at });
   if (dispute.dispute_escalated_at) timeline.push({ label: 'Escalated', date: dispute.dispute_escalated_at });
+  if (dispute.dispute_requested_at) timeline.push({ label: 'Sub-WO requested', date: dispute.dispute_requested_at });
   if (dispute.dispute_resolved_at)  timeline.push({ label: dispute.dispute_status === 'resolved' ? 'Resolved' : 'Closed', date: dispute.dispute_resolved_at });
 
   return (
@@ -488,6 +625,42 @@ function DisputeCard({
               <span className="text-slate-400">{fmtDate(t.date)}</span>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Sub work order — the way money comes back on a cancelled/closed WO */}
+      {(dispute.dispute_status === 'sub_wo_requested' || dispute.dispute_sub_wo) && (
+        <div className="px-4 py-2.5 border-b border-[#1e1e2e] bg-sky-500/5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-sky-400 font-semibold uppercase tracking-wider">Sub-WO</span>
+          {editingSubWo ? (
+            <>
+              <input value={subWoDraft} onChange={e => onChangeSubWo(e.target.value)}
+                placeholder="e.g. C3301234"
+                className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 rounded px-2 py-1 font-mono w-36 focus:outline-none focus:border-sky-500/60" />
+              <button onClick={onSaveSubWo} className="px-2 py-1 rounded bg-sky-600 text-white font-semibold">Save</button>
+              <button onClick={onCancelSubWo} className="px-2 py-1 rounded bg-[#1e1e2e] border border-[#2d2d44] text-slate-400">Cancel</button>
+            </>
+          ) : dispute.dispute_sub_wo ? (
+            <>
+              <span className="font-mono text-slate-200">{dispute.dispute_sub_wo}</span>
+              {subWo ? (
+                <span className="text-slate-400">
+                  · in FSM: {subWo.status}{subWo.cbre_status ? ` / ${subWo.cbre_status}` : ''}
+                  {subWo.invoice
+                    ? <> · <a href={`/invoices?invoiceId=${subWo.invoice.invoice_id}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 font-mono">{subWo.invoice.invoice_number}</a> {subWo.invoice.status} {fmt(subWo.invoice.total)}</>
+                    : ' · no invoice yet'}
+                </span>
+              ) : (
+                <span className="text-amber-400">· not in FSM yet (import the dispatch e-mail)</span>
+              )}
+              <button onClick={onStartEditSubWo} className="text-blue-400 hover:text-blue-300 ml-auto">✏️</button>
+            </>
+          ) : (
+            <>
+              <span className="text-slate-500 italic">waiting for CBRE{dispute.dispute_requested_at ? ` — requested ${fmtDate(dispute.dispute_requested_at)} (${daysSince(dispute.dispute_requested_at)} days)` : ''}</span>
+              <button onClick={onStartEditSubWo} className="text-blue-400 hover:text-blue-300 ml-auto">+ Link sub-WO</button>
+            </>
+          )}
         </div>
       )}
 
@@ -559,10 +732,70 @@ function DisputeCard({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+function WaitingOnCbre({ rows, loading, onRefresh, onCopy, copied }) {
+  const overdue = rows.filter(r => (r.days ?? 0) >= WAITING_WARN_DAYS);
+  const total = rows.reduce((s, r) => s + (r.requested || 0), 0);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="text-slate-400">
+          <span className="text-slate-200 font-semibold">{rows.length}</span> NTE request{rows.length !== 1 ? 's' : ''} waiting at CBRE
+          {' · '}<span className="text-amber-400 font-semibold">{overdue.length}</span> older than {WAITING_WARN_DAYS} days
+          {' · '}{fmt(total)} requested
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onRefresh} className="px-3 py-1.5 rounded-lg text-xs bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:bg-[#2d2d44]">↻ Refresh</button>
+          <button onClick={onCopy} disabled={!overdue.length}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 disabled:cursor-not-allowed">
+            {copied ? '✓ Copied' : `📋 Copy overdue list for CBRE (${overdue.length})`}
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-slate-500 text-sm">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl py-16 text-center text-slate-600">Nothing waiting at CBRE</div>
+      ) : (
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-500 uppercase tracking-wider">
+              <tr className="border-b border-[#1e1e2e]">
+                <th className="text-left px-3 py-2">WO</th>
+                <th className="text-left px-3 py-2">Site</th>
+                <th className="text-left px-3 py-2">Submitted</th>
+                <th className="text-right px-3 py-2">Days</th>
+                <th className="text-right px-3 py-2">Requested</th>
+                <th className="text-left px-3 py-2">FSM status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const late = (r.days ?? 0) >= WAITING_WARN_DAYS;
+                return (
+                  <tr key={r.wo_id} className={`border-b border-[#1e1e2e]/60 ${late ? 'bg-amber-500/5' : ''}`}>
+                    <td className="px-3 py-2 font-mono text-blue-400">{r.wo_number}{r.dispute_status ? <span className="ml-1 text-[10px] text-slate-500">(dispute)</span> : null}</td>
+                    <td className="px-3 py-2 text-slate-400 truncate max-w-[220px]">{r.building}</td>
+                    <td className="px-3 py-2 text-slate-400">{fmtDate(r.waiting_since)}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${late ? 'text-amber-400 font-semibold' : 'text-slate-300'}`}>{r.days ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-200">{fmt(r.requested)}</td>
+                    <td className="px-3 py-2 text-slate-500">{r.status}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getBtnClass(variant) {
   return {
     success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
     orange:  'bg-orange-600 hover:bg-orange-500 text-white',
+    sky:     'bg-sky-600 hover:bg-sky-500 text-white',
     default: 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:bg-[#2d2d44]',
     ghost:   'text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]',
   }[variant] || 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300';

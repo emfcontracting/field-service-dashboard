@@ -49,8 +49,10 @@ const CBRE_WO_PATTERN = /^(C|P|PJ|ST|COU)\d+$/i;
 // cbre_status values that mean "CBRE already has a quote from us" — a pending
 // quote created BEFORE that status was set is a duplicate, not new work.
 const CBRE_HAS_QUOTE = ['quote_submitted', 'quote_approved'];
-// Nothing to request on these.
-const CBRE_CLOSED = ['cancelled', 'CMP', 'CA1', 'CA2', 'CIR', 'CIS', 'CPW'];
+// Nothing to request on these. CPW ("closed, waiting paperwork") is NOT in the
+// list: CBRE still expects our invoice there, and an NTE increase is exactly
+// what such a WO usually needs.
+const CBRE_CLOSED = ['cancelled', 'CMP', 'CA1', 'CA2', 'CIR', 'CIS'];
 
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';
 const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)';
@@ -84,6 +86,7 @@ async function handle(request) {
       notACbreNumber: [],
       noBuildingCode: [],
       noAmount: [],
+      noIncrease: [],         // quote amount does not exceed the current NTE
       alreadySubmitted: [],   // quote older than the last submission recorded on the WO
       closed: [],             // WO cancelled / posted at CBRE
       problems: [],
@@ -111,7 +114,7 @@ async function handle(request) {
     // 2) Their work orders.
     const { data: wos, error: wErr } = await supabase
       .from('work_orders')
-      .select('wo_id, wo_number, nte, cbre_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
+      .select('wo_id, wo_number, nte, cbre_nte, cbre_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
       .in('wo_id', [...latestByWo.keys()]);
     if (wErr) throw new Error(`work order query failed: ${wErr.message}`);
     const woById = new Map((wos || []).map((w) => [w.wo_id, w]));
@@ -142,6 +145,15 @@ async function handle(request) {
 
       const amt = parseFloat(quote.new_nte_amount) || parseFloat(quote.grand_total);
       if (!Number.isFinite(amt) || amt <= 0) { result.excluded.noAmount.push(num); continue; }
+      // The NTE already covers the quote → it was granted (or the quote was
+      // written against the current NTE). Nothing to request. cbre_nte is the
+      // NTE as CBRE has it; `nte` may include a verbal approval that never
+      // reached the portal, so it only counts when cbre_nte is unknown.
+      const official = wo.cbre_nte != null ? parseFloat(wo.cbre_nte) : parseFloat(wo.nte);
+      if (Number.isFinite(official) && amt <= official) {
+        result.excluded.noIncrease.push(`${num} (NTE ${official} ≥ ${amt})`);
+        continue;
+      }
 
       const built = buildCbrePayload({
         kind: 'cbre_nte',

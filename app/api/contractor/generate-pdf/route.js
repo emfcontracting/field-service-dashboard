@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff } from '@/lib/serverAuth';
 
 export async function POST(request) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const data = await request.json();

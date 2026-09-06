@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { getSupabase } from '@/lib/supabase';
+import { setAppToken } from '@/lib/apiClient';
 import { useRouter } from 'next/navigation';
 
-const supabase = getSupabase();
 
 export default function ContractorLoginPage() {
   const router = useRouter();
@@ -15,55 +14,32 @@ export default function ContractorLoginPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
 
+  // Both steps go through /api/contractor/login (server-side checks with the
+  // service role). The PIN step returns the app token every /api/contractor/*
+  // route requires — the portal used to verify the PIN in the browser and
+  // never had a token, so PDF downloads and tax records failed with
+  // "Sign in required".
+  async function callLogin(payload) {
+    const res = await fetch('/api/contractor/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
   async function handleEmailSubmit(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      // Find user by email
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('user_id, email, first_name, last_name')
-        .eq('email', email.toLowerCase().trim())
-        .eq('is_active', true)
-        .single();
-
-      if (userError || !userData) {
-        setError('Email not found or account inactive');
-        setLoading(false);
-        return;
-      }
-
-      // Check if they have a subcontractor profile
-      const { data: profile, error: profileError } = await supabase
-        .from('subcontractor_profiles')
-        .select('*')
-        .eq('user_id', userData.user_id)
-        .single();
-
-      if (profileError || !profile) {
-        setError('Subcontractor access not enabled. Contact admin.');
-        setLoading(false);
-        return;
-      }
-
-      if (!profile.is_enabled) {
-        setError('Your subcontractor access is disabled. Contact admin.');
-        setLoading(false);
-        return;
-      }
-
-      if (profile.subscription_status === 'expired') {
-        setError('Your subscription has expired. Contact admin.');
-        setLoading(false);
-        return;
-      }
-
-      setUser({ ...userData, profile });
+      const data = await callLogin({ email: email.toLowerCase().trim(), step: 'email' });
+      setUser({ email: email.toLowerCase().trim(), first_name: data.first_name, last_name: data.last_name, hasPin: data.hasPin });
       setStep('pin');
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -73,45 +49,20 @@ export default function ContractorLoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      // Verify PIN (simple hash comparison)
-      // In production, use bcrypt on server side
-      const pinHash = btoa(pin); // Simple encoding for demo
-      
-      if (user.profile.pin_hash && user.profile.pin_hash !== pinHash) {
-        setError('Incorrect PIN');
-        setLoading(false);
-        return;
-      }
-
-      // If no PIN set yet, this is first login - let them in to set one
-      if (!user.profile.pin_hash) {
-        // Store session
-        sessionStorage.setItem('contractor_user', JSON.stringify({
-          user_id: user.user_id,
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          profile: user.profile,
-          needsPinSetup: true
-        }));
-        router.push('/contractor/settings');
-        return;
-      }
-
-      // Store session
+      const data = await callLogin({ email: user.email, pin });
+      setAppToken(data.token);
       sessionStorage.setItem('contractor_user', JSON.stringify({
-        user_id: user.user_id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        profile: user.profile
+        user_id: data.user.user_id,
+        email: data.user.email,
+        first_name: data.user.first_name,
+        last_name: data.user.last_name,
+        profile: data.profile,
+        ...(data.needsPinSetup ? { needsPinSetup: true } : {}),
       }));
-
-      router.push('/contractor/dashboard');
+      router.push(data.needsPinSetup ? '/contractor/settings' : '/contractor/dashboard');
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -166,7 +117,7 @@ export default function ContractorLoginPage() {
               </div>
 
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                {user?.profile?.pin_hash ? 'Enter your PIN' : 'Create a PIN (4-6 digits)'}
+                {user?.hasPin ? 'Enter your PIN' : 'Create a PIN (4-6 digits)'}
               </label>
               <input
                 type="password"
@@ -191,7 +142,7 @@ export default function ContractorLoginPage() {
                 disabled={loading || pin.length < 4}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50 mb-3"
               >
-                {loading ? 'Verifying...' : user?.profile?.pin_hash ? 'Login' : 'Set PIN & Continue'}
+                {loading ? 'Verifying...' : user?.hasPin ? 'Login' : 'Set PIN & Continue'}
               </button>
 
               <button

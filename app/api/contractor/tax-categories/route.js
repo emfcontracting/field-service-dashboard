@@ -7,7 +7,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -15,7 +15,7 @@ const supabase = createClient(
 );
 
 export async function GET(request) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
@@ -24,6 +24,7 @@ export async function GET(request) {
     if (!userId) {
       return NextResponse.json({ error: 'user_id is required' }, { status: 400 });
     }
+    if (!ownsUser(auth, userId)) return denyNotOwner().response;
 
     const { data, error } = await supabase
       .from('contractor_tax_categories')
@@ -45,11 +46,12 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const { user_id, category_name } = body;
+    if (!ownsUser(auth, user_id)) return denyNotOwner().response;
 
     if (!user_id || !category_name) {
       return NextResponse.json(

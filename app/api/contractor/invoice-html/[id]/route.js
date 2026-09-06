@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -16,7 +16,7 @@ function formatDateLocal(dateString) {
 }
 
 export async function GET(request, { params }) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   const { id } = params;
 
@@ -31,6 +31,7 @@ export async function GET(request, { params }) {
     if (invoiceError || !invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }
+    if (!ownsUser(auth, invoice.user_id)) return denyNotOwner().response;
 
     // Get user data
     const { data: userData } = await supabase

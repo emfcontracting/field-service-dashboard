@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
+import { setAppToken } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -116,6 +117,7 @@ export default function ContractorDashboard() {
   }
 
   function handleLogout() {
+    setAppToken(null);
     sessionStorage.removeItem('contractor_user');
     router.push('/contractor');
   }

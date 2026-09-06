@@ -1,14 +1,15 @@
 // app/api/contractor/generate-invoice-pdf/route.js
 // Generates a PDF invoice for subcontractors
 import { NextResponse } from 'next/server';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
 import { fmtDate } from '@/lib/dates';
 
 export async function POST(request) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const { invoice, user, lineItems } = await request.json();
+    if (!ownsUser(auth, user?.user_id || invoice?.user_id)) return denyNotOwner().response;
     
     const businessName = user.profile?.business_name || `${user.first_name} ${user.last_name}`;
     const businessAddress = user.profile?.business_address || '';

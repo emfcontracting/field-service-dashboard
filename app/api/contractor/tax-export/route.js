@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 import { DEFAULT_TAX_CATEGORIES, TAX_CATEGORY_GROUPS } from '@/lib/taxRecordCategories';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -270,7 +270,7 @@ async function buildEMFIncomeSheet(userId, year) {
 }
 
 export async function POST(request) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const { user_id, year, format } = await request.json();
@@ -278,6 +278,7 @@ export async function POST(request) {
     if (!user_id || !year) {
       return NextResponse.json({ error: 'user_id and year are required' }, { status: 400 });
     }
+    if (!ownsUser(auth, user_id)) return denyNotOwner().response;
 
     // Fetch records and custom categories
     const [recordsRes, categoriesRes, userRes] = await Promise.all([

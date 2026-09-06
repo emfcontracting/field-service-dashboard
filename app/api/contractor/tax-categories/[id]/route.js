@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,11 +18,14 @@ const supabase = createClient(
 );
 
 export async function PATCH(request, { params }) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const { id } = await params;
     const body = await request.json();
+    const { data: existing } = await supabase.from('contractor_tax_categories').select('user_id').eq('category_id', id).maybeSingle();
+    if (!existing) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+    if (!ownsUser(auth, existing.user_id)) return denyNotOwner().response;
 
     const update = {};
     if (body.category_name !== undefined) update.category_name = String(body.category_name).trim();
@@ -55,10 +58,13 @@ export async function PATCH(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-  const auth = await requireStaff(request);
+  const auth = await requireContractorOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
     const { id } = await params;
+    const { data: existing } = await supabase.from('contractor_tax_categories').select('user_id').eq('category_id', id).maybeSingle();
+    if (!existing) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+    if (!ownsUser(auth, existing.user_id)) return denyNotOwner().response;
 
     const { error } = await supabase
       .from('contractor_tax_categories')

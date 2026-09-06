@@ -47,15 +47,19 @@ export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
   const [breakdownMode, setBreakdownMode] = useState('priority'); // priority | facility | tech
   const [users, setUsers] = useState([]);
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [loadErrors, setLoadErrors] = useState([]);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     setLoading(true);
+    setLoadErrors([]);
     try {
       const since = new Date(Date.now() - 400 * MS_D).toISOString();
       // .limit(5000) does NOT lift PostgREST's 1000-row cap — page instead.
-      const [woRows, pauseRows, invRows] = await Promise.all([
+      // Each source is loaded on its own: one failing query (a missing
+      // column, say) must not blank the whole view — it is reported instead.
+      const results = await Promise.allSettled([
         fetchAll(() => supabaseClient.from('work_orders').select(`
           wo_id, wo_number, building, priority, status, date_entered, date_completed,
           target_response_at, target_completion_at, time_in, waiting_reason,
@@ -70,17 +74,26 @@ export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
           .select('wo_id, generated_at, cmp_date, paid_at, rejected_at, status')
           .gte('created_at', since).order('invoice_id')),
       ]);
-      const woRes = { data: woRows }, pauseRes = { data: pauseRows }, invRes = { data: invRows };
+      const names = ['work orders', 'clock pauses', 'invoices'];
+      const errors = [];
+      const [woRows, pauseRows, invRows] = results.map((r, i) => {
+        if (r.status === 'fulfilled') return r.value;
+        console.error(`PerformanceView load (${names[i]}):`, r.reason);
+        errors.push(`${names[i]}: ${r.reason?.message || String(r.reason)}`);
+        return [];
+      });
+      setLoadErrors(errors);
       const { data: userRows } = await supabaseClient
         .from('users')
         .select('user_id, first_name, last_name, email, role')
         .eq('is_active', true);
       setUsers(userRows || []);
-      setWos(woRes.data || []);
-      setPauseRows(pauseRes.data || []);
-      setInvoices(invRes.data || []);
+      setWos(woRows);
+      setPauseRows(pauseRows);
+      setInvoices(invRows);
     } catch (e) {
       console.error('PerformanceView load:', e);
+      setLoadErrors([e?.message || String(e)]);
     } finally {
       setLoading(false);
     }
@@ -300,6 +313,12 @@ export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
 
   return (
     <div className="space-y-4">
+      {loadErrors.length > 0 && (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+          ⚠️ Some data could not be loaded — the numbers below are incomplete:
+          <ul className="list-disc ml-5 mt-1 text-xs font-mono">{loadErrors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+        </div>
+      )}
       {/* Header + filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

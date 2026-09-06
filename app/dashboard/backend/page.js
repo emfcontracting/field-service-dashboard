@@ -194,6 +194,66 @@ function TriggersTab({ trigger, triggering }) {
   );
 }
 
+// ── Digest Tab ───────────────────────────────────────────────────────────────
+// The health digest route needs the session token in the Authorization header,
+// so a plain browser URL answers "Sign in required". This tab fetches it with
+// apiFetch and shows the same HTML the 07:00 e-mail carries.
+function DigestTab() {
+  const [html, setHtml]       = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [result, setResult]   = useState(null);
+  const [error, setError]     = useState(null);
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiFetch('/api/cron/health-digest?format=html');
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      setHtml(await res.text());
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const sendNow = async () => {
+    if (!confirm('Send the health digest e-mail now (to the configured recipients)?')) return;
+    setSending(true); setResult(null); setError(null);
+    try {
+      const res = await apiFetch('/api/cron/health-digest', { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      setResult(j);
+    } catch (e) { setError(e.message); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-blue-500/5 border border-blue-500/15 rounded-xl p-4">
+        <p className="text-xs text-slate-500">
+          <span className="text-blue-400 font-semibold">Health Digest</span> — what the 07:00 ET e-mail will say: failed and stale jobs (cron_runs), QuickBooks, approvals, NTE requests waiting at CBRE, sub-WO requests, old draft invoices.
+        </p>
+        <div className="flex gap-2">
+          <button onClick={load} disabled={loading} className="px-3 py-1.5 rounded-lg text-xs bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:bg-[#2d2d44] disabled:opacity-50">↻ Refresh</button>
+          <button onClick={sendNow} disabled={sending} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">{sending ? 'Sending…' : '✉️ Send now'}</button>
+        </div>
+      </div>
+      {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">{error}</div>}
+      {result && (
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+          Sent to {(result.to || []).join(', ')} — {result.attention} item{result.attention === 1 ? '' : 's'} flagged{result.pruned != null ? `, ${result.pruned} old run rows pruned` : ''}.
+        </div>
+      )}
+      {loading && !html ? (
+        <div className="flex items-center justify-center py-16 text-slate-500 text-sm">Loading…</div>
+      ) : html ? (
+        <iframe title="Health digest" srcDoc={html} sandbox="" className="w-full rounded-xl border border-[#1e1e2e] bg-white" style={{ minHeight: '70vh' }} />
+      ) : null}
+    </div>
+  );
+}
+
 // ── Logs Tab ─────────────────────────────────────────────────────────────────
 function LogsTab({ logs, stats, logType, setLogType, logStatus, setLogStatus, logLimit, setLogLimit, onRefresh }) {
   const LOG_TYPES   = ['all','email_import','availability_reminder','aging_alert','manual_trigger','notification','error'];
@@ -360,6 +420,7 @@ const TABS = [
   { id:'bulk-ops',  label:'Bulk Ops',   icon:'⚙️' },
   { id:'triggers',  label:'Triggers',   icon:'⚡' },
   { id:'logs',      label:'Logs',       icon:'📜' },
+  { id:'digest',    label:'Digest',     icon:'🩺' },
   { id:'database',  label:'Database',   icon:'🗄️' },
 ];
 
@@ -463,6 +524,7 @@ export default function BackendDashboard() {
           {activeTab === 'bulk-ops'  && <BulkOperationsTab />}
           {activeTab === 'triggers'  && <TriggersTab trigger={trigger} triggering={triggering} />}
           {activeTab === 'logs'      && <LogsTab logs={logs} stats={logStats} logType={logType} setLogType={setLogType} logStatus={logStatus} setLogStatus={setLogStatus} logLimit={logLimit} setLogLimit={setLogLimit} onRefresh={fetchLogs} />}
+          {activeTab === 'digest'    && <DigestTab />}
           {activeTab === 'database'  && <DatabaseTab />}
         </div>
 

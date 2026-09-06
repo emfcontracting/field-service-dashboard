@@ -1,7 +1,7 @@
 // useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS, SIGNATURE & OFFLINE SUPPORT)
 
 import { useState, useEffect, useRef } from 'react';
-import { markCheckedIn, markCheckedOut } from '../utils/checkedInStore';
+import { markCheckedIn, markCheckedOut, setCheckedInFromServer, isCheckedIn, fetchCheckedInWos } from '../utils/checkedInStore';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   getCachedWorkOrders,
@@ -173,6 +173,14 @@ export function useWorkOrders(currentUser) {
       );
 
       setWorkOrders(uniqueWOs);
+
+      // Presence from the shared time log (native + web write the same table),
+      // so the pin/banner follows the tech across devices.
+      try {
+        setCheckedInFromServer(currentUser.user_id, await fetchCheckedInWos(supabase, currentUser.user_id));
+      } catch (presenceErr) {
+        console.warn('checked-in state not refreshed:', presenceErr.message);
+      }
     } catch (err) {
       console.error('Error loading work orders from server:', err);
       
@@ -971,6 +979,12 @@ export function useWorkOrders(currentUser) {
 
         if (error) throw error;
 
+        // Per-tech presence event — the same table the native app writes (M6).
+        const { error: evErr } = await supabase
+          .from('work_order_time_log')
+          .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_in', created_at: isoTime });
+        if (evErr) console.error('time log check_in failed:', evErr.message);
+
         await loadWorkOrders();
         if (selectedWO && selectedWO.wo_id === woId) {
           const { data: updated } = await supabase
@@ -1027,6 +1041,12 @@ export function useWorkOrders(currentUser) {
   }
 
   async function checkOut(woId) {
+    // No check-out without a check-in — the log must pair up (M6). The local
+    // set is seeded from the server, so a check-in on the phone counts here.
+    if (!isCheckedIn(currentUser?.user_id, woId)) {
+      alert('You are not checked in on this work order.');
+      return;
+    }
     try {
       setSaving(true);
       const now = new Date();
@@ -1062,6 +1082,11 @@ export function useWorkOrders(currentUser) {
           .eq('wo_id', woId);
 
         if (error) throw error;
+
+        const { error: evErr } = await supabase
+          .from('work_order_time_log')
+          .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_out', created_at: isoTime });
+        if (evErr) console.error('time log check_out failed:', evErr.message);
 
         await loadWorkOrders();
         if (selectedWO && selectedWO.wo_id === woId) {

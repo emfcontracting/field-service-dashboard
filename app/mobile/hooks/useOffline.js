@@ -406,6 +406,8 @@ export function useOffline(currentUser) {
             comments: wo?.comments ? `${wo.comments}\n\n${checkInNote}` : checkInNote
           })
           .eq('wo_id', woId);
+        await supabase.from('work_order_time_log')
+          .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_in', created_at: isoTime });
         return { success: true, synced: true };
       } catch (error) {
         console.error('Online check-in failed, queuing:', error);
@@ -453,6 +455,8 @@ export function useOffline(currentUser) {
             comments: wo?.comments ? `${wo.comments}\n\n${checkOutNote}` : checkOutNote
           })
           .eq('wo_id', woId);
+        await supabase.from('work_order_time_log')
+          .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_out', created_at: isoTime });
         return { success: true, synced: true };
       } catch (error) {
         console.error('Online check-out failed, queuing:', error);

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import WorkOrdersView from './components/WorkOrdersView';
 import AvailabilityView from './components/AvailabilityView';
 import MissingHoursView from './components/MissingHoursView';
@@ -23,10 +23,9 @@ import ApprovalsView from './components/ApprovalsView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabase = getSupabase();
 
 const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
 

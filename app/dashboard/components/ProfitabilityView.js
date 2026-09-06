@@ -5,15 +5,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 const fmt  = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct  = (profit, Billable) => Billable > 0 ? ((profit / Billable) * 100).toFixed(1) + '%' : '—';

@@ -15,7 +15,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import {
   DISPUTE_STATUS,
   DISPUTE_REASONS,
@@ -26,10 +26,9 @@ import {
 import { exportToExcel, exportToPDF } from '@/lib/upsEscalationExport';
 import ActivityLogExportModal from './ActivityLogExportModal';
 
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 const fmt = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';

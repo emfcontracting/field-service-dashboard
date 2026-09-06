@@ -6,13 +6,12 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import { DISPUTE_REASONS } from '@/lib/disputeStatus';
 
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 export default function MarkDisputedModal({
   workOrder,        // { wo_id, wo_number, building, nte, ... }

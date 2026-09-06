@@ -168,7 +168,7 @@ export default function ApprovalsView({ userInfo }) {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 60000);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60000);
     return () => clearInterval(t);
   }, [load]);
 

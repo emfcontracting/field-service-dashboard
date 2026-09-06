@@ -973,6 +973,7 @@ export default function WorkOrderDetail({
             quotes={quotes}
             loading={quotesLoading}
             workOrder={wo}
+            currentUser={currentUser}
             currentTeamList={currentTeamList}
             onNewQuote={onNewQuote}
             onViewQuote={onViewQuote}

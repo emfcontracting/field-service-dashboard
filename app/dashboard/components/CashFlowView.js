@@ -13,14 +13,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 
 const supabase = getSupabase();
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const BILLING_RT  = 64;

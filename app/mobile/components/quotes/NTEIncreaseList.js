@@ -3,6 +3,7 @@
 // The ticket can accumulate more costs, but the NTE request always shows its saved state
 import { useState } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { canDeleteQuote } from '../../services/quoteService';
 
 export default function NTEIncreaseList({ 
   quotes = [],
@@ -11,6 +12,7 @@ export default function NTEIncreaseList({
   onViewQuote,
   onDeleteQuote,
   workOrder,
+  currentUser,
   currentTeamList,
   nteIncreases,
   onEdit,
@@ -170,7 +172,7 @@ export default function NTEIncreaseList({
                         ✏️
                       </button>
                     )}
-                    {(onDeleteQuote || onDelete) && (
+                    {(onDeleteQuote || onDelete) && (!currentUser || canDeleteQuote(quote, currentUser)) && (
                       <button onClick={() => handleDelete(quote.quote_id)} className="bg-red-600 hover:bg-red-500 p-2 rounded text-sm" title="Delete">
                         🗑️
                       </button>

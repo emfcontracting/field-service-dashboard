@@ -486,131 +486,99 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     })();
   }, [authenticated]);
 
-  // ── CBRE Data Entry pending count (admin/office only) ──
-  // Mirrors the CBREDataEntryView filter logic so the sidebar badge matches
-  // what the user actually sees inside the view:
-  //   1. Only active WOs (acknowledged=false, is_locked=false)
-  //   2. Completions must be 'ready for CBRE' (no pending quote, no escalation,
-  //      no rejection, under NTE) — we approximate by checking cbre_status
-  //   3. Within the 90-day window for daily check-outs
-  useEffect(() => {
-    if (!authenticated || !userInfo) return;
-    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-
-        // 1. Pending daily check-outs — join in WO to filter inactive ones.
-        // We need to fetch the actual rows (not just count) because the
-        // acknowledged/is_locked filter happens on the joined work_order.
-        const { data: dailyRows } = await supabase
-          .from('daily_hours_log')
-          .select('log_id, work_order:work_orders!inner(acknowledged, is_locked)')
-          .eq('cbre_transferred', false)
-          .gte('work_date', cutoff)
-          .eq('work_order.acknowledged', false)
-          .eq('work_order.is_locked', false);
-
-        // 2. Pending completion transfers — active WOs only, with CBRE status
-        // that's clean enough to actually report (null/empty or quote_approved).
-        // This mirrors CBRE_STATUS_READY in CBREDataEntryView.js.
-        const { data: completionRows } = await supabase
-          .from('work_orders')
-          .select('wo_id, cbre_status')
-          .eq('completion_transferred', false)
-          .eq('status', 'completed')
-          .eq('acknowledged', false)
-          .eq('is_locked', false);
-
-        const readyCompletions = (completionRows || []).filter(wo =>
-          !wo.cbre_status || wo.cbre_status === 'quote_approved'
-        );
-
-        if (!cancelled) {
-          setCbreDataEntryCount((dailyRows?.length || 0) + readyCompletions.length);
-        }
-      } catch (err) {
-        console.error('Failed to load CBRE data entry count:', err);
-      }
-    };
-    load();
-    // Re-poll every 60s like Review Queue
-    const interval = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [authenticated, userInfo]);
-
-  // ── Review Queue open-flag count (admin/office only) ──
-  useEffect(() => {
-    if (!authenticated || !userInfo) return;
-    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const { count } = await supabase
-          .from('work_order_flags')
-          .select('flag_id', { count: 'exact', head: true })
-          .eq('status', 'open');
-        if (!cancelled) setReviewQueueCount(count || 0);
-      } catch {}
-    };
-    load();
-    // Re-poll every 60s so badge stays roughly current without aggressive refresh
-    const interval = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [authenticated, userInfo]);
-
-  // ── QuickBooks connection health (admin/office only) ──
-  // needs_reconnect is set server-side when Intuit rejects the refresh token;
-  // a banner beats a 500 on the next invoice push. Checked every 10 minutes.
+  // ── Sidebar badges + QuickBooks health: ONE tick ────────────────────────────
+  // Used to be four independent 60 s intervals (CBRE data entry, review queue,
+  // approvals, QuickBooks) firing on every page. Now one loop: all counts in
+  // parallel every 60 s, QuickBooks every 10th tick, nothing while the tab is
+  // hidden, and an immediate refresh when it becomes visible again.
   const [qbHealth, setQbHealth] = useState(null);
   useEffect(() => {
     if (!authenticated || !userInfo) return;
     if (!['admin', 'office_staff'].includes(userInfo.role)) return;
     let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await apiFetch('/api/quickbooks/status');
-        if (!res.ok) return;
-        const j = await res.json();
-        if (cancelled) return;
-        const connectedAge = j.settings?.connected_at ? Date.now() - new Date(j.settings.connected_at).getTime() : null;
-        setQbHealth({
-          connected: !!j.connected,
-          needsReconnect: !!j.needs_reconnect,
-          lastError: j.settings?.last_error || null,
-          tokenAgeDays: connectedAge != null ? Math.floor(connectedAge / 86400000) : null,
-        });
-      } catch {}
+    let tick = 0;
+
+    const loadCbreDataEntry = async () => {
+      // Mirrors the CBREDataEntryView filter logic so the badge matches the view:
+      // active WOs only, completions "ready for CBRE", 90-day window for check-outs.
+      const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const [{ data: dailyRows }, { data: completionRows }] = await Promise.all([
+        supabase
+          .from('daily_hours_log')
+          .select('log_id, work_order:work_orders!inner(acknowledged, is_locked)')
+          .eq('cbre_transferred', false)
+          .gte('work_date', cutoff)
+          .eq('work_order.acknowledged', false)
+          .eq('work_order.is_locked', false),
+        supabase
+          .from('work_orders')
+          .select('wo_id, cbre_status')
+          .eq('completion_transferred', false)
+          .eq('status', 'completed')
+          .eq('acknowledged', false)
+          .eq('is_locked', false),
+      ]);
+      const readyCompletions = (completionRows || []).filter(wo => !wo.cbre_status || wo.cbre_status === 'quote_approved');
+      return (dailyRows?.length || 0) + readyCompletions.length;
     };
-    load();
-    const interval = setInterval(load, 10 * 60000);
-    return () => { cancelled = true; clearInterval(interval); };
+
+    const loadReviewQueue = async () => {
+      const { count } = await supabase
+        .from('work_order_flags')
+        .select('flag_id', { count: 'exact', head: true })
+        .eq('status', 'open');
+      return count || 0;
+    };
+
+    const loadApprovals = async () => {
+      const { count } = await supabase
+        .from('approval_requests')
+        .select('approval_id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      return count || 0;
+    };
+
+    const loadQb = async () => {
+      // needs_reconnect is set server-side when Intuit rejects the refresh
+      // token; a banner beats a 500 on the next invoice push.
+      const res = await apiFetch('/api/quickbooks/status');
+      if (!res.ok) return null;
+      const j = await res.json();
+      const connectedAge = j.settings?.connected_at ? Date.now() - new Date(j.settings.connected_at).getTime() : null;
+      return {
+        connected: !!j.connected,
+        needsReconnect: !!j.needs_reconnect,
+        lastError: j.settings?.last_error || null,
+        tokenAgeDays: connectedAge != null ? Math.floor(connectedAge / 86400000) : null,
+      };
+    };
+
+    const run = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const doQb = tick % 10 === 0;
+      tick++;
+      const [cbre, review, approvals, qb] = await Promise.allSettled([
+        loadCbreDataEntry(), loadReviewQueue(), loadApprovals(), doQb ? loadQb() : Promise.resolve(undefined),
+      ]);
+      if (cancelled) return;
+      if (cbre.status === 'fulfilled') setCbreDataEntryCount(cbre.value); else console.error('CBRE data entry count:', cbre.reason?.message);
+      if (review.status === 'fulfilled') setReviewQueueCount(review.value);
+      if (approvals.status === 'fulfilled') setApprovalsCount(approvals.value); // table may not exist until the migration is run
+      if (doQb && qb.status === 'fulfilled' && qb.value) setQbHealth(qb.value);
+    };
+
+    run();
+    const interval = setInterval(run, 60000);
+    const onVisible = () => { if (!document.hidden) run(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { cancelled = true; clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
   }, [authenticated, userInfo]);
+
   const qbBanner = qbHealth && (qbHealth.needsReconnect || (qbHealth.connected && qbHealth.tokenAgeDays >= 90))
     ? (qbHealth.needsReconnect
         ? { tone: 'bg-red-600/90 text-white', text: `QuickBooks connection lost${qbHealth.lastError ? ` (${qbHealth.lastError.slice(0, 120)})` : ''} — invoices cannot be pushed until it is reconnected.` }
         : { tone: 'bg-amber-500/90 text-black', text: `QuickBooks refresh token is ${qbHealth.tokenAgeDays} days old — Intuit expires it after ~100 days. Reconnect now to avoid an outage.` })
     : null;
-
-  // ── Approvals pending count (admin/office only) ──
-  useEffect(() => {
-    if (!authenticated || !userInfo) return;
-    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const { count } = await supabase
-          .from('approval_requests')
-          .select('approval_id', { count: 'exact', head: true })
-          .eq('status', 'pending');
-        if (!cancelled) setApprovalsCount(count || 0);
-      } catch {}   // table may not exist until the migration is run
-    };
-    load();
-    const interval = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [authenticated, userInfo]);
 
   async function checkAuth() {
     try {

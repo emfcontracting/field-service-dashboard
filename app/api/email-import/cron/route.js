@@ -12,6 +12,11 @@ import { requireCronOrStaff } from '@/lib/serverAuth';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
 import { withCronRun } from '@/lib/cronRun';
 
+// 50 dispatch e-mails with attachments can take a while; the default 10 s
+// (hobby) / 60 s cut runs mid-loop. Vercel Pro allows up to 300.
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -158,8 +163,12 @@ async function fetchEmails() {
   });
 }
 
-// Mark email as read in INBOX
-async function markAsRead(uid) {
+// Mark e-mails as read in INBOX — ONE connection for the whole batch.
+// (Used to open a fresh IMAP connection per e-mail: up to 50 reconnects per
+// run, each a full TLS + login round trip.) Accepts a single UID or an array.
+async function markAsRead(uids) {
+  const list = (Array.isArray(uids) ? uids : [uids]).filter((u) => u != null);
+  if (!list.length) return;
   return new Promise((resolve, reject) => {
     const imap = connectIMAP();
 
@@ -170,7 +179,7 @@ async function markAsRead(uid) {
           return reject(err);
         }
 
-        imap.addFlags(uid, ['\\Seen'], (err) => {
+        imap.addFlags(list, ['\\Seen'], (err) => {
           imap.end();
           if (err) return reject(err);
           resolve();
@@ -540,6 +549,8 @@ async function GET_impl(request) {
     notifications: { sent: 0 }
   };
 
+  // UIDs to flag \Seen — flushed in one IMAP session after the loop (P6).
+  const seenUids = [];
   try {
     // Check if IMAP is configured
     const email = process.env.EMAIL_IMPORT_USER;
@@ -600,7 +611,7 @@ async function GET_impl(request) {
         if (!workOrder.wo_number) {
           console.log('Could not extract WO number, skipping');
           results.skipped++;
-          await markAsRead(email.uid);
+          seenUids.push(email.uid);
           continue;
         }
 
@@ -651,7 +662,7 @@ async function GET_impl(request) {
             console.error(`Target update failed for ${workOrder.wo_number}:`, tErr.message);
           }
           results.duplicates++;
-          await markAsRead(email.uid);
+          seenUids.push(email.uid);
           continue;
         }
 
@@ -686,7 +697,7 @@ async function GET_impl(request) {
           console.log(`WO ${workOrder.wo_number} already existed (caught at insert), skipping`);
           results.duplicates++;
           existingWONumbers.add(workOrder.wo_number);
-          await markAsRead(email.uid);
+          seenUids.push(email.uid);
           continue;
         }
 
@@ -730,7 +741,7 @@ async function GET_impl(request) {
         existingWONumbers.add(workOrder.wo_number);
 
         // Mark as read
-        await markAsRead(email.uid);
+        seenUids.push(email.uid);
 
       } catch (msgErr) {
         console.error('Error processing message:', msgErr);
@@ -756,6 +767,10 @@ async function GET_impl(request) {
     let syncResults = null;
 
     // Log activity
+    // One IMAP session marks everything this run handled as read.
+    try { await markAsRead(seenUids); results.markedRead = seenUids.length; }
+    catch (flagErr) { console.error('markAsRead batch failed:', flagErr.message); results.errors.push(`markAsRead: ${flagErr.message}`); }
+
     await logImportActivity(results);
 
     results.message = results.imported > 0
@@ -778,6 +793,9 @@ async function GET_impl(request) {
     return Response.json(results);
 
   } catch (error) {
+    // Do not leave already-imported dispatches unread: they would be imported
+    // again next run (harmless thanks to the upsert, but noisy).
+    try { if (seenUids.length) await markAsRead(seenUids); } catch {}
     console.error('Cron error:', error);
     results.success = false;
     results.errors.push(error.message);

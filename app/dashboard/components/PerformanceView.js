@@ -10,7 +10,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import {
   toDate, pausesByWo, onTimeRate, onTimeRateBy, weeklyOnTime, responseHours,
   timeToTarget, median, facilityOf, PAUSE_REASON_LABELS,
@@ -18,10 +18,9 @@ import {
 import SendAlertModal from './aging/SendAlertModal';
 import { fetchAll } from '@/lib/fetchAll';
 
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 const MS_D = 86400000;
 const fmtPct = (r) => (r === null ? '—' : `${Math.round(r * 100)}%`);

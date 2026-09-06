@@ -115,13 +115,16 @@ export function useQuotes(workOrder, currentUser) {
   }
 
   async function deleteQuote(quoteId) {
+    const quote = quotes.find((q) => q.quote_id === quoteId);
+    const blocked = quoteService.quoteDeleteBlockedReason(quote, currentUser);
+    if (blocked) { alert(blocked); return false; }
     if (!confirm('Are you sure you want to delete this NTE Increase?')) {
       return false;
     }
 
     try {
       setSaving(true);
-      await quoteService.deleteQuote(supabase, quoteId);
+      await quoteService.deleteQuote(supabase, quoteId, currentUser);
       await loadQuotesForWO();
       return true;
     } catch (err) {

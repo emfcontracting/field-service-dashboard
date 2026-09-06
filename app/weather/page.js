@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppShell from '@/app/components/AppShell';
 import { apiFetch } from '@/lib/apiClient';
 
@@ -93,20 +93,24 @@ export default function WeatherPage() {
   const [alertSent, setAlertSent]           = useState(false);
   const [expandedAlert, setExpandedAlert]   = useState(null);
   const [lastUpdated, setLastUpdated]       = useState(null);
+  const weatherRef = useRef(null);
 
   useEffect(() => {
     fetchWeather();
-    const iv = setInterval(fetchWeather, 15 * 60 * 1000);
+    // Background refresh: no spinner over data that is already on screen, and
+    // nothing while the tab is hidden.
+    const iv = setInterval(() => { if (!document.hidden) fetchWeather(); }, 15 * 60 * 1000);
     return () => clearInterval(iv);
   }, []);
 
   async function fetchWeather() {
     try {
-      setLoading(true);
+      setLoading((prev) => prev || !weatherRef.current);
       const res = await apiFetch('/api/weather?location=all');
       if (!res.ok) throw new Error('Failed to fetch weather');
       const data = await res.json();
       setWeather(data);
+      weatherRef.current = data;
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {

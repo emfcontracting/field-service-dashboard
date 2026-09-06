@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
@@ -13,10 +13,9 @@ import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/
 import { apiFetch } from '@/lib/apiClient';
 import { fetchAll } from '@/lib/fetchAll';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabase = getSupabase();
 
 // ── Status helpers ──────────────────────────────────────────────────────────
 const STATUS_CONFIG = {

@@ -11,7 +11,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import {
   DEFAULT_CBRE_MAPPING,
@@ -22,10 +21,9 @@ import { isPostingCode, postingBadgeConfig } from '@/lib/cbrePostingStatus';
 import { fetchAll } from '@/lib/fetchAll';
 
 const supabase = getSupabase();
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 const AUTO_CONFIRM_SECONDS = 5;
 

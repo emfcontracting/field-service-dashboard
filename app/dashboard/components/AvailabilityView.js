@@ -55,7 +55,9 @@ export default function AvailabilityView({ supabase, users }) {
     const ch = supabase.channel('avail-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_availability' }, load)
       .subscribe();
-    const iv = setInterval(load, 30000);
+    // Realtime carries the changes; the interval is only a safety net for a
+    // dropped channel — every 5 min, and not while the tab is hidden.
+    const iv = setInterval(() => { if (!document.hidden) load(); }, 5 * 60000);
     return () => { supabase.removeChannel(ch); clearInterval(iv); };
   }, [date]);
 

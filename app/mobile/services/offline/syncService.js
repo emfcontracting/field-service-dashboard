@@ -229,6 +229,12 @@ async function syncCheckIn(supabase, data, currentUser) {
     .eq('wo_id', woId);
 
   if (error) throw error;
+
+  // Presence event with the ORIGINAL time (shared with the native app, M6).
+  const { error: evErr } = await supabase
+    .from('work_order_time_log')
+    .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_in', created_at: isoTime || new Date().toISOString() });
+  if (evErr) console.error('time log check_in (sync) failed:', evErr.message);
   return true;
 }
 
@@ -263,6 +269,10 @@ async function syncCheckOut(supabase, data, currentUser) {
     .eq('wo_id', woId);
 
   if (error) throw error;
+  const { error: evErr } = await supabase
+    .from('work_order_time_log')
+    .insert({ wo_id: woId, user_id: currentUser.user_id, event_type: 'check_out', created_at: isoTime || new Date().toISOString() });
+  if (evErr) console.error('time log check_out (sync) failed:', evErr.message);
   return true;
 }
 

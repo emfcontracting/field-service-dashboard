@@ -19,9 +19,12 @@ export function getTodayEST() {
  * Use this for created_at, updated_at, submitted_at fields
  */
 export function getNowEST() {
-  const now = new Date();
-  const estTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  return estTime.toISOString();
+  // A timestamptz is an instant; "now" is the same instant in every zone.
+  // The old version re-parsed the Eastern wall-clock string in the DEVICE
+  // zone, so a phone set to Central/Mountain (or a travelling laptop) wrote
+  // timestamps off by hours. Use getTodayEST() when a DATE in Eastern time
+  // is wanted.
+  return new Date().toISOString();
 }
 
 /**

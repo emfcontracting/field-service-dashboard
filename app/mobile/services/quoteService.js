@@ -574,14 +574,52 @@ export async function approveWrittenNTE(supabase, quoteId, approvedBy) {
   return data;
 }
 
-// Delete a quote
-export async function deleteQuote(supabase, quoteId) {
+// Who may delete which NTE increase (M11):
+//   - only the technician who wrote it, or office/admin;
+//   - only while it is 'pending' (written, not uploaded) or a verbal NTE —
+//     once it is at CBRE (submitted/approved/rejected) it is a record.
+// Returns null when allowed, otherwise the reason (English).
+export const OFFICE_ROLES = ['admin', 'office', 'office_staff'];
+export function quoteDeleteBlockedReason(quote, user) {
+  if (!quote) return 'Quote not found';
+  const status = quote.nte_status || (quote.is_verbal_nte ? 'verbal_approved' : 'pending');
+  if (!['pending', 'verbal_approved'].includes(status)) {
+    return `This NTE increase is already ${status.replace('_', ' ')} at CBRE and cannot be deleted. Ask the office.`;
+  }
+  const isOffice = OFFICE_ROLES.includes(user?.role);
+  const isOwner = user?.user_id && quote.created_by && String(quote.created_by) === String(user.user_id);
+  if (!isOffice && !isOwner) return 'Only the technician who wrote this NTE increase (or the office) can delete it.';
+  return null;
+}
+export const canDeleteQuote = (quote, user) => quoteDeleteBlockedReason(quote, user) === null;
+
+// Delete a quote. `user` is optional for old callers, but when given the
+// permission rule above is enforced here too, not only in the button.
+export async function deleteQuote(supabase, quoteId, user) {
+  const { data: quote } = await supabase
+    .from('work_order_quotes')
+    .select('quote_id, wo_id, created_by, nte_status, is_verbal_nte, new_nte_amount, original_nte')
+    .eq('quote_id', quoteId)
+    .maybeSingle();
+  if (user) {
+    const blocked = quoteDeleteBlockedReason(quote, user);
+    if (blocked) throw new Error(blocked);
+  }
+
   const { error } = await supabase
     .from('work_order_quotes')
     .delete()
     .eq('quote_id', quoteId);
-
   if (error) throw error;
+
+  // A verbal NTE raised the work order's NTE when it was created; deleting it
+  // must take that back (only if nothing else changed the NTE since).
+  if (quote?.is_verbal_nte && quote.wo_id && quote.new_nte_amount != null && quote.original_nte != null) {
+    const { data: wo } = await supabase.from('work_orders').select('nte').eq('wo_id', quote.wo_id).maybeSingle();
+    if (wo && Number(wo.nte) === Number(quote.new_nte_amount)) {
+      await supabase.from('work_orders').update({ nte: quote.original_nte }).eq('wo_id', quote.wo_id);
+    }
+  }
   return true;
 }
 

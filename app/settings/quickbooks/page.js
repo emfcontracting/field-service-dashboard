@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase';
 import { useSearchParams } from 'next/navigation';
 import AppShell from '@/app/components/AppShell';
 import { apiFetch } from '@/lib/apiClient';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabase = getSupabase();
 
 // ── UI primitives ────────────────────────────────────────────────────────────
 const Card = ({ children, className = '' }) => (

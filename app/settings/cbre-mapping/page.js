@@ -7,16 +7,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 import { DEFAULT_CBRE_MAPPING, buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 
 const supabase = getSupabase();
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// One shared browser client (lib/supabase) — a client per file meant ~20
+// GoTrue instances fighting over the same session storage.
+const supabaseClient = getSupabase();
 
 const TARGET_TYPE_OPTIONS = [
   { value: 'invoice',         label: 'Invoice Status' },

@@ -5,6 +5,7 @@ import { translations } from '../utils/translations';
 import LanguageToggle from './LanguageToggle';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge } from '../utils/helpers';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
+import { parseDate } from '@/lib/dates';
 
 export default function CompletedWorkOrders({
   currentUser,
@@ -46,30 +47,30 @@ export default function CompletedWorkOrders({
     if (dateFilter === 'week') {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       filtered = filtered.filter(wo => {
-        const completedDate = new Date(wo.date_completed);
-        return completedDate >= weekAgo;
+        const completedDate = parseDate(wo.date_completed);
+        return completedDate && completedDate >= weekAgo;
       });
     } else if (dateFilter === 'month') {
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       filtered = filtered.filter(wo => {
-        const completedDate = new Date(wo.date_completed);
-        return completedDate >= monthAgo;
+        const completedDate = parseDate(wo.date_completed);
+        return completedDate && completedDate >= monthAgo;
       });
     } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
-      const start = new Date(customStartDate);
-      const end = new Date(customEndDate);
-      end.setHours(23, 59, 59, 999); // Include entire end day
+      const start = parseDate(customStartDate);
+      const end = parseDate(customEndDate);
+      if (end) end.setTime(end.getTime() + 86400000 - 1); // include the entire end day (Eastern)
       filtered = filtered.filter(wo => {
-        const completedDate = new Date(wo.date_completed);
-        return completedDate >= start && completedDate <= end;
+        const completedDate = parseDate(wo.date_completed);
+        return completedDate && start && end && completedDate >= start && completedDate <= end;
       });
     }
 
     // Sorting
     if (sortBy === 'newest') {
-      filtered.sort((a, b) => new Date(b.date_completed) - new Date(a.date_completed));
+      filtered.sort((a, b) => (parseDate(b.date_completed) || 0) - (parseDate(a.date_completed) || 0));
     } else if (sortBy === 'oldest') {
-      filtered.sort((a, b) => new Date(a.date_completed) - new Date(b.date_completed));
+      filtered.sort((a, b) => (parseDate(a.date_completed) || 0) - (parseDate(b.date_completed) || 0));
     } else if (sortBy === 'building') {
       filtered.sort((a, b) => (a.building || '').localeCompare(b.building || ''));
     } else if (sortBy === 'wo_number') {

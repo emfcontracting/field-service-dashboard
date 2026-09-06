@@ -22,6 +22,7 @@ import ReviewQueueView from './components/ReviewQueueView';
 import ApprovalsView from './components/ApprovalsView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { calculateStats } from './utils/calculations';
+import { parseDate } from '@/lib/dates';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -129,7 +130,7 @@ function DashboardContent() {
       const eligibleWOs = workOrders.filter(wo => {
         return wo.lead_tech_id &&
           ['assigned', 'in_progress', 'completed'].includes(wo.status) &&
-          new Date(wo.date_entered || wo.created_at) >= cutoffDate;
+          (parseDate(wo.date_entered || wo.created_at) || 0) >= cutoffDate;
       });
       if (eligibleWOs.length === 0) { setMissingHoursCount(0); return; }
 

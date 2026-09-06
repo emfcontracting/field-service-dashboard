@@ -1,6 +1,7 @@
 import { RATES } from '@/lib/billing';
 import { getEffectiveAdminHours } from '@/lib/clientType';
 import { calculateTotalCost } from './calculations';
+import { fmtDate } from '@/lib/dates';
 // app/dashboard/utils/exportHelpers.js
 
 /**
@@ -39,9 +40,7 @@ export const convertWorkOrdersToCSV = (workOrders) => {
     const totalCost = calculateTotalCost(wo);
 
     // Format date
-    const dateEntered = wo.date_entered 
-      ? new Date(wo.date_entered).toLocaleDateString('en-US')
-      : 'N/A';
+    const dateEntered = fmtDate(wo.date_entered, 'N/A');
 
     // Get lead tech name
     const leadTech = wo.lead_tech 

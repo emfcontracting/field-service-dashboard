@@ -2,6 +2,7 @@
 // Generates a PDF invoice for subcontractors
 import { NextResponse } from 'next/server';
 import { requireStaff } from '@/lib/serverAuth';
+import { fmtDate } from '@/lib/dates';
 
 export async function POST(request) {
   const auth = await requireStaff(request);
@@ -22,7 +23,7 @@ export async function POST(request) {
     // Build labor rows HTML
     const laborRowsHtml = hoursItems.map(item => `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${fmtDate(item.work_date, '-')}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.description || ''}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${parseFloat(item.quantity || 0).toFixed(1)}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${parseFloat(item.rate || 0).toFixed(2)}</td>
@@ -33,7 +34,7 @@ export async function POST(request) {
     // Build mileage rows HTML
     const mileageRowsHtml = mileageItems.map(item => `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.work_date ? new Date(item.work_date).toLocaleDateString() : '-'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${fmtDate(item.work_date, '-')}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.description || 'Mileage'}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${parseFloat(item.quantity || 0).toFixed(0)}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${parseFloat(item.rate || 0).toFixed(4)}</td>

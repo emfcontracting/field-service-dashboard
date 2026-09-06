@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
+import { fmtDate } from '@/lib/dates';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -110,8 +111,8 @@ export default function InvoicePrintPage() {
             <h2 className="text-2xl font-bold mb-2">INVOICE</h2>
             <div className="text-sm space-y-1">
               <div><strong>Invoice #:</strong> {invoice.invoice_number}</div>
-              <div><strong>Date:</strong> {new Date(invoice.invoice_date).toLocaleDateString()}</div>
-              <div><strong>Due Date:</strong> {new Date(invoice.due_date).toLocaleDateString()}</div>
+              <div><strong>Date:</strong> {fmtDate(invoice.invoice_date)}</div>
+              <div><strong>Due Date:</strong> {fmtDate(invoice.due_date)}</div>
               <div><strong>Work Order:</strong> {invoice.work_order?.wo_number}</div>
             </div>
           </div>

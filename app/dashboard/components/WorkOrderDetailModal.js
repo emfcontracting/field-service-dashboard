@@ -39,6 +39,7 @@ import {
 } from '../../mobile/utils/dateUtils';
 import { getClientType, getEffectiveAdminHours, CLIENT_STYLES } from '@/lib/clientType';
 import { apiFetch } from '@/lib/apiClient';
+import { fmtDate } from '@/lib/dates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client type marker + per-WO admin-hours override.
@@ -1940,14 +1941,9 @@ const sendAssignmentNotifications = async () => {
             <div>
               <label className="block text-xs text-slate-500 uppercase tracking-wider mb-1.5">Date & Time Entered</label>
               <input
-                type="datetime-local"
-                value={(() => {
-                  if (!selectedWO.date_entered) return '';
-                  const date = new Date(selectedWO.date_entered);
-                  if (isNaN(date.getTime())) return '';
-                  return date.toISOString().slice(0, 16);
-                })()}
-                onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: new Date(e.target.value).toISOString() })}
+                type="date"
+                value={selectedWO.date_entered ? String(selectedWO.date_entered).slice(0, 10) : ''}
+                onChange={(e) => setSelectedWO({ ...selectedWO, date_entered: e.target.value || null })}
                 onBlur={() => handleUpdateField('date_entered', selectedWO.date_entered)}
                 className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500/60 transition"
                 disabled={lockField('date_entered')}
@@ -2216,7 +2212,7 @@ const sendAssignmentNotifications = async () => {
                       {payout.daysRemaining > 0
                         ? `~${payout.daysRemaining} day${payout.daysRemaining !== 1 ? 's' : ''} remaining (75 days from posting)`
                         : `Payout date reached (${Math.abs(payout.daysRemaining)} day${Math.abs(payout.daysRemaining) !== 1 ? 's' : ''} ago)`}
-                      {selectedWO.cmp_date && <> · CMP date: {new Date(selectedWO.cmp_date).toLocaleDateString()}</>}
+                      {selectedWO.cmp_date && <> · CMP date: {fmtDate(selectedWO.cmp_date)}</>}
                     </div>
                   </div>
                 )}

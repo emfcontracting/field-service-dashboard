@@ -1,36 +1,20 @@
 // Helper Functions and Utilities
+import { fmtDateMed, fmtET, daysBetweenET } from '@/lib/dates';
 import { getPriorityInfo, extractPriorityCode } from '@/lib/priorityCodes';
 
+// DATE columns ('YYYY-MM-DD') and tz-less timestamps go through lib/dates —
+// `new Date('2026-09-05')` showed Sep 4 to a technician in Eastern time.
 export function formatDate(dateString) {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric' 
-  });
+  return fmtDateMed(dateString, 'N/A');
 }
 
 export function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
+  return fmtET(dateString, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }, 'N/A');
 }
 
 export function calculateAge(dateString) {
   if (!dateString) return 0;
-  const entered = new Date(dateString);
-  const now = new Date();
-  const diffTime = Math.abs(now - entered);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
+  return Math.abs(daysBetweenET(dateString) ?? 0);
 }
 
 export function getPriorityColor(priority) {

@@ -8,6 +8,7 @@ import { formatDateEST } from '../utils/dateUtils';
 import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissionStatus';
 import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
+import { parseDate, daysBetweenET } from '@/lib/dates';
 
 // CBRE posting-status badge (CPW/CIS/CIR/CA1/CA2/CMP) — separate track from the
 // active cbre_status. Shows the CBRE-side processing stage of a completed WO.
@@ -43,7 +44,7 @@ const ACK_FRESH_DAYS = 14;
 const ackAgeDays = (wo) => {
   const d = wo.date_entered || wo.created_at;
   if (!d) return null;
-  return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  return daysBetweenET(d);
 };
 
 // Inline badge: only ever shows the MISSING state, and only while it is still
@@ -219,8 +220,10 @@ const getPriorityStyle = (badge) => {
 
 const isNewWorkOrder = (wo) => {
   if (wo.lead_tech_id) return false;
-  const created = new Date(wo.date_entered || wo.created_at);
-  const hours = (new Date() - created) / (1000 * 60 * 60);
+  // created_at is the import instant; date_entered is only a day → midnight ET.
+  const created = parseDate(wo.created_at || wo.date_entered);
+  if (!created) return false;
+  const hours = (Date.now() - created.getTime()) / (1000 * 60 * 60);
   return hours <= 24;
 };
 

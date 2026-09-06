@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { apiFetch } from '@/lib/apiClient';
+import { fmtDate } from '@/lib/dates';
 
 export default function BulkOperationsTab() {
   const supabase = createClientComponentClient();
@@ -359,7 +360,7 @@ export default function BulkOperationsTab() {
                         {assignedName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(wo.date_entered).toLocaleDateString()}
+                        {fmtDate(wo.date_entered)}
                       </td>
                     </tr>
                   );

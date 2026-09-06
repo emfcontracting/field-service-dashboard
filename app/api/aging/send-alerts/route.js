@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { requireStaff } from '@/lib/serverAuth';
+import { parseDate } from '@/lib/dates';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -286,11 +287,7 @@ export async function GET(request) {
     const agingWorkOrders = [];
 
     for (const wo of workOrders || []) {
-      const assignedDate = wo.lead_tech_assigned_at 
-        ? new Date(wo.lead_tech_assigned_at)
-        : wo.date_entered 
-          ? new Date(wo.date_entered)
-          : null;
+      const assignedDate = parseDate(wo.lead_tech_assigned_at) || parseDate(wo.date_entered);
 
       if (!assignedDate) continue;
 

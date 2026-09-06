@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
+import { fmtDate, fmtDateTime } from '@/lib/dates';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -493,7 +494,7 @@ export default function InvoiceVerification() {
                       </p>
                     )}
                     <p className="text-xs text-gray-500 mt-2">
-                      Verified: {new Date(v.created_at).toLocaleString()}
+                      Verified: {fmtDateTime(v.created_at)}
                     </p>
                   </div>
                 ))}
@@ -807,7 +808,7 @@ export default function InvoiceVerification() {
                           <div key={idx} className="text-sm p-2 bg-gray-700/50 rounded">
                             <div className="flex justify-between">
                               <span className="text-gray-400">
-                                {new Date(entry.work_date).toLocaleDateString()}
+                                {fmtDate(entry.work_date)}
                               </span>
                               <span className="font-mono">
                                 {parseFloat(entry.hours_regular || 0).toFixed(1)}h + {parseFloat(entry.hours_overtime || 0).toFixed(1)}h OT | {parseFloat(entry.miles || 0).toFixed(0)} mi

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getStatusColor } from '../utils/styleHelpers';
+import { parseDate, daysBetweenET, fmtDate, fmtMonthDay } from '@/lib/dates';
 
 const SEL = ({ label, className = '', children, ...props }) => (
   <select className={`bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60 transition ${className}`} {...props}>{children}</select>
@@ -50,7 +51,7 @@ export default function MissingHoursView({ workOrders, users, supabase, onSelect
       const eligible = workOrders.filter(wo =>
         wo.lead_tech_id &&
         ['assigned','in_progress','completed'].includes(wo.status) &&
-        new Date(wo.date_entered || wo.created_at) >= cutoff
+        (parseDate(wo.date_entered || wo.created_at) || 0) >= cutoff
       );
       if (!eligible.length) { setMissingWOs([]); setLoading(false); return; }
 
@@ -76,7 +77,7 @@ export default function MissingHoursView({ workOrders, users, supabase, onSelect
         const total = hoursPerWO[wo.wo_id]||0;
         const techsWithHours = techHours[wo.wo_id]||new Set();
         const woAsgns = asgnPerWO[wo.wo_id]||[];
-        const days = Math.floor((Date.now() - new Date(wo.date_entered||wo.created_at))/(86400000));
+        const days = daysBetweenET(wo.date_entered||wo.created_at) ?? 0;
         const techIds = new Set();
         if (wo.lead_tech_id) techIds.add(wo.lead_tech_id);
         woAsgns.forEach(a => techIds.add(a.user_id));
@@ -102,7 +103,7 @@ export default function MissingHoursView({ workOrders, users, supabase, onSelect
 
   const exportCSV = () => {
     const rows = filtered.map(wo => [
-      wo.wo_number, new Date(wo.date_entered||wo.created_at).toLocaleDateString(),
+      wo.wo_number, fmtDate(wo.date_entered||wo.created_at),
       wo.building, wo.status,
       wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'Unassigned',
       wo.daysSinceStart, wo.totalHoursLogged.toFixed(1),
@@ -263,7 +264,7 @@ export default function MissingHoursView({ workOrders, users, supabase, onSelect
                   <tr key={wo.wo_id} onClick={() => onSelectWorkOrder(wo)}
                     className="hover:bg-[#1e1e2e]/50 cursor-pointer transition">
                     <td className="px-4 py-3 font-bold text-slate-200">{wo.wo_number}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{new Date(wo.date_entered||wo.created_at).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'})}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{fmtMonthDay(wo.date_entered||wo.created_at)}</td>
                     <td className="px-4 py-3 text-slate-300">{wo.building}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${

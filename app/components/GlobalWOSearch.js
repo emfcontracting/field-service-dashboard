@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { fmtDate } from '@/lib/dates';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -236,7 +237,7 @@ export default function GlobalWOSearch({ onClose }) {
                       </div>
                       <div>
                         <span className="text-gray-400">Created:</span>
-                        <span className="ml-2">{new Date(wo.created_at).toLocaleDateString()}</span>
+                        <span className="ml-2">{fmtDate(wo.date_entered || wo.created_at)}</span>
                       </div>
                     </div>
 

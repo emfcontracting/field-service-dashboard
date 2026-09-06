@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/serverAuth';
+import { daysBetweenET } from '@/lib/dates';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -146,8 +147,7 @@ function calculateAging(workOrders) {
   );
 
   openWorkOrders.forEach(wo => {
-    const enteredDate = new Date(wo.date_entered);
-    const ageInDays = Math.floor((now - enteredDate) / (1000 * 60 * 60 * 24));
+    const ageInDays = daysBetweenET(wo.date_entered, now) ?? 0;
 
     if (ageInDays <= 3) aging.current++;
     else if (ageInDays <= 7) aging.recent++;
@@ -263,7 +263,7 @@ function calculateTrends(workOrders, days) {
   // Count work orders entered each day
   daysArray.forEach(dateStr => {
     const woOnDate = workOrders.filter(wo => {
-      const woDate = new Date(wo.date_entered).toISOString().split('T')[0];
+      const woDate = String(wo.date_entered || '').slice(0, 10);   // DATE column — already 'YYYY-MM-DD'
       return woDate === dateStr;
     });
 

@@ -2,6 +2,7 @@
 // Sends subcontractor invoice via email
 import nodemailer from 'nodemailer';
 import { requireStaff } from '@/lib/serverAuth';
+import { fmtDate } from '@/lib/dates';
 
 export async function POST(request) {
   const auth = await requireStaff(request);
@@ -73,7 +74,7 @@ export async function POST(request) {
 
       return `
         <tr style="border-bottom: 1px solid #e5e7eb;">
-          <td style="padding: 8px;">${new Date(entry.work_date).toLocaleDateString()}</td>
+          <td style="padding: 8px;">${fmtDate(entry.work_date)}</td>
           <td style="padding: 8px;">
             <strong>${entry.work_order?.wo_number || 'N/A'}</strong><br/>
             <span style="color: #6b7280; font-size: 11px;">${entry.work_order?.building || ''}</span>

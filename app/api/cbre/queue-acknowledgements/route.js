@@ -25,6 +25,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireCronOrStaff, cronHeaders } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { parseDate, dateKeyET } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -86,7 +87,7 @@ function ackComment(wo) {
   const assigned = wo.assigned_to_field_at;
   const template = assigned ? ACK_COMMENT_TEMPLATE : ACK_COMMENT_UNASSIGNED;
   const basis = assigned || wo.date_entered;
-  const date = basis ? String(basis).slice(0, 10) : 'receipt';
+  const date = basis ? (dateKeyET(parseDate(basis)) || 'receipt') : 'receipt';   // Eastern day, not the UTC one
   return template.replace('{WO}', wo.wo_number || '').replace('{DATE}', date);
 }
 

@@ -13,6 +13,7 @@ import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/
 import { apiFetch } from '@/lib/apiClient';
 import { fetchAll } from '@/lib/fetchAll';
 import { calcBillable, calcTotal, buildActualLineItems } from '@/lib/billing';
+import { fmtDate } from '@/lib/dates';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -896,7 +897,7 @@ export default function InvoicingPage() {
                           </td>
                           <td className="px-4 py-3 font-mono text-blue-400 text-xs">{inv.work_order?.wo_number}</td>
                           <td className="px-4 py-3 text-slate-400">{inv.work_order?.building}</td>
-                          <td className="px-4 py-3 text-slate-500 text-xs">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(inv.invoice_date)}</td>
                           <td className="px-4 py-3 text-right font-bold font-mono text-emerald-400">${inv.total.toFixed(2)}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">

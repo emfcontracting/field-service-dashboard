@@ -10,6 +10,7 @@ import NotificationBell from './NotificationBell';
 import { formatDate, calculateAge, getPriorityColor, getPriorityBadge, getStatusBadge } from '../utils/helpers';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { extractPriorityCode } from '@/lib/priorityCodes';
+import { parseDate } from '@/lib/dates';
 
 // Tech filter options (mirror of pcs-mobile/src/lib/workOrderFilters.ts)
 const STATUS_OPTS = [
@@ -131,8 +132,8 @@ export default function WorkOrdersList({
       
       switch (sortBy) {
         case 'date_entered':
-          valA = new Date(a.date_entered).getTime();
-          valB = new Date(b.date_entered).getTime();
+          valA = parseDate(a.date_entered)?.getTime() || 0;
+          valB = parseDate(b.date_entered)?.getTime() || 0;
           break;
         case 'priority': {
           const rank = { P1: 9, P2: 8, P3: 7, P4: 6, P5: 5, P6: 4, P10: 3, P11: 2, P23: 1 };

@@ -10,6 +10,7 @@ import { buildContactLines } from '../contactParser';
 import { parseCbreDateEntered, parseCbreTargetResponse, parseCbreTargetCompletion } from '../parseCbreDate';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
+import { withCronRun } from '@/lib/cronRun';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -515,7 +516,7 @@ async function linkSubWorkOrder(insertedWO, workOrder) {
   return orig.wo_number;
 }
 
-export async function GET(request) {
+async function GET_impl(request) {
   const startTime = Date.now();
   console.log('=== Auto Email Import Cron Started (IMAP) ===');
   console.log('Timestamp:', new Date().toISOString());
@@ -787,7 +788,7 @@ export async function GET(request) {
 }
 
 // POST handler for manual trigger
-export async function POST(request) {
+async function POST_impl(request) {
   const url = new URL(request.url);
   url.searchParams.set('manual', 'true');
   
@@ -795,3 +796,7 @@ export async function POST(request) {
     headers: request.headers
   }));
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('email-import/cron', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('email-import/cron', request, () => POST_impl(request));

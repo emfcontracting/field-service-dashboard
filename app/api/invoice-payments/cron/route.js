@@ -27,6 +27,7 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import zlib from 'zlib';
 import { requireCronOrStaff } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -190,7 +191,7 @@ function parseRemittance(body) {
   return lines.length ? { paymentDate, lines } : null;
 }
 
-export async function GET(request) {
+async function GET_impl(request) {
   try {
     const { searchParams } = new URL(request.url);
     const auth = await requireCronOrStaff(request);
@@ -439,3 +440,6 @@ export async function GET(request) {
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('invoice-payments/cron', request, () => GET_impl(request));

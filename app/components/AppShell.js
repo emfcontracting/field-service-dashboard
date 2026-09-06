@@ -18,6 +18,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -559,6 +560,39 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     return () => { cancelled = true; clearInterval(interval); };
   }, [authenticated, userInfo]);
 
+  // ── QuickBooks connection health (admin/office only) ──
+  // needs_reconnect is set server-side when Intuit rejects the refresh token;
+  // a banner beats a 500 on the next invoice push. Checked every 10 minutes.
+  const [qbHealth, setQbHealth] = useState(null);
+  useEffect(() => {
+    if (!authenticated || !userInfo) return;
+    if (!['admin', 'office_staff'].includes(userInfo.role)) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await apiFetch('/api/quickbooks/status');
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+        const connectedAge = j.settings?.connected_at ? Date.now() - new Date(j.settings.connected_at).getTime() : null;
+        setQbHealth({
+          connected: !!j.connected,
+          needsReconnect: !!j.needs_reconnect,
+          lastError: j.settings?.last_error || null,
+          tokenAgeDays: connectedAge != null ? Math.floor(connectedAge / 86400000) : null,
+        });
+      } catch {}
+    };
+    load();
+    const interval = setInterval(load, 10 * 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [authenticated, userInfo]);
+  const qbBanner = qbHealth && (qbHealth.needsReconnect || (qbHealth.connected && qbHealth.tokenAgeDays >= 90))
+    ? (qbHealth.needsReconnect
+        ? { tone: 'bg-red-600/90 text-white', text: `QuickBooks connection lost${qbHealth.lastError ? ` (${qbHealth.lastError.slice(0, 120)})` : ''} — invoices cannot be pushed until it is reconnected.` }
+        : { tone: 'bg-amber-500/90 text-black', text: `QuickBooks refresh token is ${qbHealth.tokenAgeDays} days old — Intuit expires it after ~100 days. Reconnect now to avoid an outage.` })
+    : null;
+
   // ── Approvals pending count (admin/office only) ──
   useEffect(() => {
     if (!authenticated || !userInfo) return;
@@ -644,6 +678,12 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
       </Suspense>
 
       <main className="flex-1 min-w-0 overflow-auto">
+        {qbBanner && (
+          <div className={`px-4 py-2 text-sm flex flex-wrap items-center gap-3 ${qbBanner.tone}`}>
+            <span>⚠️ {qbBanner.text}</span>
+            <a href="/settings/quickbooks" className="underline font-semibold ml-auto">Reconnect QuickBooks →</a>
+          </div>
+        )}
         {children}
       </main>
     </div>

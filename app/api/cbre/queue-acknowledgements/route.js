@@ -24,6 +24,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { requireCronOrStaff, cronHeaders } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -98,10 +99,10 @@ function buildingCode(raw) {
   return String(raw).split('-')[0].trim().toUpperCase();
 }
 
-export async function GET(request) {
+async function GET_impl(request) {
   return handle(request);
 }
-export async function POST(request) {
+async function POST_impl(request) {
   return handle(request);
 }
 
@@ -285,3 +286,7 @@ async function handle(request) {
     return Response.json({ ...result, error: err.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('cbre/queue-acknowledgements', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('cbre/queue-acknowledgements', request, () => POST_impl(request));

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { notifyTech } from '@/lib/expoPush';
 import { requireCronOrStaff } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -74,7 +75,7 @@ const getESTInfo = () => {
   return { dayName, currentTime, todayDate, estTime };
 };
 
-export async function GET(request) {
+async function GET_impl(request) {
   const auth = await requireCronOrStaff(request);
   if (!auth.ok) return auth.response;
   try {
@@ -168,7 +169,7 @@ export async function GET(request) {
 }
 
 // POST handler for manual trigger
-export async function POST(request) {
+async function POST_impl(request) {
   const auth = await requireCronOrStaff(request);
   if (!auth.ok) return auth.response;
   return GET(request);
@@ -356,3 +357,7 @@ function buildEmailHtml(automation, user) {
     </html>
   `;
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('availability/reminder-cron', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('availability/reminder-cron', request, () => POST_impl(request));

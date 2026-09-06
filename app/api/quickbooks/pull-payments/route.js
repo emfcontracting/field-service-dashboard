@@ -15,8 +15,9 @@
 // txn date), ?dryRun=true, ?manual=true (same CRON_SECRET guard as elsewhere).
 // ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
-import OAuthClient from 'intuit-oauth';
+import { getQbAccessToken, qbErrorResponse } from '@/lib/quickbooks';
 import { requireCronOrAdmin } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -33,38 +34,6 @@ const QB_BASE = () =>
     ? 'https://quickbooks.api.intuit.com'
     : 'https://sandbox-quickbooks.api.intuit.com';
 
-async function getAccessToken(supabase) {
-  const { data: settings } = await supabase
-    .from('quickbooks_settings')
-    .select('*')
-    .eq('is_active', true)
-    .single();
-  if (!settings) throw new Error('QuickBooks not connected');
-
-  const expiresAt = new Date(settings.token_expires_at || 0);
-  if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) {
-    return { accessToken: settings.access_token, realmId: settings.realm_id };
-  }
-
-  // Refresh (access tokens last ~1h; refresh tokens ~100 days and rotate).
-  const oauthClient = new OAuthClient({
-    clientId: process.env.QUICKBOOKS_CLIENT_ID,
-    clientSecret: process.env.QUICKBOOKS_CLIENT_SECRET,
-    environment: process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox',
-    redirectUri: process.env.QUICKBOOKS_REDIRECT_URI,
-  });
-  const authResponse = await oauthClient.refreshUsingToken(settings.refresh_token);
-  const token = authResponse.getJson();
-  await supabase
-    .from('quickbooks_settings')
-    .update({
-      access_token: token.access_token,
-      refresh_token: token.refresh_token,
-      token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
-    })
-    .eq('is_active', true);
-  return { accessToken: token.access_token, realmId: settings.realm_id };
-}
 
 async function qbQuery(accessToken, realmId, query) {
   const url = `${QB_BASE()}/v3/company/${realmId}/query?minorversion=73&query=${encodeURIComponent(query)}`;
@@ -94,7 +63,7 @@ async function qbQueryAll(accessToken, realmId, entity, where) {
   return rows;
 }
 
-export async function GET(request) {
+async function GET_impl(request) {
   try {
     const { searchParams } = new URL(request.url);
     const auth = await requireCronOrAdmin(request);
@@ -103,7 +72,7 @@ export async function GET(request) {
     const dryRun = searchParams.get('dryRun') === 'true';
 
     const supabase = getSupabase();
-    const { accessToken, realmId } = await getAccessToken(supabase);
+    const { accessToken, realmId } = await getQbAccessToken(supabase);
 
     const sinceDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
@@ -188,6 +157,11 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('QB pull-payments error:', error);
+    const qb = qbErrorResponse(error);
+    if (qb) return Response.json({ success: false, ...qb.body }, { status: qb.status });
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('quickbooks/pull-payments', request, () => GET_impl(request));

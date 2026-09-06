@@ -5,6 +5,7 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { requireCronOrStaff, cronHeaders, appBaseUrl } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 // Vercel: this route opens seven IMAP folders in sequence and parses up to 30
 // days of mail per folder. The platform default kills it mid-run, which is why
@@ -462,7 +463,7 @@ async function syncQuotePause(woId, newStatus, atIso) {
 }
 
 // GET: Fetch and process status update emails from all CBRE labels
-export async function GET(request) {
+async function GET_impl(request) {
   try {
     const { searchParams } = new URL(request.url);
     const labelFilter = searchParams.get('label');
@@ -894,7 +895,7 @@ export async function GET(request) {
 }
 
 // POST: Manually trigger sync
-export async function POST(request) {
+async function POST_impl(request) {
   try {
     // Try to parse body, but don't fail if empty
     let body = {};
@@ -922,3 +923,7 @@ export async function POST(request) {
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('email-sync', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('email-sync', request, () => POST_impl(request));

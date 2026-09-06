@@ -10,8 +10,9 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import OAuthClient from 'intuit-oauth';
+import { getQbAccessToken, qbErrorResponse } from '@/lib/quickbooks';
 import { requireStaff } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -41,37 +42,6 @@ const QB_BASE = () =>
     ? 'https://quickbooks.api.intuit.com'
     : 'https://sandbox-quickbooks.api.intuit.com';
 
-async function getAccessToken(supabase) {
-  const { data: settings } = await supabase
-    .from('quickbooks_settings')
-    .select('*')
-    .eq('is_active', true)
-    .single();
-  if (!settings) throw new Error('QuickBooks not connected');
-
-  const expiresAt = new Date(settings.token_expires_at || 0);
-  if (expiresAt.getTime() - Date.now() > 5 * 60 * 1000) {
-    return { accessToken: settings.access_token, realmId: settings.realm_id };
-  }
-
-  const oauthClient = new OAuthClient({
-    clientId: process.env.QUICKBOOKS_CLIENT_ID,
-    clientSecret: process.env.QUICKBOOKS_CLIENT_SECRET,
-    environment: process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox',
-    redirectUri: process.env.QUICKBOOKS_REDIRECT_URI,
-  });
-  const authResponse = await oauthClient.refreshUsingToken(settings.refresh_token);
-  const token = authResponse.getJson();
-  await supabase
-    .from('quickbooks_settings')
-    .update({
-      access_token: token.access_token,
-      refresh_token: token.refresh_token,
-      token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
-    })
-    .eq('is_active', true);
-  return { accessToken: token.access_token, realmId: settings.realm_id };
-}
 
 async function qbFetch(accessToken, realmId, path, options = {}) {
   const res = await fetch(`${QB_BASE()}/v3/company/${realmId}${path}`, {
@@ -95,7 +65,7 @@ async function qbQuery(accessToken, realmId, query) {
   return res.json();
 }
 
-export async function POST(request) {
+async function POST_impl(request) {
   const auth = await requireStaff(request);
   if (!auth.ok) return auth.response;
   const supabase = getSupabase();
@@ -132,7 +102,7 @@ export async function POST(request) {
       .eq('wo_id', invoice.wo_id).single();
 
     // ── Resolve QB customer + items by name (robust against id changes) ─────
-    const { accessToken, realmId } = await getAccessToken(supabase);
+    const { accessToken, realmId } = await getQbAccessToken(supabase);
 
     const custRes = await qbQuery(accessToken, realmId,
       `select Id, DisplayName from Customer where DisplayName = '${QB_CUSTOMER_NAME}'`);
@@ -331,6 +301,11 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('QB push-invoice error:', error);
+    const qb = qbErrorResponse(error);
+    if (qb) return NextResponse.json({ success: false, ...qb.body }, { status: qb.status });
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const POST = (request) => withCronRun('quickbooks/push-invoice', request, () => POST_impl(request));

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { recordRun } from '@/lib/cronRun';
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
 
@@ -51,10 +52,14 @@ export async function GET(request) {
         realm_id: realmId,
         token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
         connected_at: new Date().toISOString(),
-        is_active: true
+        is_active: true,
+        needs_reconnect: false,
+        last_error: null,
+        last_error_at: null,
       });
 
     if (error) throw error;
+    await recordRun({ job: 'quickbooks/callback', trigger: 'manual', status: 'ok', started_at: new Date().toISOString(), summary: { realm_id: realmId } });
 
     const res = NextResponse.redirect(new URL('/settings/quickbooks?qb_success=true', request.url));
     res.cookies.set('qb_oauth_state', '', { path: '/', maxAge: 0 });
@@ -63,4 +68,4 @@ export async function GET(request) {
     console.error('QuickBooks callback error:', error);
     return NextResponse.redirect(new URL('/settings/quickbooks?qb_error=callback_failed', request.url));
   }
-}
+}

@@ -482,7 +482,13 @@ export default function InvoicingPage() {
         body: JSON.stringify({ invoice_id: invoice.invoice_id }),
       });
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Push failed');
+      if (!json.success) {
+        if (json.code === 'qb_needs_reconnect' || json.code === 'qb_not_connected') {
+          if (confirm(`\u26a0\ufe0f ${json.error}\n\nOpen Settings \u2192 QuickBooks to reconnect now?`)) window.open('/settings/quickbooks', '_blank');
+          return;
+        }
+        throw new Error(json.error || 'Push failed');
+      }
       if (json.pdfUrl) window.open(json.pdfUrl, '_blank');
       alert(`\u2705 Created in QuickBooks as invoice #${json.qbInvoiceNumber}` +
         (json.emailSent ? '\n\u2709\ufe0f Invoice email sent via QuickBooks.' : '\n\u26a0\ufe0f Invoice email could NOT be sent \u2014 send it from QuickBooks.') +

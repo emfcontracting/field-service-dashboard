@@ -30,6 +30,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildCbrePayload } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -60,8 +61,8 @@ const NTE_COMMENT_TEMPLATE =
   process.env.CBRE_NTE_COMMENT ||
   'NTE increase requested by EMF Contracting LLC to complete the work order.';
 
-export async function GET(request) { return handle(request); }
-export async function POST(request) { return handle(request); }
+async function GET_impl(request) { return handle(request); }
+async function POST_impl(request) { return handle(request); }
 
 function ts(v) {
   const t = v ? Date.parse(v) : NaN;
@@ -210,3 +211,7 @@ async function handle(request) {
     return Response.json({ ...result, error: e.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('cbre/queue-nte-requests', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('cbre/queue-nte-requests', request, () => POST_impl(request));

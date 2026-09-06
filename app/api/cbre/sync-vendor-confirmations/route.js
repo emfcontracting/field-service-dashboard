@@ -17,6 +17,7 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { kindFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
+import { withCronRun } from '@/lib/cronRun';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -99,8 +100,8 @@ function field(text, label) {
   return m ? m[1].trim() : null;
 }
 
-export async function GET(request) { return handle(request); }
-export async function POST(request) { return handle(request); }
+async function GET_impl(request) { return handle(request); }
+async function POST_impl(request) { return handle(request); }
 
 async function handle(request) {
   const { searchParams } = new URL(request.url);
@@ -187,3 +188,7 @@ async function handle(request) {
     return Response.json({ ...result, error: e.message }, { status: 500 });
   }
 }
+
+// Run log (cron_runs) — see lib/cronRun.js. Response is passed through unchanged.
+export const GET = (request) => withCronRun('cbre/sync-vendor-confirmations', request, () => GET_impl(request));
+export const POST = (request) => withCronRun('cbre/sync-vendor-confirmations', request, () => POST_impl(request));

@@ -66,7 +66,11 @@ async function handle(request) {
   try {
     const { data: candidates, error: qErr } = await supabase
       .from('work_orders')
-      .select('wo_id, wo_number, ups_building_code, nte, cbre_status, building, priority, date_entered')
+      // NOTE: work_orders has no ups_building_code column (that alias only
+      // exists on the acknowledgement view) - selecting it made every cron
+      // run fail with a 400 from PostgREST. The building code is parsed from
+      // `building` by buildCbrePayload.
+      .select('wo_id, wo_number, nte, cbre_status, building, priority, date_entered')
       .eq('cbre_status', 'quote_submitted')
       .is('cbre_nte_submitted_at', null)
       .not('nte', 'is', null)
@@ -85,7 +89,7 @@ async function handle(request) {
       const built = buildCbrePayload({
         kind: 'cbre_nte',
         woNumber: wo.wo_number,
-        buildingRaw: wo.ups_building_code || wo.building,
+        buildingRaw: wo.building,
         requestorEmail: REQUESTOR_EMAIL,
         vendor: VENDOR_NAME,
         nteAmount: wo.nte,
@@ -93,7 +97,7 @@ async function handle(request) {
       });
       if (built.problems.length) {
         if (built.problems.some((p) => /building/.test(p)))
-          result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.ups_building_code || wo.building || 'null'})`);
+          result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.building || 'null'})`);
         else result.excluded.problems.push(`${wo.wo_number}: ${built.problems.join('; ')}`);
         continue;
       }
@@ -103,7 +107,7 @@ async function handle(request) {
         wo_id: wo.wo_id,
         wo_number: wo.wo_number,
         title: `Submit NTE $${built.readable.nteAmount} for ${wo.wo_number} to CBRE`,
-        summary: `${wo.ups_building_code || wo.building || 'unknown site'} · NTE $${built.readable.nteAmount}`,
+        summary: `${wo.building || 'unknown site'} · NTE $${built.readable.nteAmount}`,
         payload: { ...built.payload, _readable: built.readable },
         status: 'pending',
       };

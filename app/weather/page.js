@@ -21,7 +21,7 @@ const HAZARD_COLORS = {
   snow:      'bg-slate-500/15 text-slate-400 border-slate-500/30',
   wind:      'bg-purple-500/15 text-purple-400 border-purple-500/30',
   heat:      'bg-orange-500/15 text-orange-400 border-orange-500/30',
-  fog:       'bg-gray-500/15 text-gray-400 border-gray-500/30',
+  fog:       'bg-[#3d3d5e]/15 text-slate-400 border-[#3d3d5e]/30',
   hail:      'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
 };
 

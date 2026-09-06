@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 import { apiFetch } from '@/lib/apiClient';
+import { useCurrentUser } from '@/app/components/CurrentUserContext';
 
 const supabase = getSupabase();
 
@@ -104,10 +105,20 @@ const Avatar = ({ name, role }) => {
 const fmtPhone = (p) => p?.replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3') || '';
 
 // ════════════════════════════════════════════════════════════════════════════
+// AppShell resolves the signed-in user once (auth + users row + role gate);
+// the page body reads it from CurrentUserContext, so it renders inside the shell.
 export default function UserManagement() {
+  return (
+    <AppShell activeLink="/users">
+      <UserManagementContent />
+    </AppShell>
+  );
+}
+
+function UserManagementContent() {
   const router = useRouter();
+  const { user: currentUser, isSuperuser, isAdmin } = useCurrentUser();
   const [users, setUsers]           = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [showModal, setShowModal]   = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -124,8 +135,6 @@ export default function UserManagement() {
   const [lookingUpCarrier, setLookingUpCarrier] = useState(false);
   const [carrierLookupResult, setCarrierLookupResult] = useState(null);
 
-  const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
-  const isAdmin = currentUser?.role === 'admin';
 
   // ── Wages state (admin-only) ──────────────────────────────────────────────
   const [wages, setWages] = useState({});       // { user_id: { rt, ot } }
@@ -137,17 +146,10 @@ export default function UserManagement() {
     role: 'lead_tech', regular_rate: 64, overtime_rate: 96, is_active: true,
   });
 
-  useEffect(() => { checkAuth(); fetchUsers(); }, []);
+  useEffect(() => { fetchUsers(); }, []);
+  // Office staff may not manage users — the shell lets them in, this page does not.
+  useEffect(() => { if (currentUser?.role === 'office_staff') router.push('/dashboard'); }, [currentUser, router]);
   useEffect(() => { if (isAdmin) fetchWages(); }, [isAdmin]);
-
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.push('/login'); return; }
-    const { data, error } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
-    // Only block if we explicitly confirmed office_staff — never on error/null
-    if (!error && data?.role === 'office_staff') { router.push('/dashboard'); return; }
-    setCurrentUser(data);
-  }
 
   async function fetchUsers() {
     try {
@@ -343,19 +345,16 @@ export default function UserManagement() {
 
   if (loading) {
     return (
-      <AppShell activeLink="/users">
-        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
-            <p className="text-slate-500 text-sm">Loading users…</p>
-          </div>
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+          <p className="text-slate-500 text-sm">Loading users…</p>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
   return (
-    <AppShell activeLink="/users">
       <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
 
         {/* ── Header ── */}
@@ -779,6 +778,5 @@ export default function UserManagement() {
           </div>
         )}
       </div>
-    </AppShell>
   );
 }

@@ -1,8 +1,7 @@
 // app/api/email-sync/route.js
 // Syncs CBRE status updates from Gmail labels via IMAP (Escalation, Quote Approval, Quote Rejected, Quote Submitted, Reassignment)
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
-import { simpleParser } from 'mailparser';
+import { fetchMessages, addFlags, sinceDays } from '@/lib/imap';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { requireCronOrStaff, cronHeaders, appBaseUrl } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
@@ -56,166 +55,17 @@ const PROTECTED_STATUSES = new Set(['quote_approved']);
 // other direction, where a posting code is kept out of the active status.
 const EMAIL_OWNED_STATUSES = new Set(Object.keys(STATUS_RANK));
 
-// Connect to Gmail via IMAP
-function connectIMAP() {
-  const email = process.env.EMAIL_IMPORT_USER;
-  const password = process.env.EMAIL_IMPORT_PASSWORD;
-
-  if (!email || !password) {
-    throw new Error('IMAP credentials not configured');
-  }
-
-  return new Imap({
-    user: email,
-    password: password,
-    host: 'imap.gmail.com',
-    port: 993,
-    tls: true,
-    tlsOptions: { servername: 'imap.gmail.com' }
-  });
-}
-
-// Fetch emails from a specific IMAP folder (Gmail label)
-// searchDays: how many days back to search (default 30, use higher for rescan)
+// IMAP lives in lib/imap.js. Fetch e-mails from a Gmail label (read or
+// unread — office staff often reads them before the sync runs; duplicate
+// prevention is by status rank, not by \Seen). searchDays: window (default 30).
 async function fetchEmailsFromLabel(labelName, searchDays = 30) {
-  return new Promise((resolve, reject) => {
-    const imap = connectIMAP();
-    const emails = [];
-
-    // Use label name exactly as it appears in Gmail
-    const folderName = labelName;
-
-    imap.once('ready', () => {
-      imap.openBox(folderName, false, (err, box) => {
-        if (err) {
-          imap.end();
-          return reject(new Error(`Could not open ${folderName} folder: ${err.message}`));
-        }
-
-        // Search emails from last N days (read or unread)
-        // Office staff often reads emails before sync runs, so we can't rely on UNSEEN
-        // Duplicate prevention: we skip WOs that already have the matching status
-        const sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - searchDays);
-        const formatIMAPDate = (date) => {
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          return `${date.getDate().toString().padStart(2, '0')}-${months[date.getMonth()]}-${date.getFullYear()}`;
-        };
-        
-        console.log(`[${labelName}] Searching emails since ${formatIMAPDate(sinceDate)} (${searchDays} days)`);
-        
-        imap.search([['SINCE', formatIMAPDate(sinceDate)]], (err, results) => {
-          if (err) {
-            imap.end();
-            return reject(err);
-          }
-
-          if (!results || results.length === 0) {
-            imap.end();
-            return resolve([]);
-          }
-
-          const fetch = imap.fetch(results, {
-            bodies: '',
-            markSeen: false
-          });
-
-          const parsePromises = []; // Track all parse operations
-
-          fetch.on('message', (msg, seqno) => {
-            let buffer = '';
-            let uid;
-            let flags = [];
-
-            msg.on('body', (stream) => {
-              stream.on('data', (chunk) => {
-                buffer += chunk.toString('utf8');
-              });
-            });
-
-            msg.once('attributes', (attrs) => {
-              uid = attrs.uid;
-              flags = attrs.flags || [];
-            });
-
-            msg.once('end', () => {
-              // Create a promise for each parse operation
-              const parsePromise = new Promise((resolveParser) => {
-                simpleParser(buffer, (err, parsed) => {
-                  if (err) {
-                    console.error('Parse error:', err);
-                    resolveParser(); // Resolve even on error
-                    return;
-                  }
-
-                  emails.push({
-                    uid,
-                    seen: flags.includes('\\Seen'),
-                    subject: parsed.subject || '',
-                    from: parsed.from?.text || '',
-                    date: parsed.date || new Date(),
-                    body: parsed.html || parsed.textAsHtml || parsed.text || ''
-                  });
-                  resolveParser();
-                });
-              });
-              parsePromises.push(parsePromise);
-            });
-          });
-
-          fetch.once('error', (err) => {
-            imap.end();
-            reject(err);
-          });
-
-          fetch.once('end', async () => {
-            // Wait for all parse operations to complete
-            await Promise.all(parsePromises);
-            imap.end();
-            resolve(emails);
-          });
-        });
-      });
-    });
-
-    imap.once('error', (err) => {
-      reject(err);
-    });
-
-    imap.connect();
-  });
+  console.log(`[${labelName}] Searching emails of the last ${searchDays} days`);
+  const { messages } = await fetchMessages({ account: 'import', box: labelName, criteria: [sinceDays(searchDays)] });
+  return messages;
 }
 
-// Mark email as read in specific folder
-async function markAsRead(labelName, uid) {
-  return new Promise((resolve, reject) => {
-    const imap = connectIMAP();
-    
-    // Use label name exactly as it appears in Gmail
-    const folderName = labelName;
-
-    imap.once('ready', () => {
-      imap.openBox(folderName, false, (err) => {
-        if (err) {
-          imap.end();
-          return reject(err);
-        }
-
-        imap.addFlags(uid, ['\\Seen'], (err) => {
-          imap.end();
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-    });
-
-    imap.once('error', (err) => {
-      reject(err);
-    });
-
-    imap.connect();
-  });
-}
+// Mark an e-mail as read in a specific label.
+const markAsRead = (labelName, uid) => addFlags({ account: 'import', box: labelName, uids: uid });
 
 // Extract WO number from email subject or body
 function extractWONumber(subject, body) {

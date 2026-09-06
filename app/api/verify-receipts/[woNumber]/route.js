@@ -5,7 +5,7 @@
 // Mirrors verify-photos and verify-writeups exactly.
 // ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
+import { findMailsBySubject } from '@/lib/imap';
 import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
@@ -13,81 +13,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-function searchForReceipts(woNumber) {
-  return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => {
-      console.log('IMAP search timed out');
-      resolve({ found: false, emails: [], error: 'Search timed out' });
-    }, 12000);
+// Gmail search lives in lib/imap.js (findMailsBySubject): subject must contain
+// one of the terms AND the WO number; 12 s budget, never throws.
+const searchForReceipts = (woNumber) => findMailsBySubject({ account: 'photos', terms: ['Receipts', 'Recibos'], contains: woNumber });
 
-    const imap = new Imap({
-      user: process.env.SMTP_USER,
-      password: process.env.SMTP_PASSWORD,
-      host: 'imap.gmail.com',
-      port: 993,
-      tls: true,
-      tlsOptions: { servername: 'imap.gmail.com' },
-      authTimeout: 8000,
-      connTimeout: 8000,
-    });
-
-    const results = { found: false, emails: [], error: null };
-    const cleanup = () => { clearTimeout(timeoutId); try { imap.end(); } catch {} };
-
-    imap.once('ready', () => {
-      imap.openBox('INBOX', true, (err) => {
-        if (err) { results.error = err.message; cleanup(); resolve(results); return; }
-
-        // Search for "Receipts" (EN) + "Recibos" (ES) in subject.
-        imap.search([['SUBJECT', 'Receipts']], (e1, receiptUids) => {
-          imap.search([['SUBJECT', 'Recibos']], (e2, recibosUids) => {
-            const allUids = [...new Set([
-              ...(receiptUids || []),
-              ...(recibosUids || []),
-            ])];
-
-            if (allUids.length === 0) { cleanup(); resolve(results); return; }
-
-            const fetch = imap.fetch(allUids, {
-              bodies: 'HEADER.FIELDS (FROM SUBJECT DATE)',
-              struct: false,
-            });
-
-            fetch.on('message', (msg) => {
-              msg.on('body', (stream) => {
-                let buffer = '';
-                stream.on('data', (chunk) => buffer += chunk.toString('utf8'));
-                stream.on('end', () => {
-                  const subjectMatch = buffer.match(/Subject:\s*(.+?)(?:\r\n|\n)/i);
-                  const subject = subjectMatch ? subjectMatch[1].trim() : '';
-                  if (subject.toUpperCase().includes(woNumber.toUpperCase())) {
-                    const fromMatch = buffer.match(/From:\s*(.+?)(?:\r\n|\n)/i);
-                    const dateMatch = buffer.match(/Date:\s*(.+?)(?:\r\n|\n)/i);
-                    results.emails.push({
-                      subject,
-                      from: fromMatch ? fromMatch[1].trim() : '',
-                      date: dateMatch ? dateMatch[1].trim() : '',
-                    });
-                    results.found = true;
-                  }
-                });
-              });
-            });
-
-            fetch.once('error', (fetchErr) => { results.error = fetchErr.message; });
-            fetch.once('end', () => { cleanup(); resolve(results); });
-          });
-        });
-      });
-    });
-
-    imap.once('error', (err) => { results.error = err.message; cleanup(); resolve(results); });
-
-    try { imap.connect(); } catch (e) { results.error = e.message; cleanup(); resolve(results); }
-  });
-}
-
-// ── GET: Check if receipts exist ────────────────────────────────────────────
 export async function GET(request, { params }) {
   const auth = await requireUser(request);
   if (!auth.ok) return auth.response;

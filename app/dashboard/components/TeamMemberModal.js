@@ -60,13 +60,13 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-600 p-6 w-full max-w-md">
+      <div className="bg-[#0d0d14] rounded-lg shadow-xl border border-[#3d3d5e] p-6 w-full max-w-md">
         <h3 className="text-xl font-bold text-white mb-4">Add Team Member</h3>
         
         <div className="space-y-4">
           {/* Team Member Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-slate-400 mb-2">
               Select Team Member
             </label>
             {availableUsers.length === 0 ? (
@@ -78,7 +78,7 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
               <select
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-[#1e1e2e] text-white border border-[#3d3d5e] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 size={Math.min(availableUsers.length + 1, 8)}
               >
                 <option value="">Choose a person...</option>
@@ -128,19 +128,19 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
           {/* Role on this Job */}
           {selectedUserId && (
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
+              <label className="block text-sm font-medium text-slate-400 mb-2">
                 Role on this Job
               </label>
               <select
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 bg-[#1e1e2e] text-white border border-[#3d3d5e] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="helper">Helper</option>
                 <option value="tech">Technician</option>
                 <option value="lead_tech">Co-Lead Tech</option>
               </select>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 This defines their role for this specific work order
               </p>
             </div>
@@ -151,11 +151,11 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
             const selectedUser = users.find(u => u.user_id === selectedUserId);
             if (selectedUser) {
               return (
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <div className="text-sm text-gray-400 mb-1">Selected:</div>
+                <div className="bg-[#1e1e2e] rounded-lg p-3">
+                  <div className="text-sm text-slate-400 mb-1">Selected:</div>
                   <div className="font-semibold">{selectedUser.first_name} {selectedUser.last_name}</div>
-                  <div className="text-xs text-gray-400">{selectedUser.email}</div>
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-slate-400">{selectedUser.email}</div>
+                  <div className="text-xs text-slate-400">
                     Current Role: {selectedUser.role.replace('_', ' ').toUpperCase()}
                   </div>
                 </div>
@@ -181,14 +181,14 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
           <button
             onClick={onClose}
             disabled={saving}
-            className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 border border-gray-500 text-white rounded-lg font-semibold transition"
+            className="flex-1 px-4 py-3 bg-[#2d2d44] hover:bg-[#1e1e2e] disabled:opacity-50 border border-[#3d3d5e] text-white rounded-lg font-semibold transition"
           >
             Cancel
           </button>
           <button
             onClick={handleAddTeamMember}
             disabled={saving || !selectedUserId}
-            className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition"
+            className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-[#2d2d44] disabled:cursor-not-allowed text-white rounded-lg font-semibold transition"
           >
             {saving ? 'Adding...' : 'Add Member'}
           </button>
@@ -196,4 +196,4 @@ export default function TeamMemberModal({ workOrder, users, supabase, onClose, o
       </div>
     </div>
   );
-}
+}

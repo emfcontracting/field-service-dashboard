@@ -159,6 +159,28 @@ export default function MobilePage() {
   const [syncNotificationMessage, setSyncNotificationMessage] = useState('');
   const [syncNotificationType, setSyncNotificationType] = useState('success');
 
+  // Push-tap opens the work order (M14). Two paths: the service worker posts
+  // OPEN_WORK_ORDER to an open window, or opens /mobile?wo=<wo_id> in a new
+  // one. Either way the ticket is selected once the list has loaded.
+  const [pendingWoId, setPendingWoId] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('wo'); } catch { return null; }
+  });
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+    const onMessage = (e) => { if (e.data?.type === 'OPEN_WORK_ORDER' && e.data.wo_id) setPendingWoId(String(e.data.wo_id)); };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+  useEffect(() => {
+    if (!pendingWoId || !currentUser) return;
+    const wo = (workOrders || []).find((w) => String(w.wo_id) === pendingWoId)
+      || (completedWorkOrders || []).find((w) => String(w.wo_id) === pendingWoId);
+    if (!wo) return;                       // list not loaded yet (or not this tech's ticket)
+    setSelectedWO(wo);
+    setPendingWoId(null);
+    try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+  }, [pendingWoId, workOrders, completedWorkOrders, currentUser, setSelectedWO]);
+
   // Show sync notification when sync/download completes
   useEffect(() => {
     if (syncStatus === 'success') {

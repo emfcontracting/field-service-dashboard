@@ -21,6 +21,7 @@ import CBREDataEntryView from './components/CBREDataEntryView';
 import ReviewQueueView from './components/ReviewQueueView';
 import ApprovalsView from './components/ApprovalsView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
+import { useCurrentUser } from '../components/CurrentUserContext';
 import { calculateStats } from './utils/calculations';
 import { parseDate } from '@/lib/dates';
 
@@ -28,7 +29,6 @@ import { parseDate } from '@/lib/dates';
 // GoTrue instances fighting over the same session storage.
 const supabase = getSupabase();
 
-const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -37,7 +37,7 @@ function DashboardContent() {
 
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, isSuperuser } = useCurrentUser();   // resolved once by AppShell
   const [selectedWO, setSelectedWO] = useState(null);
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -51,7 +51,6 @@ function DashboardContent() {
     pending_cbre_quote: 0, quoted: 0, quote_approved: 0
   });
 
-  const isSuperuser = currentUser?.email === SUPERUSER_EMAIL;
 
   const chunkArray = (array, size) => {
     const chunks = [];
@@ -61,7 +60,6 @@ function DashboardContent() {
 
   useEffect(() => {
     loadInitialData();
-    fetchCurrentUser();
   }, []);
 
   useEffect(() => {
@@ -78,16 +76,6 @@ function DashboardContent() {
   useEffect(() => {
     if (workOrders.length > 0) calculateMissingHoursCount();
   }, [workOrders]);
-
-  const fetchCurrentUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: userData } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
-        setCurrentUser(userData);
-      }
-    } catch {}
-  };
 
   const loadInitialData = async () => {
     setLoading(true);

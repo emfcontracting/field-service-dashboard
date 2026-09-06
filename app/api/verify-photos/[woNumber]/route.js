@@ -2,7 +2,7 @@
 // Verifies that before/after photos have been sent to emfcbre@gmail.com for a work order
 // Uses IMAP to search Gmail - just needs "photos" + WO number in subject
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
+import { findMailsBySubject } from '@/lib/imap';
 import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
@@ -11,134 +11,10 @@ const supabase = createClient(
 );
 
 // Search Gmail via IMAP for photo emails
-function searchForPhotos(woNumber) {
-  return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => {
-      console.log('IMAP search timed out');
-      resolve({ found: false, emails: [], error: 'Search timed out' });
-    }, 12000);
+// Gmail search lives in lib/imap.js (findMailsBySubject): subject must contain
+// one of the terms AND the WO number; 12 s budget, never throws.
+const searchForPhotos = (woNumber) => findMailsBySubject({ account: 'photos', terms: ['Photos', 'Fotos'], contains: woNumber });
 
-    const imapConfig = {
-      user: process.env.SMTP_USER,
-      password: process.env.SMTP_PASSWORD,
-      host: 'imap.gmail.com',
-      port: 993,
-      tls: true,
-      tlsOptions: { servername: 'imap.gmail.com' },
-      authTimeout: 8000,
-      connTimeout: 8000
-    };
-
-    console.log('IMAP connecting as:', imapConfig.user);
-    console.log('Looking for: "photos" + "' + woNumber + '" in subject');
-
-    const imap = new Imap(imapConfig);
-
-    let results = {
-      found: false,
-      emails: [],
-      error: null
-    };
-
-    function cleanup() {
-      clearTimeout(timeoutId);
-      try { imap.end(); } catch (e) {}
-    }
-
-    imap.once('ready', () => {
-      console.log('IMAP connected');
-      
-      imap.openBox('INBOX', true, (err, box) => {
-        if (err) {
-          console.error('Mailbox error:', err.message);
-          results.error = err.message;
-          cleanup();
-          resolve(results);
-          return;
-        }
-
-        console.log('INBOX opened, messages:', box.messages?.total);
-
-        // Search for emails with "Photos" in subject
-        imap.search([['SUBJECT', 'Photos']], (err1, photoUids) => {
-          // Also search for "Fotos" (Spanish)
-          imap.search([['SUBJECT', 'Fotos']], (err2, fotoUids) => {
-            // Combine results
-            const allUids = [...new Set([...(photoUids || []), ...(fotoUids || [])])];
-            
-            console.log('Found', allUids.length, 'emails with Photos/Fotos in subject');
-
-            if (allUids.length === 0) {
-              console.log('No photo emails found at all');
-              cleanup();
-              resolve(results);
-              return;
-            }
-
-            // Fetch these emails and check if WO number is in subject
-            const fetch = imap.fetch(allUids, {
-              bodies: 'HEADER.FIELDS (FROM SUBJECT DATE)',
-              struct: false
-            });
-
-            fetch.on('message', (msg) => {
-              msg.on('body', (stream) => {
-                let buffer = '';
-                stream.on('data', (chunk) => buffer += chunk.toString('utf8'));
-                stream.on('end', () => {
-                  const subjectMatch = buffer.match(/Subject:\s*(.+?)(?:\r\n|\n)/i);
-                  const subject = subjectMatch ? subjectMatch[1].trim() : '';
-                  
-                  // Check if WO number is in subject
-                  if (subject.toUpperCase().includes(woNumber.toUpperCase())) {
-                    const fromMatch = buffer.match(/From:\s*(.+?)(?:\r\n|\n)/i);
-                    const dateMatch = buffer.match(/Date:\s*(.+?)(?:\r\n|\n)/i);
-                    
-                    console.log('✓ MATCH:', subject);
-                    results.emails.push({
-                      subject: subject,
-                      from: fromMatch ? fromMatch[1].trim() : '',
-                      date: dateMatch ? dateMatch[1].trim() : ''
-                    });
-                    results.found = true;
-                  }
-                });
-              });
-            });
-
-            fetch.once('error', (fetchErr) => {
-              console.error('Fetch error:', fetchErr.message);
-              results.error = fetchErr.message;
-            });
-
-            fetch.once('end', () => {
-              console.log('Search complete. Matches:', results.emails.length);
-              cleanup();
-              resolve(results);
-            });
-          });
-        });
-      });
-    });
-
-    imap.once('error', (err) => {
-      console.error('IMAP error:', err.message);
-      results.error = err.message;
-      cleanup();
-      resolve(results);
-    });
-
-    try {
-      imap.connect();
-    } catch (e) {
-      results.error = e.message;
-      cleanup();
-      resolve(results);
-    }
-  });
-}
-
-// GET: Check if photos exist for a work order
 export async function GET(request, { params }) {
   const auth = await requireUser(request);
   if (!auth.ok) return auth.response;

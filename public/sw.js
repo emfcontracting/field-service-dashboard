@@ -178,7 +178,9 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
   
-  const urlToOpen = event.notification.data?.url || '/mobile';
+  // Deep link: a fresh window opens the ticket directly (app/mobile reads ?wo=).
+  const woId = event.notification.data?.wo_id;
+  const urlToOpen = woId ? `/mobile?wo=${encodeURIComponent(woId)}` : (event.notification.data?.url || '/mobile');
   
   // Handle action buttons
   if (event.action === 'dismiss') {

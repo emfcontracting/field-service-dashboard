@@ -111,7 +111,7 @@ export default function GlobalWOSearch({ onClose }) {
         return { stage: 'Return Trip', color: 'bg-orange-500', icon: '🔄' };
       case 'pending':
       default:
-        return { stage: 'Pending', color: 'bg-gray-500', icon: '⏳' };
+        return { stage: 'Pending', color: 'bg-[#3d3d5e]', icon: '⏳' };
     }
   };
 
@@ -121,31 +121,31 @@ export default function GlobalWOSearch({ onClose }) {
       case 'high': return { bg: 'bg-orange-500', text: 'HIGH' };
       case 'medium': return { bg: 'bg-yellow-500 text-black', text: 'MEDIUM' };
       case 'low': return { bg: 'bg-blue-500', text: 'LOW' };
-      default: return { bg: 'bg-gray-500', text: priority?.toUpperCase() || 'N/A' };
+      default: return { bg: 'bg-[#3d3d5e]', text: priority?.toUpperCase() || 'N/A' };
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-[#0d0d14] rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-700 p-6 flex justify-between items-center">
+        <div className="border-b border-[#2d2d44] p-6 flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold">🔍 Global Work Order Search</h2>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="text-slate-400 text-sm mt-1">
               Search across ALL work orders - any status, including invoiced
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-3xl leading-none"
+            className="text-slate-400 hover:text-white text-3xl leading-none"
           >
             ×
           </button>
         </div>
 
         {/* Search Bar */}
-        <div className="p-6 border-b border-gray-700">
+        <div className="p-6 border-b border-[#2d2d44]">
           <div className="flex gap-3">
             <input
               type="text"
@@ -153,13 +153,13 @@ export default function GlobalWOSearch({ onClose }) {
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Enter WO# or Building name..."
-              className="flex-1 bg-gray-700 text-white px-4 py-3 rounded-lg text-lg"
+              className="flex-1 bg-[#1e1e2e] text-white px-4 py-3 rounded-lg text-lg"
               autoFocus
             />
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-[#2d2d44] px-6 py-3 rounded-lg font-bold"
             >
               {searching ? '⏳' : '🔍'} Search
             </button>
@@ -169,21 +169,21 @@ export default function GlobalWOSearch({ onClose }) {
         {/* Results */}
         <div className="flex-1 overflow-y-auto p-6">
           {!searched && (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-slate-400 py-12">
               <div className="text-6xl mb-4">🔍</div>
               <p>Enter a WO# or building name to search</p>
             </div>
           )}
 
           {searched && results.length === 0 && !searching && (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-slate-400 py-12">
               <div className="text-6xl mb-4">📭</div>
               <p>No work orders found matching "{searchTerm}"</p>
             </div>
           )}
 
           {searching && (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-slate-400 py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
               <p>Searching...</p>
             </div>
@@ -191,7 +191,7 @@ export default function GlobalWOSearch({ onClose }) {
 
           {results.length > 0 && (
             <div className="space-y-4">
-              <div className="text-sm text-gray-400 mb-4">
+              <div className="text-sm text-slate-400 mb-4">
                 Found {results.length} work order(s) matching "{searchTerm}"
               </div>
 
@@ -202,7 +202,7 @@ export default function GlobalWOSearch({ onClose }) {
                 return (
                   <div
                     key={wo.wo_id}
-                    className="bg-gray-700 rounded-lg p-4 hover:bg-gray-650 transition"
+                    className="bg-[#1e1e2e] rounded-lg p-4 hover:bg-[#2d2d44] transition"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div>
@@ -212,7 +212,7 @@ export default function GlobalWOSearch({ onClose }) {
                             {priority.text}
                           </span>
                         </div>
-                        <div className="text-gray-300 mt-1">{wo.building}</div>
+                        <div className="text-slate-300 mt-1">{wo.building}</div>
                       </div>
                       <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${workflow.color} flex items-center gap-2`}>
                         <span>{workflow.icon}</span>
@@ -222,30 +222,30 @@ export default function GlobalWOSearch({ onClose }) {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
-                        <span className="text-gray-400">Status:</span>
+                        <span className="text-slate-400">Status:</span>
                         <span className="ml-2 capitalize">{wo.status?.replace('_', ' ')}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400">Lead Tech:</span>
+                        <span className="text-slate-400">Lead Tech:</span>
                         <span className="ml-2">
                           {wo.lead_tech ? `${wo.lead_tech.first_name} ${wo.lead_tech.last_name}` : 'Unassigned'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-gray-400">NTE:</span>
+                        <span className="text-slate-400">NTE:</span>
                         <span className="ml-2 font-semibold text-yellow-400">${(wo.nte || 0).toFixed(2)}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400">Created:</span>
+                        <span className="text-slate-400">Created:</span>
                         <span className="ml-2">{fmtDate(wo.date_entered || wo.created_at)}</span>
                       </div>
                     </div>
 
                     {wo.invoice && (
-                      <div className="mt-3 pt-3 border-t border-gray-600">
+                      <div className="mt-3 pt-3 border-t border-[#3d3d5e]">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4 text-sm">
-                            <span className="text-gray-400">Invoice:</span>
+                            <span className="text-slate-400">Invoice:</span>
                             <span className="font-semibold">{wo.invoice.invoice_number}</span>
                             <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                               wo.invoice.status === 'paid' || wo.invoice.status === 'synced' ? 'bg-green-600' :
@@ -262,10 +262,10 @@ export default function GlobalWOSearch({ onClose }) {
                     )}
 
                     {/* Quick Actions */}
-                    <div className="mt-3 pt-3 border-t border-gray-600 flex gap-2">
+                    <div className="mt-3 pt-3 border-t border-[#3d3d5e] flex gap-2">
                       <a
                         href={`/dashboard`}
-                        className="bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded text-sm"
+                        className="bg-[#2d2d44] hover:bg-[#3d3d5e] px-3 py-1.5 rounded text-sm"
                       >
                         📋 Dashboard
                       </a>

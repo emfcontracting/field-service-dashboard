@@ -27,11 +27,8 @@
 // Recommended: run GET first, review, then POST.
 
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
-import { simpleParser } from 'mailparser';
-import { buildContactLines } from '../contactParser';
-import { parseCbreDateEntered } from '../parseCbreDate';
-import { PRIORITY_CODES } from '@/lib/priorityCodes';
+import { fetchMessages, withImap, openBox, fetchRaw, parseMail, summarize, sinceDays } from '@/lib/imap';
+import { parseCBREEmail, classifySubject, extractWoFromSubject } from '@/lib/cbreEmailParser';
 import { requireAdmin } from '@/lib/serverAuth';
 
 const supabase = createClient(
@@ -47,344 +44,44 @@ const MAX_CANDIDATES = 2500;
 // Categories that POST will import unless overridden via ?types=
 const DEFAULT_IMPORT_TYPES = ['dispatch'];
 
-function connectIMAP() {
-  const email = process.env.EMAIL_IMPORT_USER;
-  const password = process.env.EMAIL_IMPORT_PASSWORD;
-  if (!email || !password) {
-    throw new Error('IMAP credentials not configured');
-  }
-  return new Imap({
-    user: email,
-    password: password,
-    host: 'imap.gmail.com',
-    port: 993,
-    tls: true,
-    tlsOptions: { servername: 'imap.gmail.com' }
-  });
-}
-
-function formatIMAPDate(date) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
-}
-
-// Classify a subject line into the kind of CBRE notice it is.
-// Order matters: a "Cancellation of Work Order" must NOT be read as a dispatch.
-function classifySubject(subject) {
-  const s = (subject || '').toLowerCase();
-
-  // Real new dispatch indicators (some are prefixed "ALERT:" / "Principal Workorder Created").
-  const looksDispatch =
-    s.includes('dispatch of work order') ||
-    s.includes('dispatch_of_work_order') ||
-    s.includes('pm work order') ||
-    s.includes('principal workorder');
-
-  if (looksDispatch) {
-    // ...but a cancellation/reassignment OF a work order is not a new dispatch.
-    if (s.includes('cancellation') || s.includes('cancelled') || s.includes('canceled')) return 'cancellation';
-    if (s.includes('reassignment') || s.includes('reassigned')) return 'reassignment';
-    return 'dispatch';
-  }
-
-  if (s.includes('cancellation') || s.includes('cancelled') || s.includes('canceled')) return 'cancellation';
-  if (s.includes('reassignment') || s.includes('reassigned')) return 'reassignment';
-  if (s.includes('escalation')) return 'escalation';
-  if (s.includes('ovd alert') || s.includes('alert')) return 'alert';
-  return 'other';
-}
-
-// Robust WO-number extraction from a subject line.
-// Layer 1 (canonical): "...Work Order ST3162410..." / "PM Work Order P2919408".
-// Layer 2 (loose):     any "<1-3 letters><6+ digits>" token (covers "WO# C2765194",
-//                      "OVD Alert - Work Order #C2856093", project subjects, etc.).
-function extractWoFromSubject(subject) {
-  const s = subject || '';
-
-  const canonical = s.match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]{0,3}\d+)/i);
-  if (canonical && canonical[1]) {
-    return { wo: canonical[1].toUpperCase(), matchType: 'canonical' };
-  }
-
-  const loose = s.match(/\b([A-Z]{1,3}\d{6,})\b/i);
-  if (loose && loose[1]) {
-    return { wo: loose[1].toUpperCase(), matchType: 'loose' };
-  }
-
-  return { wo: null, matchType: null };
-}
-
-// PHASE 1: fetch lightweight headers (subject + date + read flag) for WO-related
-// emails in the window. WO-focused subject search keeps volume low so the cap
-// does not truncate the window. No bodies -> fast and timeout-safe.
+// IMAP + parsing live in lib/imap.js / lib/cbreEmailParser.js.
+// PHASE 1: lightweight headers (subject + date + read flag) for WO-related
+// e-mails in the window — WO-focused subject search keeps volume low so the
+// cap does not truncate the window. No bodies → fast and timeout-safe.
 async function scanHeaders(days) {
-  return new Promise((resolve, reject) => {
-    const imap = connectIMAP();
-    const candidates = [];
-
-    imap.once('ready', () => {
-      imap.openBox('INBOX', true, (err) => {
-        if (err) {
-          imap.end();
-          return reject(new Error(`Could not open INBOX: ${err.message}`));
-        }
-
-        const since = new Date();
-        since.setDate(since.getDate() - days);
-        const sinceDate = formatIMAPDate(since);
-
-        // WO-related subjects only (dispatches, cancellations, reassignments,
-        // OVD alerts). Excludes bids/invoices/newsletters that otherwise swamp
-        // the scan. Classification + type filter decide what actually imports.
-        const searchCriteria = [
-          ['SINCE', sinceDate],
-          ['OR',
-            ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Workorder']],
-            ['OR', ['SUBJECT', 'WO#'], ['SUBJECT', 'Dispatch']]
-          ]
-        ];
-
-        imap.search(searchCriteria, (err, results) => {
-          if (err) {
-            imap.end();
-            return reject(err);
-          }
-          if (!results || results.length === 0) {
-            imap.end();
-            return resolve([]);
-          }
-
-          // Newest first, capped.
-          const uids = results.sort((a, b) => b - a).slice(0, MAX_CANDIDATES);
-
-          const fetch = imap.fetch(uids, {
-            bodies: 'HEADER.FIELDS (SUBJECT DATE)',
-            struct: false
-          });
-
-          const parsePromises = [];
-
-          fetch.on('message', (msg) => {
-            let headerBuf = '';
-            let uid;
-            let flags = [];
-
-            msg.on('body', (stream) => {
-              stream.on('data', (chunk) => { headerBuf += chunk.toString('utf8'); });
-            });
-            msg.once('attributes', (attrs) => {
-              uid = attrs.uid;
-              flags = attrs.flags || [];
-            });
-            msg.once('end', () => {
-              const p = new Promise((res) => {
-                simpleParser(headerBuf, (err, parsed) => {
-                  if (err) { res(); return; }
-                  const subject = parsed.subject || '';
-                  const { wo, matchType } = extractWoFromSubject(subject);
-                  candidates.push({
-                    uid,
-                    subject,
-                    date: parsed.date || null,
-                    isRead: flags.includes('\\Seen'),
-                    wo_number: wo,
-                    matchType,
-                    category: classifySubject(subject)
-                  });
-                  res();
-                });
-              });
-              parsePromises.push(p);
-            });
-          });
-
-          fetch.once('error', (err) => { imap.end(); reject(err); });
-          fetch.once('end', async () => {
-            await Promise.all(parsePromises);
-            imap.end();
-            resolve(candidates);
-          });
-        });
-      });
-    });
-
-    imap.once('error', reject);
-    imap.connect();
+  const { messages } = await fetchMessages({
+    account: 'import',
+    box: 'INBOX',
+    criteria: [
+      sinceDays(days),
+      ['OR',
+        ['OR', ['SUBJECT', 'Work Order'], ['SUBJECT', 'Workorder']],
+        ['OR', ['SUBJECT', 'WO#'], ['SUBJECT', 'Dispatch']]
+      ]
+    ],
+    newestFirst: true,
+    limit: MAX_CANDIDATES,
+    bodies: 'HEADER.FIELDS (SUBJECT DATE)',
+  });
+  return messages.map((m) => {
+    const { wo, matchType } = extractWoFromSubject(m.subject);
+    return { uid: m.uid, subject: m.subject, date: m.date || null, isRead: m.seen, wo_number: wo, matchType, category: classifySubject(m.subject) };
   });
 }
 
-// PHASE 2 (import only): fetch full bodies for a specific set of UIDs.
+// PHASE 2 (import only): full bodies for a specific set of UIDs.
 async function fetchBodiesByUid(uids) {
-  return new Promise((resolve, reject) => {
-    if (!uids || uids.length === 0) return resolve([]);
-    const imap = connectIMAP();
-    const emails = [];
-
-    imap.once('ready', () => {
-      imap.openBox('INBOX', false, (err) => {
-        if (err) { imap.end(); return reject(err); }
-
-        const fetch = imap.fetch(uids, { bodies: '', markSeen: false });
-        const parsePromises = [];
-
-        fetch.on('message', (msg) => {
-          let buffer = '';
-          let uid;
-          msg.on('body', (stream) => {
-            stream.on('data', (chunk) => { buffer += chunk.toString('utf8'); });
-          });
-          msg.once('attributes', (attrs) => { uid = attrs.uid; });
-          msg.once('end', () => {
-            const p = new Promise((res) => {
-              simpleParser(buffer, (err, parsed) => {
-                if (err) { res(); return; }
-                emails.push({
-                  uid,
-                  subject: parsed.subject || '',
-                  from: parsed.from?.text || '',
-                  date: parsed.date || new Date(),
-                  body: parsed.html || parsed.textAsHtml || parsed.text || ''
-                });
-                res();
-              });
-            });
-            parsePromises.push(p);
-          });
-        });
-
-        fetch.once('error', (err) => { imap.end(); reject(err); });
-        fetch.once('end', async () => {
-          await Promise.all(parsePromises);
-          imap.end();
-          resolve(emails);
-        });
-      });
-    });
-
-    imap.once('error', reject);
-    imap.connect();
+  if (!uids || uids.length === 0) return [];
+  return withImap('import', async (imap) => {
+    await openBox(imap, 'INBOX', true);
+    const raws = await fetchRaw(imap, uids);
+    const out = [];
+    for (const r of raws) {
+      const parsed = await parseMail(r.raw);
+      if (parsed) out.push(summarize(parsed, { uid: r.uid, flags: r.flags }));
+    }
+    return out;
   });
-}
-
-// Full CBRE parser (mirrors cron/route.js). wo_number can be overridden by the
-// caller with the value already extracted during the scan.
-function parseCBREEmail(subject, body) {
-  const workOrder = {
-    wo_number: '',
-    building: '',
-    address: '',
-    city: '',
-    state: '',
-    priority: 'P4',
-    date_entered: new Date().toISOString(),
-    work_order_description: '',
-    requestor: '',
-    requestor_phone: '',
-    status: 'pending',
-    comments: '',
-    nte: 0
-  };
-
-  const isPM = (subject || '').toLowerCase().includes('pm work order') ||
-               (body || '').toLowerCase().includes('preventive maintenance description');
-
-  const cleanBody = (body || '')
-    .replace(/=\r?\n/g, '')
-    .replace(/=3D/g, '=')
-    .replace(/=20/g, ' ')
-    .replace(/=2F/g, '/')
-    .replace(/=2C/g, ',')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const woMatch = (subject || '').match(/(?:PM[\s_]+)?Work[\s_]+Order[\s_]+([A-Z]{0,3}\d+)/i);
-  if (woMatch) workOrder.wo_number = woMatch[1].toUpperCase();
-
-  const priorityMatch = cleanBody.match(/Priority[:\s_]*(P\d+)[\s\-_]*([^<\n]*)/i) ||
-                        (subject || '').match(/Priority[:\s_]*(P\d+)/i);
-  if (priorityMatch) {
-    const pNum = parseInt(String(priorityMatch[1]).replace(/P/i, ''), 10);
-    const canonical = `P${pNum}`;
-    if (PRIORITY_CODES[canonical]) {
-      // Store the real CBRE priority code (single source of truth).
-      workOrder.priority = canonical;
-    } else {
-      const pText = (priorityMatch[2] || '').toLowerCase();
-      if (pText.includes('emergency')) workOrder.priority = 'P1';
-      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'P2';
-      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'P4';
-      else workOrder.priority = 'P5';
-    }
-  }
-
-  // Extract Date Entered. CBRE stamps this in Eastern and usually includes the
-  // source offset (e.g. "UTC-05"); parseCbreDateEntered honors it and returns a
-  // correct UTC instant. Without it, the naive string is read in the runtime
-  // zone (UTC on Vercel) and lands 4-5 hours early.
-  const dateEntered = parseCbreDateEntered(cleanBody);
-  if (dateEntered) workOrder.date_entered = dateEntered;
-
-  const buildingMatch = cleanBody.match(/Building:\s*([^<\n]+?)(?=\s*Floor|\s*Area|\s*Country|$)/i);
-  if (buildingMatch) workOrder.building = buildingMatch[1].trim().substring(0, 200);
-
-  const addressMatch = cleanBody.match(/Address:\s*([^<\n]+?)(?=\s*Country|\s*Building|$)/i);
-  if (addressMatch) workOrder.address = addressMatch[1].replace(/,\s*,/g, ',').replace(/,\s*$/, '').trim();
-
-  const locationMatch = cleanBody.match(/Country,?\s*St,?\s*City[:\s]*(?:USA?),?\s*([A-Z]{2}),?\s*([A-Za-z\s]+)/i);
-  if (locationMatch) {
-    workOrder.state = locationMatch[1].trim();
-    workOrder.city = locationMatch[2].trim();
-  }
-
-  let requestorMatch = cleanBody.match(/Work Order Requestor Name and Phone:\s*([^,<\n]+),?\s*([\d\-\(\)\s]+)?/i);
-  if (!requestorMatch) requestorMatch = cleanBody.match(/UPS Site Contact:\s*([^(<\n]+)\s*\(?([\d\-]+)\)?/i);
-  if (requestorMatch) {
-    workOrder.requestor = requestorMatch[1].trim();
-    if (requestorMatch[2]) workOrder.requestor_phone = requestorMatch[2].replace(/[^\d\-]/g, '').trim();
-  }
-
-  const nteMatch = cleanBody.match(/should not exceed\s*\*?\*?([\d,]+\.?\d*)\s*USD\*?\*?/i);
-  if (nteMatch) workOrder.nte = parseFloat(nteMatch[1].replace(/,/g, '')) || 0;
-
-  let description = '';
-  let descMatch = cleanBody.match(/Problem Description:\s*(.+?)(?=Assignment Name|Notes to Vendor|Service Location|$)/is);
-  if (!descMatch || !descMatch[1].trim()) {
-    descMatch = cleanBody.match(/Preventive Maintenance Description:\s*(.+?)(?=Service Location|Asset|PM Action|$)/is);
-  }
-  const pmActionMatch = cleanBody.match(/PM Action Steps:\s*[-]+\s*(.+?)(?=If you have any questions|Assignment Name|$)/is);
-  if (descMatch && descMatch[1]) description = descMatch[1].replace(/\s+/g, ' ').trim();
-  if (pmActionMatch && pmActionMatch[1]) {
-    const pmAction = pmActionMatch[1].replace(/\s+/g, ' ').trim();
-    if (pmAction && !description.includes(pmAction)) {
-      description = description ? `${description}\n\nPM Action: ${pmAction}` : pmAction;
-    }
-  }
-  workOrder.work_order_description = description.substring(0, 2000);
-
-  const comments = [];
-  if (isPM) comments.push('[PM - Preventive Maintenance]');
-  if (workOrder.address) comments.push(`Address: ${workOrder.address}`);
-  if (workOrder.city && workOrder.state) comments.push(`Location: ${workOrder.city}, ${workOrder.state}`);
-  // CBRE escalation contacts (Dispatcher / Conveyors / Environmental / Capital / GTSG ...)
-  const contactLines = buildContactLines(cleanBody);
-  if (contactLines.length > 0) {
-    comments.push('📞 CBRE Contacts');
-    contactLines.forEach(line => comments.push(line));
-  }
-  const targetMatch = cleanBody.match(/Target Completion:\s*([A-Za-z]+\s+\d+\s+\d+)/i);
-  if (targetMatch) comments.push(`Target Completion: ${targetMatch[1].trim()}`);
-  const tagMatch = cleanBody.match(/Tag Number:\s*(\d+)/i);
-  if (tagMatch) comments.push(`Asset Tag: ${tagMatch[1]}`);
-  comments.push(`[Backfill-imported from CBRE ${isPM ? 'PM ' : ''}email on ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST]`);
-  workOrder.comments = comments.join('\n');
-
-  return workOrder;
 }
 
 function parseTypes(searchParams) {

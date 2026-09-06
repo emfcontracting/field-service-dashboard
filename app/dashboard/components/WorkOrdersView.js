@@ -418,9 +418,9 @@ export default function WorkOrdersView({
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-red-500">
+          <div className="bg-[#0d0d14] rounded-lg p-6 max-w-md w-full mx-4 border border-red-500">
             <h3 className="text-xl font-bold text-red-400 mb-4">⚠️ Confirm Delete</h3>
-            <p className="text-gray-300 mb-4">
+            <p className="text-slate-300 mb-4">
               Are you sure you want to permanently delete <strong className="text-white">{selectedWOs.size} work order(s)</strong>?
             </p>
             <p className="text-red-400 text-sm mb-6">
@@ -430,7 +430,7 @@ export default function WorkOrdersView({
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
-                className="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded font-semibold"
+                className="bg-[#2d2d44] hover:bg-[#3d3d5e] px-4 py-2 rounded font-semibold"
               >
                 Cancel
               </button>
@@ -454,7 +454,7 @@ export default function WorkOrdersView({
 
       {/* Results count + Select/Combine toggle */}
       <div className="mb-2 flex justify-between items-center">
-        <span className="text-sm text-gray-400">
+        <span className="text-sm text-slate-400">
           Showing {filteredWorkOrders.length} of {workOrders.length} work orders
           {nteFilter && <span className="ml-2 text-orange-400 font-semibold">· NTE filter active</span>}
         </span>
@@ -463,7 +463,7 @@ export default function WorkOrdersView({
           className={`px-3 py-1 rounded text-sm font-semibold transition flex items-center gap-2 ${
             showCheckboxes 
               ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-              : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              : 'bg-[#1e1e2e] hover:bg-[#2d2d44] text-slate-300'
           }`}
         >
           {showCheckboxes ? '✅ Select Mode ON' : '☑️ Select & Combine'}

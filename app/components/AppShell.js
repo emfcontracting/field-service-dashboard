@@ -20,6 +20,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
 import { COMPLETION_SELECT, completionReadinessCheck, isActiveWo } from '@/lib/completionReadiness';
+import { CurrentUserProvider } from './CurrentUserContext';
 
 const supabase = getSupabase();
 
@@ -611,6 +612,18 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     finally { setLoading(false); }
   }
 
+  // Re-read the signed-in user's row (after they edit their own profile).
+  // Provided to pages through CurrentUserContext.
+  async function refreshUser() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
+      if (data) setUserInfo(data);
+      return data || null;
+    } catch { return null; }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/login');
@@ -632,6 +645,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
 
   // ── Render ──
   return (
+    <CurrentUserProvider user={userInfo} loading={false} refresh={refreshUser}>
     <div className={`min-h-screen bg-[#0a0a0f] ${isMobile ? 'flex flex-col' : 'flex'}`}>
       <Suspense fallback={
         isMobile ? null : (
@@ -664,5 +678,6 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
         {children}
       </main>
     </div>
+    </CurrentUserProvider>
   );
 }

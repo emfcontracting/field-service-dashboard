@@ -70,53 +70,53 @@ export default function ExportDropdown({ workOrders, supabase }) {
           />
           
           {/* Dropdown menu */}
-          <div className="absolute right-0 mt-2 w-72 bg-gray-800 rounded-lg shadow-xl border border-gray-700 z-20">
+          <div className="absolute right-0 mt-2 w-72 bg-[#0d0d14] rounded-lg shadow-xl border border-[#2d2d44] z-20">
             <div className="py-2">
               <button
                 onClick={() => handleExport('active')}
-                className="w-full text-left px-4 py-3 hover:bg-gray-700 transition text-white flex items-center gap-3"
+                className="w-full text-left px-4 py-3 hover:bg-[#1e1e2e] transition text-white flex items-center gap-3"
               >
                 <span className="text-2xl">📋</span>
                 <div>
                   <div className="font-semibold">Export Active</div>
-                  <div className="text-xs text-gray-400">Pending, Assigned, In Progress</div>
+                  <div className="text-xs text-slate-400">Pending, Assigned, In Progress</div>
                 </div>
               </button>
 
               <button
                 onClick={() => handleExport('completed')}
-                className="w-full text-left px-4 py-3 hover:bg-gray-700 transition text-white flex items-center gap-3"
+                className="w-full text-left px-4 py-3 hover:bg-[#1e1e2e] transition text-white flex items-center gap-3"
               >
                 <span className="text-2xl">✅</span>
                 <div>
                   <div className="font-semibold">Export Completed</div>
-                  <div className="text-xs text-gray-400">Finished & Locked Orders</div>
+                  <div className="text-xs text-slate-400">Finished & Locked Orders</div>
                 </div>
               </button>
 
-              <div className="border-t border-gray-700 my-1"></div>
+              <div className="border-t border-[#2d2d44] my-1"></div>
 
               <button
                 onClick={() => handleExport('all')}
-                className="w-full text-left px-4 py-3 hover:bg-gray-700 transition text-white flex items-center gap-3"
+                className="w-full text-left px-4 py-3 hover:bg-[#1e1e2e] transition text-white flex items-center gap-3"
               >
                 <span className="text-2xl">📊</span>
                 <div>
                   <div className="font-semibold">Export All</div>
-                  <div className="text-xs text-gray-400">All Work Orders</div>
+                  <div className="text-xs text-slate-400">All Work Orders</div>
                 </div>
               </button>
 
-              <div className="border-t border-gray-700 my-1"></div>
+              <div className="border-t border-[#2d2d44] my-1"></div>
 
               <button
                 onClick={() => handleExport('cost_detail')}
-                className="w-full text-left px-4 py-3 hover:bg-gray-700 transition text-white flex items-center gap-3"
+                className="w-full text-left px-4 py-3 hover:bg-[#1e1e2e] transition text-white flex items-center gap-3"
               >
                 <span className="text-2xl">💰</span>
                 <div>
                   <div className="font-semibold text-green-400">Cost Detail Report</div>
-                  <div className="text-xs text-gray-400">Per-tech hours, mileage & all costs with totals</div>
+                  <div className="text-xs text-slate-400">Per-tech hours, mileage & all costs with totals</div>
                 </div>
               </button>
             </div>

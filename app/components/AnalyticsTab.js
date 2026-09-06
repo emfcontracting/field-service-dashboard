@@ -38,7 +38,7 @@ export default function AnalyticsTab() {
   return (
     <div className="space-y-6">
       {/* Period Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Analytics Period</h3>
           <div className="flex space-x-2">
@@ -49,7 +49,7 @@ export default function AnalyticsTab() {
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   period === days
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-[#1e1e2e] text-slate-300 hover:bg-[#2d2d44]'
                 }`}
               >
                 {days} Days
@@ -95,7 +95,7 @@ export default function AnalyticsTab() {
       </div>
 
       {/* Financial Metrics */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
         <h3 className="text-xl font-semibold mb-4">💵 Financial Overview</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <FinancialMetric 
@@ -129,7 +129,7 @@ export default function AnalyticsTab() {
 
       {/* Work Orders by Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
           <h3 className="text-xl font-semibold mb-4">📊 Work Orders by Status</h3>
           <div className="space-y-3">
             {Object.entries(analytics.byStatus).map(([status, count]) => (
@@ -144,7 +144,7 @@ export default function AnalyticsTab() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
           <h3 className="text-xl font-semibold mb-4">🎯 Work Orders by Priority</h3>
           <div className="space-y-3">
             {Object.entries(analytics.byPriority).map(([priority, count]) => (
@@ -161,7 +161,7 @@ export default function AnalyticsTab() {
       </div>
 
       {/* Aging Analysis */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
         <h3 className="text-xl font-semibold mb-4">⏱️ Work Order Aging</h3>
         <div className="space-y-3">
           {analytics.aging.byRange.map((range) => (
@@ -185,7 +185,7 @@ export default function AnalyticsTab() {
       </div>
 
       {/* Top Buildings */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
         <h3 className="text-xl font-semibold mb-4">🏢 Top 10 Buildings (Most Work Orders)</h3>
         <div className="space-y-3">
           {Object.entries(analytics.byBuilding).map(([building, count], index) => (
@@ -208,28 +208,28 @@ export default function AnalyticsTab() {
       </div>
 
       {/* Technician Performance */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
         <h3 className="text-xl font-semibold mb-4">👷 Technician Performance</h3>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-[#1e1e2e]">
+            <thead className="bg-[#0a0a0f]">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Technician</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Jobs</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Completed</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">In Progress</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pending</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Hours</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Completion %</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Technician</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Total Jobs</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Completed</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">In Progress</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Pending</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Total Hours</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase">Completion %</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[#0d0d14] divide-y divide-[#1e1e2e]">
               {Object.entries(analytics.technicians).map(([name, stats]) => (
-                <tr key={name} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{stats.role.replace('_', ' ')}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900 font-semibold">{stats.totalJobs}</td>
+                <tr key={name} className="hover:bg-[#0a0a0f]">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-100">{name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 capitalize">{stats.role.replace('_', ' ')}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-slate-100 font-semibold">{stats.totalJobs}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                       {stats.completed}
@@ -245,7 +245,7 @@ export default function AnalyticsTab() {
                       {stats.pending}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900">{stats.totalHours}h</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-slate-100">{stats.totalHours}h</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       parseFloat(stats.completionRate) >= 80 ? 'bg-green-100 text-green-800' :
@@ -278,12 +278,12 @@ function StatCard({ title, value, icon, color, subtitle }) {
   return (
     <div className={`rounded-lg border-2 p-6 ${colorClasses[color]}`}>
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-medium text-gray-600">{title}</div>
+        <div className="text-sm font-medium text-slate-400">{title}</div>
         <div className="text-2xl">{icon}</div>
       </div>
-      <div className="text-3xl font-bold text-gray-900">{value}</div>
+      <div className="text-3xl font-bold text-slate-100">{value}</div>
       {subtitle && (
-        <div className="text-xs text-gray-500 mt-1">{subtitle}</div>
+        <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
       )}
     </div>
   );
@@ -291,9 +291,9 @@ function StatCard({ title, value, icon, color, subtitle }) {
 
 function FinancialMetric({ label, value, highlight }) {
   return (
-    <div className={`p-4 rounded-lg ${highlight ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'}`}>
-      <div className="text-xs text-gray-600 mb-1">{label}</div>
-      <div className={`text-lg font-bold ${highlight ? 'text-blue-600' : 'text-gray-900'}`}>
+    <div className={`p-4 rounded-lg ${highlight ? 'bg-blue-50 border-2 border-blue-200' : 'bg-[#0a0a0f]'}`}>
+      <div className="text-xs text-slate-400 mb-1">{label}</div>
+      <div className={`text-lg font-bold ${highlight ? 'text-blue-600' : 'text-slate-100'}`}>
         {value}
       </div>
     </div>
@@ -306,10 +306,10 @@ function ProgressBar({ label, value, max, color, showCount }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
-        {showCount && <span className="text-sm font-semibold text-gray-900">{value}</span>}
+        <span className="text-sm font-medium text-slate-300">{label}</span>
+        {showCount && <span className="text-sm font-semibold text-slate-100">{value}</span>}
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
+      <div className="w-full bg-[#2d2d44] rounded-full h-6 overflow-hidden">
         <div
           className="h-6 flex items-center justify-end pr-2 text-white text-xs font-semibold transition-all duration-300"
           style={{

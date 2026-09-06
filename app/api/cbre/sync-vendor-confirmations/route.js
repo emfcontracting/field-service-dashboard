@@ -13,8 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
-import { simpleParser } from 'mailparser';
+import { fetchMessages, sinceDays } from '@/lib/imap';
 import { kindFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
@@ -38,53 +37,15 @@ const WO_STAMP = {
   cbre_complete:    (now) => ({ cbre_completion_submitted_at: now, completion_transferred: true, completion_transferred_at: now }),
 };
 
-function connectIMAP() {
-  const email = process.env.EMAIL_IMPORT_USER;
-  const password = process.env.EMAIL_IMPORT_PASSWORD;
-  if (!email || !password) throw new Error('IMAP credentials not configured');
-  return new Imap({ user: email, password, host: 'imap.gmail.com', port: 993, tls: true, tlsOptions: { servername: 'imap.gmail.com' } });
-}
-
-function fmtIMAPDate(date) {
-  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${String(date.getDate()).padStart(2, '0')}-${m[date.getMonth()]}-${date.getFullYear()}`;
-}
-
+// IMAP lives in lib/imap.js.
 async function fetchConfirmations(searchDays) {
-  return new Promise((resolve, reject) => {
-    const imap = connectIMAP();
-    const emails = [];
-    imap.once('ready', () => {
-      imap.openBox('INBOX', true, (err) => {
-        if (err) { imap.end(); return reject(new Error(`Could not open INBOX: ${err.message}`)); }
-        const since = new Date();
-        since.setDate(since.getDate() - searchDays);
-        imap.search([['FROM', FROM_ADDR], ['SUBJECT', SUBJECT_MATCH], ['SINCE', fmtIMAPDate(since)]], (err, results) => {
-          if (err) { imap.end(); return reject(err); }
-          if (!results || !results.length) { imap.end(); return resolve([]); }
-          const fetch = imap.fetch(results, { bodies: '', markSeen: false });
-          const parsePromises = [];
-          fetch.on('message', (msg) => {
-            let buffer = '';
-            msg.on('body', (stream) => { stream.on('data', (c) => { buffer += c.toString('utf8'); }); });
-            msg.once('end', () => {
-              parsePromises.push(new Promise((res) => {
-                simpleParser(buffer, (err, parsed) => {
-                  if (err) { res(); return; }
-                  emails.push({ date: parsed.date || new Date(), text: parsed.text || '', html: parsed.html || '' });
-                  res();
-                });
-              }));
-            });
-          });
-          fetch.once('error', (err) => { imap.end(); reject(err); });
-          fetch.once('end', async () => { await Promise.all(parsePromises); imap.end(); resolve(emails); });
-        });
-      });
-    });
-    imap.once('error', reject);
-    imap.connect();
+  const { messages } = await fetchMessages({
+    account: 'import',
+    box: 'INBOX',
+    criteria: [['FROM', FROM_ADDR], ['SUBJECT', SUBJECT_MATCH], sinceDays(searchDays)],
+    bodyPreference: 'text',
   });
+  return messages;
 }
 
 // Prefer the plaintext part; fall back to a rough de-tagged HTML.

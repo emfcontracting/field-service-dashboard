@@ -494,16 +494,16 @@ Final Cost Breakdown:
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4 overflow-y-auto">
-      <div className="bg-gray-800 rounded-lg max-w-4xl w-full my-8">
+      <div className="bg-[#0d0d14] rounded-lg max-w-4xl w-full my-8">
         {/* Header */}
-        <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex justify-between items-center z-10 rounded-t-lg">
+        <div className="sticky top-0 bg-[#0d0d14] border-b border-[#2d2d44] p-6 flex justify-between items-center z-10 rounded-t-lg">
           <div>
             <h2 className="text-2xl font-bold text-yellow-400">
               💰 {editMode ? 'Edit NTE Increase Request' : 'Create NTE Increase Request'}
             </h2>
-            <p className="text-sm text-gray-400 mt-1">Work Order: {workOrder.wo_number}</p>
+            <p className="text-sm text-slate-400 mt-1">Work Order: {workOrder.wo_number}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none">×</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-3xl leading-none">×</button>
         </div>
 
         {/* Content */}
@@ -546,7 +546,7 @@ Final Cost Breakdown:
 
           {/* 🔄 MODE TOGGLE (Superuser only) */}
           {canUseReconciliationMode && !editMode && (
-            <div className="bg-gray-700 border-2 border-purple-600 rounded-lg p-4">
+            <div className="bg-[#1e1e2e] border-2 border-purple-600 rounded-lg p-4">
               <h3 className="font-bold text-sm text-purple-300 mb-3">⚙️ Request Mode (Superuser)</h3>
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -555,7 +555,7 @@ Final Cost Breakdown:
                   className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
                     requestMode === 'estimate'
                       ? 'bg-yellow-700 border-yellow-400 text-white'
-                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                      : 'bg-[#0d0d14] border-[#3d3d5e] text-slate-400 hover:border-[#3d3d5e]'
                   }`}
                 >
                   📊 Estimate Mode
@@ -567,7 +567,7 @@ Final Cost Breakdown:
                   className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
                     requestMode === 'reconciliation'
                       ? 'bg-purple-700 border-purple-400 text-white'
-                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                      : 'bg-[#0d0d14] border-[#3d3d5e] text-slate-400 hover:border-[#3d3d5e]'
                   }`}
                 >
                   🔄 Reconciliation Mode
@@ -591,7 +591,7 @@ Final Cost Breakdown:
           )}
 
           {/* NTE Type Selection */}
-          <div className="bg-gray-700 rounded-lg p-4">
+          <div className="bg-[#1e1e2e] rounded-lg p-4">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -601,7 +601,7 @@ Final Cost Breakdown:
               />
               <div>
                 <span className="font-semibold">📞 Verbal NTE Approval</span>
-                <p className="text-sm text-gray-400">Check if this increase was verbally approved – NTE will be updated immediately</p>
+                <p className="text-sm text-slate-400">Check if this increase was verbally approved – NTE will be updated immediately</p>
               </div>
             </label>
             {!formData.is_verbal_nte && (
@@ -612,13 +612,13 @@ Final Cost Breakdown:
 
             {formData.is_verbal_nte && (
               <div className="mt-3">
-                <label className="block text-sm text-gray-400 mb-1">Approved By (Name)</label>
+                <label className="block text-sm text-slate-400 mb-1">Approved By (Name)</label>
                 <input
                   type="text"
                   value={formData.verbal_approved_by}
                   onChange={(e) => setFormData({ ...formData, verbal_approved_by: e.target.value })}
                   placeholder="Enter name of person who approved"
-                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#2d2d44] text-white px-4 py-2 rounded-lg"
                 />
               </div>
             )}
@@ -627,7 +627,7 @@ Final Cost Breakdown:
           {/* Description */}
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm text-gray-400">
+              <label className="block text-sm text-slate-400">
                 Description of Additional Work <span className="text-red-400">*</span>
               </label>
               {(workOrder.comments && workOrder.comments.trim()) && (
@@ -649,7 +649,7 @@ Final Cost Breakdown:
                   ? "Describe the work that was completed and why it exceeded the original NTE..."
                   : "Describe the additional work that requires NTE increase..."
               }
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
               rows={isReconciliation ? "6" : "3"}
             />
           </div>
@@ -660,7 +660,7 @@ Final Cost Breakdown:
               📊 CURRENT COSTS ACCRUED {isReconciliation && <span className="text-sm font-normal text-blue-400">(reference – from logged data)</span>}
             </h3>
             {loadingCosts ? (
-              <div className="text-center py-4 text-gray-400">Calculating costs...</div>
+              <div className="text-center py-4 text-slate-400">Calculating costs...</div>
             ) : (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -731,39 +731,39 @@ Final Cost Breakdown:
               
               {/* # Technicians */}
               <div className="mb-3">
-                <label className="block text-sm text-gray-300 mb-1"># of Technicians</label>
+                <label className="block text-sm text-slate-300 mb-1"># of Technicians</label>
                 <input
                   type="number"
                   min="1"
                   value={formData.estimated_techs}
                   onChange={(e) => setFormData({ ...formData, estimated_techs: e.target.value })}
-                  className="w-32 bg-gray-700 text-white px-3 py-2 rounded-lg"
+                  className="w-32 bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                 />
               </div>
 
               {/* Labor */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Regular Hours (per tech)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Regular Hours (per tech)</label>
                   <input
                     type="number" step="0.5"
                     value={formData.hours_regular}
                     onChange={(e) => setFormData({ ...formData, hours_regular: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     {parseInt(formData.estimated_techs) || 1} tech(s) × {parseFloat(formData.hours_regular) || 0} hrs × ${RATES.RT} = ${((parseInt(formData.estimated_techs) || 1) * (parseFloat(formData.hours_regular) || 0) * RATES.RT).toFixed(2)}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Overtime Hours (per tech)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Overtime Hours (per tech)</label>
                   <input
                     type="number" step="0.5"
                     value={formData.hours_overtime}
                     onChange={(e) => setFormData({ ...formData, hours_overtime: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     {parseInt(formData.estimated_techs) || 1} tech(s) × {parseFloat(formData.hours_overtime) || 0} hrs × $96 = ${((parseInt(formData.estimated_techs) || 1) * (parseFloat(formData.hours_overtime) || 0) * 96).toFixed(2)}
                   </p>
                 </div>
@@ -772,61 +772,61 @@ Final Cost Breakdown:
               {/* Materials & Equipment */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Materials Cost</label>
+                  <label className="block text-sm text-slate-300 mb-1">Materials Cost</label>
                   <input
                     type="number" step="0.01"
                     value={formData.materials_base}
                     onChange={(e) => setFormData({ ...formData, materials_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.materials_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(formData.materials_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Equipment Cost</label>
+                  <label className="block text-sm text-slate-300 mb-1">Equipment Cost</label>
                   <input
                     type="number" step="0.01"
                     value={formData.equipment_base}
                     onChange={(e) => setFormData({ ...formData, equipment_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(formData.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
               {/* Rental & Trailer */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Rental Cost</label>
+                  <label className="block text-sm text-slate-300 mb-1">Rental Cost</label>
                   <input
                     type="number" step="0.01"
                     value={formData.rental_base}
                     onChange={(e) => setFormData({ ...formData, rental_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.rental_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(formData.rental_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Trailer Cost</label>
+                  <label className="block text-sm text-slate-300 mb-1">Trailer Cost</label>
                   <input
                     type="number" step="0.01"
                     value={formData.trailer_base}
                     onChange={(e) => setFormData({ ...formData, trailer_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(formData.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
               {/* Mileage */}
               <div className="mb-3">
-                <label className="block text-sm text-gray-300 mb-1">Additional Miles</label>
+                <label className="block text-sm text-slate-300 mb-1">Additional Miles</label>
                 <input
                   type="number" step="0.1"
                   value={formData.miles}
                   onChange={(e) => setFormData({ ...formData, miles: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                 />
-                <p className="text-xs text-gray-400 mt-1">× $1.00/mi = ${(parseFloat(formData.miles) * 1.00).toFixed(2)}</p>
+                <p className="text-xs text-slate-400 mt-1">× $1.00/mi = ${(parseFloat(formData.miles) * 1.00).toFixed(2)}</p>
               </div>
 
               {/* Additional Work Total */}
@@ -835,7 +835,7 @@ Final Cost Breakdown:
                   <span>ADDITIONAL WORK TOTAL:</span>
                   <span>${additional.total.toFixed(2)}</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Note: No admin fee for additional work (already in current costs)</p>
+                <p className="text-xs text-slate-400 mt-1">Note: No admin fee for additional work (already in current costs)</p>
               </div>
             </div>
           )}
@@ -851,26 +851,26 @@ Final Cost Breakdown:
               {/* Labor */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total RT Hours (all techs)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total RT Hours (all techs)</label>
                   <input
                     type="number" step="0.25"
                     value={reconciliationCosts.rt_hours}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, rt_hours: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     {parseFloat(reconciliationCosts.rt_hours) || 0} hrs × ${RATES.RT} = ${((parseFloat(reconciliationCosts.rt_hours) || 0) * RATES.RT).toFixed(2)}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total OT Hours (all techs)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total OT Hours (all techs)</label>
                   <input
                     type="number" step="0.25"
                     value={reconciliationCosts.ot_hours}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, ot_hours: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     {parseFloat(reconciliationCosts.ot_hours) || 0} hrs × $96 = ${((parseFloat(reconciliationCosts.ot_hours) || 0) * 96).toFixed(2)}
                   </p>
                 </div>
@@ -883,61 +883,61 @@ Final Cost Breakdown:
               {/* Materials & Equipment */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total Materials Cost (base)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total Materials Cost (base)</label>
                   <input
                     type="number" step="0.01"
                     value={reconciliationCosts.materials_base}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, materials_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.materials_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.materials_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total Equipment Cost (base)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total Equipment Cost (base)</label>
                   <input
                     type="number" step="0.01"
                     value={reconciliationCosts.equipment_base}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, equipment_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
               {/* Rental & Trailer */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total Rental Cost (base)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total Rental Cost (base)</label>
                   <input
                     type="number" step="0.01"
                     value={reconciliationCosts.rental_base}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, rental_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.rental_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.rental_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1">Total Trailer Cost (base)</label>
+                  <label className="block text-sm text-slate-300 mb-1">Total Trailer Cost (base)</label>
                   <input
                     type="number" step="0.01"
                     value={reconciliationCosts.trailer_base}
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, trailer_base: e.target.value })}
-                    className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                    className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
+                  <p className="text-xs text-slate-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
               {/* Mileage */}
               <div className="mb-3">
-                <label className="block text-sm text-gray-300 mb-1">Total Miles (all techs)</label>
+                <label className="block text-sm text-slate-300 mb-1">Total Miles (all techs)</label>
                 <input
                   type="number" step="0.1"
                   value={reconciliationCosts.miles}
                   onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, miles: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-3 py-2 rounded-lg"
                 />
-                <p className="text-xs text-gray-400 mt-1">× $1.00/mi = ${(parseFloat(reconciliationCosts.miles) * 1.00).toFixed(2)}</p>
+                <p className="text-xs text-slate-400 mt-1">× $1.00/mi = ${(parseFloat(reconciliationCosts.miles) * 1.00).toFixed(2)}</p>
               </div>
 
               {/* Final Actual Total */}
@@ -946,14 +946,14 @@ Final Cost Breakdown:
                   <span>FINAL ACTUAL TOTAL:</span>
                   <span>${reconciliation.total.toFixed(2)}</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Includes admin fee + 25% markup on materials/equipment/rental/trailer</p>
+                <p className="text-xs text-slate-400 mt-1">Includes admin fee + 25% markup on materials/equipment/rental/trailer</p>
               </div>
             </div>
           )}
 
           {/* 💵 BILLING MODE: fixed quote vs T&M (estimate mode only) */}
           {!isReconciliation && (
-            <div className="bg-gray-700 border-2 border-emerald-600 rounded-lg p-4">
+            <div className="bg-[#1e1e2e] border-2 border-emerald-600 rounded-lg p-4">
               <h3 className="font-bold text-sm text-emerald-300 mb-3">🧾 How will CBRE be billed?</h3>
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -962,7 +962,7 @@ Final Cost Breakdown:
                   className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
                     formData.billing_mode !== 'fixed'
                       ? 'bg-blue-700 border-blue-400 text-white'
-                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                      : 'bg-[#0d0d14] border-[#3d3d5e] text-slate-400 hover:border-[#3d3d5e]'
                   }`}
                 >
                   📊 T&M / Estimate
@@ -974,7 +974,7 @@ Final Cost Breakdown:
                   className={`p-3 rounded-lg font-semibold text-sm transition border-2 ${
                     formData.billing_mode === 'fixed'
                       ? 'bg-emerald-700 border-emerald-400 text-white'
-                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                      : 'bg-[#0d0d14] border-[#3d3d5e] text-slate-400 hover:border-[#3d3d5e]'
                   }`}
                 >
                   💵 Fixed Quote
@@ -1005,7 +1005,7 @@ Final Cost Breakdown:
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>− Original NTE Budget:</span>
-                    <span className="font-semibold text-gray-300">${originalNTE.toFixed(2)}</span>
+                    <span className="font-semibold text-slate-300">${originalNTE.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-green-700 pt-2 mt-2 flex justify-between text-lg font-bold">
                     <span className={overageAmount > 0 ? 'text-red-300' : 'text-green-300'}>
@@ -1030,7 +1030,7 @@ Final Cost Breakdown:
                     <span>NEW NTE NEEDED:</span>
                     <span>${projectedTotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <div className="flex justify-between text-xs text-slate-400 mt-1">
                     <span>Accrued so far (reference only):</span>
                     <span>${currentCosts.total.toFixed(2)}</span>
                   </div>
@@ -1055,7 +1055,7 @@ Final Cost Breakdown:
               {/* Budget Comparison */}
               <div className="mt-4 pt-4 border-t border-green-700">
                 {!isReconciliation && (
-                  <div className="flex justify-between text-sm text-gray-300 mb-2">
+                  <div className="flex justify-between text-sm text-slate-300 mb-2">
                     <span>{isFollowUp ? 'Current NTE (ceiling):' : 'Original NTE Budget:'}</span>
                     <span>${originalNTE.toFixed(2)}</span>
                   </div>
@@ -1090,22 +1090,22 @@ Final Cost Breakdown:
 
           {/* Additional Notes */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Additional Notes (Optional)</label>
+            <label className="block text-sm text-slate-400 mb-1">Additional Notes (Optional)</label>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Any additional notes or details..."
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+              className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
               rows="2"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-gray-700">
+          <div className="flex gap-3 pt-4 border-t border-[#2d2d44]">
             <button
               onClick={handleSubmit}
               disabled={saving || !formData.description.trim() || (isReconciliation && overageAmount <= 0)}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-[#2d2d44] disabled:cursor-not-allowed px-6 py-3 rounded-lg font-bold text-lg transition"
             >
               {saving 
                 ? '⏳ Saving...' 
@@ -1121,7 +1121,7 @@ Final Cost Breakdown:
               <button
                 onClick={handleMarkSubmitted}
                 disabled={saving}
-                className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold transition"
+                className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-[#2d2d44] px-6 py-3 rounded-lg font-bold transition"
                 title="Mark this NTE increase as uploaded to CBRE"
               >
                 📤 Submitted to CBRE
@@ -1133,7 +1133,7 @@ Final Cost Breakdown:
               <button
                 onClick={handleApproveWrittenNTE}
                 disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold transition"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-[#2d2d44] px-6 py-3 rounded-lg font-bold transition"
               >
                 ✅ Approve NTE
               </button>
@@ -1142,7 +1142,7 @@ Final Cost Breakdown:
             <button
               onClick={onClose}
               disabled={saving}
-              className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-500 px-6 py-3 rounded-lg font-semibold transition"
+              className="bg-[#2d2d44] hover:bg-[#1e1e2e] disabled:bg-[#3d3d5e] px-6 py-3 rounded-lg font-semibold transition"
             >
               Cancel
             </button>

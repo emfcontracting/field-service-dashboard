@@ -23,8 +23,7 @@
 // (same CRON_SECRET guard as email-sync).
 // ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
-import Imap from 'imap';
-import { simpleParser } from 'mailparser';
+import { fetchMessages, sinceDays, beforeDays } from '@/lib/imap';
 import zlib from 'zlib';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
@@ -37,104 +36,21 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-function connectIMAP() {
-  // This route reads the MAIN mailbox (emfcontractingsc@gmail.com): the QB
-  // invoice mails and the Coupa paid mails only arrive there. EMAIL_IMPORT_*
-  // points at the wo.@ import mailbox (whose read-status is load-bearing for
-  // the dispatch import), so use dedicated credentials with a fallback.
-  // NOTE: this route never marks anything as read, in any mailbox.
-  const email = process.env.INVOICE_EMAIL_USER || process.env.EMAIL_IMPORT_USER;
-  const password = process.env.INVOICE_EMAIL_PASSWORD || process.env.EMAIL_IMPORT_PASSWORD;
-  if (!email || !password) throw new Error('IMAP credentials not configured');
-  return new Imap({
-    user: email,
-    password,
-    host: 'imap.gmail.com',
-    port: 993,
-    tls: true,
-    tlsOptions: { servername: 'imap.gmail.com' },
+// IMAP lives in lib/imap.js. This route reads the MAIN mailbox
+// (emfcontractingsc@gmail.com — account 'main': INVOICE_EMAIL_* with fallback
+// to the import credentials): the QB invoice mails and the Coupa paid mails
+// only arrive there. NOTE: this route never marks anything as read.
+// Fetch from an IMAP folder (or INBOX filtered by sender when the folder does
+// not exist). withAttachments keeps PDF buffers.
+async function fetchEmails({ folder, fromFilter, searchDays, beforeDays: before, withAttachments }) {
+  const criteria = [sinceDays(searchDays)];
+  if (before > 0) criteria.push(beforeDays(before));
+  if (folder === 'INBOX' && fromFilter) criteria.push(['FROM', fromFilter]);
+  const fallback = folder !== 'INBOX' && fromFilter ? { box: 'INBOX', criteria: [...criteria, ['FROM', fromFilter]] } : null;
+  const { messages, box } = await fetchMessages({
+    account: 'main', box: folder, criteria, fallback, withAttachments, bodyPreference: 'text',
   });
-}
-
-const formatIMAPDate = (date) => {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${date.getDate().toString().padStart(2, '0')}-${months[date.getMonth()]}-${date.getFullYear()}`;
-};
-
-// Fetch emails from an IMAP folder (or INBOX filtered by sender when the
-// folder doesn't exist). withAttachments keeps PDF buffers.
-function fetchEmails({ folder, fromFilter, searchDays, beforeDays, withAttachments }) {
-  return new Promise((resolve, reject) => {
-    const imap = connectIMAP();
-    const emails = [];
-    let usedFolder = folder;
-
-    const run = (boxName, criteria) => {
-      imap.openBox(boxName, true, (err) => {
-        if (err) {
-          if (boxName !== 'INBOX' && fromFilter) {
-            // Folder missing (label not created / no filter yet) → INBOX scan.
-            usedFolder = 'INBOX';
-            return run('INBOX', [...criteria, ['FROM', fromFilter]]);
-          }
-          imap.end();
-          return reject(new Error(`Could not open ${boxName}: ${err.message}`));
-        }
-        imap.search(criteria, (err, results) => {
-          if (err) { imap.end(); return reject(err); }
-          if (!results || results.length === 0) { imap.end(); return resolve({ emails, usedFolder }); }
-          const fetch = imap.fetch(results, { bodies: '', markSeen: false });
-          const parsePromises = [];
-          fetch.on('message', (msg) => {
-            let buffer = Buffer.alloc(0);
-            let uid;
-            msg.on('body', (stream) => {
-              stream.on('data', (chunk) => { buffer = Buffer.concat([buffer, chunk]); });
-            });
-            msg.once('attributes', (attrs) => { uid = attrs.uid; });
-            msg.once('end', () => {
-              parsePromises.push(new Promise((done) => {
-                simpleParser(buffer, (err, parsed) => {
-                  if (!err && parsed) {
-                    emails.push({
-                      uid,
-                      subject: parsed.subject || '',
-                      from: parsed.from?.text || '',
-                      date: parsed.date || new Date(),
-                      body: parsed.text || parsed.html || '',
-                      attachments: withAttachments ? (parsed.attachments || []) : [],
-                    });
-                  }
-                  done();
-                });
-              }));
-            });
-          });
-          fetch.once('error', (err) => { imap.end(); reject(err); });
-          fetch.once('end', async () => {
-            await Promise.all(parsePromises);
-            imap.end();
-            resolve({ emails, usedFolder });
-          });
-        });
-      });
-    };
-
-    imap.once('ready', () => {
-      const since = new Date();
-      since.setDate(since.getDate() - searchDays);
-      const criteria = [['SINCE', formatIMAPDate(since)]];
-      if (beforeDays > 0) {
-        const before = new Date();
-        before.setDate(before.getDate() - beforeDays);
-        criteria.push(['BEFORE', formatIMAPDate(before)]);
-      }
-      if (folder === 'INBOX' && fromFilter) criteria.push(['FROM', fromFilter]);
-      run(folder, criteria);
-    });
-    imap.once('error', reject);
-    imap.connect();
-  });
+  return { emails: messages, usedFolder: box };
 }
 
 // Minimal PDF text extraction: inflate every stream, harvest (..)Tj / [..]TJ

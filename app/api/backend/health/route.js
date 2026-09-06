@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import Imap from 'imap';
+import { checkConnection } from '@/lib/imap';
 import { requireAdmin } from '@/lib/serverAuth';
 
 const supabase = createClient(
@@ -193,46 +193,12 @@ export async function GET(request) {
   }
 }
 
-// Helper function to check IMAP connection
+// IMAP probe lives in lib/imap.js (checkConnection: 10 s budget, never throws).
 async function checkImapConnection() {
-  return new Promise((resolve) => {
-    const imap = new Imap({
-      user: process.env.EMAIL_IMPORT_USER,
-      password: process.env.EMAIL_IMPORT_PASSWORD,
-      host: 'imap.gmail.com',
-      port: 993,
-      tls: true,
-      tlsOptions: { servername: 'imap.gmail.com' }
-    });
-
-    let timeout = setTimeout(() => {
-      imap.end();
-      resolve({
-        status: 'error',
-        message: 'IMAP connection timeout',
-        lastChecked: new Date().toISOString()
-      });
-    }, 10000);
-
-    imap.once('ready', () => {
-      clearTimeout(timeout);
-      imap.end();
-      resolve({
-        status: 'healthy',
-        message: 'IMAP connection successful',
-        lastChecked: new Date().toISOString()
-      });
-    });
-
-    imap.once('error', (err) => {
-      clearTimeout(timeout);
-      resolve({
-        status: 'error',
-        message: `IMAP error: ${err.message}`,
-        lastChecked: new Date().toISOString()
-      });
-    });
-
-    imap.connect();
-  });
+  const r = await checkConnection({ account: 'import', timeoutMs: 10000 });
+  return {
+    status: r.ok ? 'healthy' : 'error',
+    message: r.ok ? 'IMAP connection successful' : `IMAP error: ${r.error}`,
+    lastChecked: new Date().toISOString(),
+  };
 }

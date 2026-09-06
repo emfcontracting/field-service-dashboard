@@ -406,32 +406,32 @@ export default function InvoiceVerification() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#0a0a0f] text-white">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <header className="bg-[#0d0d14] border-b border-[#2d2d44] px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               href="/settings"
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+              className="px-4 py-2 bg-[#1e1e2e] hover:bg-[#2d2d44] rounded-lg text-sm"
             >
               ← Back
             </Link>
             <div>
               <h1 className="text-2xl font-bold">🧾 External Invoice Verification</h1>
-              <p className="text-sm text-gray-400">Compare external contractor invoices against EMF records</p>
+              <p className="text-sm text-slate-400">Compare external contractor invoices against EMF records</p>
             </div>
           </div>
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+            className="px-4 py-2 bg-[#1e1e2e] hover:bg-[#2d2d44] rounded-lg text-sm"
           >
             {showHistory ? '📝 New Check' : '📋 History'}
           </button>
@@ -444,7 +444,7 @@ export default function InvoiceVerification() {
           <div className="space-y-4">
             <h2 className="text-xl font-bold">Verification History</h2>
             {savedVerifications.length === 0 ? (
-              <div className="bg-gray-800 rounded-xl p-8 text-center text-gray-500">
+              <div className="bg-[#0d0d14] rounded-xl p-8 text-center text-slate-500">
                 No verifications saved yet
               </div>
             ) : (
@@ -452,17 +452,17 @@ export default function InvoiceVerification() {
                 {savedVerifications.map(v => (
                   <div
                     key={v.id}
-                    className={`bg-gray-800 rounded-xl border p-4 ${
-                      v.has_discrepancy ? 'border-red-500/50' : 'border-gray-700'
+                    className={`bg-[#0d0d14] rounded-xl border p-4 ${
+                      v.has_discrepancy ? 'border-red-500/50' : 'border-[#2d2d44]'
                     }`}
                   >
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="font-bold">
                           {v.user?.first_name} {v.user?.last_name}
-                          {v.invoice_number && <span className="text-gray-400 ml-2">#{v.invoice_number}</span>}
+                          {v.invoice_number && <span className="text-slate-400 ml-2">#{v.invoice_number}</span>}
                         </h3>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-slate-400">
                           {new Date(v.period_start).toLocaleDateString()} - {new Date(v.period_end).toLocaleDateString()}
                         </p>
                       </div>
@@ -476,24 +476,24 @@ export default function InvoiceVerification() {
                     </div>
                     <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
                       <div>
-                        <p className="text-gray-500">Regular Hours</p>
+                        <p className="text-slate-500">Regular Hours</p>
                         <p>Claimed: {v.claimed_regular_hours}h | EMF: {v.emf_regular_hours}h</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">OT Hours</p>
+                        <p className="text-slate-500">OT Hours</p>
                         <p>Claimed: {v.claimed_ot_hours}h | EMF: {v.emf_ot_hours}h</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">Mileage</p>
+                        <p className="text-slate-500">Mileage</p>
                         <p>Claimed: {v.claimed_miles} mi | EMF: {v.emf_miles} mi</p>
                       </div>
                     </div>
                     {v.claimed_total > 0 && (
-                      <p className="text-sm text-gray-400 mt-2">
+                      <p className="text-sm text-slate-400 mt-2">
                         Claimed Total: ${parseFloat(v.claimed_total).toFixed(2)}
                       </p>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-slate-500 mt-2">
                       Verified: {fmtDateTime(v.created_at)}
                     </p>
                   </div>
@@ -507,14 +507,14 @@ export default function InvoiceVerification() {
             {/* Left: Invoice Entry */}
             <div className="space-y-4">
               {/* Entry Mode Toggle */}
-              <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+              <div className="bg-[#0d0d14] rounded-xl border border-[#2d2d44] p-4">
                 <div className="flex gap-2 mb-4">
                   <button
                     onClick={() => setEntryMode('manual')}
                     className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
                       entryMode === 'manual' 
                         ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        : 'bg-[#1e1e2e] text-slate-400 hover:bg-[#2d2d44]'
                     }`}
                   >
                     ✏️ Manual Entry
@@ -524,7 +524,7 @@ export default function InvoiceVerification() {
                     className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
                       entryMode === 'import' 
                         ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        : 'bg-[#1e1e2e] text-slate-400 hover:bg-[#2d2d44]'
                     }`}
                   >
                     📥 Import File
@@ -533,14 +533,14 @@ export default function InvoiceVerification() {
 
                 {entryMode === 'import' && (
                   <div className="mb-4">
-                    <label className="block text-sm text-gray-400 mb-2">Upload Invoice File</label>
+                    <label className="block text-sm text-slate-400 mb-2">Upload Invoice File</label>
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.heic"
                       onChange={handleFileUpload}
                       disabled={processingFile}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer disabled:opacity-50"
+                      className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer disabled:opacity-50"
                     />
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">CSV</span>
@@ -559,20 +559,20 @@ export default function InvoiceVerification() {
                 {/* File Preview */}
                 {filePreview && filePreview.type === 'image' && (
                   <div className="mb-4">
-                    <p className="text-sm text-gray-400 mb-2">Preview: {filePreview.name}</p>
+                    <p className="text-sm text-slate-400 mb-2">Preview: {filePreview.name}</p>
                     <img 
                       src={filePreview.url} 
                       alt="Invoice preview" 
-                      className="max-h-48 rounded-lg border border-gray-600"
+                      className="max-h-48 rounded-lg border border-[#3d3d5e]"
                     />
                   </div>
                 )}
 
                 {/* Extracted Text */}
                 {importedText && (
-                  <div className="mb-4 p-3 bg-gray-700/50 rounded-lg">
-                    <p className="text-xs text-gray-400 mb-1">Extracted/Notes:</p>
-                    <p className="text-sm text-gray-300 whitespace-pre-wrap max-h-24 overflow-y-auto">
+                  <div className="mb-4 p-3 bg-[#1e1e2e]/50 rounded-lg">
+                    <p className="text-xs text-slate-400 mb-1">Extracted/Notes:</p>
+                    <p className="text-sm text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto">
                       {importedText}
                     </p>
                   </div>
@@ -582,11 +582,11 @@ export default function InvoiceVerification() {
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Contractor *</label>
+                    <label className="block text-sm text-slate-400 mb-1">Contractor *</label>
                     <select
                       value={selectedUser}
                       onChange={(e) => setSelectedUser(e.target.value)}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                      className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                     >
                       <option value="">Select contractor...</option>
                       {users.map(u => (
@@ -598,40 +598,40 @@ export default function InvoiceVerification() {
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Invoice # (optional)</label>
+                    <label className="block text-sm text-slate-400 mb-1">Invoice # (optional)</label>
                     <input
                       type="text"
                       value={invoiceNumber}
                       onChange={(e) => setInvoiceNumber(e.target.value)}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                      className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                       placeholder="e.g., INV-2024-001"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Period Start *</label>
+                      <label className="block text-sm text-slate-400 mb-1">Period Start *</label>
                       <input
                         type="date"
                         value={periodStart}
                         onChange={(e) => setPeriodStart(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Period End *</label>
+                      <label className="block text-sm text-slate-400 mb-1">Period End *</label>
                       <input
                         type="date"
                         value={periodEnd}
                         onChange={(e) => setPeriodEnd(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                       />
                     </div>
                   </div>
 
-                  <hr className="border-gray-700" />
+                  <hr className="border-[#2d2d44]" />
 
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-slate-400">
                     {entryMode === 'import' && importedItems.length > 0 
                       ? `Totals from imported file (${importedItems.length} items):` 
                       : 'Enter hours/miles from their invoice:'}
@@ -639,24 +639,24 @@ export default function InvoiceVerification() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Regular Hours</label>
+                      <label className="block text-sm text-slate-400 mb-1">Regular Hours</label>
                       <input
                         type="number"
                         step="0.1"
                         value={claimedRegularHours}
                         onChange={(e) => setClaimedRegularHours(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                         placeholder="0.0"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">OT Hours</label>
+                      <label className="block text-sm text-slate-400 mb-1">OT Hours</label>
                       <input
                         type="number"
                         step="0.1"
                         value={claimedOTHours}
                         onChange={(e) => setClaimedOTHours(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                         placeholder="0.0"
                       />
                     </div>
@@ -664,24 +664,24 @@ export default function InvoiceVerification() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Miles</label>
+                      <label className="block text-sm text-slate-400 mb-1">Miles</label>
                       <input
                         type="number"
                         step="1"
                         value={claimedMiles}
                         onChange={(e) => setClaimedMiles(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Total $</label>
+                      <label className="block text-sm text-slate-400 mb-1">Total $</label>
                       <input
                         type="number"
                         step="0.01"
                         value={claimedTotal}
                         onChange={(e) => setClaimedTotal(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
+                        className="w-full bg-[#1e1e2e] border border-[#3d3d5e] rounded-lg px-4 py-2"
                         placeholder="0.00"
                       />
                     </div>
@@ -699,20 +699,20 @@ export default function InvoiceVerification() {
 
               {/* Imported Items Detail */}
               {showImportedItems && importedItems.length > 0 && (
-                <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                <div className="bg-[#0d0d14] rounded-xl border border-[#2d2d44] p-4">
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="font-bold">📋 Imported Line Items ({importedItems.length})</h3>
                     <button
                       onClick={() => setShowImportedItems(!showImportedItems)}
-                      className="text-sm text-gray-400 hover:text-white"
+                      className="text-sm text-slate-400 hover:text-white"
                     >
                       Hide
                     </button>
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-1">
                     {importedItems.map((item, idx) => (
-                      <div key={idx} className="text-xs p-2 bg-gray-700/50 rounded flex justify-between">
-                        <span className="text-gray-400">{item.date || '-'}</span>
+                      <div key={idx} className="text-xs p-2 bg-[#1e1e2e]/50 rounded flex justify-between">
+                        <span className="text-slate-400">{item.date || '-'}</span>
                         <span className="truncate max-w-[150px]">{item.description || '-'}</span>
                         <span className="font-mono">
                           {item.regularHours}h + {item.otHours}h OT | {item.miles}mi
@@ -727,7 +727,7 @@ export default function InvoiceVerification() {
             {/* Right: Comparison Results */}
             <div className="space-y-4">
               {!comparisonDone ? (
-                <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center text-gray-500">
+                <div className="bg-[#0d0d14] rounded-xl border border-[#2d2d44] p-8 text-center text-slate-500">
                   <p className="text-4xl mb-4">🔍</p>
                   <p>Enter invoice details and click Compare to see EMF records</p>
                 </div>
@@ -751,11 +751,11 @@ export default function InvoiceVerification() {
                   )}
 
                   {/* Comparison Table */}
-                  <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                  <div className="bg-[#0d0d14] rounded-xl border border-[#2d2d44] p-4">
                     <h3 className="font-bold mb-4">📊 Comparison</h3>
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-gray-400 border-b border-gray-700">
+                        <tr className="text-slate-400 border-b border-[#2d2d44]">
                           <th className="text-left py-2">Metric</th>
                           <th className="text-right py-2">Invoice Claims</th>
                           <th className="text-right py-2">EMF Records</th>
@@ -798,23 +798,23 @@ export default function InvoiceVerification() {
                   </div>
 
                   {/* EMF Detail */}
-                  <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+                  <div className="bg-[#0d0d14] rounded-xl border border-[#2d2d44] p-4">
                     <h3 className="font-bold mb-3">📋 EMF Daily Log ({emfData.length} entries)</h3>
                     <div className="max-h-64 overflow-y-auto space-y-2">
                       {emfData.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4">No EMF records found for this period</p>
+                        <p className="text-slate-500 text-center py-4">No EMF records found for this period</p>
                       ) : (
                         emfData.map((entry, idx) => (
-                          <div key={idx} className="text-sm p-2 bg-gray-700/50 rounded">
+                          <div key={idx} className="text-sm p-2 bg-[#1e1e2e]/50 rounded">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">
+                              <span className="text-slate-400">
                                 {fmtDate(entry.work_date)}
                               </span>
                               <span className="font-mono">
                                 {parseFloat(entry.hours_regular || 0).toFixed(1)}h + {parseFloat(entry.hours_overtime || 0).toFixed(1)}h OT | {parseFloat(entry.miles || 0).toFixed(0)} mi
                               </span>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-slate-500">
                               {entry.work_order?.wo_number || 'N/A'} - {entry.work_order?.building || ''}
                             </div>
                           </div>

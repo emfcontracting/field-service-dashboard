@@ -132,7 +132,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       case 'high': return { bg: 'bg-orange-500', text: '🟠 HIGH' };
       case 'medium': return { bg: 'bg-yellow-500 text-black', text: '🟡 MEDIUM' };
       case 'low': return { bg: 'bg-blue-500', text: '🔵 LOW' };
-      default: return { bg: 'bg-gray-500', text: priority?.toUpperCase() || 'N/A' };
+      default: return { bg: 'bg-[#3d3d5e]', text: priority?.toUpperCase() || 'N/A' };
     }
   };
 
@@ -312,13 +312,13 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   if (!importMethod) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full">
+        <div className="bg-[#0d0d14] rounded-lg p-8 max-w-2xl w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-white">Import Work Orders</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl">×</button>
+            <button onClick={onClose} className="text-slate-400 hover:text-white text-3xl">×</button>
           </div>
           
-          <p className="text-gray-300 mb-6">Choose how you want to import:</p>
+          <p className="text-slate-300 mb-6">Choose how you want to import:</p>
           
           <div className="space-y-3">
             <button
@@ -348,7 +348,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
           
           <button
             onClick={onClose}
-            className="w-full mt-6 bg-gray-600 hover:bg-gray-700 px-4 py-3 rounded-lg text-white font-bold"
+            className="w-full mt-6 bg-[#2d2d44] hover:bg-[#1e1e2e] px-4 py-3 rounded-lg text-white font-bold"
           >
             Cancel
           </button>
@@ -361,16 +361,16 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   if (importMethod === 'gmail') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-800 rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-[#0d0d14] rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="border-b border-gray-700 p-6 flex justify-between items-center">
+          <div className="border-b border-[#2d2d44] p-6 flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">📧 CBRE Email Import</h2>
-              <p className="text-gray-400 text-sm mt-1">Fetching from wo.emfcontractingsc@gmail.com</p>
+              <p className="text-slate-400 text-sm mt-1">Fetching from wo.emfcontractingsc@gmail.com</p>
             </div>
             <button
               onClick={() => { setImportMethod(''); setGmailEmails([]); setGmailError(''); setImportResult(null); }}
-              className="text-gray-400 hover:text-white text-3xl"
+              className="text-slate-400 hover:text-white text-3xl"
             >←</button>
           </div>
 
@@ -399,7 +399,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
             {gmailLoading && (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-gray-400">Fetching emails from Gmail...</p>
+                <p className="text-slate-400">Fetching emails from Gmail...</p>
               </div>
             )}
 
@@ -450,7 +450,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
             {/* No Emails */}
             {!gmailLoading && gmailEmails.length === 0 && !gmailError && (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-slate-400">
                 <div className="text-6xl mb-4">📭</div>
                 <p className="text-xl font-semibold mb-2">No New Work Order Emails</p>
                 <p className="text-sm mb-4">All CBRE dispatch emails have been imported or marked as read.</p>
@@ -469,8 +469,8 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                   >
                     📥 Include Read Emails (Last 3 Days)
                   </button>
-                  <p className="text-xs text-gray-500 mt-2">Use "Include Read" if a new WO was already opened in Gmail</p>
-                  <p className="text-xs text-gray-500">💡 Auto-import runs every 15 min and may have processed new emails</p>
+                  <p className="text-xs text-slate-500 mt-2">Use "Include Read" if a new WO was already opened in Gmail</p>
+                  <p className="text-xs text-slate-500">💡 Auto-import runs every 15 min and may have processed new emails</p>
                 </div>
               </div>
             )}
@@ -480,7 +480,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
               <>
                 {/* Selection Controls */}
                 <div className="flex justify-between items-center mb-2">
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-slate-400">
                     {Object.values(selectedEmails).filter(Boolean).length} of {gmailEmails.length} selected
                   </div>
                   <div className="flex gap-2">
@@ -492,17 +492,17 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                       }}
                       className="text-purple-400 hover:text-purple-300 text-sm"
                     >Select All</button>
-                    <span className="text-gray-600">|</span>
+                    <span className="text-slate-500">|</span>
                     <button
                       onClick={() => setSelectedEmails({})}
                       className="text-purple-400 hover:text-purple-300 text-sm"
                     >Select None</button>
-                    <span className="text-gray-600">|</span>
+                    <span className="text-slate-500">|</span>
                     <button
                       onClick={() => fetchGmailEmails(false)}
                       className="text-purple-400 hover:text-purple-300 text-sm"
                     >🔄 Refresh</button>
-                    <span className="text-gray-600">|</span>
+                    <span className="text-slate-500">|</span>
                     <button
                       onClick={() => fetchGmailEmails(true)}
                       className="text-orange-400 hover:text-orange-300 text-sm"
@@ -519,7 +519,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                       <div
                         key={idx}
                         className={`border rounded-lg p-4 transition ${
-                          selectedEmails[idx] ? 'border-purple-500 bg-gray-700' : 'border-gray-600 bg-gray-750 opacity-60'
+                          selectedEmails[idx] ? 'border-purple-500 bg-[#1e1e2e]' : 'border-[#3d3d5e] bg-[#0d0d14] opacity-60'
                         }`}
                       >
                         {/* Card Header */}
@@ -540,11 +540,11 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                                   {badge.text}
                                 </span>
                               </div>
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-slate-400">
                                 {formatDate(email.receivedAt)}
                               </span>
                             </div>
-                            <p className="text-gray-300 mt-1">
+                            <p className="text-slate-300 mt-1">
                               📍 {email.parsedData.building || 'No building specified'}
                             </p>
                           </div>
@@ -555,32 +555,32 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                           <div className="mt-4 pl-8 space-y-3">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-xs text-gray-400 mb-1">Work Order #</label>
+                                <label className="block text-xs text-slate-400 mb-1">Work Order #</label>
                                 <input
                                   type="text"
                                   value={email.parsedData.wo_number || ''}
                                   onChange={(e) => updateEmailField(idx, 'wo_number', e.target.value)}
-                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs text-gray-400 mb-1">Building</label>
+                                <label className="block text-xs text-slate-400 mb-1">Building</label>
                                 <input
                                   type="text"
                                   value={email.parsedData.building || ''}
                                   onChange={(e) => updateEmailField(idx, 'building', e.target.value)}
-                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                 />
                               </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
                               <div>
-                                <label className="block text-xs text-gray-400 mb-1">Priority</label>
+                                <label className="block text-xs text-slate-400 mb-1">Priority</label>
                                 <select
                                   value={email.parsedData.priority || 'P4'}
                                   onChange={(e) => updateEmailField(idx, 'priority', e.target.value)}
-                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                 >
                                   <option value="P1">🚨 P1 · Emergency</option>
                                   <option value="P2">⚡ P2 · Urgent</option>
@@ -594,39 +594,39 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-xs text-gray-400 mb-1">Requestor</label>
+                                <label className="block text-xs text-slate-400 mb-1">Requestor</label>
                                 <input
                                   type="text"
                                   value={email.parsedData.requestor || ''}
                                   onChange={(e) => updateEmailField(idx, 'requestor', e.target.value)}
-                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs text-gray-400 mb-1">NTE ($)</label>
+                                <label className="block text-xs text-slate-400 mb-1">NTE ($)</label>
                                 <input
                                   type="number"
                                   step="0.01"
                                   value={email.parsedData.nte || ''}
                                   onChange={(e) => updateEmailField(idx, 'nte', parseFloat(e.target.value) || 0)}
-                                  className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                  className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                   placeholder="Enter NTE"
                                 />
                               </div>
                             </div>
 
                             <div>
-                              <label className="block text-xs text-gray-400 mb-1">Description</label>
+                              <label className="block text-xs text-slate-400 mb-1">Description</label>
                               <textarea
                                 value={email.parsedData.work_order_description || ''}
                                 onChange={(e) => updateEmailField(idx, 'work_order_description', e.target.value)}
-                                className="w-full bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                className="w-full bg-[#2d2d44] text-white px-3 py-2 rounded text-sm"
                                 rows="3"
                               />
                             </div>
 
                             {email.parsedData.comments && (
-                              <div className="bg-gray-800 rounded p-3 text-xs text-gray-400">
+                              <div className="bg-[#0d0d14] rounded p-3 text-xs text-slate-400">
                                 <pre className="whitespace-pre-wrap">{email.parsedData.comments}</pre>
                               </div>
                             )}
@@ -641,17 +641,17 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-700 p-4 flex justify-between">
+          <div className="border-t border-[#2d2d44] p-4 flex justify-between">
             <button
               onClick={() => { setImportMethod(''); setGmailEmails([]); setGmailError(''); setImportResult(null); }}
-              className="bg-gray-600 hover:bg-gray-700 px-6 py-2 rounded-lg font-semibold"
+              className="bg-[#2d2d44] hover:bg-[#1e1e2e] px-6 py-2 rounded-lg font-semibold"
             >
               Back
             </button>
             <button
               onClick={handleGmailImport}
               disabled={importing || Object.values(selectedEmails).filter(Boolean).length === 0}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-8 py-2 rounded-lg font-bold"
+              className="bg-green-600 hover:bg-green-700 disabled:bg-[#2d2d44] px-8 py-2 rounded-lg font-bold"
             >
               {importing ? '⏳ Importing...' : `✅ Import ${Object.values(selectedEmails).filter(Boolean).length} Work Order(s)`}
             </button>
@@ -665,20 +665,20 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   if (importMethod === 'sheets') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full">
+        <div className="bg-[#0d0d14] rounded-lg p-8 max-w-2xl w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">📊 Import from Google Sheets</h2>
-            <button onClick={() => { setImportMethod(''); setSheetsUrl(''); }} className="text-gray-400 hover:text-white text-3xl">←</button>
+            <button onClick={() => { setImportMethod(''); setSheetsUrl(''); }} className="text-slate-400 hover:text-white text-3xl">←</button>
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm text-gray-300 mb-2">Google Sheets URL (optional)</label>
+            <label className="block text-sm text-slate-300 mb-2">Google Sheets URL (optional)</label>
             <input
               type="text"
               value={sheetsUrl}
               onChange={(e) => setSheetsUrl(e.target.value)}
               placeholder="Leave empty for default EMF sheet..."
-              className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg"
+              className="w-full px-4 py-3 bg-[#1e1e2e] text-white rounded-lg"
               disabled={importing}
             />
           </div>
@@ -691,13 +691,13 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
             <button
               onClick={importFromSheets}
               disabled={importing}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold"
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-[#2d2d44] px-6 py-3 rounded-lg font-bold"
             >
               {importing ? 'Importing...' : '🔄 Import'}
             </button>
             <button
               onClick={() => { setImportMethod(''); setSheetsUrl(''); }}
-              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold"
+              className="bg-[#2d2d44] hover:bg-[#1e1e2e] px-6 py-3 rounded-lg font-semibold"
             >
               Back
             </button>
@@ -711,61 +711,61 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
   if (importMethod === 'manual') {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-800 rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-[#0d0d14] rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">✏️ Manual Entry</h2>
-            <button onClick={() => setImportMethod('')} className="text-gray-400 hover:text-white text-3xl">←</button>
+            <button onClick={() => setImportMethod('')} className="text-slate-400 hover:text-white text-3xl">←</button>
           </div>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Work Order # *</label>
+                <label className="block text-sm text-slate-400 mb-1">Work Order # *</label>
                 <input
                   type="text"
                   value={manualWO.wo_number}
                   onChange={(e) => setManualWO({ ...manualWO, wo_number: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                   placeholder="C1234567"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Building *</label>
+                <label className="block text-sm text-slate-400 mb-1">Building *</label>
                 <input
                   type="text"
                   value={manualWO.building}
                   onChange={(e) => setManualWO({ ...manualWO, building: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Description *</label>
+              <label className="block text-sm text-slate-400 mb-1">Description *</label>
               <textarea
                 value={manualWO.work_order_description}
                 onChange={(e) => setManualWO({ ...manualWO, work_order_description: e.target.value })}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                 rows="3"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Requestor</label>
+                <label className="block text-sm text-slate-400 mb-1">Requestor</label>
                 <input
                   type="text"
                   value={manualWO.requestor}
                   onChange={(e) => setManualWO({ ...manualWO, requestor: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Priority</label>
+                <label className="block text-sm text-slate-400 mb-1">Priority</label>
                 <select
                   value={manualWO.priority}
                   onChange={(e) => setManualWO({ ...manualWO, priority: e.target.value })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                 >
                   <option value="P1">🔴 P1 - Emergency</option>
                   <option value="P2">🟠 P2 - Urgent</option>
@@ -774,12 +774,12 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">NTE ($)</label>
+                <label className="block text-sm text-slate-400 mb-1">NTE ($)</label>
                 <input
                   type="number"
                   value={manualWO.nte}
                   onChange={(e) => setManualWO({ ...manualWO, nte: parseFloat(e.target.value) || 0 })}
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  className="w-full bg-[#1e1e2e] text-white px-4 py-2 rounded-lg"
                 />
               </div>
             </div>
@@ -789,13 +789,13 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
             <button
               onClick={handleManualSubmit}
               disabled={importing}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-bold"
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-[#2d2d44] px-6 py-3 rounded-lg font-bold"
             >
               {importing ? 'Creating...' : 'Create Work Order'}
             </button>
             <button
               onClick={() => setImportMethod('')}
-              className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold"
+              className="bg-[#2d2d44] hover:bg-[#1e1e2e] px-6 py-3 rounded-lg font-semibold"
             >
               Back
             </button>

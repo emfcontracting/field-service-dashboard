@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 import { apiFetch } from '@/lib/apiClient';
+import { useCurrentUser } from '@/app/components/CurrentUserContext';
 
 const supabase = getSupabase();
 
@@ -69,10 +70,20 @@ const AdminTool = ({ icon, label, onClick }) => (
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// AppShell resolves the signed-in user once; the page body reads it from
+// CurrentUserContext (so it has to render INSIDE the shell).
 export default function SettingsPage() {
+  return (
+    <AppShell activeLink="/settings">
+      <SettingsContent />
+    </AppShell>
+  );
+}
+
+function SettingsContent() {
   const router = useRouter();
-  const [currentUser, setCurrentUser]     = useState(null);
-  const [loading, setLoading]             = useState(true);
+  const { user: currentUser, isSuperuser } = useCurrentUser();
+  const loading = !currentUser;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword]     = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -83,19 +94,6 @@ export default function SettingsPage() {
   const [showNew, setShowNew]             = useState(false);
   const [showConfirm, setShowConfirm]     = useState(false);
 
-  const isSuperuser = currentUser?.email === 'jones.emfcontracting@gmail.com';
-
-  useEffect(() => { fetchCurrentUser(); }, []);
-
-  async function fetchCurrentUser() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/login'); return; }
-      const { data } = await supabase.from('users').select('*').eq('auth_id', user.id).single();
-      setCurrentUser(data);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  }
 
   async function handleChangePassword(e) {
     e.preventDefault();
@@ -139,21 +137,18 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <AppShell activeLink="/settings">
-        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
-            <p className="text-slate-500 text-sm">Loading settings…</p>
-          </div>
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
+          <p className="text-slate-500 text-sm">Loading settings…</p>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
   const roleLabel = currentUser?.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
   return (
-    <AppShell activeLink="/settings">
       <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
 
         {/* ── Header ── */}
@@ -325,6 +320,5 @@ export default function SettingsPage() {
 
         </div>
       </div>
-    </AppShell>
   );
 }

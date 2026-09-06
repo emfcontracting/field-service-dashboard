@@ -150,13 +150,13 @@ export default function BulkOperationsTab() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-6">
         <h3 className="text-lg font-semibold mb-4">🔍 Filter Work Orders</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
           <select
             value={filters.status}
             onChange={(e) => setFilters({...filters, status: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           >
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
@@ -170,7 +170,7 @@ export default function BulkOperationsTab() {
           <select
             value={filters.priority}
             onChange={(e) => setFilters({...filters, priority: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           >
             <option value="">All Priorities</option>
             <option value="P1">🚨 P1 · Emergency</option>
@@ -189,13 +189,13 @@ export default function BulkOperationsTab() {
             placeholder="Building name..."
             value={filters.building}
             onChange={(e) => setFilters({...filters, building: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           />
 
           <select
             value={filters.assigned_to}
             onChange={(e) => setFilters({...filters, assigned_to: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           >
             <option value="">All Technicians</option>
             {users.filter(u => ['lead_tech', 'tech', 'helper'].includes(u.role)).map(user => (
@@ -210,7 +210,7 @@ export default function BulkOperationsTab() {
             placeholder="From date"
             value={filters.date_from}
             onChange={(e) => setFilters({...filters, date_from: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           />
 
           <input
@@ -218,12 +218,12 @@ export default function BulkOperationsTab() {
             placeholder="To date"
             value={filters.date_to}
             onChange={(e) => setFilters({...filters, date_to: e.target.value})}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+            className="px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
           />
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-slate-400">
             Showing {workOrders.length} work order(s)
           </div>
           <button
@@ -237,10 +237,10 @@ export default function BulkOperationsTab() {
       </div>
 
       {/* Selection Actions */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-slate-300">
               {selectedCount} work order(s) selected
             </span>
             <button
@@ -251,7 +251,7 @@ export default function BulkOperationsTab() {
             </button>
             <button
               onClick={clearSelection}
-              className="text-sm text-gray-600 hover:text-gray-800"
+              className="text-sm text-slate-400 hover:text-slate-200"
             >
               Clear Selection
             </button>
@@ -295,31 +295,31 @@ export default function BulkOperationsTab() {
       </div>
 
       {/* Work Orders Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-[#0d0d14] rounded-lg border border-[#1e1e2e] overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-[#1e1e2e]">
+            <thead className="bg-[#0a0a0f]">
               <tr>
                 <th className="px-6 py-3 text-left">
                   <input
                     type="checkbox"
                     checked={selectedCount === workOrders.length && workOrders.length > 0}
                     onChange={(e) => e.target.checked ? selectAll() : clearSelection()}
-                    className="rounded"
+                    className="rounded bg-[#0a0a0f]"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">WO #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Building</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Entered</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">WO #</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Building</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Priority</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Assigned To</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date Entered</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[#0d0d14] divide-y divide-[#1e1e2e]">
               {workOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
                     {loading ? 'Loading work orders...' : 'No work orders found. Adjust filters and search again.'}
                   </td>
                 </tr>
@@ -331,19 +331,19 @@ export default function BulkOperationsTab() {
                     : 'Unassigned';
 
                   return (
-                    <tr key={wo.wo_id} className={`hover:bg-gray-50 ${selectedIds.includes(wo.wo_id) ? 'bg-blue-50' : ''}`}>
+                    <tr key={wo.wo_id} className={`hover:bg-[#0a0a0f] ${selectedIds.includes(wo.wo_id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-6 py-4">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(wo.wo_id)}
                           onChange={() => toggleSelect(wo.wo_id)}
-                          className="rounded"
+                          className="rounded bg-[#0a0a0f]"
                         />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-100">
                         {wo.wo_number}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-slate-100">
                         {wo.building || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -356,10 +356,10 @@ export default function BulkOperationsTab() {
                           {wo.priority || 'medium'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-100">
                         {assignedName}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                         {fmtDate(wo.date_entered)}
                       </td>
                     </tr>
@@ -375,13 +375,13 @@ export default function BulkOperationsTab() {
       {showStatusModal && (
         <Modal title="Change Status" onClose={() => setShowStatusModal(false)}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Change status for {selectedCount} selected work order(s)
             </p>
             <select
               value={newStatus}
               onChange={(e) => setNewStatus(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+              className="w-full px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
             >
               <option value="">Select new status...</option>
               <option value="pending">Pending</option>
@@ -394,7 +394,7 @@ export default function BulkOperationsTab() {
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setShowStatusModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-[#2d2d44] rounded-lg hover:bg-[#0a0a0f]"
               >
                 Cancel
               </button>
@@ -414,13 +414,13 @@ export default function BulkOperationsTab() {
       {showReassignModal && (
         <Modal title="Reassign Work Orders" onClose={() => setShowReassignModal(false)}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Reassign {selectedCount} selected work order(s) to:
             </p>
             <select
               value={newAssignedTo}
               onChange={(e) => setNewAssignedTo(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+              className="w-full px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
             >
               <option value="">Select technician...</option>
               {users.filter(u => ['lead_tech', 'tech', 'helper'].includes(u.role)).map(user => (
@@ -432,7 +432,7 @@ export default function BulkOperationsTab() {
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setShowReassignModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-[#2d2d44] rounded-lg hover:bg-[#0a0a0f]"
               >
                 Cancel
               </button>
@@ -458,13 +458,13 @@ export default function BulkOperationsTab() {
       {showPriorityModal && (
         <Modal title="Change Priority" onClose={() => setShowPriorityModal(false)}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Change priority for {selectedCount} selected work order(s)
             </p>
             <select
               value={newPriority}
               onChange={(e) => setNewPriority(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+              className="w-full px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
             >
               <option value="">Select new priority...</option>
               <option value="P1">🚨 P1 · Emergency</option>
@@ -480,7 +480,7 @@ export default function BulkOperationsTab() {
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setShowPriorityModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-[#2d2d44] rounded-lg hover:bg-[#0a0a0f]"
               >
                 Cancel
               </button>
@@ -500,7 +500,7 @@ export default function BulkOperationsTab() {
       {showCommentModal && (
         <Modal title="Add Comment" onClose={() => setShowCommentModal(false)}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Add the same comment to {selectedCount} selected work order(s)
             </p>
             <textarea
@@ -508,12 +508,12 @@ export default function BulkOperationsTab() {
               onChange={(e) => setBulkComment(e.target.value)}
               placeholder="Enter comment..."
               rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+              className="w-full px-3 py-2 border border-[#2d2d44] rounded-lg text-slate-100 bg-[#0a0a0f]"
             />
             <div className="flex justify-end space-x-2">
               <button
                 onClick={() => setShowCommentModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-[#2d2d44] rounded-lg hover:bg-[#0a0a0f]"
               >
                 Cancel
               </button>
@@ -536,7 +536,7 @@ export default function BulkOperationsTab() {
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-[#0d0d14] rounded-lg p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold mb-4">{title}</h3>
         {children}
       </div>
@@ -551,9 +551,9 @@ function getStatusColor(status) {
     in_progress: 'bg-purple-100 text-purple-800',
     completed: 'bg-green-100 text-green-800',
     on_hold: 'bg-red-100 text-red-800',
-    cancelled: 'bg-gray-100 text-gray-800'
+    cancelled: 'bg-[#1e1e2e] text-slate-200'
   };
-  return colors[status] || 'bg-gray-100 text-gray-800';
+  return colors[status] || 'bg-[#1e1e2e] text-slate-200';
 }
 
 function getPriorityColor(priority) {
@@ -563,5 +563,5 @@ function getPriorityColor(priority) {
     medium: 'bg-yellow-100 text-yellow-800',
     low: 'bg-green-100 text-green-800'
   };
-  return colors[priority] || 'bg-gray-100 text-gray-800';
+  return colors[priority] || 'bg-[#1e1e2e] text-slate-200';
 }

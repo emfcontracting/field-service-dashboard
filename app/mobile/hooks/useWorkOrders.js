@@ -50,9 +50,26 @@ export function useWorkOrders(currentUser) {
     initDB();
   }, []);
 
+  // Foreground refresh (M14): the PWA sits in the background all day; reload
+  // the list when the tab becomes visible again, at most every 30 s.
+  const lastLoadRef = useRef(0);
+  useEffect(() => {
+    if (!currentUser) return;
+    const onVisible = () => {
+      if (document.hidden || !navigator.onLine) return;
+      if (Date.now() - lastLoadRef.current < 30000) return;
+      lastLoadRef.current = Date.now();
+      loadWorkOrders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
   useEffect(() => {
     if (!currentUser) return;
     
+    lastLoadRef.current = Date.now();
     loadWorkOrders();
     loadCompletedWorkOrders();
 

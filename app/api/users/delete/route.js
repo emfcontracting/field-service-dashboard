@@ -40,6 +40,26 @@ export async function POST(request) {
       );
     }
 
+    // A technician with logged hours is part of the billing history: deleting
+    // them used to delete their daily_hours_log rows, which is how Matthew
+    // Sweet's hours vanished from 18 invoiced work orders (see
+    // migrations/2026-09-06_restore_sweet_hours.sql). Refuse; deactivate instead.
+    const [{ count: hoursCount }, { count: asgCount }] = await Promise.all([
+      supabase.from('daily_hours_log').select('log_id', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('work_order_assignments').select('wo_id', { count: 'exact', head: true }).eq('user_id', userId),
+    ]);
+    if ((hoursCount || 0) > 0 || (asgCount || 0) > 0) {
+      return NextResponse.json(
+        {
+          error: `This user has ${hoursCount || 0} hours entries and ${asgCount || 0} work order assignments. Deleting would erase billing history — deactivate the user instead (Active = off).`,
+          code: 'has_history',
+          hours: hoursCount || 0,
+          assignments: asgCount || 0,
+        },
+        { status: 409 }
+      );
+    }
+
     // Clear foreign key references first to avoid constraint errors
     // Update work_orders to remove lead_tech_id references
     await supabase

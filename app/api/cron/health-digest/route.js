@@ -36,6 +36,7 @@ const EXPECTED = {
   'invoice-payments/cron':          60 * 60 * 1000,
   'quickbooks/pull-payments':       24 * H,
   'availability/reminder-cron':     24 * H,
+  'cron/health-digest':             24 * H,
 };
 
 const fmtAge = (ms) => {
@@ -75,12 +76,18 @@ async function buildDigest(db) {
   }
   for (const job of Object.keys(EXPECTED)) jobs[job] ||= { job, runs24: 0, errors24: 0, lastOk: null, lastError: null, lastErrorAt: null, lastRun: null, durations: [] };
 
+  // How long has the run log existed? A daily job that simply has not had its
+  // first slot since logging started is "pending", not dead.
+  const oldestRun = (runs || []).length ? Math.min(...runs.map((r) => new Date(r.started_at).getTime())) : now;
+  const loggingAge = now - oldestRun;
+
   const jobRows = Object.values(jobs).map((j) => {
     const interval = EXPECTED[j.job];
     const okAge = j.lastOk ? now - new Date(j.lastOk).getTime() : null;
-    const stale = interval ? (okAge == null || okAge > Math.max(2 * interval, H)) : false;
+    const pending = interval ? (okAge == null && loggingAge < 2 * interval) : false;
+    const stale = interval && !pending ? (okAge == null || okAge > Math.max(2 * interval, H)) : false;
     const p50 = j.durations.length ? j.durations.sort((a, b) => a - b)[Math.floor(j.durations.length / 2)] : null;
-    return { ...j, okAge, stale, p50, scheduled: !!interval };
+    return { ...j, okAge, stale, pending, p50, scheduled: !!interval };
   }).sort((a, b) => (b.stale - a.stale) || (b.errors24 - a.errors24) || a.job.localeCompare(b.job));
 
   // ── QuickBooks ─────────────────────────────────────────────────────────────
@@ -102,12 +109,14 @@ async function buildDigest(db) {
   }
 
   // ── Business signals ───────────────────────────────────────────────────────
-  const [{ count: approvalsOld }, { data: waiting }, { data: subWo }, { count: staleDrafts }, { count: openEsc }] = await Promise.all([
+  const [{ count: approvalsOld }, { data: waiting }, { data: subWo }, { data: staleDraftRows }, { count: openEsc }] = await Promise.all([
     db.from('approval_requests').select('approval_id', { count: 'exact', head: true }).eq('status', 'pending').lt('created_at', new Date(now - 48 * H).toISOString()),
     db.from('work_orders').select('wo_number, cbre_quote_submitted_at, cbre_status_updated_at').eq('cbre_status', 'quote_submitted'),
     db.from('work_orders').select('wo_number, dispute_requested_at, dispute_sub_wo').eq('dispute_status', 'sub_wo_requested').is('dispute_sub_wo', null),
-    db.from('invoices').select('invoice_id', { count: 'exact', head: true }).eq('status', 'draft').lt('created_at', new Date(now - 14 * D).toISOString()),
-    db.from('work_orders').select('wo_id', { count: 'exact', head: true }).eq('escalation', true),
+    db.from('invoices').select('invoice_id, work_order:work_orders!inner(dispute_status, status)').eq('status', 'draft').lt('created_at', new Date(now - 14 * D).toISOString())
+      .is('work_order.dispute_status', null).neq('work_order.status', 'cancelled'),
+    db.from('work_orders').select('wo_id', { count: 'exact', head: true }).eq('escalation', true)
+      .not('status', 'in', '(completed,cancelled,rejected)').or('is_locked.is.null,is_locked.eq.false'),
   ]);
   const waitingOld = (waiting || []).filter((w) => {
     const t = w.cbre_quote_submitted_at || w.cbre_status_updated_at;
@@ -119,8 +128,8 @@ async function buildDigest(db) {
     { label: 'Approvals pending > 48 h', value: approvalsOld || 0, warn: (approvalsOld || 0) > 0, hint: 'Dashboard → Approvals' },
     { label: 'NTE requests waiting at CBRE > 14 days', value: waitingOld.length, warn: waitingOld.length > 0, hint: 'UPS Escalation → Waiting on CBRE (copy list for CBRE)', detail: waitingOld.map((w) => w.wo_number).slice(0, 15).join(', ') },
     { label: 'Sub-WO requests without answer > 21 days', value: subWoOld.length, warn: subWoOld.length > 0, hint: 'UPS Escalation → Sub-WO req.', detail: subWoOld.map((w) => w.wo_number).join(', ') },
-    { label: 'Draft invoices older than 14 days', value: staleDrafts || 0, warn: (staleDrafts || 0) > 0, hint: 'Invoicing' },
-    { label: 'Work orders in escalation', value: openEsc || 0, warn: (openEsc || 0) > 0, hint: 'Work Orders → Escalation filter' },
+    { label: 'Draft invoices older than 14 days (excluding disputed WOs)', value: (staleDraftRows || []).length, warn: (staleDraftRows || []).length > 0, hint: 'Invoicing' },
+    { label: 'Active work orders in escalation', value: openEsc || 0, warn: (openEsc || 0) > 0, hint: 'Work Orders → Escalation filter' },
   ];
 
   const failing = jobRows.filter((j) => j.errors24 > 0);
@@ -136,10 +145,10 @@ function renderHtml(d) {
   const row = (cells) => `<tr>${cells.map((c) => `<td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top">${c}</td>`).join('')}</tr>`;
   const jobsTable = `<table style="border-collapse:collapse;width:100%"><tr>${['Job', 'Runs 24 h', 'Errors', 'Last success', 'Median', 'Last error'].map((h) => `<th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd;font-size:12px;color:#555">${h}</th>`).join('')}</tr>` +
     d.jobs.map((j) => row([
-      `${j.stale ? '🔴 ' : j.errors24 ? '🟠 ' : '🟢 '}<code>${esc(j.job)}</code>${j.scheduled ? '' : ' <span style="color:#888">(on demand)</span>'}`,
+      `${j.stale ? '🔴 ' : j.pending ? '⚪ ' : j.errors24 ? '🟠 ' : '🟢 '}<code>${esc(j.job)}</code>${j.scheduled ? '' : ' <span style="color:#888">(on demand)</span>'}`,
       j.runs24,
       j.errors24 ? `<b style="color:#b91c1c">${j.errors24}</b>` : '0',
-      j.lastOk ? `${fmtWhen(j.lastOk)} <span style="color:#888">(${fmtAge(j.okAge)} ago)</span>` : '<b style="color:#b91c1c">never</b>',
+      j.lastOk ? `${fmtWhen(j.lastOk)} <span style="color:#888">(${fmtAge(j.okAge)} ago)</span>` : (j.pending ? '<span style="color:#888">not due yet since logging started</span>' : '<b style="color:#b91c1c">never</b>'),
       j.p50 != null ? `${(j.p50 / 1000).toFixed(1)} s` : '—',
       j.lastError ? `<span style="color:#b91c1c">${esc(j.lastError).slice(0, 220)}</span> <span style="color:#888">${fmtWhen(j.lastErrorAt)}</span>` : '',
     ])).join('') + '</table>';

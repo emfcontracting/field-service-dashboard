@@ -35,7 +35,7 @@ const SUBJECT_MATCH = 'Confirmation - Vendor App Submission';
 const WO_STAMP = {
   cbre_acknowledge: (now) => ({ cbre_acknowledged_at: now, cbre_acknowledged_via: 'vendor_app_form' }),
   cbre_nte:         (now) => ({ cbre_nte_submitted_at: now }),
-  cbre_complete:    (now) => ({ cbre_completion_submitted_at: now }),
+  cbre_complete:    (now) => ({ cbre_completion_submitted_at: now, completion_transferred: true, completion_transferred_at: now }),
 };
 
 function connectIMAP() {

@@ -19,6 +19,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
+import { COMPLETION_SELECT, completionReadinessCheck, isActiveWo } from '@/lib/completionReadiness';
 
 const supabase = getSupabase();
 
@@ -499,27 +500,35 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
     let tick = 0;
 
     const loadCbreDataEntry = async () => {
-      // Mirrors the CBREDataEntryView filter logic so the badge matches the view:
-      // active WOs only, completions "ready for CBRE", 90-day window for check-outs.
-      const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-      const [{ data: dailyRows }, { data: completionRows }] = await Promise.all([
-        supabase
-          .from('daily_hours_log')
-          .select('log_id, work_order:work_orders!inner(acknowledged, is_locked)')
-          .eq('cbre_transferred', false)
-          .gte('work_date', cutoff)
-          .eq('work_order.acknowledged', false)
-          .eq('work_order.is_locked', false),
-        supabase
-          .from('work_orders')
-          .select('wo_id, cbre_status')
-          .eq('completion_transferred', false)
-          .eq('status', 'completed')
-          .eq('acknowledged', false)
-          .eq('is_locked', false),
-      ]);
-      const readyCompletions = (completionRows || []).filter(wo => !wo.cbre_status || wo.cbre_status === 'quote_approved');
-      return (dailyRows?.length || 0) + readyCompletions.length;
+      // Same rules as CBREDataEntryView / queue-completions (lib/completionReadiness):
+      // completed, still active, not yet reported. The badge counts what needs
+      // a hand here — ready-but-not-yet-queued and rejected — not the rows
+      // already sitting in Approvals (those are in the Approvals badge).
+      const { data: wos } = await supabase
+        .from('work_orders')
+        .select(COMPLETION_SELECT)
+        .eq('status', 'completed')
+        .eq('completion_transferred', false)
+        .is('cbre_completion_submitted_at', null)
+        .eq('acknowledged', false)
+        .eq('is_locked', false);
+      const active = (wos || []).filter(isActiveWo);
+      if (!active.length) return 0;
+      const { data: ar } = await supabase
+        .from('approval_requests')
+        .select('wo_id, status, created_at')
+        .eq('kind', 'cbre_complete')
+        .in('wo_id', active.map((w) => w.wo_id))
+        .order('created_at', { ascending: false });
+      const latest = new Map();
+      for (const a of ar || []) if (!latest.has(a.wo_id)) latest.set(a.wo_id, a.status);
+      let n = 0;
+      for (const wo of active) {
+        const st = latest.get(wo.wo_id);
+        if (st === 'pending' || st === 'approved') continue;          // in Approvals
+        if (st === 'rejected' || completionReadinessCheck(wo).ready) n++;
+      }
+      return n;
     };
 
     const loadReviewQueue = async () => {

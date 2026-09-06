@@ -1,307 +1,177 @@
 // app/dashboard/components/CBREDataEntryView.js
 // ─────────────────────────────────────────────────────────────────────────────
-// CBRE Data Entry Queue — Admin/Office only
+// CBRE Data Entry — Admin/Office only. COMPLETIONS ONLY (2026-09-06).
 //
-// Workflow:
-//   1. Tech checks out daily → daily_hours_log entry created
-//      → Office assistant must enter check-in/out + hours into CBRE Portal
-//   2. Tech completes WO → work_orders.status='completed'
-//      → Office assistant must notify CBRE
+// What CBRE needs from us when a work order is done is the Vendor App action
+// "Complete A Work Order" with Start (first check-in) and End (last check-out).
+// The daily check-out queue that used to live here was never what the portal
+// asked for and is gone; the check-in/out stamps are shown here instead.
 //
-// Both events tracked separately via cbre_transferred / completion_transferred.
-// Office staff opens CBRE Portal in another tab, copies data from this view,
-// pastes it in, then clicks "Mark transferred" to clear the entry.
+// Flow:
+//   tech completes WO ──► completed + ready (lib/completionReadiness.js)
+//        │                    │
+//        │                    ▼  every 15 min: /api/cbre/queue-completions
+//        │                       (or "Queue now" here) → approval_requests
+//        │                                                    │
+//        │                                                    ▼  Approvals tab
+//        │                          approve → prefilled Smartsheet form → Submit
+//        │                          "Mark submitted" stamps cbre_completion_submitted_at
+//        │                          + completion_transferred → leaves this view
+//        ▼
+//   not ready (NTE at CBRE, quote pending, over NTE, no times) → "Waiting"
+//   here with the reason. No times → "Send manually" (Send-to-CBRE dialog).
+//
+// "Mark transferred" stays as the by-hand exit (someone did it in the portal
+// directly). Nothing here contacts CBRE.
 // ─────────────────────────────────────────────────────────────────────────────
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { calcTotal } from '@/lib/billing';
+import { apiFetch } from '@/lib/apiClient';
+import { parseTs } from '@/lib/cbreVendorForm';
+import {
+  COMPLETION_SELECT, READINESS_LABEL,
+  completionReadinessCheck, completionWindow, completionActualTotal,
+  buildCompletionApprovalRow, isActiveWo,
+} from '@/lib/completionReadiness';
+import SendToCbreModal from './SendToCbreModal';
 
 const supabase = getSupabase();
 
-// Timezone-safe date parser. JS's `new Date('2026-04-13')` treats date-only strings
-// as UTC midnight, which then displays one day earlier in EST. This helper detects
-// 'YYYY-MM-DD' format and parses as LOCAL date instead. Timestamps with a time
-// component fall through to standard Date parsing.
-function parseLocalDate(d) {
-  if (!d) return null;
-  if (d instanceof Date) return d;
-  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-  return new Date(d);
-}
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const safeUuid = (v) => (typeof v === 'string' && UUID_REGEX.test(v) ? v : null);
 
+const EST = { timeZone: 'America/New_York' };
 const fmtDate = (d) => {
-  const date = parseLocalDate(d);
-  return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const dt = parseTs(d);
+  return dt ? dt.toLocaleDateString('en-US', { ...EST, month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 };
+const fmtDateTime = (d) => {
+  const dt = parseTs(d);
+  return dt ? dt.toLocaleString('en-US', { ...EST, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+};
+const money = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const fmtDateTime = (d) => d
-  ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-  : '—';
+const LIVE = ['pending', 'approved'];
 
-// Parse FIRST check-in and LAST check-out timestamps from comments.
-// Comments may have multiple events on the SAME LINE separated by whitespace:
-//   [4/13/2026, 3:34:23 PM] Stephen Jordan - ✓ CHECKED IN     [4/13/2026, 4:38:43 PM] Stephen Jordan - ⏸ CHECKED OUT
-// or on separate lines. We use a global regex (no line-splitting) so we catch ALL events.
-// Supports English (CHECKED IN/OUT) and Spanish (ENTRADA/SALIDA).
-// A tech may check in/out multiple times in a day (lunch break, etc.) — we want the
-// EARLIEST check-in and the LATEST check-out as the working window for CBRE.
-function extractCheckInOut(comments, userName, workDate) {
-  if (!comments) return { checkIn: null, checkOut: null };
-  const checkIns = [], checkOuts = [];
-  // Build target date string "M/D/YYYY" using LOCAL parsing (no UTC shift)
-  const date = parseLocalDate(workDate);
-  const dateStr = date ? `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}` : null;
-  const firstName = userName ? userName.toLowerCase().split(' ')[0] : null;
-
-  // Global regex — finds every [timestamp] name - event anywhere in the string
-  // (not anchored to line start, so multiple events on one line all match)
-  const regex = /\[([^\]]+)\]\s+([^[\n]+?)\s+-\s+(✓ CHECKED IN|⏸ CHECKED OUT|✓ ENTRADA|⏸ SALIDA)/g;
-  let m;
-  while ((m = regex.exec(comments)) !== null) {
-    const [, timestamp, name, event] = m;
-    // Filter to this date — normalize both sides to strip leading zeros ("04/13" ≡ "4/13")
-    if (dateStr) {
-      const tsDate = timestamp.split(',')[0].trim().split('/').map(p => parseInt(p, 10)).join('/');
-      if (tsDate !== dateStr) continue;
-    }
-    // Filter to this user (first name match)
-    if (firstName && !name.trim().toLowerCase().includes(firstName)) continue;
-    if (event.includes('CHECKED IN')  || event.includes('ENTRADA')) checkIns.push(timestamp);
-    if (event.includes('CHECKED OUT') || event.includes('SALIDA'))  checkOuts.push(timestamp);
-  }
-  // Sort by parsed Date — earliest first
-  const byTime = (a, b) => new Date(a) - new Date(b);
-  checkIns.sort(byTime);
-  checkOuts.sort(byTime);
-  return {
-    checkIn:  checkIns[0]                        || null,  // earliest IN
-    checkOut: checkOuts[checkOuts.length - 1]    || null,  // latest OUT
-  };
+// Which bucket a completion belongs to.
+//   queued   — a live Complete request sits in the Approvals tab
+//   rejected — the office rejected the last request (producer skips it)
+//   ready    — the producer will queue it within 15 min (or "Queue now")
+//   waiting  — not ready; reason from completionReadinessCheck
+//   done     — reported (only shown with "Show transferred")
+function classify(wo, approval) {
+  if (wo.completion_transferred || wo.cbre_completion_submitted_at) return { bucket: 'done' };
+  if (approval && LIVE.includes(approval.status)) return { bucket: 'queued', approval };
+  const r = completionReadinessCheck(wo);
+  if (approval && approval.status === 'rejected') return { bucket: 'rejected', approval, readiness: r };
+  if (!r.ready) return { bucket: 'waiting', readiness: r };
+  return { bucket: 'ready' };
 }
 
-// Strip date prefix from "5/11/2026, 10:28:46 AM" → "10:28 AM"
-// (seconds dropped for cleaner display)
-function timeOnly(timestamp) {
-  if (!timestamp) return null;
-  const m = timestamp.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
-  return m ? `${m[1]}:${m[2]} ${m[3].toUpperCase()}` : timestamp;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Actual costs for a completed WO — lib/billing.js (same formula as the invoice).
-// ──────────────────────────────────────────────────────────────────────────────
-function calculateActualTotal(wo) {
-  // lib/billing: WO + team assignments + daily log, tech material, admin hours
-  // per client policy (CBRE 0 unless include_admin_hours).
-  return calcTotal(wo, { assignments: wo.work_order_assignments || [], dailyLogs: wo.daily_hours_log || [] });
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Is this completed WO actually ready to be reported to CBRE?
-// A completed WO is NOT ready if any of the following are true:
-//   1. CBRE-side has a pending state (quote submitted, escalation, rejection,
-//      pending quote, etc.) — only `null` or `quote_approved` are clean enough
-//      to push a completion notification.
-//   2. We have a pending/submitted NTE quote on our side that hasn't been
-//      approved yet — office can't close out the WO with CBRE until that
-//      approval comes back.
-//   3. The actual accrued costs exceed the NTE — if we report completion now,
-//      CBRE will only pay up to the NTE; we need a quote increase first.
-// ──────────────────────────────────────────────────────────────────────────────
-const CBRE_STATUS_READY    = [null, undefined, '', 'quote_approved'];
-const QUOTE_PENDING_STATES = ['pending', 'submitted'];
-
-function completionReadinessCheck(wo) {
-  // 1. CBRE status check
-  if (!CBRE_STATUS_READY.includes(wo.cbre_status)) {
-    return { ready: false, reason: 'cbre_status', detail: wo.cbre_status };
+function reasonText(r) {
+  if (!r || r.ready) return '';
+  switch (r.reason) {
+    case 'cbre_status':   return `${READINESS_LABEL.cbre_status} (${r.detail})`;
+    case 'pending_quote': return `${READINESS_LABEL.pending_quote} (${r.detail})`;
+    case 'over_nte':      return `${READINESS_LABEL.over_nte}: ${money(r.detail.actual)} vs NTE ${money(r.detail.nte)}`;
+    case 'no_times':      return `${READINESS_LABEL.no_times}${r.detail.hasStart ? ' (end missing)' : r.detail.hasEnd ? ' (check-in missing)' : ''}`;
+    case 'not_cbre':      return `${READINESS_LABEL.not_cbre} — nothing to send to CBRE; mark transferred to clear it`;
+    default:              return r.reason;
   }
-  // 2. Pending NTE quote on our side
-  const pendingQuote = (wo.work_order_quotes || []).find(q =>
-    QUOTE_PENDING_STATES.includes(q.nte_status)
-  );
-  if (pendingQuote) {
-    return { ready: false, reason: 'pending_quote', detail: pendingQuote.nte_status };
-  }
-  // 3. Over budget
-  const actual = calculateActualTotal(wo);
-  const nte    = parseFloat(wo.nte) || 0;
-  if (actual > nte) {
-    return { ready: false, reason: 'over_nte', detail: { actual, nte } };
-  }
-  return { ready: true };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
   const isAuthorized = currentUser?.role === 'admin' || currentUser?.role === 'office_staff';
 
-  const [loading, setLoading]               = useState(true);
-  const [dailyEntries, setDailyEntries]     = useState([]);   // pending check-outs
-  const [completions, setCompletions]       = useState([]);   // pending completions
-  const [search, setSearch]                 = useState('');
-  const [dayWindow, setDayWindow]           = useState(30);   // 14 | 30 | 90 | 0 (=all)
+  const [loading, setLoading]                 = useState(true);
+  const [rows, setRows]                       = useState([]);      // work orders (completed, active)
+  const [approvals, setApprovals]             = useState(new Map()); // wo_id → latest cbre_complete request
+  const [search, setSearch]                   = useState('');
+  const [dayWindow, setDayWindow]             = useState(30);      // 14 | 30 | 90 | 0 (=all)
   const [showTransferred, setShowTransferred] = useState(false);
-  const [activeTab, setActiveTab]           = useState('daily'); // 'daily' | 'completion'
-  const [busy, setBusy]                     = useState(false);
+  const [busy, setBusy]                       = useState(false);
+  const [notice, setNotice]                   = useState(null);
+  const [manualFor, setManualFor]             = useState(null);    // WO for the Send-to-CBRE dialog
 
-  // ── Load ────────────────────────────────────────────────────────────────
-  useEffect(() => { if (isAuthorized) loadData(); /* eslint-disable-next-line */ }, [isAuthorized, dayWindow, showTransferred]);
+  useEffect(() => { if (isAuthorized) loadData(); /* eslint-disable-next-line */ }, [isAuthorized, showTransferred]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const cutoff = dayWindow > 0
-        ? new Date(Date.now() - dayWindow * 86400000).toISOString().slice(0, 10)
-        : null;
-
-      // ── Daily hours pending transfer ──
-      // Join in `acknowledged` + `is_locked` so we can filter to only WOs
-      // still visible on the dashboard (matches fetchWorkOrders filter).
-      let dailyQuery = supabase
-        .from('daily_hours_log')
-        .select(`
-          log_id, wo_id, user_id, work_date,
-          hours_regular, hours_overtime, miles, tech_material_cost, notes,
-          cbre_transferred, cbre_transferred_at, cbre_transferred_by,
-          user:users!daily_hours_log_user_id_fkey(first_name, last_name),
-          work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, nte, status, acknowledged, is_locked)
-        `)
-        .order('work_date', { ascending: false });
-
-      if (!showTransferred) dailyQuery = dailyQuery.eq('cbre_transferred', false);
-      if (cutoff)            dailyQuery = dailyQuery.gte('work_date', cutoff);
-
-      const { data: dailyData, error: dailyErr } = await dailyQuery;
-      if (dailyErr) throw dailyErr;
-
-      // ── Completions pending transfer ──
-      // Include `acknowledged` + `is_locked` for the dashboard-visibility filter below.
-      // Also pull all cost components + quotes so we can compute readiness for
-      // CBRE completion notification (see completionReadinessCheck below).
-      let completionQuery = supabase
+      let q = supabase
         .from('work_orders')
-        .select(`
-          wo_id, wo_number, building, work_order_description, comments, nte, status,
-          acknowledged, is_locked, cbre_status,
-          hours_regular, hours_overtime, miles,
-          material_cost, emf_equipment_cost, rental_cost, trailer_cost,
-          date_completed, acknowledged_at, customer_signature, customer_name,
-          completion_transferred, completion_transferred_at, completion_transferred_by,
-          lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name),
-          work_order_assignments(hours_regular, hours_overtime, miles),
-          daily_hours_log(hours_regular, hours_overtime, miles, tech_material_cost),
-          work_order_quotes(quote_id, nte_status, new_nte_amount)
-        `)
+        .select(COMPLETION_SELECT)
         .eq('status', 'completed')
-        .order('date_completed', { ascending: false });
+        .eq('acknowledged', false)
+        .eq('is_locked', false)
+        .order('date_completed', { ascending: false, nullsFirst: false });
+      if (!showTransferred) q = q.eq('completion_transferred', false).is('cbre_completion_submitted_at', null);
+      const { data, error } = await q;
+      if (error) throw error;
+      const active = (data || []).filter(isActiveWo);
 
-      if (!showTransferred) completionQuery = completionQuery.eq('completion_transferred', false);
-      if (cutoff)            completionQuery = completionQuery.gte('date_completed', cutoff);
-
-      const { data: completionData, error: completionErr } = await completionQuery;
-      if (completionErr) throw completionErr;
-
-      // ── Filter to only WOs still in the dashboard ──
-      // Mirrors the fetchWorkOrders() filter in dataFetchers.js — once a WO is
-      // acknowledged or locked, it leaves the dashboard and is treated as
-      // "done" from the office's perspective (already invoiced / archived).
-      // We don't want stale check-outs cluttering the CBRE queue for those.
-      const isActive = (wo) => wo && !wo.acknowledged && !wo.is_locked;
-
-      const activeDailyData = (dailyData || []).filter(e => isActive(e.work_order));
-
-      // For completions: also filter on CBRE-readiness. A completed WO is only
-      // "ready" to be reported to CBRE when (a) no pending quote at CBRE, (b)
-      // no pending NTE increase request internally, and (c) NTE covers actuals.
-      // Otherwise we'd be telling Office to update something that can't be
-      // updated yet anyway. We log filtered-out counts for transparency.
-      const activeCompletions = (completionData || []).filter(isActive);
-      const notReadyByReason = { cbre_status: 0, pending_quote: 0, over_nte: 0 };
-      const activeCompletionData = activeCompletions.filter(wo => {
-        const r = completionReadinessCheck(wo);
-        if (!r.ready) notReadyByReason[r.reason]++;
-        return r.ready;
-      });
-      if (activeCompletions.length !== activeCompletionData.length) {
-        console.log(
-          `[CBRE Data Entry] Hiding ${activeCompletions.length - activeCompletionData.length} completion(s) not yet ready for CBRE:`,
-          notReadyByReason
-        );
+      // Latest Complete request per WO (live → "queued", rejected → "rejected").
+      const ids = active.map((w) => w.wo_id);
+      const map = new Map();
+      if (ids.length) {
+        const { data: ar, error: aErr } = await supabase
+          .from('approval_requests')
+          .select('approval_id, wo_id, status, created_at, reject_reason')
+          .eq('kind', 'cbre_complete')
+          .in('wo_id', ids)
+          .order('created_at', { ascending: false });
+        if (aErr) throw aErr;
+        for (const a of ar || []) if (!map.has(a.wo_id)) map.set(a.wo_id, a);
       }
-
-      setDailyEntries(activeDailyData);
-      setCompletions(activeCompletionData);
+      setRows(active);
+      setApprovals(map);
     } catch (e) {
-      // Supabase errors have message/details/hint/code — stringify them properly
-      const errInfo = {
-        message: e?.message,
-        details: e?.details,
-        hint:    e?.hint,
-        code:    e?.code,
-        raw:     e,
-      };
-      console.error('Error loading CBRE data entry queue:', errInfo);
+      console.error('Error loading CBRE data entry queue:', e);
       alert('Error loading data:\n' + (e?.message || e?.details || e?.hint || JSON.stringify(e)));
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Group daily entries by WO ─────────────────────────────────────────
-  const filteredDaily = useMemo(() => {
+  // ── Derived ────────────────────────────────────────────────────────────
+  const items = useMemo(() => {
+    const cutoff = dayWindow > 0 ? Date.now() - dayWindow * 86400000 : 0;
     const s = search.trim().toLowerCase();
-    let arr = dailyEntries;
-    if (s) arr = arr.filter(e =>
-      e.work_order?.wo_number?.toLowerCase().includes(s) ||
-      e.work_order?.building?.toLowerCase().includes(s) ||
-      `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.toLowerCase().includes(s)
-    );
-    // Group by wo_id
-    const groups = new Map();
-    arr.forEach(entry => {
-      const k = entry.wo_id;
-      if (!groups.has(k)) groups.set(k, { wo: entry.work_order, entries: [] });
-      groups.get(k).entries.push(entry);
-    });
-    return Array.from(groups.values());
-  }, [dailyEntries, search]);
+    return rows
+      .filter((wo) => {
+        if (cutoff) {
+          // date_completed is often empty on completed WOs — fall back to the
+          // last check-out / first check-in / last change.
+          const basis = parseTs(wo.date_completed) || parseTs(wo.time_out) || parseTs(wo.time_in) || parseTs(wo.updated_at);
+          if (basis && basis.getTime() < cutoff) return false;
+        }
+        if (s && !(wo.wo_number?.toLowerCase().includes(s) || wo.building?.toLowerCase().includes(s)
+          || `${wo.lead_tech?.first_name || ''} ${wo.lead_tech?.last_name || ''}`.toLowerCase().includes(s))) return false;
+        return true;
+      })
+      .map((wo) => ({ wo, ...classify(wo, approvals.get(wo.wo_id)) }));
+  }, [rows, approvals, dayWindow, search]);
 
-  const filteredCompletions = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return completions;
-    return completions.filter(c =>
-      c.wo_number?.toLowerCase().includes(s) ||
-      c.building?.toLowerCase().includes(s)
-    );
-  }, [completions, search]);
-
-  const pendingDailyCount = dailyEntries.filter(e => !e.cbre_transferred).length;
-  const pendingCompletionCount = completions.filter(c => !c.completion_transferred).length;
+  const by = (b) => items.filter((i) => i.bucket === b);
+  const ready = by('ready'), queued = by('queued'), waiting = by('waiting'), rejected = by('rejected'), done = by('done');
 
   // ── Mutations ──────────────────────────────────────────────────────────
-  const markDailyTransferred = async (logIds, transferred = true) => {
-    if (!logIds.length) return;
+  const flash = (msg) => { setNotice(msg); setTimeout(() => setNotice(null), 6000); };
+
+  const queueOne = async (wo) => {
+    const { row, problems } = buildCompletionApprovalRow(wo, { createdBy: safeUuid(currentUser?.user_id) });
+    if (!row) { alert('Cannot build the CBRE form for this work order:\n' + problems.join('\n')); return; }
     setBusy(true);
     try {
-      const update = transferred
-        ? { cbre_transferred: true,  cbre_transferred_at: new Date().toISOString(), cbre_transferred_by: currentUser.user_id }
-        : { cbre_transferred: false, cbre_transferred_at: null, cbre_transferred_by: null };
-
-      const { error } = await supabase
-        .from('daily_hours_log')
-        .update(update)
-        .in('log_id', logIds);
-
-      if (error) throw error;
-
-      // Optimistic update
-      setDailyEntries(prev => prev.map(e =>
-        logIds.includes(e.log_id) ? { ...e, ...update } : e
-      ));
+      const { error } = await supabase.from('approval_requests').insert(row);
+      if (error) {
+        if (error.code === '23505') flash(`${wo.wo_number} is already queued in Approvals.`);
+        else throw error;
+      } else flash(`${wo.wo_number} queued — approve and submit it in the Approvals tab.`);
+      await loadData();
     } catch (e) {
       alert('Error: ' + e.message);
     } finally {
@@ -309,23 +179,31 @@ export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
     }
   };
 
-  const markCompletionTransferred = async (woId, transferred = true) => {
+  // Runs the producer once for everything ready (same rows the cron would make).
+  const queueAll = async () => {
+    setBusy(true);
+    try {
+      const res = await apiFetch('/api/cbre/queue-completions?limit=50', { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      flash(`Queued ${j.queued} completion(s)${j.skipped ? `, ${j.skipped} already queued` : ''}. Approve them in the Approvals tab.`);
+      await loadData();
+    } catch (e) {
+      alert('Queue failed: ' + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markTransferred = async (woId, transferred = true) => {
     setBusy(true);
     try {
       const update = transferred
         ? { completion_transferred: true,  completion_transferred_at: new Date().toISOString(), completion_transferred_by: currentUser.user_id }
-        : { completion_transferred: false, completion_transferred_at: null, completion_transferred_by: null };
-
-      const { error } = await supabase
-        .from('work_orders')
-        .update(update)
-        .eq('wo_id', woId);
-
+        : { completion_transferred: false, completion_transferred_at: null, completion_transferred_by: null, cbre_completion_submitted_at: null, cbre_completion_submitted_by: null };
+      const { error } = await supabase.from('work_orders').update(update).eq('wo_id', woId);
       if (error) throw error;
-
-      setCompletions(prev => prev.map(c =>
-        c.wo_id === woId ? { ...c, ...update } : c
-      ));
+      await loadData();
     } catch (e) {
       alert('Error: ' + e.message);
     } finally {
@@ -333,65 +211,29 @@ export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
     }
   };
 
-  // ── Copy summary helpers ───────────────────────────────────────────────
-  const buildDailySummary = (wo, entries) => {
-    const lines = [
-      `=== CBRE Daily Update — WO #${wo.wo_number} ===`,
-      `Building: ${wo.building || '—'}`,
-      ``,
-    ];
-    entries.forEach(e => {
-      const techName = `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim();
-      const { checkIn, checkOut } = extractCheckInOut(wo.comments, techName, e.work_date);
-      lines.push(`--- ${fmtDate(e.work_date)} | ${techName} ---`);
-      lines.push(`  First Check-In:  ${timeOnly(checkIn)  || '(not logged)'}`);
-      lines.push(`  Last  Check-Out: ${timeOnly(checkOut) || '(not logged)'}`);
-      lines.push(`  Regular Hours:  ${parseFloat(e.hours_regular) || 0}`);
-      lines.push(`  Overtime Hours: ${parseFloat(e.hours_overtime) || 0}`);
-      lines.push(`  Miles: ${parseFloat(e.miles) || 0}`);
-      if (parseFloat(e.tech_material_cost) > 0) {
-        lines.push(`  Tech Material: $${parseFloat(e.tech_material_cost).toFixed(2)}`);
-      }
-      if (e.notes && !e.notes.includes('[MIGRATED]') && !e.notes.includes('[Added by Admin]')) {
-        lines.push(`  Notes: ${e.notes}`);
-      }
-      lines.push('');
-    });
-    return lines.join('\n');
-  };
-
-  const buildCompletionSummary = (c) => {
+  const buildSummary = (c) => {
+    const { startAt, endAt } = completionWindow(c);
     return [
       `=== CBRE Work Order COMPLETED ===`,
       `WO #: ${c.wo_number}`,
-      `Building: ${c.building || '—'}`,
+      `Building: ${c.ups_building_code || c.building || '—'}`,
       `Lead Tech: ${c.lead_tech ? `${c.lead_tech.first_name} ${c.lead_tech.last_name}` : '—'}`,
+      `Start (first check-in): ${startAt ? fmtDateTime(startAt) : '(not logged)'}`,
+      `End (last check-out):   ${endAt ? fmtDateTime(endAt) : '(not logged)'}`,
       `Completion Date: ${fmtDate(c.date_completed)}`,
-      c.acknowledged_at ? `Acknowledged: ${fmtDateTime(c.acknowledged_at)}` : '',
       c.customer_signature ? `Customer Signed: YES (${c.customer_name || 'name on file'})` : `Customer Signed: NO`,
       ``,
       `--- Work Performed ---`,
       c.work_order_description || '(no description)',
-      ``,
-      c.comments ? `--- Tech Comments ---\n${c.comments}` : ''
     ].filter(Boolean).join('\n');
   };
 
   const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      // Quick visual feedback (no library needed)
-      const el = document.createElement('div');
-      el.textContent = '✓ Copied to clipboard';
-      el.style.cssText = 'position:fixed;top:20px;right:20px;background:#059669;color:white;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 1500);
-    } catch {
-      alert('Copy failed — please select the text manually.');
-    }
+    try { await navigator.clipboard.writeText(text); flash('✓ Copied to clipboard'); }
+    catch { alert('Copy failed — please select the text manually.'); }
   };
 
-  // ── Authorization gate ─────────────────────────────────────────────────
+  // ── Gates ──────────────────────────────────────────────────────────────
   if (!isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -402,344 +244,232 @@ export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
       </div>
     );
   }
-
-  // ── Loading ───────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin" />
-          <p className="text-slate-500 text-sm">Loading CBRE data entry queue...</p>
+          <p className="text-slate-500 text-sm">Loading CBRE completions...</p>
         </div>
       </div>
     );
   }
 
+  // ── Card ───────────────────────────────────────────────────────────────
+  const Card = ({ item }) => {
+    const { wo, bucket, approval, readiness } = item;
+    const { startAt, endAt, source } = completionWindow(wo);
+    const actual = completionActualTotal(wo);
+    const border = {
+      ready: 'border-emerald-500/25', queued: 'border-sky-500/25', waiting: 'border-amber-500/20',
+      rejected: 'border-rose-500/25', done: 'border-[#1e1e2e] opacity-60',
+    }[bucket];
+    return (
+      <div className={`bg-[#0d0d14] border rounded-xl overflow-hidden transition ${border}`}>
+        <div className="px-5 py-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button onClick={() => onSelectWorkOrder?.(wo)} title="Open work order"
+                  className="font-mono font-bold text-blue-400 hover:text-blue-300 hover:underline text-lg transition cursor-pointer">
+                  {wo.wo_number}
+                </button>
+                <span className="text-slate-400 text-sm">{wo.ups_building_code || wo.building || '—'}</span>
+                {bucket === 'ready' && <Pill tone="emerald">Ready — queues automatically</Pill>}
+                {bucket === 'queued' && <Pill tone="sky">In Approvals ({approval.status})</Pill>}
+                {bucket === 'waiting' && <Pill tone="amber">⏳ Waiting</Pill>}
+                {bucket === 'rejected' && <Pill tone="rose">Rejected in Approvals</Pill>}
+                {bucket === 'done' && <Pill tone="slate">✓ Reported</Pill>}
+                {wo.customer_signature && <Pill tone="blue">✍️ Signed</Pill>}
+              </div>
+              <div className="text-xs text-slate-500 mt-1.5 flex gap-3 flex-wrap">
+                <span>Completed: <span className="text-slate-300">{fmtDate(wo.date_completed)}</span></span>
+                {wo.lead_tech && <span>Lead: <span className="text-slate-300">{wo.lead_tech.first_name} {wo.lead_tech.last_name}</span></span>}
+                <span>Cost: <span className="text-slate-300">{money(actual)}</span> / NTE <span className="text-slate-300">{money(wo.nte)}</span></span>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => copyToClipboard(buildSummary(wo))}
+                className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                📋 Copy
+              </button>
+              {bucket === 'ready' && (
+                <button onClick={() => queueOne(wo)} disabled={busy}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                  📤 Queue now
+                </button>
+              )}
+              {(bucket === 'ready' || bucket === 'waiting' || bucket === 'rejected') && readiness?.reason !== 'not_cbre' && (
+                <button onClick={() => setManualFor(wo)} disabled={busy}
+                  className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                  title="Open the Send-to-CBRE dialog with editable start/end (queues a Complete request with your times)">
+                  ✏️ Edit & send
+                </button>
+              )}
+              {bucket === 'done' ? (
+                <button onClick={() => markTransferred(wo.wo_id, false)} disabled={busy}
+                  className="bg-[#1e1e2e] hover:bg-[#2d2d44] text-slate-400 hover:text-slate-200 border border-[#2d2d44] text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                  ↶ Untick
+                </button>
+              ) : (
+                <button onClick={() => markTransferred(wo.wo_id, true)} disabled={busy}
+                  title="Already reported in the portal by hand — remove from this list"
+                  className="bg-[#1e1e2e] hover:bg-[#2d2d44] text-slate-400 hover:text-slate-200 border border-[#2d2d44] text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                  ✓ Mark transferred
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Start / End — what goes into the CBRE form */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <TimeBox label="Start · first check-in" value={startAt ? fmtDateTime(startAt) : null} />
+            <TimeBox label={`End · ${source === 'check-in + completion date' ? 'completion date (no check-out)' : 'last check-out'}`} value={endAt ? fmtDateTime(endAt) : null} />
+          </div>
+
+          {(bucket === 'waiting' || bucket === 'rejected') && (
+            <div className="text-xs text-amber-300/90 bg-amber-500/5 border border-amber-500/15 rounded-lg px-3 py-2 mb-2">
+              {bucket === 'rejected'
+                ? <>Rejected {fmtDateTime(approval.created_at)}{approval.reject_reason ? ` — ${approval.reject_reason}` : ''}. Not re-queued automatically; fix and send manually, or mark transferred.</>
+                : reasonText(readiness)}
+            </div>
+          )}
+
+          {wo.work_order_description && (
+            <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-slate-400 line-clamp-2">
+              {wo.work_order_description}
+            </div>
+          )}
+          {bucket === 'done' && (
+            <div className="text-xs text-emerald-500 mt-2">
+              ✓ Reported {fmtDateTime(wo.cbre_completion_submitted_at || wo.completion_transferred_at)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const Section = ({ title, hint, list }) => list.length === 0 ? null : (
+    <div className="space-y-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wide">{title}</h2>
+        <span className="text-xs text-slate-500">{list.length}</span>
+        {hint && <span className="text-xs text-slate-600">· {hint}</span>}
+      </div>
+      {list.map((item) => <Card key={item.wo.wo_id} item={item} />)}
+    </div>
+  );
+
   // ─────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-              📤 CBRE Data Entry
-            </h1>
+            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">📤 CBRE Data Entry</h1>
             <p className="text-slate-500 text-sm mt-0.5">
-              Manual data transfer queue for the CBRE Web Portal
-              <span className="text-slate-600"> · only ready-to-report WOs</span>
+              Completed work orders to report to CBRE (“Complete A Work Order”, start/end from check-in/out)
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={dayWindow}
-              onChange={(e) => setDayWindow(parseInt(e.target.value))}
-              className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60"
-            >
+            <select value={dayWindow} onChange={(e) => setDayWindow(parseInt(e.target.value))}
+              className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60">
               <option value="14">Last 14 days</option>
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
               <option value="0">All time</option>
             </select>
             <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showTransferred}
-                onChange={(e) => setShowTransferred(e.target.checked)}
-                className="w-4 h-4 accent-blue-500"
-              />
-              Show transferred
+              <input type="checkbox" checked={showTransferred} onChange={(e) => setShowTransferred(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+              Show reported
             </label>
-            <button
-              onClick={loadData}
-              className="bg-[#1e1e2e] border border-[#2d2d44] hover:bg-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm transition"
-            >
+            <button onClick={loadData}
+              className="bg-[#1e1e2e] border border-[#2d2d44] hover:bg-[#2d2d44] text-slate-300 px-3 py-2 rounded-lg text-sm transition">
               🔄 Refresh
+            </button>
+            <button onClick={queueAll} disabled={busy || ready.length === 0}
+              title="Queue every ready completion into the Approvals tab now (the cron does this every 15 min)"
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-3 py-2 rounded-lg text-sm font-semibold transition">
+              📤 Queue all ready ({ready.length})
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-[#0a0a0f] border border-[#2d2d44] rounded-lg p-1 mt-4 w-fit">
-          <button
-            onClick={() => setActiveTab('daily')}
-            className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition ${
-              activeTab === 'daily' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            🕒 Daily Check-Outs
-            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-              activeTab === 'daily' ? 'bg-blue-500/30 text-blue-300' : 'bg-[#1e1e2e] text-slate-500'
-            }`}>
-              {pendingDailyCount}
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('completion')}
-            className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition ${
-              activeTab === 'completion' ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            ✅ Completions
-            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-              activeTab === 'completion' ? 'bg-emerald-500/30 text-emerald-300' : 'bg-[#1e1e2e] text-slate-500'
-            }`}>
-              {pendingCompletionCount}
-            </span>
-          </button>
+        {/* Counters */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
+          <Stat label="Ready" n={ready.length} tone="emerald" hint="queued automatically" />
+          <Stat label="In Approvals" n={queued.length} tone="sky" hint="approve & submit there" />
+          <Stat label="Waiting" n={waiting.length} tone="amber" hint="blocked at CBRE / NTE / times" />
+          <Stat label="Rejected" n={rejected.length} tone="rose" hint="needs a manual decision" />
         </div>
 
-        {/* Search */}
         <div className="mt-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search WO#, building, or tech..."
-            className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600 px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60"
-          />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search WO#, building, or lead tech..."
+            className="w-full bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 placeholder-slate-600 px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500/60" />
         </div>
+        {notice && <div className="mt-3 text-sm text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{notice}</div>}
       </div>
 
-      {/* ─── DAILY CHECK-OUTS TAB ─── */}
-      {activeTab === 'daily' && (
-        <div className="space-y-3">
-          {filteredDaily.length === 0 ? (
-            <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-12 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-slate-300 font-semibold">All daily check-outs transferred!</p>
-              <p className="text-slate-500 text-sm mt-1">
-                {showTransferred ? 'No entries match your filter.' : 'Office is up to date with CBRE Portal.'}
-              </p>
-            </div>
-          ) : (
-            filteredDaily.map(({ wo, entries }) => {
-              const allLogIds = entries.filter(e => !e.cbre_transferred).map(e => e.log_id);
-              const allTransferred = entries.every(e => e.cbre_transferred);
-
-              return (
-                <div key={wo.wo_id} className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl overflow-hidden">
-                  {/* WO header */}
-                  <div className="bg-[#1e1e2e]/40 border-b border-[#2d2d44] px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => onSelectWorkOrder?.(wo)}
-                        className="font-mono font-bold text-blue-400 hover:text-blue-300 hover:underline text-lg transition cursor-pointer"
-                        title="Open work order"
-                      >
-                        {wo.wo_number}
-                      </button>
-                      <span className="text-slate-400 text-sm">{wo.building || '—'}</span>
-                      {!allTransferred && (
-                        <span className="bg-orange-500/15 text-orange-400 border border-orange-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
-                          {entries.filter(e => !e.cbre_transferred).length} pending
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => copyToClipboard(buildDailySummary(wo, entries.filter(e => !e.cbre_transferred)))}
-                        disabled={allLogIds.length === 0}
-                        className="bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-40 disabled:cursor-not-allowed text-blue-400 border border-blue-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                      >
-                        📋 Copy all pending
-                      </button>
-                      {allLogIds.length > 0 && (
-                        <button
-                          onClick={() => markDailyTransferred(allLogIds, true)}
-                          disabled={busy}
-                          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                        >
-                          ✓ Mark all transferred ({allLogIds.length})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Entries list */}
-                  <div className="divide-y divide-[#1e1e2e]">
-                    {entries.map(entry => {
-                      const techName = `${entry.user?.first_name || ''} ${entry.user?.last_name || ''}`.trim();
-                      const { checkIn, checkOut } = extractCheckInOut(wo.comments, techName, entry.work_date);
-
-                      const inT  = timeOnly(checkIn);
-                      const outT = timeOnly(checkOut);
-
-                      return (
-                        <div
-                          key={entry.log_id}
-                          className={`px-5 py-3 flex items-center justify-between gap-3 flex-wrap transition ${
-                            entry.cbre_transferred ? 'opacity-60' : 'hover:bg-[#1e1e2e]/30'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            {/* PRIMARY ROW — name · date · check-in → check-out */}
-                            <div className="flex items-center gap-3 flex-wrap text-sm">
-                              <span className="font-semibold text-slate-200">{techName || 'Unknown'}</span>
-                              <span className="text-slate-500">·</span>
-                              <span className="text-slate-400">{fmtDate(entry.work_date)}</span>
-                              <span className="text-slate-500">·</span>
-                              {(inT || outT) ? (
-                                <span className="font-mono text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">
-                                  <span className={inT ? '' : 'text-slate-600 italic'}>
-                                    {inT || 'no IN'}
-                                  </span>
-                                  <span className="text-slate-500 mx-1.5">→</span>
-                                  <span className={outT ? '' : 'text-slate-600 italic'}>
-                                    {outT || 'no OUT'}
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="text-xs text-slate-600 italic">no check-in/out logged</span>
-                              )}
-                            </div>
-                            {/* SECONDARY ROW — hours + miles (for cross-reference) */}
-                            <div className="text-xs text-slate-500 mt-1 flex gap-3 flex-wrap">
-                              <span className="font-mono">
-                                <span className="text-emerald-500/80">{(parseFloat(entry.hours_regular) || 0).toFixed(1)} RT</span>
-                                {parseFloat(entry.hours_overtime) > 0 && (
-                                  <span className="text-orange-500/80 ml-2">{(parseFloat(entry.hours_overtime) || 0).toFixed(1)} OT</span>
-                                )}
-                                {parseFloat(entry.miles) > 0 && (
-                                  <span className="text-slate-500 ml-2">{(parseFloat(entry.miles) || 0).toFixed(1)} mi</span>
-                                )}
-                              </span>
-                            </div>
-                            {entry.cbre_transferred && entry.cbre_transferred_at && (
-                              <div className="text-xs text-emerald-500 mt-1">
-                                ✓ Transferred {fmtDateTime(entry.cbre_transferred_at)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 flex-shrink-0">
-                            {entry.cbre_transferred ? (
-                              <button
-                                onClick={() => markDailyTransferred([entry.log_id], false)}
-                                disabled={busy}
-                                className="bg-[#1e1e2e] hover:bg-[#2d2d44] text-slate-400 hover:text-slate-200 border border-[#2d2d44] text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                                title="Undo transfer (admin/office only)"
-                              >
-                                ↶ Untick
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => markDailyTransferred([entry.log_id], true)}
-                                disabled={busy}
-                                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                              >
-                                ✓ Mark transferred
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
+      {items.length === 0 ? (
+        <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-12 text-center">
+          <div className="text-4xl mb-3">🎉</div>
+          <p className="text-slate-300 font-semibold">Nothing to report</p>
+          <p className="text-slate-500 text-sm mt-1">{showTransferred ? 'No entries match your filter.' : 'CBRE has been told about every completion.'}</p>
         </div>
+      ) : (
+        <>
+          <Section title="✅ Ready" hint="the producer queues these into Approvals every 15 min" list={ready} />
+          <Section title="📨 In Approvals" hint="approve, open the prefilled form, submit, Mark submitted" list={queued} />
+          <Section title="🚫 Rejected" list={rejected} />
+          <Section title="⏳ Waiting" hint="becomes ready by itself once the blocker clears" list={waiting} />
+          <Section title="✓ Reported" list={done} />
+        </>
       )}
 
-      {/* ─── COMPLETIONS TAB ─── */}
-      {activeTab === 'completion' && (
-        <div className="space-y-3">
-          {filteredCompletions.length === 0 ? (
-            <div className="bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-12 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-slate-300 font-semibold">All completions transferred!</p>
-              <p className="text-slate-500 text-sm mt-1">
-                {showTransferred ? 'No entries match your filter.' : 'CBRE has been notified of all completions.'}
-              </p>
-            </div>
-          ) : (
-            filteredCompletions.map(c => (
-              <div
-                key={c.wo_id}
-                className={`bg-[#0d0d14] border rounded-xl overflow-hidden transition ${
-                  c.completion_transferred ? 'border-[#1e1e2e] opacity-60' : 'border-emerald-500/20'
-                }`}
-              >
-                <div className="px-5 py-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                    <div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                          onClick={() => onSelectWorkOrder?.(c)}
-                          className="font-mono font-bold text-blue-400 hover:text-blue-300 hover:underline text-lg transition cursor-pointer"
-                          title="Open work order"
-                        >
-                          {c.wo_number}
-                        </button>
-                        <span className="text-slate-400 text-sm">{c.building || '—'}</span>
-                        {!c.completion_transferred && (
-                          <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
-                            Pending CBRE notification
-                          </span>
-                        )}
-                        {c.customer_signature && (
-                          <span className="bg-blue-500/15 text-blue-400 border border-blue-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
-                            ✍️ Signed
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1.5 flex gap-3 flex-wrap">
-                        <span>Completed: <span className="text-slate-300">{fmtDate(c.date_completed)}</span></span>
-                        {c.lead_tech && (
-                          <span>Lead: <span className="text-slate-300">{c.lead_tech.first_name} {c.lead_tech.last_name}</span></span>
-                        )}
-                        {c.acknowledged_at && (
-                          <span>Ack'd: <span className="text-slate-300">{fmtDateTime(c.acknowledged_at)}</span></span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => copyToClipboard(buildCompletionSummary(c))}
-                        className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                      >
-                        📋 Copy summary
-                      </button>
-                      {c.completion_transferred ? (
-                        <button
-                          onClick={() => markCompletionTransferred(c.wo_id, false)}
-                          disabled={busy}
-                          className="bg-[#1e1e2e] hover:bg-[#2d2d44] text-slate-400 hover:text-slate-200 border border-[#2d2d44] text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                        >
-                          ↶ Untick
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => markCompletionTransferred(c.wo_id, true)}
-                          disabled={busy}
-                          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-                        >
-                          ✓ Mark transferred
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Description preview */}
-                  {c.work_order_description && (
-                    <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg p-3 text-sm text-slate-400 line-clamp-3 mb-2">
-                      {c.work_order_description}
-                    </div>
-                  )}
-
-                  {/* Transfer info */}
-                  {c.completion_transferred && c.completion_transferred_at && (
-                    <div className="text-xs text-emerald-500">
-                      ✓ Transferred {fmtDateTime(c.completion_transferred_at)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+      {manualFor && (
+        <SendToCbreModal
+          workOrder={manualFor}
+          supabase={supabase}
+          currentUser={currentUser}
+          onClose={() => { setManualFor(null); loadData(); }}
+        />
       )}
+    </div>
+  );
+}
+
+function Pill({ tone, children }) {
+  const cls = {
+    emerald: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    sky:     'bg-sky-500/15 text-sky-300 border-sky-500/30',
+    amber:   'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    rose:    'bg-rose-500/15 text-rose-300 border-rose-500/30',
+    blue:    'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    slate:   'bg-slate-500/15 text-slate-400 border-slate-500/30',
+  }[tone] || '';
+  return <span className={`border text-xs font-bold px-2 py-0.5 rounded-full ${cls}`}>{children}</span>;
+}
+
+function Stat({ label, n, tone, hint }) {
+  const color = { emerald: 'text-emerald-400', sky: 'text-sky-300', amber: 'text-amber-300', rose: 'text-rose-300' }[tone];
+  return (
+    <div className="bg-[#0a0a0f] border border-[#1e1e2e] rounded-lg px-3 py-2">
+      <div className="flex items-baseline gap-2">
+        <span className={`text-xl font-bold ${color}`}>{n}</span>
+        <span className="text-sm text-slate-300">{label}</span>
+      </div>
+      <div className="text-[11px] text-slate-600">{hint}</div>
+    </div>
+  );
+}
+
+function TimeBox({ label, value }) {
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${value ? 'bg-[#0a0a0f] border-[#1e1e2e]' : 'bg-rose-500/5 border-rose-500/20'}`}>
+      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`text-sm font-semibold ${value ? 'text-slate-200' : 'text-rose-300'}`}>{value || 'not logged'}</div>
     </div>
   );
 }

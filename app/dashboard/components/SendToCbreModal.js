@@ -19,7 +19,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { buildCbrePayload, ACTIONS, to12h } from '@/lib/cbreVendorForm';
+import { buildCbrePayload, ACTIONS, to12h, parseTs, tzParts, tzDate } from '@/lib/cbreVendorForm';
 import { billableComments } from '@/lib/commentsSplit';
 
 // Mirrors the producer defaults (app/api/cbre/*). Override with NEXT_PUBLIC_* if
@@ -50,23 +50,26 @@ for (let h = 1; h <= 12; h++) for (const m of ['00', '15', '30', '45']) TIMES.pu
 
 const pad = (n) => String(n).padStart(2, '0');
 
-// timestamp → { ymd:'YYYY-MM-DD', time:'9:15', ampm:'AM' } in LOCAL time.
+// DB timestamp → { ymd:'YYYY-MM-DD', time:'9:15', ampm:'AM' } in Eastern time.
+// time_in/time_out are naive UTC stamps — parseTs() knows that; plain
+// `new Date(ts)` showed them 4–5 h late (see lib/cbreVendorForm.js).
 function tsToParts(ts) {
-  if (!ts) return { ymd: '', time: '', ampm: 'AM' };
-  const dt = new Date(ts);
-  if (isNaN(dt.getTime())) return { ymd: '', time: '', ampm: 'AM' };
+  const dt = parseTs(ts);
+  const p = dt ? tzParts(dt) : null;
+  if (!p) return { ymd: '', time: '', ampm: 'AM' };
   const t = to12h(dt) || { time: '', ampm: 'AM' };
-  return { ymd: `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`, time: t.time, ampm: t.ampm };
+  return { ymd: `${p.y}-${pad(p.m)}-${pad(p.d)}`, time: t.time, ampm: t.ampm };
 }
 
-// picked parts → a LOCAL Date (built from components, so no timezone parse shift).
+// picked parts → the instant an Eastern clock shows them (independent of the
+// browser's own time zone).
 function partsToDate(ymd, time, ampm) {
   if (!ymd) return null;
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y || !m || !d) return null;
   let hh = 9, mm = 0;
   if (time) { const [h, mn] = time.split(':').map(Number); hh = (h % 12) + (ampm === 'PM' ? 12 : 0); mm = mn || 0; }
-  return new Date(y, m - 1, d, hh, mm, 0, 0);
+  return tzDate(y, m, d, hh, mm);
 }
 
 // Module-level so its identity is stable across re-renders — a nested
@@ -112,9 +115,8 @@ const DEFAULT_START_HOUR = 8;            // 8:00 AM
 
 function defaultWindow(wo) {
   const base = wo?.date_completed || wo?.time_in || wo?.date_entered;
-  const d = base ? new Date(base) : new Date();
-  const day = isNaN(d.getTime()) ? new Date() : d;
-  const ymd = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+  const p = tzParts(parseTs(base) || new Date());
+  const ymd = `${p.y}-${pad(p.m)}-${pad(p.d)}`;
 
   // Logged regular hours win; otherwise the 2 RT default. Snap to the form's
   // 15-minute grid and keep the window inside one day.
@@ -303,8 +305,8 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
               })()}
               {(wo.time_in || wo.time_out) && (
                 <div className="text-slate-400">
-                  <span className="text-slate-500">Check-in:</span> {wo.time_in ? new Date(wo.time_in).toLocaleString() : '—'}
-                  {'  ·  '}<span className="text-slate-500">out:</span> {wo.time_out ? new Date(wo.time_out).toLocaleString() : '—'}
+                  <span className="text-slate-500">Check-in:</span> {wo.time_in ? parseTs(wo.time_in).toLocaleString('en-US', { timeZone: 'America/New_York' }) : '—'}
+                  {'  ·  '}<span className="text-slate-500">out:</span> {wo.time_out ? parseTs(wo.time_out).toLocaleString('en-US', { timeZone: 'America/New_York' }) : '—'}
                 </div>
               )}
               {wo.nte != null && wo.nte !== '' && (

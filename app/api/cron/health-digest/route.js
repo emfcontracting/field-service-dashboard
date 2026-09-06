@@ -32,6 +32,7 @@ const EXPECTED = {
   'email-sync':                     30 * 60 * 1000,
   'cbre/queue-acknowledgements':    15 * 60 * 1000,
   'cbre/queue-nte-requests':        15 * 60 * 1000,
+  'cbre/queue-completions':         15 * 60 * 1000,
   'cbre/sync-vendor-confirmations': 15 * 60 * 1000,
   'invoice-payments/cron':          60 * 60 * 1000,
   'quickbooks/pull-payments':       24 * H,

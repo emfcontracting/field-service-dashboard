@@ -320,12 +320,17 @@ export default function ApprovalsView({ userInfo }) {
         if (qErr) setError(`Marked sent, but the quote status update failed: ${qErr.message}`);
       }
 
-      // Completions: stamp so it is recorded as reported to CBRE.
+      // Completions: stamp so it is recorded as reported to CBRE, and close the
+      // CBRE Data Entry item (completion_transferred) — that view and the
+      // queue-completions producer both key on these two columns.
       const compWoIds = affected.filter((r) => r.kind === 'cbre_complete' && r.wo_id).map((r) => r.wo_id);
       if (compWoIds.length) {
         const { error: compErr } = await supabase
           .from('work_orders')
-          .update({ cbre_completion_submitted_at: now, cbre_completion_submitted_by: userInfo?.user_id ?? null })
+          .update({
+            cbre_completion_submitted_at: now, cbre_completion_submitted_by: userInfo?.user_id ?? null,
+            completion_transferred: true, completion_transferred_at: now, completion_transferred_by: userInfo?.user_id ?? null,
+          })
           .in('wo_id', compWoIds)
           .is('cbre_completion_submitted_at', null);
         if (compErr) setError(`Marked sent, but the completion stamp failed: ${compErr.message}`);

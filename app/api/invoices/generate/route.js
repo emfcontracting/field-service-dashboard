@@ -2,17 +2,11 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
-import { getEffectiveAdminHours } from '@/lib/clientType';
+import { calcBillable, buildActualLineItems, round2 } from '@/lib/billing';
 import { billableComments } from '@/lib/commentsSplit';
 import { requireStaff } from '@/lib/serverAuth';
 
-// Rate constants - MUST match CostSummarySection / Invoicing page logic
-const RT_RATE       = 64;
-const OT_RATE       = 96;
-const MILEAGE_RATE  = 1.00;
-const MARKUP        = 1.25;          // 25% markup on materials/equipment/rental/trailer
-const ADMIN_HOURS   = 2;             // DEFAULT admin hours (UPS); CBRE defaults to 0 — see getEffectiveAdminHours
-const ADMIN_FEE     = ADMIN_HOURS * RT_RATE; // default admin fee (UPS)
+// Rates and the cost formula live in lib/billing.js.
 
 
 export async function POST(request) {
@@ -43,11 +37,6 @@ export async function POST(request) {
         { status: 404 }
       );
     }
-
-    // Client-type aware admin hours (UPS default 2h, CBRE default 0h,
-    // per-WO override via work_orders.include_admin_hours — lib/clientType.js)
-    const effectiveAdminHours = getEffectiveAdminHours(workOrder);
-    const effectiveAdminFee   = effectiveAdminHours * RT_RATE;
 
     // Check if work order is completed and acknowledged
     if (workOrder.status !== 'completed') {
@@ -83,82 +72,24 @@ export async function POST(request) {
     const fixedQuote = await getFixedQuoteForInvoice(supabase, wo_id);
 
     // ============================================================
-    // COMBINED hours calculation: legacy + team assignments + daily_hours_log
-    // (matches /app/invoices/page.js generateInvoicePreview EXACTLY)
+    // Cost calculation — lib/billing.js (one formula for preview, generator,
+    // table, CBRE data entry and exports). Hours = legacy WO fields + team
+    // assignments + daily_hours_log; admin hours per client policy.
     // ============================================================
-    const primaryRT    = parseFloat(workOrder.hours_regular)  || 0;
-    const primaryOT    = parseFloat(workOrder.hours_overtime) || 0;
-    const primaryMiles = parseFloat(workOrder.miles)          || 0;
-
-    // Legacy team member assignments
-    const { data: teamAssignments } = await supabase
-      .from('work_order_assignments')
-      .select('hours_regular, hours_overtime, miles')
-      .eq('wo_id', wo_id);
-
-    let teamRT = 0, teamOT = 0, teamMiles = 0;
-    if (teamAssignments) {
-      teamAssignments.forEach(m => {
-        teamRT    += parseFloat(m.hours_regular)  || 0;
-        teamOT    += parseFloat(m.hours_overtime) || 0;
-        teamMiles += parseFloat(m.miles)          || 0;
-      });
-    }
-
-    // Daily hours logs (this is where MOST hours live now)
-    const { data: dailyLogs } = await supabase
-      .from('daily_hours_log')
-      .select('hours_regular, hours_overtime, miles, tech_material_cost')
-      .eq('wo_id', wo_id);
-
-    let dailyRT = 0, dailyOT = 0, dailyMiles = 0, dailyTechMaterial = 0;
-    if (dailyLogs) {
-      dailyLogs.forEach(l => {
-        dailyRT           += parseFloat(l.hours_regular)      || 0;
-        dailyOT           += parseFloat(l.hours_overtime)     || 0;
-        dailyMiles        += parseFloat(l.miles)              || 0;
-        dailyTechMaterial += parseFloat(l.tech_material_cost) || 0;
-      });
-    }
-
-    // COMBINED totals = primary + team + daily
-    const totalRT    = primaryRT    + teamRT    + dailyRT;
-    const totalOT    = primaryOT    + teamOT    + dailyOT;
-    const totalMiles = primaryMiles + teamMiles + dailyMiles;
-
-    // Material totals (EMF + Tech) with 25% markup
-    const emfMaterialBase   = parseFloat(workOrder.material_cost)      || 0;
-    const techMaterialBase  = dailyTechMaterial;
-    const totalMaterialBase = emfMaterialBase + techMaterialBase;
-    const materialsTotal    = totalMaterialBase * MARKUP;
-
-    // Other costs with 25% markup
-    const equipmentBase  = parseFloat(workOrder.emf_equipment_cost) || 0;
-    const equipmentTotal = equipmentBase * MARKUP;
-    const trailerBase    = parseFloat(workOrder.trailer_cost)       || 0;
-    const trailerTotal   = trailerBase * MARKUP;
-    const rentalBase     = parseFloat(workOrder.rental_cost)        || 0;
-    const rentalTotal    = rentalBase * MARKUP;
-
-    // Mileage (no markup)
-    const mileageCost = totalMiles * MILEAGE_RATE;
-
-    // Labor totals
-    const laborRT       = totalRT * RT_RATE;
-    const laborOT       = totalOT * OT_RATE;
-    const laborAdmin    = effectiveAdminFee;
-    const laborSubtotal = laborRT + laborOT + laborAdmin;
+    const [{ data: teamAssignments }, { data: dailyLogs }] = await Promise.all([
+      supabase.from('work_order_assignments').select('hours_regular, hours_overtime, miles').eq('wo_id', wo_id),
+      supabase.from('daily_hours_log').select('hours_regular, hours_overtime, miles, tech_material_cost').eq('wo_id', wo_id),
+    ]);
+    const calc = calcBillable(workOrder, { assignments: teamAssignments || [], dailyLogs: dailyLogs || [] });
 
     // ── Billing mode: FIXED quote vs ACTUAL (T&M) ──
     // Fixed  -> line items come straight from the quote and sum to new_nte_amount.
-    // Actual -> the computed cost lines above.
+    // Actual -> the computed cost lines.
     const fixedLineItems = fixedQuote ? buildFixedQuoteLineItems(fixedQuote) : null;
-
-    const actualSubtotal = laborSubtotal + mileageCost
-                         + materialsTotal + equipmentTotal + trailerTotal + rentalTotal;
+    const actualLineItems = buildActualLineItems(calc);
     const subtotal = fixedLineItems
-      ? Math.round(fixedLineItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0) * 100) / 100
-      : actualSubtotal;
+      ? round2(fixedLineItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0))
+      : round2(calc.subtotal);
     const tax      = 0;
     const total    = subtotal + tax;
 
@@ -234,96 +165,9 @@ export async function POST(request) {
         });
       });
     } else {
-    if (totalRT > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Labor – Regular Time (${totalRT} hrs @ $${RT_RATE}/hr)`,
-        quantity: totalRT,
-        unit_price: RT_RATE,
-        amount: laborRT,
-        line_type: 'labor'
-      });
+      // ACTUAL (T&M): the computed cost lines, same wording as the preview.
+      actualLineItems.forEach(it => lineItems.push({ invoice_id: invoice.invoice_id, ...it }));
     }
-
-    if (totalOT > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Labor – Overtime (${totalOT} hrs @ $${OT_RATE}/hr)`,
-        quantity: totalOT,
-        unit_price: OT_RATE,
-        amount: laborOT,
-        line_type: 'labor'
-      });
-    }
-
-    // Admin hours — client-type aware (skipped entirely when 0, e.g. CBRE default)
-    if (effectiveAdminHours > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: 'Administrative Hours (' + effectiveAdminHours + ' hrs @ ' + "$" + RT_RATE + '/hr)',
-        quantity: effectiveAdminHours,
-        unit_price: RT_RATE,
-        amount: effectiveAdminFee,
-        line_type: 'labor'
-      });
-    }
-
-    if (totalMiles > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: `Mileage (${totalMiles} miles @ $${MILEAGE_RATE.toFixed(2)}/mile)`,
-        quantity: totalMiles,
-        unit_price: MILEAGE_RATE,
-        amount: mileageCost,
-        line_type: 'mileage'
-      });
-    }
-
-    if (materialsTotal > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: 'Materials',
-        quantity: 1,
-        unit_price: materialsTotal,
-        amount: materialsTotal,
-        line_type: 'material'
-      });
-    }
-
-    if (equipmentTotal > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: 'Equipment',
-        quantity: 1,
-        unit_price: equipmentTotal,
-        amount: equipmentTotal,
-        line_type: 'equipment'
-      });
-    }
-
-    if (trailerTotal > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: 'Trailer',
-        quantity: 1,
-        unit_price: trailerTotal,
-        amount: trailerTotal,
-        line_type: 'equipment'
-      });
-    }
-
-    if (rentalTotal > 0) {
-      lineItems.push({
-        invoice_id: invoice.invoice_id,
-        description: 'Rental',
-        quantity: 1,
-        unit_price: rentalTotal,
-        amount: rentalTotal,
-        line_type: 'rental'
-      });
-    }
-
-    } // end actual-cost line items (skipped for fixed-price quotes)
 
     // Work Performed Description (always last)
     lineItems.push({

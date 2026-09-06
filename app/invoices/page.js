@@ -12,6 +12,7 @@ import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 import { apiFetch } from '@/lib/apiClient';
 import { fetchAll } from '@/lib/fetchAll';
+import { calcBillable, calcTotal, buildActualLineItems } from '@/lib/billing';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -288,7 +289,7 @@ export default function InvoicingPage() {
         ids.length ? fetchAll(() => supabase.from('work_order_assignments')
           .select('wo_id, hours_regular, hours_overtime, miles').in('wo_id', ids).order('assignment_id')) : [],
         ids.length ? fetchAll(() => supabase.from('daily_hours_log')
-          .select('wo_id, hours_regular, hours_overtime, miles').in('wo_id', ids).order('log_id')) : [],
+          .select('wo_id, hours_regular, hours_overtime, miles, tech_material_cost').in('wo_id', ids).order('log_id')) : [],
       ]);
       teams.forEach(m => { (teamByWo[m.wo_id] ||= []).push(m); });
       daily.forEach(l => { (dailyByWo[l.wo_id] ||= []).push(l); });
@@ -298,25 +299,10 @@ export default function InvoicingPage() {
 
     for (const wo of workOrders) {
       try {
-        const pRT = parseFloat(wo.hours_regular) || 0;
-        const pOT = parseFloat(wo.hours_overtime) || 0;
-        const pMi = parseFloat(wo.miles) || 0;
-
-        let tRT = 0, tOT = 0, tMi = 0;
-        (teamByWo[wo.wo_id] || []).forEach(m => { tRT += parseFloat(m.hours_regular)||0; tOT += parseFloat(m.hours_overtime)||0; tMi += parseFloat(m.miles)||0; });
-
-        let dRT = 0, dOT = 0, dMi = 0;
-        (dailyByWo[wo.wo_id] || []).forEach(l => { dRT += parseFloat(l.hours_regular)||0; dOT += parseFloat(l.hours_overtime)||0; dMi += parseFloat(l.miles)||0; });
-
-        const totalRT = pRT+tRT+dRT, totalOT = pOT+tOT+dOT, totalMi = pMi+tMi+dMi;
-        totals[wo.wo_id] =
-          (totalRT*64) + (totalOT*96) + 128 +
-          (totalMi*1) +
-          ((parseFloat(wo.material_cost)||0)*1.25) +
-          ((parseFloat(wo.emf_equipment_cost)||0)*1.25) +
-          ((parseFloat(wo.trailer_cost)||0)*1.25) +
-          ((parseFloat(wo.rental_cost)||0)*1.25);
-      } catch { totals[wo.wo_id] = 128; }
+        // lib/billing: hours from WO + team + daily log, tech material included,
+        // admin hours per client policy (CBRE 0 unless include_admin_hours).
+        totals[wo.wo_id] = calcTotal(wo, { assignments: teamByWo[wo.wo_id] || [], dailyLogs: dailyByWo[wo.wo_id] || [] });
+      } catch { totals[wo.wo_id] = 0; }
     }
     setWoTotals(totals);
   };
@@ -386,33 +372,18 @@ export default function InvoicingPage() {
     if (!wo) return;
     setGeneratingInvoice(true);
     try {
-      const pRT = parseFloat(wo.hours_regular)||0, pOT = parseFloat(wo.hours_overtime)||0, pMi = parseFloat(wo.miles)||0;
-      const { data: teams } = await supabase.from('work_order_assignments')
-        .select('*, user:users(first_name, last_name)').eq('wo_id', woId);
-      let tRT=0, tOT=0, tMi=0;
-      teams?.forEach(m => { tRT+=parseFloat(m.hours_regular)||0; tOT+=parseFloat(m.hours_overtime)||0; tMi+=parseFloat(m.miles)||0; });
-      const { data: daily } = await supabase.from('daily_hours_log').select('*').eq('wo_id', woId);
-      let dRT=0, dOT=0, dMi=0, dTechMat=0;
-      daily?.forEach(l => { dRT+=parseFloat(l.hours_regular)||0; dOT+=parseFloat(l.hours_overtime)||0; dMi+=parseFloat(l.miles)||0; dTechMat+=parseFloat(l.tech_material_cost)||0; });
-      const totalRT=pRT+tRT+dRT, totalOT=pOT+tOT+dOT, totalMi=pMi+tMi+dMi;
+      const [{ data: teams }, { data: daily }] = await Promise.all([
+        supabase.from('work_order_assignments').select('hours_regular, hours_overtime, miles').eq('wo_id', woId),
+        supabase.from('daily_hours_log').select('hours_regular, hours_overtime, miles, tech_material_cost').eq('wo_id', woId),
+      ]);
 
       // Billing mode: does a fixed-price quote drive this invoice?
       const fixedQuotePrev = await getFixedQuoteForInvoice(supabase, woId);
 
-      const items = [];
-      if (fixedQuotePrev) {
-        buildFixedQuoteLineItems(fixedQuotePrev).forEach(it => items.push({ ...it, editable:true }));
-      } else {
-      if (totalRT>0) items.push({ description:`Labor – Regular Time (${totalRT} hrs @ $64/hr)`, quantity:totalRT, unit_price:64, amount:totalRT*64, line_type:'labor', editable:true });
-      if (totalOT>0) items.push({ description:`Labor – Overtime (${totalOT} hrs @ $96/hr)`, quantity:totalOT, unit_price:96, amount:totalOT*96, line_type:'labor', editable:true });
-      items.push({ description:'Administrative Hours (2 hrs @ $64/hr)', quantity:2, unit_price:64, amount:128, line_type:'labor', editable:true });
-      if (totalMi>0) items.push({ description:`Mileage (${totalMi} miles @ $1.00/mile)`, quantity:totalMi, unit_price:1, amount:totalMi, line_type:'mileage', editable:true });
-      const mat = (parseFloat(wo.material_cost)||0) + dTechMat;       if (mat>0)  items.push({ description:'Materials',  quantity:1, unit_price:mat*1.25,  amount:mat*1.25,  line_type:'material',  editable:true });
-      const eqp = parseFloat(wo.emf_equipment_cost)||0;  if (eqp>0)  items.push({ description:'Equipment',  quantity:1, unit_price:eqp*1.25,  amount:eqp*1.25,  line_type:'equipment', editable:true });
-      const trl = parseFloat(wo.trailer_cost)||0;        if (trl>0)  items.push({ description:'Trailer',    quantity:1, unit_price:trl*1.25,  amount:trl*1.25,  line_type:'equipment', editable:true });
-      const ren = parseFloat(wo.rental_cost)||0;         if (ren>0)  items.push({ description:'Rental',     quantity:1, unit_price:ren*1.25,  amount:ren*1.25,  line_type:'rental',    editable:true });
-
-      } // end actual-cost line items (skipped for fixed-price quotes)
+      // Same formula as the generator, the table and the detail modal (lib/billing).
+      const items = fixedQuotePrev
+        ? buildFixedQuoteLineItems(fixedQuotePrev).map(it => ({ ...it, editable: true }))
+        : buildActualLineItems(calcBillable(wo, { assignments: teams || [], dailyLogs: daily || [] })).map(it => ({ ...it, editable: true }));
 
       let wp = billableComments(wo) || wo.work_order_description || 'Work completed as requested.';
       setWorkPerformedText(wp);

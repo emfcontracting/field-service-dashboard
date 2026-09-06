@@ -45,7 +45,7 @@ export async function fetchWorkOrders(supabase) {
     try {
       dailyHoursData = await fetchAll(() => supabase
         .from('daily_hours_log')
-        .select('wo_id, hours_regular, hours_overtime, miles')
+        .select('wo_id, hours_regular, hours_overtime, miles, tech_material_cost')
         .in('wo_id', woIds)
         .order('log_id'));
     } catch (e) { dailyError = e; }
@@ -55,11 +55,12 @@ export async function fetchWorkOrders(supabase) {
       const dailyTotals = {};
       dailyHoursData.forEach(log => {
         if (!dailyTotals[log.wo_id]) {
-          dailyTotals[log.wo_id] = { hours_regular: 0, hours_overtime: 0, miles: 0 };
+          dailyTotals[log.wo_id] = { hours_regular: 0, hours_overtime: 0, miles: 0, tech_material: 0 };
         }
         dailyTotals[log.wo_id].hours_regular += parseFloat(log.hours_regular) || 0;
         dailyTotals[log.wo_id].hours_overtime += parseFloat(log.hours_overtime) || 0;
         dailyTotals[log.wo_id].miles += parseFloat(log.miles) || 0;
+        dailyTotals[log.wo_id].tech_material += parseFloat(log.tech_material_cost) || 0;
       });
 
       // Also fetch team member legacy hours from work_order_assignments
@@ -93,6 +94,7 @@ export async function fetchWorkOrders(supabase) {
         wo.total_hours_regular = (parseFloat(wo.hours_regular) || 0) + daily.hours_regular + assignments.hours_regular;
         wo.total_hours_overtime = (parseFloat(wo.hours_overtime) || 0) + daily.hours_overtime + assignments.hours_overtime;
         wo.total_miles = (parseFloat(wo.miles) || 0) + daily.miles + assignments.miles;
+        wo.total_tech_material = daily.tech_material || 0;   // technician-bought material (marked up like EMF material)
       });
     }
   }
@@ -244,4 +246,4 @@ export async function updateTeamMember(supabase, assignmentId, updates) {
   }
 
   return true;
-}
+}

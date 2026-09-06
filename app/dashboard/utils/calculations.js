@@ -1,6 +1,6 @@
 // app/dashboard/utils/calculations.js
 
-import { getEffectiveAdminHours } from '@/lib/clientType';
+import { calcBillable, sumHours, RATES } from '@/lib/billing';
 
 export function calculateStats(orders) {
   return {
@@ -23,88 +23,47 @@ export function calculateStats(orders) {
   };
 }
 
+// Grand total for the work-order table. Uses the combined totals the table
+// fetches (total_hours_* / total_miles / total_tech_material) when present,
+// legacy WO fields otherwise. Formula: lib/billing.js.
 export function calculateTotalCost(wo) {
-  // Use combined totals if available (from fetchWorkOrders), otherwise fall back to legacy fields
-  const hoursRT = wo.total_hours_regular !== undefined ? wo.total_hours_regular : (parseFloat(wo.hours_regular) || 0);
-  const hoursOT = wo.total_hours_overtime !== undefined ? wo.total_hours_overtime : (parseFloat(wo.hours_overtime) || 0);
-  const miles = wo.total_miles !== undefined ? wo.total_miles : (parseFloat(wo.miles) || 0);
-  
-  const labor = (hoursRT * 64) + (hoursOT * 96);
-  const materials = parseFloat(wo.material_cost) || 0;
-  const equipment = parseFloat(wo.emf_equipment_cost) || 0;
-  const trailer = parseFloat(wo.trailer_cost) || 0;
-  const rental = parseFloat(wo.rental_cost) || 0;
-  const mileage = miles * 1.00;
-  
-  // Admin hours are client-type aware: UPS = 2 hrs embedded (legacy), CBRE = 0
-  // by default, per-WO override via work_orders.include_admin_hours.
-  // Policy lives in lib/clientType.js (getEffectiveAdminHours).
-  const adminHours = getEffectiveAdminHours(wo) * 64;
-  
-  // Apply markups to materials/equipment/trailer/rental (25%)
-  const materialsWithMarkup = materials * 1.25;
-  const equipmentWithMarkup = equipment * 1.25;
-  const trailerWithMarkup = trailer * 1.25;
-  const rentalWithMarkup = rental * 1.25;
-  
-  return labor + adminHours + mileage + materialsWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
+  const has = (k) => wo[k] !== undefined && wo[k] !== null;
+  const hours = {
+    rt: has('total_hours_regular') ? Number(wo.total_hours_regular) : (parseFloat(wo.hours_regular) || 0),
+    ot: has('total_hours_overtime') ? Number(wo.total_hours_overtime) : (parseFloat(wo.hours_overtime) || 0),
+    miles: has('total_miles') ? Number(wo.total_miles) : (parseFloat(wo.miles) || 0),
+    techMaterial: has('total_tech_material') ? Number(wo.total_tech_material) : 0,
+  };
+  return calcBillable(wo, { hours }).total;
 }
 
-export function calculateInvoiceTotal(wo, teamMembers = []) {
-  // Calculate lead tech labor
-  const leadRegular = (wo.hours_regular || 0) * 64;
-  const leadOvertime = (wo.hours_overtime || 0) * 96;
-  
-  // Calculate team labor
-  let teamLabor = 0;
-  let teamMiles = 0;
-  
-  if (teamMembers && teamMembers.length > 0) {
-    teamMembers.forEach(member => {
-      teamLabor += ((member.hours_regular || 0) * 64) + ((member.hours_overtime || 0) * 96);
-      teamMiles += (member.miles || 0);
-    });
-  }
-  
-  // Admin hours (client-type aware: UPS 2 hrs, CBRE 0 unless overridden per WO)
-  const adminHours = getEffectiveAdminHours(wo) * 64;
-  
-  // Total labor
-  const totalLabor = leadRegular + leadOvertime + teamLabor + adminHours;
-  
-  // Calculate materials and equipment with markups
-  const materialsWithMarkup = (wo.material_cost || 0) * 1.25;
-  const equipmentWithMarkup = (wo.emf_equipment_cost || 0) * 1.25;
-  const trailerWithMarkup = (wo.trailer_cost || 0) * 1.25;
-  const rentalWithMarkup = (wo.rental_cost || 0) * 1.25;
-  
-  // Mileage
-  const totalMiles = (wo.miles || 0) + teamMiles;
-  const mileageCost = totalMiles * 1.00;
-  
-  // Grand total
-  const grandTotal = totalLabor + mileageCost + materialsWithMarkup + 
-                     equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup;
-  
+// Breakdown for the detail modal (legacy shape kept for its callers).
+// `teamMembers` = work_order_assignments rows, `dailyLogs` = daily_hours_log rows.
+export function calculateInvoiceTotal(wo, teamMembers = [], dailyLogs = []) {
+  const c = calcBillable(wo, { assignments: teamMembers, dailyLogs });
+  const h = sumHours(wo, teamMembers, dailyLogs);
+  const leadRegular = h.primary.rt * RATES.RT;
+  const leadOvertime = h.primary.ot * RATES.OT;
+  const teamLabor = (h.team.rt + h.daily.rt) * RATES.RT + (h.team.ot + h.daily.ot) * RATES.OT;
   return {
     leadRegular,
     leadOvertime,
     teamLabor,
-    adminHours,
-    totalLabor,
-    materialsBase: wo.material_cost || 0,
-    materialsWithMarkup,
-    equipmentBase: wo.emf_equipment_cost || 0,
-    equipmentWithMarkup,
-    trailerBase: wo.trailer_cost || 0,
-    trailerWithMarkup,
-    rentalBase: wo.rental_cost || 0,
-    rentalWithMarkup,
-    totalMiles,
-    mileageCost,
-    grandTotal,
-    remaining: (wo.nte || 0) - grandTotal,
-    isOverBudget: grandTotal > (wo.nte || 0) && (wo.nte || 0) > 0
+    adminHours: c.labor.admin,
+    totalLabor: c.labor.total,
+    materialsBase: c.materials.base,
+    materialsWithMarkup: c.materials.total,
+    equipmentBase: c.equipment.base,
+    equipmentWithMarkup: c.equipment.total,
+    trailerBase: c.trailer.base,
+    trailerWithMarkup: c.trailer.total,
+    rentalBase: c.rental.base,
+    rentalWithMarkup: c.rental.total,
+    totalMiles: c.hours.miles,
+    mileageCost: c.mileage,
+    grandTotal: c.total,
+    remaining: (wo.nte || 0) - c.total,
+    isOverBudget: c.total > (wo.nte || 0) && (wo.nte || 0) > 0
   };
 }
 

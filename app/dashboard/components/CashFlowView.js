@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { calcTotal as billingTotal, sumHours } from '@/lib/billing';
 
 const supabase = getSupabase();
 // One shared browser client (lib/supabase) — a client per file meant ~20
@@ -21,11 +22,6 @@ const supabase = getSupabase();
 const supabaseClient = getSupabase();
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const BILLING_RT  = 64;
-const BILLING_OT  = 96;
-const MARKUP      = 1.25;
-const ADMIN_HOURS = 2;
-const MILEAGE_RATE = 1.0;
 
 const DEFAULT_PAYOUT_DAYS = 90;
 const PAYOUT_STORAGE_KEY  = 'cashflow.payoutDays';
@@ -101,32 +97,12 @@ const getMonthLabel = (key) => {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 };
 
-// ── Billable calculation (mirrors ProfitabilityView) ─────────────────────────
+// ── Billable — lib/billing.js (legacy WO + team + daily log, tech material,
+// admin hours per client policy) ────────────────────────────────────────────
 function calcBillable(wo, hoursMap) {
   const hours = hoursMap[wo.wo_id] || { rt: 0, ot: 0, miles: 0, techMaterial: 0 };
-
-  const legacyRT    = parseFloat(wo.hours_regular)  || 0;
-  const legacyOT    = parseFloat(wo.hours_overtime) || 0;
-  const legacyMiles = parseFloat(wo.miles)          || 0;
-
-  let teamRT = 0, teamOT = 0;
-  (wo.teamMembers || []).forEach(m => {
-    teamRT += parseFloat(m.hours_regular)  || 0;
-    teamOT += parseFloat(m.hours_overtime) || 0;
-  });
-
-  const totalRT    = legacyRT + teamRT + hours.rt;
-  const totalOT    = legacyOT + teamOT + hours.ot;
-  const totalMiles = legacyMiles + hours.miles;
-
-  const labor    = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
-  const material = ((parseFloat(wo.material_cost)       || 0) + hours.techMaterial) * MARKUP;
-  const equip    =  (parseFloat(wo.emf_equipment_cost) || 0) * MARKUP;
-  const trailer  =  (parseFloat(wo.trailer_cost)       || 0) * MARKUP;
-  const rental   =  (parseFloat(wo.rental_cost)        || 0) * MARKUP;
-  const mileage  =  totalMiles * MILEAGE_RATE;
-
-  return labor + material + equip + trailer + rental + mileage;
+  const h = sumHours(wo, wo.teamMembers || [], []);
+  return billingTotal(wo, { hours: { rt: h.rt + hours.rt, ot: h.ot + hours.ot, miles: h.miles + hours.miles, techMaterial: hours.techMaterial } });
 }
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -2,15 +2,16 @@
 // FIXED: Verbal NTE = immediate update, Written NTE = pending until approved
 // Snapshot principle: saves current costs at time of creation, never recalculates
 
-import { getEffectiveAdminHours } from '@/lib/clientType';
+import { RATES as BILLING, calcBillable, calcEstimate, round2 } from '@/lib/billing';
 
-// Rate constants
+// Rate constants — the numbers live in lib/billing.js; this shape is kept for
+// existing callers (RT_HOURLY / OT_HOURLY / MARKUP_PERCENT / ADMIN_HOURS).
 export const RATES = {
-  RT_HOURLY: 64,
-  OT_HOURLY: 96,
-  MILEAGE: 1,
-  MARKUP_PERCENT: 0.25,
-  ADMIN_HOURS: 2  // 2 hours × $64 = $128
+  RT_HOURLY: BILLING.RT,
+  OT_HOURLY: BILLING.OT,
+  MILEAGE: BILLING.MILEAGE,
+  MARKUP_PERCENT: BILLING.MARKUP - 1,
+  ADMIN_HOURS: BILLING.ADMIN_HOURS
 };
 
 // Calculate all totals for a quote (ADDITIONAL work only - NO admin fee)
@@ -26,37 +27,20 @@ export function calculateQuoteTotals(quoteData) {
     estimated_miles = 0
   } = quoteData;
 
-  // Labor: (RT hours × techs × $64) + (OT hours × techs × $96)
-  // NO admin fee here - admin is already included in current/accrued costs
-  // Guard every parseFloat with `|| 0` (techs with `|| 1`). An empty-string
-  // input (user cleared a field) makes parseFloat() return NaN, and NaN poisons
-  // the whole sum, so labor_total / grand_total get written to the DB as NULL.
-  const techCount = parseInt(estimated_techs) || 1;
-  const laborTotal =
-    ((parseFloat(estimated_rt_hours) || 0) * techCount * RATES.RT_HOURLY) +
-    ((parseFloat(estimated_ot_hours) || 0) * techCount * RATES.OT_HOURLY);
-
-  // All cost categories with 25% markup (same NaN guard)
-  const materialsWithMarkup = (parseFloat(material_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
-  const equipmentWithMarkup = (parseFloat(equipment_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
-  const rentalWithMarkup = (parseFloat(rental_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
-  const trailerWithMarkup = (parseFloat(trailer_cost) || 0) * (1 + RATES.MARKUP_PERCENT);
-
-  // Mileage at the per-mile rate
-  const mileageTotal = (parseFloat(estimated_miles) || 0) * RATES.MILEAGE;
-
-  // Grand total for ADDITIONAL work (no admin fee)
-  const grandTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + 
-                     rentalWithMarkup + trailerWithMarkup + mileageTotal;
-
+  // ADDITIONAL work only — no admin fee (it sits in the accrued costs).
+  // lib/billing.calcEstimate with admin forced off. Empty inputs parse to 0.
+  const c = calcEstimate({ include_admin_hours: false }, {
+    techs: estimated_techs, rtHours: estimated_rt_hours, otHours: estimated_ot_hours, miles: estimated_miles,
+    materials: material_cost, equipment: equipment_cost, rental: rental_cost, trailer: trailer_cost,
+  });
   return {
-    labor_total: Math.round(laborTotal * 100) / 100,
-    materials_with_markup: Math.round(materialsWithMarkup * 100) / 100,
-    equipment_with_markup: Math.round(equipmentWithMarkup * 100) / 100,
-    rental_with_markup: Math.round(rentalWithMarkup * 100) / 100,
-    trailer_with_markup: Math.round(trailerWithMarkup * 100) / 100,
-    mileage_total: Math.round(mileageTotal * 100) / 100,
-    grand_total: Math.round(grandTotal * 100) / 100
+    labor_total: round2(c.labor.rt + c.labor.ot),
+    materials_with_markup: round2(c.materials.total),
+    equipment_with_markup: round2(c.equipment.total),
+    rental_with_markup: round2(c.rental.total),
+    trailer_with_markup: round2(c.trailer.total),
+    mileage_total: round2(c.mileage),
+    grand_total: round2(c.total)
   };
 }
 
@@ -119,47 +103,21 @@ export async function calculateExistingCosts(supabase, workOrder, currentTeamLis
       });
     }
 
-    // Combined totals = legacy + daily (same as CostSummarySection)
-    const totalRT = legacyTotalRT + dailyTotalRT;
-    const totalOT = legacyTotalOT + dailyTotalOT;
-    const totalMiles = legacyTotalMiles + dailyTotalMiles;
-
-    // Labor includes admin hours.
-    // Admin hours are client-dependent: UPS keeps the legacy 2 hrs, CBRE
-    // defaults to 0 (admins can force them on per WO via include_admin_hours).
-    // Unclassified WOs keep the legacy 2 hrs so nothing shifts until they're set.
-    const adminHours = getEffectiveAdminHours(wo, RATES.ADMIN_HOURS);
-    const laborCost = (totalRT * RATES.RT_HOURLY) + (totalOT * RATES.OT_HOURLY) + (adminHours * RATES.RT_HOURLY);
-
-    // Materials: EMF + Tech, both with markup
-    const emfMaterialBase = parseFloat(wo.material_cost) || 0;
-    const techMaterialBase = dailyTotalTechMaterial;
-    const totalMaterialBase = emfMaterialBase + techMaterialBase;
-    const materialWithMarkup = totalMaterialBase * (1 + RATES.MARKUP_PERCENT);
-
-    const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-    const equipmentWithMarkup = equipmentBase * (1 + RATES.MARKUP_PERCENT);
-
-    const trailerBase = parseFloat(wo.trailer_cost) || 0;
-    const trailerWithMarkup = trailerBase * (1 + RATES.MARKUP_PERCENT);
-
-    const rentalBase = parseFloat(wo.rental_cost) || 0;
-    const rentalWithMarkup = rentalBase * (1 + RATES.MARKUP_PERCENT);
-
-    const mileageCost = totalMiles * RATES.MILEAGE;
-
-    const grandTotal = laborCost + materialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
-
+    // lib/billing — same formula as the invoice; admin hours per client policy.
+    const c = calcBillable(wo, { hours: {
+      rt: legacyTotalRT + dailyTotalRT, ot: legacyTotalOT + dailyTotalOT, miles: legacyTotalMiles + dailyTotalMiles,
+      techMaterial: dailyTotalTechMaterial,
+    } });
     return {
-      totalRT, totalOT, totalMiles,
-      adminHours,
-      laborCost,
-      emfMaterialBase, techMaterialBase, totalMaterialBase, materialWithMarkup,
-      equipmentBase, equipmentWithMarkup,
-      trailerBase, trailerWithMarkup,
-      rentalBase, rentalWithMarkup,
-      mileageCost,
-      grandTotal: Math.round(grandTotal * 100) / 100
+      totalRT: c.hours.rt, totalOT: c.hours.ot, totalMiles: c.hours.miles,
+      adminHours: c.adminHours,
+      laborCost: c.labor.total,
+      emfMaterialBase: c.materials.emf, techMaterialBase: c.materials.tech, totalMaterialBase: c.materials.base, materialWithMarkup: c.materials.total,
+      equipmentBase: c.equipment.base, equipmentWithMarkup: c.equipment.total,
+      trailerBase: c.trailer.base, trailerWithMarkup: c.trailer.total,
+      rentalBase: c.rental.base, rentalWithMarkup: c.rental.total,
+      mileageCost: c.mileage,
+      grandTotal: round2(c.total)
     };
   } catch (err) {
     console.error('Error calculating existing costs:', err);

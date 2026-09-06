@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { getEffectiveAdminHours } from '@/lib/clientType';
+import { calcBillable, RATES } from '@/lib/billing';
 
 export default function CostSummarySection({ workOrder, currentTeamList }) {
   const { language } = useLanguage();
@@ -97,33 +97,24 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
   const totalOT = legacyTotals.totalOT + dailyTotals.totalOT;
   const totalMiles = legacyTotals.totalMiles + dailyTotals.totalMiles;
   
-  // Client-type aware: UPS = 2 admin hrs (legacy), CBRE = 0 by default,
-  // per-WO override via include_admin_hours (policy in lib/clientType.js).
-  // Must stay in sync with the dashboard cost summary and the invoice route.
-  const adminHours = getEffectiveAdminHours(wo);
-
-  const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-  
-  // EMF Material (company paid)
-  const emfMaterialBase = parseFloat(wo.material_cost) || 0;
-  const emfMaterialWithMarkup = emfMaterialBase * 1.25;
-  
-  // Tech Material (tech purchased, for reimbursement)
-  const techMaterialBase = dailyTotals.totalTechMaterial;
-  const techMaterialWithMarkup = techMaterialBase * 1.25;
-  
-  // Total Material = EMF + Tech
-  const totalMaterialBase = emfMaterialBase + techMaterialBase;
-  const totalMaterialWithMarkup = emfMaterialWithMarkup + techMaterialWithMarkup;
-  
-  const equipmentBase = parseFloat(wo.emf_equipment_cost) || 0;
-  const equipmentWithMarkup = equipmentBase * 1.25;
-  const trailerBase = parseFloat(wo.trailer_cost) || 0;
-  const trailerWithMarkup = trailerBase * 1.25;
-  const rentalBase = parseFloat(wo.rental_cost) || 0;
-  const rentalWithMarkup = rentalBase * 1.25;
-  const mileageCost = totalMiles * 1.00;
-  const grandTotal = laborCost + totalMaterialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+  // lib/billing — same formula as the office invoice (admin hours per client policy).
+  const c = calcBillable(wo, { hours: { rt: totalRT, ot: totalOT, miles: totalMiles, techMaterial: dailyTotals.totalTechMaterial } });
+  const adminHours = c.adminHours;
+  const laborCost = c.labor.total;
+  const emfMaterialBase = c.materials.emf;
+  const emfMaterialWithMarkup = emfMaterialBase * RATES.MARKUP;
+  const techMaterialBase = c.materials.tech;
+  const techMaterialWithMarkup = techMaterialBase * RATES.MARKUP;
+  const totalMaterialBase = c.materials.base;
+  const totalMaterialWithMarkup = c.materials.total;
+  const equipmentBase = c.equipment.base;
+  const equipmentWithMarkup = c.equipment.total;
+  const trailerBase = c.trailer.base;
+  const trailerWithMarkup = c.trailer.total;
+  const rentalBase = c.rental.base;
+  const rentalWithMarkup = c.rental.total;
+  const mileageCost = c.mileage;
+  const grandTotal = c.total;
   const remaining = nte - grandTotal;
 
   // Check if there's legacy data to show
@@ -150,17 +141,17 @@ export default function CostSummarySection({ workOrder, currentTeamList }) {
           <div className="space-y-2 mb-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">{t('teamRTHours')}</span>
-              <span>{totalRT.toFixed(2)} {t('hrs')} × $64 = ${(totalRT * 64).toFixed(2)}</span>
+              <span>{totalRT.toFixed(2)} {t('hrs')} × ${RATES.RT} = ${(totalRT * RATES.RT).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">{t('teamOTHours')}</span>
-              <span>{totalOT.toFixed(2)} {t('hrs')} × $96 = ${(totalOT * 96).toFixed(2)}</span>
+              <span>{totalOT.toFixed(2)} {t('hrs')} × ${RATES.OT} = ${(totalOT * RATES.OT).toFixed(2)}</span>
             </div>
             <div className={adminHours > 0 ? 'flex justify-between text-sm text-yellow-400' : 'flex justify-between text-sm text-gray-500'}>
               <span>{t('adminHours')}</span>
               <span>
                 {adminHours > 0 ? (
-                  <>{adminHours} {t('hrs')} × {"$"}64 = {"$"}{(adminHours * 64).toFixed(2)}</>
+                  <>{adminHours} {t('hrs')} × {"$"}{RATES.RT} = {"$"}{(adminHours * RATES.RT).toFixed(2)}</>
                 ) : (
                   <>0 {t('hrs')} {language === 'en' ? '(off for this client)' : '(desactivado para este cliente)'}</>
                 )}

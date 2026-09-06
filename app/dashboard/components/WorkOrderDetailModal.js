@@ -16,6 +16,7 @@ import {
   updateTeamMember
 } from '../utils/dataFetchers';
 import { calculateInvoiceTotal } from '../utils/calculations';
+import { calcBillable, RATES } from '@/lib/billing';
 import ProfitabilityTab from './ProfitabilityTab';
 import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
@@ -127,7 +128,7 @@ function ClientBillingStrip({ wo, supabase, canEdit, onUpdated }) {
               <option value="off">Force OFF (0h)</option>
             </select>
             <span className={effectiveAdmin > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500 font-bold'}>
-              billed: {effectiveAdmin}h ({"$"}{effectiveAdmin * 64})
+              billed: {effectiveAdmin}h ({"$"}{effectiveAdmin * RATES.RT})
             </span>
             {saving && <span className="text-slate-500 animate-pulse">saving…</span>}
           </div>
@@ -407,7 +408,7 @@ export default function WorkOrderDetailModal({
     const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
     
     let existingCostsTotal = 0;
-    let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: getEffectiveAdminHours(selectedWO) * 64 };
+    let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: getEffectiveAdminHours(selectedWO) * RATES.RT };
     
     if (hasSnapshot) {
       // USE SAVED SNAPSHOT - matches what the NTE card shows
@@ -428,42 +429,16 @@ export default function WorkOrderDetailModal({
           .select('*')
           .eq('wo_id', selectedWO.wo_id);
         
-        // COMBINE legacy + daily (not either/or)
-        let totalRT = parseFloat(selectedWO.hours_regular) || 0;
-        let totalOT = parseFloat(selectedWO.hours_overtime) || 0;
-        let totalMileage = parseFloat(selectedWO.miles) || 0;
-        let totalTechMaterial = 0;
-        
-        // Add legacy team member hours
-        if (teamMembers) {
-          teamMembers.forEach(tm => {
-            totalRT += parseFloat(tm.hours_regular) || 0;
-            totalOT += parseFloat(tm.hours_overtime) || 0;
-            totalMileage += parseFloat(tm.miles) || 0;
-          });
-        }
-        
-        // Add daily log hours
-        if (dailyLogs && dailyLogs.length > 0) {
-          dailyLogs.forEach(log => {
-            totalRT += parseFloat(log.hours_regular) || 0;
-            totalOT += parseFloat(log.hours_overtime) || 0;
-            totalMileage += parseFloat(log.miles) || 0;
-            totalTechMaterial += parseFloat(log.tech_material_cost) || 0;
-          });
-        }
-        
-        existingBreakdown.labor = (totalRT * 64) + (totalOT * 96);
-        existingBreakdown.materials = ((parseFloat(selectedWO.material_cost) || 0) + totalTechMaterial) * 1.25;
-        existingBreakdown.equipment = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-        existingBreakdown.rental = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-        existingBreakdown.trailer = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-        existingBreakdown.mileage = totalMileage * 1.00;
-        
-        existingCostsTotal = existingBreakdown.labor + existingBreakdown.materials + 
-                             existingBreakdown.equipment + existingBreakdown.rental + 
-                             existingBreakdown.trailer + existingBreakdown.mileage + 
-                             existingBreakdown.admin;
+        // lib/billing — same formula as the invoice preview/generator.
+        const c = calcBillable(selectedWO, { assignments: teamMembers || [], dailyLogs: dailyLogs || [] });
+        existingBreakdown.labor = c.labor.rt + c.labor.ot;
+        existingBreakdown.materials = c.materials.total;
+        existingBreakdown.equipment = c.equipment.total;
+        existingBreakdown.rental = c.rental.total;
+        existingBreakdown.trailer = c.trailer.total;
+        existingBreakdown.mileage = c.mileage;
+        existingBreakdown.admin = c.labor.admin;
+        existingCostsTotal = c.total;
       } catch (err) {
         console.error('Error calculating existing costs:', err);
       }
@@ -1747,33 +1722,24 @@ const sendAssignmentNotifications = async () => {
     const totalOT = legacyOT + legacyTeamOT + dailyTotals.totalOT;
     const totalMiles = legacyMiles + legacyTeamMiles + dailyTotals.totalMiles;
 
-    // Client-type aware: UPS = 2 admin hrs (legacy), CBRE = 0 by default,
-    // per-WO override via include_admin_hours (policy in lib/clientType.js).
-    const adminHours = getEffectiveAdminHours(selectedWO);
-    const laborCost = (totalRT * 64) + (totalOT * 96) + (adminHours * 64);
-
-    // EMF Material (company paid - from work_orders table)
-    const emfMaterialBase = parseFloat(selectedWO.material_cost) || 0;
-    const emfMaterialWithMarkup = emfMaterialBase * 1.25;
-    
-    // Tech Material (tech purchased - from daily_hours_log)
-    const techMaterialBase = dailyTotals.totalTechMaterial;
-    const techMaterialWithMarkup = techMaterialBase * 1.25;
-    
-    // Total Material = EMF + Tech
-    const totalMaterialBase = emfMaterialBase + techMaterialBase;
-    const totalMaterialWithMarkup = emfMaterialWithMarkup + techMaterialWithMarkup;
-    
-    const equipmentBase = parseFloat(selectedWO.emf_equipment_cost) || 0;
-    const equipmentWithMarkup = equipmentBase * 1.25;
-    const trailerBase = parseFloat(selectedWO.trailer_cost) || 0;
-    const trailerWithMarkup = trailerBase * 1.25;
-    const rentalBase = parseFloat(selectedWO.rental_cost) || 0;
-    const rentalWithMarkup = rentalBase * 1.25;
-    const mileageCost = totalMiles * 1.00;
-
-    // Grand total now includes BOTH EMF and Tech materials
-    const grandTotal = laborCost + totalMaterialWithMarkup + equipmentWithMarkup + trailerWithMarkup + rentalWithMarkup + mileageCost;
+    // lib/billing — the one formula (admin hours per client policy).
+    const c = calcBillable(selectedWO, { hours: { rt: totalRT, ot: totalOT, miles: totalMiles, techMaterial: dailyTotals.totalTechMaterial } });
+    const adminHours = c.adminHours;
+    const laborCost = c.labor.total;
+    const emfMaterialBase = c.materials.emf;
+    const emfMaterialWithMarkup = emfMaterialBase * RATES.MARKUP;
+    const techMaterialBase = c.materials.tech;
+    const techMaterialWithMarkup = techMaterialBase * RATES.MARKUP;
+    const totalMaterialBase = c.materials.base;
+    const totalMaterialWithMarkup = c.materials.total;
+    const equipmentBase = c.equipment.base;
+    const equipmentWithMarkup = c.equipment.total;
+    const trailerBase = c.trailer.base;
+    const trailerWithMarkup = c.trailer.total;
+    const rentalBase = c.rental.base;
+    const rentalWithMarkup = c.rental.total;
+    const mileageCost = c.mileage;
+    const grandTotal = c.total;
     const remaining = (selectedWO.nte || 0) - grandTotal;
 
     return {
@@ -2694,7 +2660,7 @@ const sendAssignmentNotifications = async () => {
                       <div className="mt-2 flex justify-between text-xs">
                         <span className="flex items-center gap-3">
                           <span className="text-slate-400">
-                            Labor: ${(((parseFloat(entry.hours_regular) || 0) * 64) + ((parseFloat(entry.hours_overtime) || 0) * 96)).toFixed(2)}
+                            Labor: ${(((parseFloat(entry.hours_regular) || 0) * RATES.RT) + ((parseFloat(entry.hours_overtime) || 0) * RATES.OT)).toFixed(2)}
                           </span>
                           {(parseFloat(entry.tech_material_cost) || 0) > 0 && (
                             <span className="text-emerald-400 font-semibold">🧰 Material: ${(parseFloat(entry.tech_material_cost) || 0).toFixed(2)}</span>
@@ -3019,37 +2985,9 @@ const sendAssignmentNotifications = async () => {
                         // (don't trust stored new_nte_amount — it may be stale after edits)
                         newNTENeeded = currentCosts + additionalTotal;
                       } else {
-                        let laborRT = 0;
-                        let laborOT = 0;
-                        let totalMileageFromLogs = 0;
-                        
-                        if (dailyHoursLog && dailyHoursLog.length > 0) {
-                          dailyHoursLog.forEach(log => {
-                            laborRT += parseFloat(log.hours_regular) || 0;
-                            laborOT += parseFloat(log.hours_overtime) || 0;
-                            totalMileageFromLogs += parseFloat(log.miles) || 0;
-                          });
-                        } else {
-                          laborRT = parseFloat(selectedWO.hours_regular) || 0;
-                          laborOT = parseFloat(selectedWO.hours_overtime) || 0;
-                          totalMileageFromLogs = parseFloat(selectedWO.miles) || 0;
-                          
-                          (selectedWO.teamMembers || []).forEach(tm => {
-                            laborRT += parseFloat(tm.hours_regular) || 0;
-                            laborOT += parseFloat(tm.hours_overtime) || 0;
-                            totalMileageFromLogs += parseFloat(tm.miles) || 0;
-                          });
-                        }
-                        
-                        const laborCost = (laborRT * 64) + (laborOT * 96);
-                        const materialsCost = (parseFloat(selectedWO.material_cost) || 0) * 1.25;
-                        const equipmentCost = (parseFloat(selectedWO.emf_equipment_cost) || 0) * 1.25;
-                        const rentalCost = (parseFloat(selectedWO.rental_cost) || 0) * 1.25;
-                        const trailerCost = (parseFloat(selectedWO.trailer_cost) || 0) * 1.25;
-                        const mileageCost = totalMileageFromLogs * 1.00;
-                        const adminFee = getEffectiveAdminHours(selectedWO) * 64;
-                        
-                        currentCosts = laborCost + materialsCost + equipmentCost + rentalCost + trailerCost + mileageCost + adminFee;
+                        // Accrued so far — lib/billing (legacy + team + daily log combined,
+                        // tech material included, admin hours per client policy).
+                        currentCosts = calcBillable(selectedWO, { assignments: selectedWO.teamMembers || [], dailyLogs: dailyHoursLog || [] }).total;
                         newNTENeeded = currentCosts + additionalTotal;
                       }
 
@@ -3282,17 +3220,17 @@ const sendAssignmentNotifications = async () => {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Regular Hours ({costSummary.totalRT.toFixed(1)} hrs × $64)</span>
-                  <span>${(costSummary.totalRT * 64).toFixed(2)}</span>
+                  <span>${(costSummary.totalRT * RATES.RT).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Overtime Hours ({costSummary.totalOT.toFixed(1)} hrs × $96)</span>
-                  <span>${(costSummary.totalOT * 96).toFixed(2)}</span>
+                  <span>${(costSummary.totalOT * RATES.OT).toFixed(2)}</span>
                 </div>
                 <div className={costSummary.adminHours > 0 ? 'flex justify-between text-yellow-300' : 'flex justify-between text-slate-500'}>
                   <span>+ Admin Hours</span>
                   <span>
                     {costSummary.adminHours > 0 ? (
-                      <>{costSummary.adminHours} hrs × {"$"}64 = {"$"}{(costSummary.adminHours * 64).toFixed(2)}</>
+                      <>{costSummary.adminHours} hrs × {"$"}{RATES.RT} = {"$"}{(costSummary.adminHours * RATES.RT).toFixed(2)}</>
                     ) : (
                       <>0 hrs (off for this client)</>
                     )}

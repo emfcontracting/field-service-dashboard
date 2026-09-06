@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
+import { calcBillable, sumHours } from '@/lib/billing';
 
 const supabase = getSupabase();
 // One shared browser client (lib/supabase) — a client per file meant ~20
@@ -15,10 +16,6 @@ const supabaseClient = getSupabase();
 
 const fmt  = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct  = (profit, Billable) => Billable > 0 ? ((profit / Billable) * 100).toFixed(1) + '%' : '—';
-const BILLING_RT  = 64;
-const BILLING_OT  = 96;
-const MARKUP      = 1.25;
-const ADMIN_HOURS = 2;
 
 // ── Time range presets ────────────────────────────────────────────────────────
 const RANGES = [
@@ -31,29 +28,12 @@ const RANGES = [
 function calcProfit(wo, wages, hoursMap) {
   const hours = hoursMap[wo.wo_id] || { rt: 0, ot: 0, miles: 0, techMaterial: 0, byUser: {} };
 
-  // Legacy hours
-  const legacyRT    = parseFloat(wo.hours_regular) || 0;
-  const legacyOT    = parseFloat(wo.hours_overtime) || 0;
-  const legacyMiles = parseFloat(wo.miles) || 0;
-  let legacyTeamRT = 0, legacyTeamOT = 0;
-  (wo.teamMembers || []).forEach(m => {
-    legacyTeamRT += parseFloat(m.hours_regular) || 0;
-    legacyTeamOT += parseFloat(m.hours_overtime) || 0;
-  });
-
-  const totalRT    = legacyRT + legacyTeamRT + hours.rt;
-  const totalOT    = legacyOT + legacyTeamOT + hours.ot;
-  const totalMiles = legacyMiles + hours.miles;
-
-  // Billable
-  const laborBillable    = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
-  const materialBase    = (parseFloat(wo.material_cost) || 0) + hours.techMaterial;
-  const materialBillable = materialBase * MARKUP;
-  const equipmentBillable = (parseFloat(wo.emf_equipment_cost) || 0) * MARKUP;
-  const trailerBillable   = (parseFloat(wo.trailer_cost) || 0) * MARKUP;
-  const rentalBillable    = (parseFloat(wo.rental_cost) || 0) * MARKUP;
-  const mileageBillable   = totalMiles * 1.0;
-  const totalBillable     = laborBillable + materialBillable + equipmentBillable + trailerBillable + rentalBillable + mileageBillable;
+  // Billable — lib/billing.js (legacy WO + team + daily log, admin hours per client policy)
+  const h = sumHours(wo, wo.teamMembers || [], []);
+  const c = calcBillable(wo, { hours: { rt: h.rt + hours.rt, ot: h.ot + hours.ot, miles: h.miles + hours.miles, techMaterial: hours.techMaterial } });
+  const totalRT = c.hours.rt, totalOT = c.hours.ot;
+  const materialBase  = c.materials.base;
+  const totalBillable = c.total;
 
   // Cost Price
   let totalLaborCost   = 0;

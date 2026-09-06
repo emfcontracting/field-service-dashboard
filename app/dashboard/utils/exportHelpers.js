@@ -1,3 +1,6 @@
+import { RATES } from '@/lib/billing';
+import { getEffectiveAdminHours } from '@/lib/clientType';
+import { calculateTotalCost } from './calculations';
 // app/dashboard/utils/exportHelpers.js
 
 /**
@@ -32,14 +35,8 @@ export const convertWorkOrdersToCSV = (workOrders) => {
 
   // Create CSV rows
   const rows = workOrders.map(wo => {
-    // Calculate total cost
-    const labor = ((wo.hours_regular || 0) * 64) + ((wo.hours_overtime || 0) * 96);
-    const materials = wo.material_cost || 0;
-    const equipment = wo.emf_equipment_cost || 0;
-    const trailer = wo.trailer_cost || 0;
-    const rental = wo.rental_cost || 0;
-    const mileage = (wo.miles || 0) * 1.00;
-    const totalCost = labor + materials + equipment + trailer + rental + mileage;
+    // Billable total — lib/billing.js (uses the table's combined totals when present)
+    const totalCost = calculateTotalCost(wo);
 
     // Format date
     const dateEntered = wo.date_entered 
@@ -251,8 +248,8 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       const rt = parseFloat(log.hours_regular) || 0;
       const ot = parseFloat(log.hours_overtime) || 0;
       const miles = parseFloat(log.miles) || 0;
-      const laborCost = (rt * 64) + (ot * 96);
-      const mileageCost = miles * 1.00;
+      const laborCost = (rt * RATES.RT) + (ot * RATES.OT);
+      const mileageCost = miles * RATES.MILEAGE;
       const techMaterial = parseFloat(log.tech_material_cost) || 0;
       const date = log.work_date || '';
 
@@ -262,7 +259,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Labor', techName, date,
           rt.toFixed(2), ot.toFixed(2), '',
-          rt > 0 && ot > 0 ? '$64/$96' : rt > 0 ? '$64/hr' : '$96/hr',
+          rt > 0 && ot > 0 ? `$${RATES.RT}/$${RATES.OT}` : rt > 0 ? `$${RATES.RT}/hr` : `$${RATES.OT}/hr`,
           laborCost.toFixed(2), '0%', laborCost.toFixed(2),
           log.notes || ''
         ]);
@@ -277,7 +274,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Mileage', techName, date,
           '', '', miles.toFixed(1),
-          '$1.00/mi', mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
+          `$${RATES.MILEAGE.toFixed(2)}/mi`, mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
           ''
         ]);
         woTotals[wo.wo_id].mileageCost += mileageCost;
@@ -286,7 +283,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
 
       // Tech material row
       if (techMaterial > 0) {
-        const withMarkup = techMaterial * 1.25;
+        const withMarkup = techMaterial * RATES.MARKUP;
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Tech Material', techName, date,
@@ -313,15 +310,15 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       const rt = parseFloat(assign.hours_regular) || 0;
       const ot = parseFloat(assign.hours_overtime) || 0;
       const miles = parseFloat(assign.miles) || 0;
-      const laborCost = (rt * 64) + (ot * 96);
-      const mileageCost = miles * 1.00;
+      const laborCost = (rt * RATES.RT) + (ot * RATES.OT);
+      const mileageCost = miles * RATES.MILEAGE;
 
       if (rt > 0 || ot > 0) {
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Labor', techName, '(legacy)',
           rt.toFixed(2), ot.toFixed(2), '',
-          rt > 0 && ot > 0 ? '$64/$96' : rt > 0 ? '$64/hr' : '$96/hr',
+          rt > 0 && ot > 0 ? `$${RATES.RT}/$${RATES.OT}` : rt > 0 ? `$${RATES.RT}/hr` : `$${RATES.OT}/hr`,
           laborCost.toFixed(2), '0%', laborCost.toFixed(2),
           'Legacy assignment'
         ]);
@@ -335,7 +332,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Mileage', techName, '(legacy)',
           '', '', miles.toFixed(1),
-          '$1.00/mi', mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
+          `$${RATES.MILEAGE.toFixed(2)}/mi`, mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
           'Legacy assignment'
         ]);
         woTotals[wo.wo_id].mileageCost += mileageCost;
@@ -357,15 +354,15 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
         const rt = parseFloat(wo.hours_regular) || 0;
         const ot = parseFloat(wo.hours_overtime) || 0;
         const miles = parseFloat(wo.miles) || 0;
-        const laborCost = (rt * 64) + (ot * 96);
-        const mileageCost = miles * 1.00;
+        const laborCost = (rt * RATES.RT) + (ot * RATES.OT);
+        const mileageCost = miles * RATES.MILEAGE;
 
         if (rt > 0 || ot > 0) {
           rows.push([
             wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
             'Labor', leadTech, '(legacy)',
             rt.toFixed(2), ot.toFixed(2), '',
-            rt > 0 && ot > 0 ? '$64/$96' : rt > 0 ? '$64/hr' : '$96/hr',
+            rt > 0 && ot > 0 ? `$${RATES.RT}/$${RATES.OT}` : rt > 0 ? `$${RATES.RT}/hr` : `$${RATES.OT}/hr`,
             laborCost.toFixed(2), '0%', laborCost.toFixed(2),
             'Lead tech legacy hours'
           ]);
@@ -379,7 +376,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
             wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
             'Mileage', leadTech, '(legacy)',
             '', '', miles.toFixed(1),
-            '$1.00/mi', mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
+            `$${RATES.MILEAGE.toFixed(2)}/mi`, mileageCost.toFixed(2), '0%', mileageCost.toFixed(2),
             'Lead tech legacy mileage'
           ]);
           woTotals[wo.wo_id].mileageCost += mileageCost;
@@ -390,7 +387,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       // Material cost (EMF company-purchased)
       const materialBase = parseFloat(wo.material_cost) || 0;
       if (materialBase > 0) {
-        const materialMarkup = materialBase * 1.25;
+        const materialMarkup = materialBase * RATES.MARKUP;
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Material (EMF)', 'Company', '',
@@ -404,7 +401,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       // Equipment cost
       const equipBase = parseFloat(wo.emf_equipment_cost) || 0;
       if (equipBase > 0) {
-        const equipMarkup = equipBase * 1.25;
+        const equipMarkup = equipBase * RATES.MARKUP;
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Equipment', 'Company', '',
@@ -418,7 +415,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       // Trailer cost
       const trailerBase = parseFloat(wo.trailer_cost) || 0;
       if (trailerBase > 0) {
-        const trailerMarkup = trailerBase * 1.25;
+        const trailerMarkup = trailerBase * RATES.MARKUP;
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Trailer', 'Company', '',
@@ -432,7 +429,7 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
       // Rental cost
       const rentalBase = parseFloat(wo.rental_cost) || 0;
       if (rentalBase > 0) {
-        const rentalMarkup = rentalBase * 1.25;
+        const rentalMarkup = rentalBase * RATES.MARKUP;
         rows.push([
           wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
           'Rental', 'Company', '',
@@ -443,15 +440,19 @@ export const exportCostDetailCSV = async (supabase, workOrders) => {
         woTotals[wo.wo_id].rentalCost += rentalMarkup;
       }
 
-      // Admin hours (always 2 hrs @ $64 = $128)
-      rows.push([
-        wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
-        'Admin', 'Office', '',
-        '2.00', '', '',
-        '$64/hr', '128.00', '0%', '128.00',
-        '2 admin hours'
-      ]);
-      woTotals[wo.wo_id].adminCost = 128;
+      // Admin hours per client policy (UPS 2 h, CBRE 0 unless include_admin_hours)
+      const adminH = getEffectiveAdminHours(wo, RATES.ADMIN_HOURS);
+      const adminCost = adminH * RATES.RT;
+      if (adminH > 0) {
+        rows.push([
+          wo.wo_number, wo.building || '', (wo.nte || 0).toFixed(2),
+          'Admin', 'Office', '',
+          adminH.toFixed(2), '', '',
+          `$${RATES.RT}/hr`, adminCost.toFixed(2), '0%', adminCost.toFixed(2),
+          `${adminH} admin hours`
+        ]);
+      }
+      woTotals[wo.wo_id].adminCost = adminCost;
     });
 
     // Sort rows by WO#, then by category
@@ -538,4 +539,4 @@ export const exportSingleWOCostDetail = async (supabase, workOrder, dailyHoursLo
 
   // Wrap in array and use the bulk function
   await exportCostDetailCSV(supabase, [workOrder]);
-};
+};

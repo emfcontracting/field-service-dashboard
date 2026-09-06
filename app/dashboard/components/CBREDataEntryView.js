@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { calcTotal } from '@/lib/billing';
 
 const supabase = getSupabase();
 
@@ -90,45 +91,12 @@ function timeOnly(timestamp) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Calculate actual costs for a completed WO. Mirrors calculateInvoiceTotal /
-// CostSummarySection logic exactly: combines legacy hours from work_orders +
-// work_order_assignments + daily_hours_log, applies markup + admin fee.
+// Actual costs for a completed WO — lib/billing.js (same formula as the invoice).
 // ──────────────────────────────────────────────────────────────────────────────
-const RT_RATE = 64;
-const OT_RATE = 96;
-const MILE_RATE = 1.00;
-const MARKUP = 1.25;
-const ADMIN_HOURS = 2;
-
 function calculateActualTotal(wo) {
-  let totalRT    = parseFloat(wo.hours_regular)  || 0;
-  let totalOT    = parseFloat(wo.hours_overtime) || 0;
-  let totalMiles = parseFloat(wo.miles)          || 0;
-  let totalTechMaterial = 0;
-
-  // Legacy team assignments
-  (wo.work_order_assignments || []).forEach(a => {
-    totalRT    += parseFloat(a.hours_regular)  || 0;
-    totalOT    += parseFloat(a.hours_overtime) || 0;
-    totalMiles += parseFloat(a.miles)          || 0;
-  });
-
-  // Modern daily hours log
-  (wo.daily_hours_log || []).forEach(d => {
-    totalRT           += parseFloat(d.hours_regular)      || 0;
-    totalOT           += parseFloat(d.hours_overtime)     || 0;
-    totalMiles        += parseFloat(d.miles)              || 0;
-    totalTechMaterial += parseFloat(d.tech_material_cost) || 0;
-  });
-
-  const labor      = (totalRT * RT_RATE) + (totalOT * OT_RATE) + (ADMIN_HOURS * RT_RATE);
-  const materials  = ((parseFloat(wo.material_cost)       || 0) + totalTechMaterial) * MARKUP;
-  const equipment  =  (parseFloat(wo.emf_equipment_cost)  || 0) * MARKUP;
-  const trailer    =  (parseFloat(wo.trailer_cost)        || 0) * MARKUP;
-  const rental     =  (parseFloat(wo.rental_cost)         || 0) * MARKUP;
-  const mileage    = totalMiles * MILE_RATE;
-
-  return labor + materials + equipment + trailer + rental + mileage;
+  // lib/billing: WO + team assignments + daily log, tech material, admin hours
+  // per client policy (CBRE 0 unless include_admin_hours).
+  return calcTotal(wo, { assignments: wo.work_order_assignments || [], dailyLogs: wo.daily_hours_log || [] });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

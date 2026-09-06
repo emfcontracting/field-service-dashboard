@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
+import { RATES, calcBillable, sumHours } from '@/lib/billing';
 
 const supabase = getSupabase();
 
@@ -77,40 +78,29 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
     }
   };
 
-  const BILLING_RT    = 64;
-  const BILLING_OT    = 96;
-  const MARKUP        = 1.25;
-  const BILLING_MILES = 1.00;
-  const ADMIN_HOURS   = 2;
+  const BILLING_RT    = RATES.RT;
+  const BILLING_OT    = RATES.OT;
+  const BILLING_MILES = RATES.MILEAGE;
 
-  // Aggregate hours from legacy + daily log
-  const legacyRT    = parseFloat(workOrder.hours_regular) || 0;
-  const legacyOT    = parseFloat(workOrder.hours_overtime) || 0;
-  const legacyMiles = parseFloat(workOrder.miles) || 0;
-  let legacyTeamRT = 0, legacyTeamOT = 0, legacyTeamMiles = 0;
-  (workOrder.teamMembers || []).forEach(m => {
-    legacyTeamRT    += parseFloat(m.hours_regular) || 0;
-    legacyTeamOT    += parseFloat(m.hours_overtime) || 0;
-    legacyTeamMiles += parseFloat(m.miles) || 0;
-  });
-
-  const totalRT    = legacyRT + legacyTeamRT + (dailyTotals?.totalRT || 0);
-  const totalOT    = legacyOT + legacyTeamOT + (dailyTotals?.totalOT || 0);
-  const totalMiles = legacyMiles + legacyTeamMiles + (dailyTotals?.totalMiles || 0);
-  const techMaterialBase = dailyTotals?.totalTechMaterial || 0;
-
-  // Billable (what CBRE pays)
-  const laborBillable     = (totalRT * BILLING_RT) + (totalOT * BILLING_OT) + (ADMIN_HOURS * BILLING_RT);
-  const materialBase       = (parseFloat(workOrder.material_cost) || 0) + techMaterialBase;
-  const materialBillable  = materialBase * MARKUP;
-  const equipmentBase      = parseFloat(workOrder.emf_equipment_cost) || 0;
-  const equipmentBillable = equipmentBase * MARKUP;
-  const trailerBase        = parseFloat(workOrder.trailer_cost) || 0;
-  const trailerBillable   = trailerBase * MARKUP;
-  const rentalBase         = parseFloat(workOrder.rental_cost) || 0;
-  const rentalBillable    = rentalBase * MARKUP;
-  const mileageBillable   = totalMiles * BILLING_MILES;
-  const totalBillable     = laborBillable + materialBillable + equipmentBillable + trailerBillable + rentalBillable + mileageBillable;
+  // Billable (what the client pays) — lib/billing.js: legacy WO + team + daily
+  // log, tech material, admin hours per client policy.
+  const h = sumHours(workOrder, workOrder.teamMembers || [], []);
+  const c = calcBillable(workOrder, { hours: {
+    rt: h.rt + (dailyTotals?.totalRT || 0), ot: h.ot + (dailyTotals?.totalOT || 0),
+    miles: h.miles + (dailyTotals?.totalMiles || 0), techMaterial: dailyTotals?.totalTechMaterial || 0,
+  } });
+  const totalRT = c.hours.rt, totalOT = c.hours.ot, totalMiles = c.hours.miles;
+  const laborBillable     = c.labor.total;
+  const materialBase      = c.materials.base;
+  const materialBillable  = c.materials.total;
+  const equipmentBase     = c.equipment.base;
+  const equipmentBillable = c.equipment.total;
+  const trailerBase       = c.trailer.base;
+  const trailerBillable   = c.trailer.total;
+  const rentalBase        = c.rental.base;
+  const rentalBillable    = c.rental.total;
+  const mileageBillable   = c.mileage;
+  const totalBillable     = c.total;
 
   // Per-user aggregation (hours + miles from daily log)
   const hoursByUser = {};
@@ -164,7 +154,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
   });
 
   // Legacy mileage fallback (no per-tech breakdown) — use avg rate $0.55
-  const legacyMilesTotal = legacyMiles + legacyTeamMiles;
+  const legacyMilesTotal = h.miles;   // WO + team assignment miles (not in the daily log)
   const legacyMileageCost = legacyMilesTotal * 0.55; // default rate for legacy
   if (legacyMilesTotal > 0) totalMileageCost += legacyMileageCost;
 

@@ -357,17 +357,19 @@ export default function NTEIncreasePage({
             <div className="space-y-2 text-sm">
               {/* Labor breakdown */}
               <div className="flex justify-between">
-                <span className="text-gray-300">RT Hours ({existingCosts.totalRT.toFixed(2)} hrs × $64)</span>
+                <span className="text-gray-300">RT Hours ({existingCosts.totalRT.toFixed(2)} hrs × ${RATES.RT_RATE})</span>
                 <span>${(existingCosts.totalRT * RATES.RT_RATE).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">OT Hours ({existingCosts.totalOT.toFixed(2)} hrs × $96)</span>
+                <span className="text-gray-300">OT Hours ({existingCosts.totalOT.toFixed(2)} hrs × ${RATES.OT_RATE})</span>
                 <span>${(existingCosts.totalOT * RATES.OT_RATE).toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-yellow-400">
-                <span>Admin (2 hrs × $64)</span>
-                <span>$128.00</span>
-              </div>
+              {(existingCosts.adminHours ?? RATES.ADMIN_HOURS) > 0 && (
+                <div className="flex justify-between text-yellow-400">
+                  <span>Admin ({existingCosts.adminHours ?? RATES.ADMIN_HOURS} hrs × ${RATES.RT_RATE})</span>
+                  <span>${((existingCosts.adminHours ?? RATES.ADMIN_HOURS) * RATES.RT_RATE).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold border-t border-blue-600 pt-1">
                 <span>{language === 'en' ? 'Total Labor' : 'Total Mano de Obra'}</span>
                 <span>${existingCosts.laborCost.toFixed(2)}</span>

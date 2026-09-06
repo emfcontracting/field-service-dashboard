@@ -6,15 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import { getCurrentNteCeiling, markSubmittedToCBRE } from '../../mobile/services/quoteService';
+import { RATES, calcBillable, calcEstimate } from '@/lib/billing';
 
-// Rate constants - MUST match CostSummarySection & quoteService
-const RATES = {
-  RT_RATE: 64,
-  OT_RATE: 96,
-  MILEAGE_RATE: 1.00,
-  MARKUP_PERCENT: 0.25,
-  ADMIN_HOURS: 2  // 2 hrs × $64 = $128
-};
+// Rates and formula: lib/billing.js (RATES.RT / OT / MILEAGE / MARKUP / ADMIN_HOURS).
 
 export default function NTEIncreaseModal({ 
   workOrder, 
@@ -64,7 +58,7 @@ export default function NTEIncreaseModal({
   const [currentCosts, setCurrentCosts] = useState({
     totalRT: 0, totalOT: 0, totalMiles: 0,
     labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0,
-    mileage: 0, admin: 128, total: 0,
+    mileage: 0, admin: 0, total: 0,
     emfMaterialBase: 0, techMaterialBase: 0
   });
 
@@ -191,37 +185,13 @@ export default function NTEIncreaseModal({
         });
       }
 
-      // COMBINED totals = legacy + daily (NOT either/or!)
-      const totalRT = legacyTotalRT + dailyTotalRT;
-      const totalOT = legacyTotalOT + dailyTotalOT;
-      const totalMiles = legacyTotalMiles + dailyTotalMiles;
-
-      // Labor includes admin hours
-      const labor = (totalRT * RATES.RT_RATE) + (totalOT * RATES.OT_RATE) + (RATES.ADMIN_HOURS * RATES.RT_RATE);
-
-      // Materials: EMF + Tech, both with 25% markup
-      const emfMaterialBase = parseFloat(workOrder.material_cost) || 0;
-      const techMaterialBase = dailyTotalTechMaterial;
-      const totalMaterialBase = emfMaterialBase + techMaterialBase;
-      const materials = totalMaterialBase * (1 + RATES.MARKUP_PERCENT);
-
-      const equipmentBase = parseFloat(workOrder.emf_equipment_cost) || 0;
-      const equipment = equipmentBase * (1 + RATES.MARKUP_PERCENT);
-
-      const rentalBase = parseFloat(workOrder.rental_cost) || 0;
-      const rental = rentalBase * (1 + RATES.MARKUP_PERCENT);
-
-      const trailerBase = parseFloat(workOrder.trailer_cost) || 0;
-      const trailer = trailerBase * (1 + RATES.MARKUP_PERCENT);
-
-      const mileage = totalMiles * RATES.MILEAGE_RATE;
-      const admin = RATES.ADMIN_HOURS * RATES.RT_RATE;
-      const total = labor + materials + equipment + rental + trailer + mileage;
-
+      // lib/billing — same formula as the invoice (admin hours per client policy).
+      const c = calcBillable(workOrder, { assignments: teamMembers || [], dailyLogs: dailyLogs || [] });
       setCurrentCosts({
-        totalRT, totalOT, totalMiles,
-        labor, materials, equipment, rental, trailer, mileage, admin, total,
-        emfMaterialBase, techMaterialBase
+        totalRT: c.hours.rt, totalOT: c.hours.ot, totalMiles: c.hours.miles,
+        labor: c.labor.total, materials: c.materials.total, equipment: c.equipment.total, rental: c.rental.total,
+        trailer: c.trailer.total, mileage: c.mileage, admin: c.labor.admin, total: c.total,
+        emfMaterialBase: c.materials.emf, techMaterialBase: c.materials.tech
       });
     } catch (err) {
       console.error('Error calculating current costs:', err);
@@ -233,31 +203,23 @@ export default function NTEIncreaseModal({
   // NaN guard: a cleared input makes parseFloat("") return NaN, which would
   // poison labor/total and get saved to the DB as NULL.
   const calcAdditional = () => {
-    const techs = parseInt(formData.estimated_techs) || 1;
-    const labor = ((parseFloat(formData.hours_regular) || 0) * techs * RATES.RT_RATE) +
-                  ((parseFloat(formData.hours_overtime) || 0) * techs * RATES.OT_RATE);
-    const materials = (parseFloat(formData.materials_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const equipment = (parseFloat(formData.equipment_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const rental = (parseFloat(formData.rental_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const trailer = (parseFloat(formData.trailer_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const mileage = (parseFloat(formData.miles) || 0) * RATES.MILEAGE_RATE;
-    const total = labor + materials + equipment + rental + trailer + mileage;
-    return { labor, materials, equipment, rental, trailer, mileage, total };
+    // Additional work only — no admin hours here (they are in the accrued base).
+    const c = calcEstimate({ ...workOrder, include_admin_hours: false }, {
+      techs: formData.estimated_techs, rtHours: formData.hours_regular, otHours: formData.hours_overtime,
+      miles: formData.miles, materials: formData.materials_base, equipment: formData.equipment_base,
+      rental: formData.rental_base, trailer: formData.trailer_base,
+    });
+    return { labor: c.labor.rt + c.labor.ot, materials: c.materials.total, equipment: c.equipment.total, rental: c.rental.total, trailer: c.trailer.total, mileage: c.mileage, total: c.total };
   };
 
-  // Calculate RECONCILIATION totals (final actual costs, with markup + admin)
+  // RECONCILIATION totals (final actual costs, with markup + the client's admin hours)
   const calcReconciliation = () => {
-    const rt = parseFloat(reconciliationCosts.rt_hours) || 0;
-    const ot = parseFloat(reconciliationCosts.ot_hours) || 0;
-    const labor = (rt * RATES.RT_RATE) + (ot * RATES.OT_RATE) + (RATES.ADMIN_HOURS * RATES.RT_RATE);
-    const materials = (parseFloat(reconciliationCosts.materials_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const equipment = (parseFloat(reconciliationCosts.equipment_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const rental = (parseFloat(reconciliationCosts.rental_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const trailer = (parseFloat(reconciliationCosts.trailer_base) || 0) * (1 + RATES.MARKUP_PERCENT);
-    const mileage = (parseFloat(reconciliationCosts.miles) || 0) * RATES.MILEAGE_RATE;
-    const admin = RATES.ADMIN_HOURS * RATES.RT_RATE;
-    const total = labor + materials + equipment + rental + trailer + mileage;
-    return { labor, materials, equipment, rental, trailer, mileage, admin, total };
+    const c = calcEstimate(workOrder, {
+      techs: 1, rtHours: reconciliationCosts.rt_hours, otHours: reconciliationCosts.ot_hours,
+      miles: reconciliationCosts.miles, materials: reconciliationCosts.materials_base, equipment: reconciliationCosts.equipment_base,
+      rental: reconciliationCosts.rental_base, trailer: reconciliationCosts.trailer_base,
+    });
+    return { labor: c.labor.total, materials: c.materials.total, equipment: c.equipment.total, rental: c.rental.total, trailer: c.trailer.total, mileage: c.mileage, admin: c.labor.admin, total: c.total };
   };
 
   const additional = calcAdditional();
@@ -703,11 +665,11 @@ Final Cost Breakdown:
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>RT Hours ({currentCosts.totalRT.toFixed(2)} hrs × $64)</span>
-                  <span className="font-semibold">${(currentCosts.totalRT * RATES.RT_RATE).toFixed(2)}</span>
+                  <span className="font-semibold">${(currentCosts.totalRT * RATES.RT).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>OT Hours ({currentCosts.totalOT.toFixed(2)} hrs × $96)</span>
-                  <span className="font-semibold">${(currentCosts.totalOT * RATES.OT_RATE).toFixed(2)}</span>
+                  <span className="font-semibold">${(currentCosts.totalOT * RATES.OT).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-yellow-300">
                   <span>Admin Fee (2 hours × $64)</span>
@@ -790,7 +752,7 @@ Final Cost Breakdown:
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    {parseInt(formData.estimated_techs) || 1} tech(s) × {parseFloat(formData.hours_regular) || 0} hrs × $64 = ${((parseInt(formData.estimated_techs) || 1) * (parseFloat(formData.hours_regular) || 0) * 64).toFixed(2)}
+                    {parseInt(formData.estimated_techs) || 1} tech(s) × {parseFloat(formData.hours_regular) || 0} hrs × ${RATES.RT} = ${((parseInt(formData.estimated_techs) || 1) * (parseFloat(formData.hours_regular) || 0) * RATES.RT).toFixed(2)}
                   </p>
                 </div>
                 <div>
@@ -817,7 +779,7 @@ Final Cost Breakdown:
                     onChange={(e) => setFormData({ ...formData, materials_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.materials_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.materials_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Equipment Cost</label>
@@ -827,7 +789,7 @@ Final Cost Breakdown:
                     onChange={(e) => setFormData({ ...formData, equipment_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.equipment_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
@@ -841,7 +803,7 @@ Final Cost Breakdown:
                     onChange={(e) => setFormData({ ...formData, rental_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.rental_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.rental_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Trailer Cost</label>
@@ -851,7 +813,7 @@ Final Cost Breakdown:
                     onChange={(e) => setFormData({ ...formData, trailer_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.trailer_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(formData.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
@@ -897,7 +859,7 @@ Final Cost Breakdown:
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    {parseFloat(reconciliationCosts.rt_hours) || 0} hrs × $64 = ${((parseFloat(reconciliationCosts.rt_hours) || 0) * 64).toFixed(2)}
+                    {parseFloat(reconciliationCosts.rt_hours) || 0} hrs × ${RATES.RT} = ${((parseFloat(reconciliationCosts.rt_hours) || 0) * RATES.RT).toFixed(2)}
                   </p>
                 </div>
                 <div>
@@ -915,7 +877,7 @@ Final Cost Breakdown:
               </div>
 
               <div className="text-xs text-yellow-300 mb-3 px-1">
-                + Admin Fee (2 hrs × $64) = ${(RATES.ADMIN_HOURS * RATES.RT_RATE).toFixed(2)} automatically included
+                + Admin Fee ({reconciliation.admin > 0 ? `${reconciliation.admin / RATES.RT} hrs × $${RATES.RT}` : 'none for this client'}) = ${reconciliation.admin.toFixed(2)} automatically included
               </div>
 
               {/* Materials & Equipment */}
@@ -928,7 +890,7 @@ Final Cost Breakdown:
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, materials_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.materials_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.materials_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Total Equipment Cost (base)</label>
@@ -938,7 +900,7 @@ Final Cost Breakdown:
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, equipment_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.equipment_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.equipment_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 
@@ -952,7 +914,7 @@ Final Cost Breakdown:
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, rental_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.rental_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.rental_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-300 mb-1">Total Trailer Cost (base)</label>
@@ -962,7 +924,7 @@ Final Cost Breakdown:
                     onChange={(e) => setReconciliationCosts({ ...reconciliationCosts, trailer_base: e.target.value })}
                     className="w-full bg-gray-700 text-white px-3 py-2 rounded-lg"
                   />
-                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.trailer_base) * 1.25).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 mt-1">+ 25% = ${(parseFloat(reconciliationCosts.trailer_base) * RATES.MARKUP).toFixed(2)}</p>
                 </div>
               </div>
 

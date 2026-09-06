@@ -10,6 +10,7 @@ import {
   mergeCategories,
   groupCategories,
 } from '@/lib/taxRecordCategories';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -58,8 +59,8 @@ export default function TaxRecordsPage() {
     setLoading(true);
     try {
       const [recordsRes, catsRes] = await Promise.all([
-        fetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`),
-        fetch(`/api/contractor/tax-categories?user_id=${user.user_id}`),
+        apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`),
+        apiFetch(`/api/contractor/tax-categories?user_id=${user.user_id}`),
       ]);
       const recordsData = await recordsRes.json();
       const catsData    = await catsRes.json();
@@ -123,7 +124,7 @@ export default function TaxRecordsPage() {
         // Open print page in new window
         window.open(`/contractor/tax-records/print?year=${year}`, '_blank');
       } else {
-        const res = await fetch('/api/contractor/tax-export', {
+        const res = await apiFetch('/api/contractor/tax-export', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: user.user_id, year, format }),
@@ -151,7 +152,7 @@ export default function TaxRecordsPage() {
   async function handleDelete(recordId) {
     if (!confirm('Delete this record?')) return;
     try {
-      await fetch(`/api/contractor/tax-records/${recordId}`, { method: 'DELETE' });
+      await apiFetch(`/api/contractor/tax-records/${recordId}`, { method: 'DELETE' });
       loadData();
     } catch (err) {
       alert('Delete failed: ' + err.message);
@@ -448,7 +449,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
         : `/api/contractor/tax-records`;
       const method = isEdit ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -630,7 +631,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
     if (!newName.trim()) return;
     setSaving(true); setError('');
     try {
-      const res = await fetch('/api/contractor/tax-categories', {
+      const res = await apiFetch('/api/contractor/tax-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -654,7 +655,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
   async function handleDelete(catId) {
     if (!confirm('Delete this custom category? Existing records will keep the category name but it will no longer be selectable for new entries.')) return;
     try {
-      await fetch(`/api/contractor/tax-categories/${catId}`, { method: 'DELETE' });
+      await apiFetch(`/api/contractor/tax-categories/${catId}`, { method: 'DELETE' });
       onChanged();
     } catch (err) {
       alert('Delete failed: ' + err.message);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function AnalyticsTab() {
   const [analytics, setAnalytics] = useState(null);
@@ -14,7 +15,7 @@ export default function AnalyticsTab() {
   async function fetchAnalytics() {
     setLoading(true);
     try {
-      const response = await fetch(`/api/backend/analytics?days=${period}`);
+      const response = await apiFetch(`/api/backend/analytics?days=${period}`);
       const data = await response.json();
       if (data.success) {
         setAnalytics(data.analytics);

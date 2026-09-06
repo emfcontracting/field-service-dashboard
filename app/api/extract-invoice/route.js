@@ -2,12 +2,15 @@
 // Uses Claude AI to extract invoice data from PDFs and images
 
 import Anthropic from '@anthropic-ai/sdk';
+import { requireStaff } from '@/lib/serverAuth';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { file, fileType, mimeType } = await request.json();
 

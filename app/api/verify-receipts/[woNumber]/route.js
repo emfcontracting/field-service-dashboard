@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
+import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -25,7 +26,7 @@ function searchForReceipts(woNumber) {
       host: 'imap.gmail.com',
       port: 993,
       tls: true,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: { servername: 'imap.gmail.com' },
       authTimeout: 8000,
       connTimeout: 8000,
     });
@@ -87,7 +88,9 @@ function searchForReceipts(woNumber) {
 }
 
 // ── GET: Check if receipts exist ────────────────────────────────────────────
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { woNumber } = await params;
     if (!woNumber) return Response.json({ success: false, error: 'WO number required' }, { status: 400 });
@@ -170,6 +173,8 @@ export async function GET(_request, { params }) {
 
 // ── POST: Manual override ─────────────────────────────────────────────────
 export async function POST(request, { params }) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { woNumber } = await params;
     const body = await request.json();

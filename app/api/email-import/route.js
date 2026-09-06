@@ -7,6 +7,7 @@ import { simpleParser } from 'mailparser';
 import { buildContactLines } from './contactParser';
 import { parseCbreDateEntered } from './parseCbreDate';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -28,7 +29,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    tlsOptions: { servername: 'imap.gmail.com' }
   });
 }
 
@@ -192,7 +193,7 @@ function parseCBREEmail(subject, body) {
     address: '',
     city: '',
     state: '',
-    priority: 'medium',
+    priority: 'P4',
     date_entered: new Date().toISOString(),
     work_order_description: '',
     requestor: '',
@@ -248,10 +249,10 @@ function parseCBREEmail(subject, body) {
     } else {
       // Unknown/rare code → keep a sensible legacy bucket so nothing breaks.
       const pText = (priorityMatch[2] || '').toLowerCase();
-      if (pText.includes('emergency')) workOrder.priority = 'emergency';
-      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'high';
-      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'medium';
-      else workOrder.priority = 'low';
+      if (pText.includes('emergency')) workOrder.priority = 'P1';
+      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'P2';
+      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'P4';
+      else workOrder.priority = 'P5';
     }
   }
 
@@ -372,6 +373,8 @@ function parseCBREEmail(subject, body) {
 
 // GET: Fetch and preview emails
 export async function GET(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     // Check for query params
     const { searchParams } = new URL(request.url);
@@ -474,6 +477,8 @@ export async function GET(request) {
 
 // POST: Import selected emails as work orders OR parse pasted content
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     

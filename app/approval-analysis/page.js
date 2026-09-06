@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const usd = (n) => new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(n || 0);
@@ -86,7 +87,7 @@ export default function ApprovalAnalysisPage() {
   async function fetchAnalysis() {
     setLoading(true); setError(null);
     try {
-      const res    = await fetch(`/api/contractor/approval-analysis?days=${days}`);
+      const res    = await apiFetch(`/api/contractor/approval-analysis?days=${days}`);
       const result = await res.json();
       if (!result.success) throw new Error(result.error || 'Failed to fetch analysis');
       setData(result);

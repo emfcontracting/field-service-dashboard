@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function BulkOperationsTab() {
   const supabase = createClientComponentClient();
@@ -101,7 +102,7 @@ export default function BulkOperationsTab() {
     }
 
     try {
-      const response = await fetch('/api/backend/bulk-operations', {
+      const response = await apiFetch('/api/backend/bulk-operations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

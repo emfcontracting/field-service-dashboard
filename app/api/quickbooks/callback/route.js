@@ -38,10 +38,14 @@ export async function GET(request) {
     const authResponse = await oauthClient.createToken(request.url);
     const token = authResponse.getJson();
 
-    // Save to database
-    const { error } = await getSupabase()
+    // Save to database — exactly ONE active connection: retire every earlier
+    // row first so pull-payments/push-invoice (.eq('is_active', true).single())
+    // never see two rows after a reconnect.
+    const db = getSupabase();
+    await db.from('quickbooks_settings').update({ is_active: false }).eq('is_active', true);
+    const { error } = await db
       .from('quickbooks_settings')
-      .upsert({
+      .insert({
         access_token: token.access_token,
         refresh_token: token.refresh_token,
         realm_id: realmId,

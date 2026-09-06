@@ -5,6 +5,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AnalyticsTab from '@/app/components/AnalyticsTab';
 import BulkOperationsTab from '@/app/components/BulkOperationsTab';
 import BackendTriggerResultModal from '@/app/dashboard/components/BackendTriggerResultModal';
+import { apiFetch } from '@/lib/apiClient';
 
 // ── UI primitives ────────────────────────────────────────────────────────────
 const Card = ({ children, className = '' }) => (
@@ -391,7 +392,7 @@ export default function BackendDashboard() {
 
   async function fetchHealthData() {
     try {
-      const res = await fetch('/api/backend/health');
+      const res = await apiFetch('/api/backend/health');
       setHealthData(await res.json());
     } catch (err) { console.error(err); }
   }
@@ -400,7 +401,7 @@ export default function BackendDashboard() {
     try {
       const p = new URLSearchParams({ type: logType, limit: logLimit.toString() });
       if (logStatus) p.append('status', logStatus);
-      const res  = await fetch(`/api/backend/logs?${p}`);
+      const res  = await apiFetch(`/api/backend/logs?${p}`);
       const data = await res.json();
       setLogs(data.logs || []);
       setLogStats(data.stats || null);
@@ -410,7 +411,7 @@ export default function BackendDashboard() {
   async function trigger(action, params = {}) {
     setTriggering(action);
     try {
-      const res  = await fetch('/api/backend/trigger', {
+      const res  = await apiFetch('/api/backend/trigger', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, params }),
       });

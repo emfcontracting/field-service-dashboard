@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams } from 'next/navigation';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -74,15 +75,17 @@ function QBContent() {
   }, []);
 
   async function checkConnection() {
-    const { data, error } = await supabase
-      .from('quickbooks_settings').select('*').eq('is_active', true).single();
-    if (!error && data) { setConnected(true); setSettings(data); }
+    try {
+      const res = await apiFetch('/api/quickbooks/status');
+      const json = await res.json();
+      if (res.ok && json.connected) { setConnected(true); setSettings(json.settings); }
+    } catch (err) { console.error('QB status error:', err); }
     setLoading(false);
   }
 
   async function connectQB() {
     try {
-      const res = await fetch('/api/quickbooks/auth');
+      const res = await apiFetch('/api/quickbooks/auth');
       const { authUri } = await res.json();
       window.location.href = authUri;
     } catch (err) { showToast('Failed to connect: ' + err.message, 'error'); }
@@ -91,7 +94,7 @@ function QBContent() {
   async function disconnectQB() {
     if (!confirm('Disconnect QuickBooks? You can reconnect anytime.')) return;
     try {
-      const res = await fetch('/api/quickbooks/disconnect', { method: 'POST' });
+      const res = await apiFetch('/api/quickbooks/disconnect', { method: 'POST' });
       if (res.ok) { showToast('QuickBooks disconnected'); setConnected(false); setSettings(null); }
     } catch (err) { showToast('Failed to disconnect: ' + err.message, 'error'); }
   }

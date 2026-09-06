@@ -11,6 +11,7 @@ import {
   parseLocalDate,
   getNowEST 
 } from '../../../mobile/utils/dateUtils';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -292,7 +293,7 @@ export default function CreateInvoice() {
       const invNum = generateInvoiceNumber();
       const bName = user.profile?.business_name || (user.first_name + ' ' + user.last_name);
       
-      const response = await fetch('/api/contractor/generate-pdf', {
+      const response = await apiFetch('/api/contractor/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

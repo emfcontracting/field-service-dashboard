@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
+import { requireAdmin } from '@/lib/serverAuth';
 
 // Lazy initialization to avoid build-time errors
 function getSupabase() {
@@ -27,6 +28,8 @@ async function refreshToken(oauthClient, refreshToken) {
 }
 
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { invoice_id } = await request.json();
     const supabase = getSupabase();

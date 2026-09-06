@@ -1,8 +1,11 @@
 // app/api/contractor/send-invoice/route.js
 // Sends subcontractor invoice via email
 import nodemailer from 'nodemailer';
+import { requireStaff } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   console.log('=== Subcontractor Invoice Email Request ===');
   
   try {

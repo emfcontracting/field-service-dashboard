@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/serverAuth';
 
 // Lazy initialization to avoid build-time errors
 function getSupabase() {
@@ -10,17 +11,12 @@ function getSupabase() {
 }
 
 export async function POST(request) {
+  const auth = await requireAdmin(request, { superuser: true });
+  if (!auth.ok) return auth.response;
   try {
-    const { userId, requestorEmail } = await request.json();
+    const { userId } = await request.json();
     const supabase = getSupabase();
-
-    // Verify requestor is superuser
-    if (requestorEmail !== 'jones.emfcontracting@gmail.com') {
-      return NextResponse.json(
-        { error: 'Unauthorized: Only superuser can delete users' },
-        { status: 403 }
-      );
-    }
+    // Caller verified as the superuser by requireAdmin(request, { superuser: true }).
 
     if (!userId) {
       return NextResponse.json(

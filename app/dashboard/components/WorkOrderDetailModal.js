@@ -37,6 +37,7 @@ import {
   getTodayEST
 } from '../../mobile/utils/dateUtils';
 import { getClientType, getEffectiveAdminHours, CLIENT_STYLES } from '@/lib/clientType';
+import { apiFetch } from '@/lib/apiClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Client type marker + per-WO admin-hours override.
@@ -221,7 +222,6 @@ export default function WorkOrderDetailModal({
   const [updateRequiredModalMode, setUpdateRequiredModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingUpdateRequired, setResolvingUpdateRequired] = useState(false);
   const [activeTab, setActiveTab] = useState('details'); // 'details' | 'profitability'
-  const adminPassword = 'EMF2024!';
   const isAdmin = currentUser?.role === 'admin';
   // Field-level permission for the controls below (admin overrides the freeze).
   const lockField = (f) => !canEditField(f, currentUser, selectedWO);
@@ -1255,12 +1255,26 @@ export default function WorkOrderDetailModal({
     }
   };
 
-  const handleDeleteWorkOrder = async () => {
-    const password = prompt('Enter admin password to delete:');
-    if (password !== adminPassword) {
-      alert('❌ Incorrect password');
-      return;
+  // Re-authenticate the signed-in admin before destructive actions. Verifies
+  // the caller's OWN Supabase password server-side (no shared secret in code).
+  const confirmAdminPassword = async (what) => {
+    if (!isAdmin) { alert('❌ Admin access required'); return false; }
+    const password = prompt(`Enter YOUR login password to ${what}:`);
+    if (!password) return false;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email || currentUser?.email;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { alert('❌ Incorrect password'); return false; }
+      return true;
+    } catch (e) {
+      alert('❌ Could not verify password: ' + e.message);
+      return false;
     }
+  };
+
+  const handleDeleteWorkOrder = async () => {
+    if (!(await confirmAdminPassword('delete this work order'))) return;
 
     const confirmText = prompt('Type DELETE to confirm deletion:');
     if (confirmText !== 'DELETE') {
@@ -1359,7 +1373,7 @@ const sendAssignmentNotifications = async () => {
       const notificationType = (selectedWO.priority === 'P1' || selectedWO.priority === 'emergency') ? 
         'emergency_work_order' : 'work_order_assigned';
       
-      const response = await fetch('/api/notifications', {
+      const response = await apiFetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1422,11 +1436,7 @@ const sendAssignmentNotifications = async () => {
 
   // Handle deleting customer signature
   const handleDeleteSignature = async () => {
-    const password = prompt('Enter admin password to delete signature:');
-    if (password !== adminPassword) {
-      alert('❌ Incorrect password');
-      return;
-    }
+    if (!(await confirmAdminPassword('delete the signature'))) return;
 
     if (!confirm('Delete the customer signature?\n\nThis will remove:\n- Signature image\n- Customer name\n- Signature date\n- GPS location\n\nThis cannot be undone. Continue?')) {
       return;
@@ -1467,7 +1477,7 @@ const sendAssignmentNotifications = async () => {
     setGeneratingInvoice(true);
 
     try {
-      const response = await fetch('/api/invoices/generate', {
+      const response = await apiFetch('/api/invoices/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wo_id: selectedWO.wo_id })

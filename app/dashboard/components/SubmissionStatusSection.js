@@ -15,6 +15,7 @@
 
 import { useState } from 'react';
 import { getSubmissionStatus, SUBMISSION_META, isPMWorkOrder, needsReceipts } from '@/lib/submissionStatus';
+import { apiFetch } from '@/lib/apiClient';
 
 const TYPES = ['photos', 'receipts', 'writeups'];
 
@@ -53,7 +54,7 @@ export default function SubmissionStatusSection({ workOrder, currentUser, onUpda
     if (!woNumber) return;
     setBusy(s => ({ ...s, [type]: true }));
     try {
-      const res = await fetch(`/api/verify-${type}/${encodeURIComponent(woNumber)}`);
+      const res = await apiFetch(`/api/verify-${type}/${encodeURIComponent(woNumber)}`);
       const data = await res.json();
       if (!data.success && data.search_error) {
         alert(`Search failed: ${data.search_error}`);
@@ -81,7 +82,7 @@ export default function SubmissionStatusSection({ workOrder, currentUser, onUpda
     if (reason === null) return;
     setBusy(s => ({ ...s, [type]: true }));
     try {
-      const res = await fetch(`/api/verify-${type}/${encodeURIComponent(woNumber)}`, {
+      const res = await apiFetch(`/api/verify-${type}/${encodeURIComponent(woNumber)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ received, override_reason: reason || null }),

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -83,7 +84,7 @@ export default function ViewInvoice() {
     setMessage(null);
     
     try {
-      const response = await fetch(`/api/contractor/invoice-pdf/${invoiceId}`);
+      const response = await apiFetch(`/api/contractor/invoice-pdf/${invoiceId}`);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

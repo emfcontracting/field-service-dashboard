@@ -1,6 +1,7 @@
 // app/mobile/hooks/usePushNotifications.js
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 export function usePushNotifications(userId) {
   const [permission, setPermission] = useState('default');
@@ -47,7 +48,7 @@ export function usePushNotifications(userId) {
   // Get VAPID public key from server
   const getVapidKey = async () => {
     try {
-      const response = await fetch('/api/push/send');
+      const response = await apiFetch('/api/push/send');
       const data = await response.json();
       
       if (!data.configured || !data.publicKey) {
@@ -112,7 +113,7 @@ export function usePushNotifications(userId) {
       });
 
       // Send subscription to server
-      const response = await fetch('/api/push/subscribe', {
+      const response = await apiFetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -148,7 +149,7 @@ export function usePushNotifications(userId) {
       await subscription.unsubscribe();
 
       // Remove from server
-      await fetch('/api/push/subscribe', {
+      await apiFetch('/api/push/subscribe', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

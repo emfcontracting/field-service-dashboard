@@ -3,34 +3,27 @@
 // PATCH  /api/flags/[id]   → resolve a flag (only flagger or superadmin)
 // DELETE /api/flags/[id]   → delete a flag (only flagger or superadmin)
 //
-// Daniel = superadmin (identified by email match in users table). Admins and
-// office_staff can act on their OWN flags only. Anything stricter would need
-// real auth/JWT — for now we rely on the role+ownership check at this layer.
+// Caller identity comes from the verified session token (lib/serverAuth).
+// Superuser can act on any flag; admins/office_staff only on their OWN flags.
 // ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff, SUPERUSER_EMAIL } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const SUPERADMIN_EMAIL = 'jones.emfcontracting@gmail.com';
 
-// Authorise the request. Returns { actor, isSuperadmin } on success or
-// { error, status } on failure.
-async function authorise(userId) {
-  if (!userId) return { error: 'Missing user_id', status: 401 };
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('user_id, email, first_name, last_name, role')
-    .eq('user_id', userId)
-    .single();
-  if (error || !user) return { error: 'User not found', status: 401 };
-  if (!['admin', 'office_staff'].includes(user.role)) {
+// Authorise the signed-in caller (identity comes from the verified token,
+// never from the request body). Returns { actor, isSuperadmin } or { error, status }.
+function authorise(user) {
+  if (!user) return { error: 'Sign in required', status: 401 };
+  if (!['admin', 'office_staff', 'office'].includes(user.role)) {
     return { error: 'Only admins and office staff can modify flags', status: 403 };
   }
-  return { actor: user, isSuperadmin: user.email === SUPERADMIN_EMAIL };
+  return { actor: user, isSuperadmin: (user.email || '').toLowerCase() === SUPERUSER_EMAIL };
 }
 
 // Verify the actor can touch THIS flag. Returns { flag } or { error, status }.
@@ -50,12 +43,14 @@ async function loadFlagAndCheckOwnership(flagId, actor, isSuperadmin) {
 
 // ── PATCH /api/flags/[id] — Resolve a flag ─────────────────────────────────
 export async function PATCH(request, { params }) {
+  const session = await requireStaff(request);
+  if (!session.ok) return session.response;
   try {
     const { id } = await params;
     const body = await request.json();
-    const { user_id, resolution_note } = body;
+    const { resolution_note } = body;
 
-    const auth = await authorise(user_id);
+    const auth = authorise(session.principal.user);
     if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const check = await loadFlagAndCheckOwnership(id, auth.actor, auth.isSuperadmin);
@@ -93,12 +88,11 @@ export async function PATCH(request, { params }) {
 // Useful for "I flagged this by accident" scenarios. Resolved flags can also
 // be deleted to keep history tidy.
 export async function DELETE(request, { params }) {
+  const session = await requireStaff(request);
+  if (!session.ok) return session.response;
   try {
     const { id } = await params;
-    const url = new URL(request.url);
-    const userId = url.searchParams.get('user_id');
-
-    const auth = await authorise(userId);
+    const auth = authorise(session.principal.user);
     if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const check = await loadFlagAndCheckOwnership(id, auth.actor, auth.isSuperadmin);

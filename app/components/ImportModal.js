@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -50,7 +51,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       const url = includeReadEmails 
         ? '/api/email-import?includeRead=true&days=3' 
         : '/api/email-import';
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       const data = await response.json();
 
       if (!data.success) {
@@ -106,7 +107,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
       const emailIds = selectedIndexes.map(idx => gmailEmails[idx].emailId);
       const workOrders = selectedIndexes.map(idx => gmailEmails[idx].parsedData);
 
-      const response = await fetch('/api/email-import', {
+      const response = await apiFetch('/api/email-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emailIds, workOrders, markAsRead: true })

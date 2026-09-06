@@ -18,8 +18,11 @@
 
 import { NextResponse } from 'next/server';
 import { notifyTech } from '@/lib/expoPush';
+import { requireUser } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { userId, title, body, data } = await request.json();
     if (!userId || !title) {

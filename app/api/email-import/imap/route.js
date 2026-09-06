@@ -2,6 +2,7 @@
 // IMAP diagnostic tool - lists all folders and checks Dispatch folder contents
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import { requireStaff } from '@/lib/serverAuth';
 
 function connectIMAP() {
   const email = process.env.EMAIL_IMPORT_USER;
@@ -17,7 +18,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    tlsOptions: { servername: 'imap.gmail.com' }
   });
 }
 
@@ -181,6 +182,8 @@ function extractFolderNames(boxes, prefix = '') {
 }
 
 export async function GET(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'diagnostic';
   const folder = searchParams.get('folder') || 'INBOX';

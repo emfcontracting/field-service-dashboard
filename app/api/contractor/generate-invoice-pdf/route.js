@@ -1,8 +1,11 @@
 // app/api/contractor/generate-invoice-pdf/route.js
 // Generates a PDF invoice for subcontractors
 import { NextResponse } from 'next/server';
+import { requireStaff } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { invoice, user, lineItems } = await request.json();
     

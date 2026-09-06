@@ -6,19 +6,18 @@
 // Supabase payload shape:
 //   { type: 'INSERT'|'UPDATE'|'DELETE', table, record, old_record }
 //
-// Optional security: set NOTIFY_HOOK_SECRET in your env and add a matching
-// header "x-hook-secret" in the Supabase webhook config.
+// Security: NOTIFY_HOOK_SECRET must be set in the env and the Supabase webhook
+// must send a matching "x-hook-secret" header (required, not optional).
 
 import { NextResponse } from 'next/server';
 import { notifyTech } from '@/lib/expoPush';
+import { requireHook } from '@/lib/serverAuth';
 
 export async function POST(request) {
   try {
-    // Optional shared-secret check.
-    const secret = process.env.NOTIFY_HOOK_SECRET;
-    if (secret && request.headers.get('x-hook-secret') !== secret) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
+    // Shared-secret check (NOTIFY_HOOK_SECRET must be set and match x-hook-secret).
+    const auth = requireHook(request);
+    if (!auth.ok) return auth.response;
 
     const payload = await request.json();
     const { type, record, old_record } = payload || {};

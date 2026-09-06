@@ -8,6 +8,7 @@ import {
   buildCbreNteSubmittedEmailText,
   buildCbreNteSubmittedEmailHTML
 } from '@/lib/cbreNteEmail';
+import { requireUser, requireUserOrCron } from '@/lib/serverAuth';
 
 // Initialize Supabase for fetching push subscriptions
 const supabase = createClient(
@@ -460,6 +461,8 @@ const sendPushNotification = async (userId, payload) => {
 };
 
 export async function POST(request) {
+  const auth = await requireUserOrCron(request);
+  if (!auth.ok) return auth.response;
   try {
     const { type, recipients, workOrder, quote, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = await request.json();
     
@@ -740,7 +743,9 @@ export async function POST(request) {
 }
 
 // GET endpoint to check notification status and configuration
-export async function GET() {
+export async function GET(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   // Check push subscriptions count
   let subscriptionCount = 0;
   try {

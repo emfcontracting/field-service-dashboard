@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { notifyTech } from '@/lib/expoPush';
+import { requireCronOrStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -74,6 +75,8 @@ const getESTInfo = () => {
 };
 
 export async function GET(request) {
+  const auth = await requireCronOrStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { dayName, currentTime, todayDate } = getESTInfo();
     
@@ -166,6 +169,8 @@ export async function GET(request) {
 
 // POST handler for manual trigger
 export async function POST(request) {
+  const auth = await requireCronOrStaff(request);
+  if (!auth.ok) return auth.response;
   return GET(request);
 }
 

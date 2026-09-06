@@ -49,7 +49,7 @@ export function useAuth() {
       await authService.changeUserPin(supabase, currentUser.user_id, newPin);
       const savedEmail = authService.getSavedCredentials().email;
       authService.saveCredentials(savedEmail, newPin);
-      setCurrentUser({ ...currentUser, pin: newPin });
+      setCurrentUser({ ...currentUser });
       return true;
     } catch (err) {
       throw err;

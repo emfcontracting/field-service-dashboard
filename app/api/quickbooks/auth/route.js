@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import OAuthClient from 'intuit-oauth';
+import { requireAdmin } from '@/lib/serverAuth';
 
-export async function GET() {
+export async function GET(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const oauthClient = new OAuthClient({
       clientId: process.env.QUICKBOOKS_CLIENT_ID,

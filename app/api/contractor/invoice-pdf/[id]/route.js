@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { requireStaff } from '@/lib/serverAuth';
 
 // Force Node.js runtime
 export const runtime = 'nodejs';
@@ -20,6 +21,8 @@ function formatDateLocal(dateString) {
 }
 
 export async function GET(request, { params }) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const { id } = params;
 
   try {

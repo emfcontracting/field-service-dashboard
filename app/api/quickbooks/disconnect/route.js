@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/serverAuth';
 
 // Lazy initialization to avoid build-time errors
 function getSupabase() {
@@ -9,7 +10,9 @@ function getSupabase() {
   );
 }
 
-export async function POST() {
+export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { error } = await getSupabase()
       .from('quickbooks_settings')

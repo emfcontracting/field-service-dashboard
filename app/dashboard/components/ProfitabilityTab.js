@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -53,7 +54,7 @@ export default function ProfitabilityTab({ workOrder, dailyHoursLog, dailyTotals
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const res = await fetch('/api/admin/wages', {
+      const res = await apiFetch('/api/admin/wages', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
       if (!res.ok) throw new Error('Failed to load wages');

@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -117,6 +118,8 @@ function escapeHtml(s) {
 
 // ── POST /api/flags ─────────────────────────────────────────────────────────
 export async function POST(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const { wo_id, user_id, comment, priority = 'medium' } = body;
@@ -173,6 +176,8 @@ export async function POST(request) {
 // ── GET /api/flags?status=open&wo_id=… ──────────────────────────────────────
 // Used by the Review Queue and the WO detail modal.
 export async function GET(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');   // 'open' | 'resolved' | null (=all)

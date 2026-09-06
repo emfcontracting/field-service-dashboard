@@ -1,6 +1,7 @@
 // app/api/aging/send-alerts/route.js
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -17,6 +18,8 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { workOrders, targetTechIds } = await request.json();
 
@@ -263,6 +266,8 @@ export async function POST(request) {
 
 // GET endpoint to check aging status
 export async function GET(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     // Get all work orders with lead tech assigned that are not completed
     const { data: workOrders, error } = await supabase

@@ -8,6 +8,8 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { buildContactLines } from '../contactParser';
 import { parseCbreDateEntered, parseCbreTargetResponse, parseCbreTargetCompletion } from '../parseCbreDate';
+import { requireCronOrStaff } from '@/lib/serverAuth';
+import { PRIORITY_CODES } from '@/lib/priorityCodes';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -38,7 +40,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    tlsOptions: { servername: 'imap.gmail.com' }
   });
 }
 
@@ -191,7 +193,7 @@ function parseCBREEmail(subject, body) {
     address: '',
     city: '',
     state: '',
-    priority: 'medium',
+    priority: 'P4',
     date_entered: new Date().toISOString(),
     work_order_description: '',
     requestor: '',
@@ -238,15 +240,21 @@ function parseCBREEmail(subject, body) {
     workOrder.priority_code = pCode;   // canonical P-code (for target history)
     const pText = (priorityMatch[2] || '').toLowerCase();
     const pNum = parseInt(pCode.replace('P', ''));
-    
-    if (pNum === 1 || pText.includes('emergency')) {
-      workOrder.priority = 'emergency';
+    const canonical = `P${pNum}`;
+
+    if (PRIORITY_CODES[canonical]) {
+      // Store the real CBRE priority code (P1, P4, P10 …) — single source of
+      // truth, see lib/priorityCodes.js. The old emergency/high/medium/low
+      // buckets broke the P-code filters and KPI targets.
+      workOrder.priority = canonical;
+    } else if (pNum === 1 || pText.includes('emergency')) {
+      workOrder.priority = 'P1';
     } else if (pNum === 2 || pText.includes('urgent') || pText.includes('24 hour')) {
-      workOrder.priority = 'high';
+      workOrder.priority = 'P2';
     } else if (pNum === 3 || pNum === 4 || pText.includes('48 hour') || pText.includes('72 hour')) {
-      workOrder.priority = 'medium';
+      workOrder.priority = 'P4';
     } else {
-      workOrder.priority = 'low';
+      workOrder.priority = 'P5';
     }
   }
 
@@ -471,18 +479,13 @@ export async function GET(request) {
   console.log('=== Auto Email Import Cron Started (IMAP) ===');
   console.log('Timestamp:', new Date().toISOString());
   
-  // Verify cron secret if configured
-  const authHeader = request.headers.get('authorization');
+  // Scheduled run (CRON_SECRET) or a signed-in office/admin user pressing
+  // the import button. No more ?manual=true bypass.
+  const auth = await requireCronOrStaff(request);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
-  const isManual = searchParams.get('manual') === 'true';
-  
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    if (!isManual) {
-      console.log('Unauthorized cron request');
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.log('Manual trigger allowed');
-  }
+  const isManual = auth.principal.kind !== 'cron' || searchParams.get('manual') === 'true';
+  if (isManual) console.log('Manual trigger by', auth.principal.user?.email || 'cron');
 
   const results = {
     success: true,

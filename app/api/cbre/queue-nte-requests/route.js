@@ -18,6 +18,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { buildCbrePayload } from '@/lib/cbreVendorForm';
+import { requireCronOrStaff } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -45,14 +46,8 @@ export async function POST(request) { return handle(request); }
 
 async function handle(request) {
   const { searchParams } = new URL(request.url);
-  const authHeader = request.headers.get('authorization');
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}` &&
-    searchParams.get('key') !== process.env.CRON_SECRET
-  ) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = await requireCronOrStaff(request);
+  if (!auth.ok) return auth.response;
 
   const limit = Math.min(
     Math.max(parseInt(searchParams.get('limit') || DEFAULT_LIMIT, 10) || DEFAULT_LIMIT, 1),

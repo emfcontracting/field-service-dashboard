@@ -14,6 +14,7 @@ import {
   updateLocalDailyLog,
   deleteLocalDailyLog
 } from '../services/offline/offlineService';
+import { apiFetch } from '@/lib/apiClient';
 
 export function useWorkOrders(currentUser) {
   const [workOrders, setWorkOrders] = useState([]);
@@ -1101,7 +1102,7 @@ export function useWorkOrders(currentUser) {
         setSaving(true);
         
         // Check photos first
-        const response = await fetch(`/api/verify-photos/${selectedWO.wo_number}`);
+        const response = await apiFetch(`/api/verify-photos/${selectedWO.wo_number}`);
         const result = await response.json();
         
         if (!result.photos_received) {
@@ -1127,7 +1128,7 @@ export function useWorkOrders(currentUser) {
           
           // Verify admin PIN by checking against server
           try {
-            const pinCheck = await fetch('/api/verify-admin-pin', {
+            const pinCheck = await apiFetch('/api/verify-admin-pin', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ pin: adminOverride })
@@ -1140,7 +1141,7 @@ export function useWorkOrders(currentUser) {
             }
             
             // Mark as manually overridden
-            await fetch(`/api/verify-photos/${selectedWO.wo_number}`, {
+            await apiFetch(`/api/verify-photos/${selectedWO.wo_number}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
@@ -1158,7 +1159,7 @@ export function useWorkOrders(currentUser) {
         // For PM work orders, also check for write-ups
         if (isPMWorkOrder) {
           setSaving(true);
-          const writeupResponse = await fetch(`/api/verify-writeups/${selectedWO.wo_number}`);
+          const writeupResponse = await apiFetch(`/api/verify-writeups/${selectedWO.wo_number}`);
           const writeupResult = await writeupResponse.json();
           
           if (!writeupResult.writeups_received && !writeupResult.not_required) {
@@ -1183,7 +1184,7 @@ export function useWorkOrders(currentUser) {
             if (!adminOverride) return;
             
             try {
-              const pinCheck = await fetch('/api/verify-admin-pin', {
+              const pinCheck = await apiFetch('/api/verify-admin-pin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pin: adminOverride })
@@ -1196,7 +1197,7 @@ export function useWorkOrders(currentUser) {
               }
               
               // Mark write-ups as manually overridden
-              await fetch(`/api/verify-writeups/${selectedWO.wo_number}`, {
+              await apiFetch(`/api/verify-writeups/${selectedWO.wo_number}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
+import { requireStaff } from '@/lib/serverAuth';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -95,6 +96,8 @@ async function qbQuery(accessToken, realmId, query) {
 }
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const supabase = getSupabase();
   try {
     const body = await request.json().catch(() => ({}));
@@ -184,12 +187,34 @@ export async function POST(request) {
     // QB has custom transaction numbers enabled, so the API must assign the
     // next sequential DocNumber itself (otherwise the invoice stays unnumbered).
     const recent = await qbQuery(accessToken, realmId,
-      'select DocNumber from Invoice orderby MetaData.CreateTime desc maxresults 30');
+      'select Id, DocNumber, PrivateNote from Invoice orderby MetaData.CreateTime desc maxresults 30');
     let maxDoc = 0;
+    const fsmTag = `FSM ${invoice.invoice_number}`;
+    let alreadyInQB = null;
     (recent.QueryResponse?.Invoice || []).forEach((iv) => {
       const n = parseInt(iv.DocNumber, 10);
       if (Number.isFinite(n) && n > maxDoc) maxDoc = n;
+      // Duplicate guard: a previous push created this invoice in QB but the
+      // FSM linkage was lost (network/DB error). Re-link instead of creating
+      // a second QB invoice.
+      if (!alreadyInQB && typeof iv.PrivateNote === 'string' && iv.PrivateNote.startsWith(fsmTag)) alreadyInQB = iv;
     });
+    if (alreadyInQB && !dryRun) {
+      await supabase.from('invoices').update({
+        qb_invoice_number: alreadyInQB.DocNumber,
+        qb_invoice_id: alreadyInQB.Id,
+        synced_to_qb_at: new Date().toISOString(),
+      }).eq('invoice_id', invoiceId);
+      if (invoice.wo_id) {
+        await supabase.from('work_orders').update({ qb_invoice_number: alreadyInQB.DocNumber }).eq('wo_id', invoice.wo_id);
+      }
+      return NextResponse.json({
+        error: `This invoice already exists in QuickBooks as #${alreadyInQB.DocNumber} — linkage restored, nothing new was created. Reload the page.`,
+        qbInvoiceNumber: alreadyInQB.DocNumber,
+        qbInvoiceId: alreadyInQB.Id,
+        relinked: true,
+      }, { status: 409 });
+    }
     if (!maxDoc) throw new Error('Could not determine next QB invoice number');
     const nextDocNumber = String(maxDoc + 1);
 
@@ -229,6 +254,7 @@ export async function POST(request) {
 
     // ── Download the official QB PDF and store it ───────────────────────────
     let pdfUrl = null;
+    let pdfPath = null;
     try {
       const pdfRes = await qbFetch(accessToken, realmId, `/invoice/${qbId}/pdf?minorversion=73`, {
         accept: 'application/pdf',
@@ -240,13 +266,18 @@ export async function POST(request) {
         contentType: 'application/pdf', upsert: true,
       });
       if (up.error && /bucket/i.test(up.error.message || '')) {
-        await supabase.storage.createBucket(PDF_BUCKET, { public: true });
+        await supabase.storage.createBucket(PDF_BUCKET, { public: false });
         up = await supabase.storage.from(PDF_BUCKET).upload(path, pdfBuf, {
           contentType: 'application/pdf', upsert: true,
         });
       }
       if (!up.error) {
-        pdfUrl = supabase.storage.from(PDF_BUCKET).getPublicUrl(path).data.publicUrl;
+        // Bucket is private: the row stores the storage path, the office gets a
+        // signed link via /api/invoices/qb-pdf. For the immediate "open PDF"
+        // after pushing, hand back a short-lived signed URL right away.
+        pdfPath = path;
+        const signed = await supabase.storage.from(PDF_BUCKET).createSignedUrl(path, 15 * 60);
+        pdfUrl = signed.data?.signedUrl || null;
       } else {
         console.error('QB PDF storage error:', up.error);
       }
@@ -257,16 +288,32 @@ export async function POST(request) {
     // ── Persist QB linkage on invoice + work order ──────────────────────────
     // Critical linkage first (existing columns), extras separately so a
     // missing column can never cost us the QB number.
-    const { error: linkErr } = await supabase.from('invoices').update({
-      qb_invoice_number: docNumber,
-      qb_invoice_id: qbId,
-      synced_to_qb_at: new Date().toISOString(),
-    }).eq('invoice_id', invoiceId);
-    if (linkErr) console.error('QB linkage update error:', linkErr);
+    let linkErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const { error } = await supabase.from('invoices').update({
+        qb_invoice_number: docNumber,
+        qb_invoice_id: qbId,
+        synced_to_qb_at: new Date().toISOString(),
+      }).eq('invoice_id', invoiceId);
+      linkErr = error;
+      if (!linkErr) break;
+      console.error(`QB linkage update error (attempt ${attempt}/3):`, linkErr);
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+    if (linkErr) {
+      // The QB invoice exists — say so loudly so nobody pushes it twice.
+      return NextResponse.json({
+        error: `Invoice was created in QuickBooks as #${docNumber} (Id ${qbId}) but FSM could not save the link: ${linkErr.message}. Do NOT push again — retry once; the duplicate guard will re-link it.`,
+        qbInvoiceNumber: docNumber,
+        qbInvoiceId: qbId,
+        pdfUrl,
+        emailSent,
+      }, { status: 500 });
+    }
 
-    if (pdfUrl) {
+    if (pdfPath) {
       const { error: pdfColErr } = await supabase.from('invoices')
-        .update({ qb_pdf_url: pdfUrl }).eq('invoice_id', invoiceId);
+        .update({ qb_pdf_url: pdfPath }).eq('invoice_id', invoiceId);
       if (pdfColErr) console.error('qb_pdf_url update error (run migration?):', pdfColErr);
     }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -211,19 +212,29 @@ export default function CBREInvoicingPage() {
     setVwasUploaded(true); setWorkflowStep(6); await fetchData();
   };
 
+  // QB PDFs sit in a private bucket — ask the server for a short-lived signed link.
+  async function openQbPdf(invoiceId) {
+    try {
+      const res = await apiFetch(`/api/invoices/qb-pdf?invoice_id=${encodeURIComponent(invoiceId)}`);
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error || 'Could not get PDF link');
+      window.open(json.url, '_blank', 'noopener');
+    } catch (err) { alert('❌ ' + err.message); }
+  }
+
   const pushToQuickBooks = async (invoice) => {
     if (!invoice) return;
     if (!confirm(`Send invoice ${invoice.invoice_number} to QuickBooks?\n\nThis creates the invoice in QB (customer CBRE-UPS), emails it, and attaches the official QB PDF here.`)) return;
     setPushingToQB(true);
     try {
-      const res = await fetch('/api/quickbooks/push-invoice', {
+      const res = await apiFetch('/api/quickbooks/push-invoice', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice_id: invoice.invoice_id }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Push failed');
       if (json.pdfUrl) window.open(json.pdfUrl, '_blank');
-      setSelectedInvoice({ ...invoice, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl });
+      setSelectedInvoice({ ...invoice, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl ? 'stored' : invoice.qb_pdf_url });
       setQbInvoiceCreated(true);
       await fetchData();
     } catch (err) { alert('\u274c ' + err.message); }
@@ -375,7 +386,7 @@ export default function CBREInvoicingPage() {
                 <p className="text-xs text-slate-500 mt-0.5">{invoice.invoice_number} · ${invoice.total?.toFixed(2)}</p>
               </div>
               {invoice.qb_pdf_url
-                ? <ExternalLink href={invoice.qb_pdf_url} variant="purple" size="lg">⬇ QB PDF</ExternalLink>
+                ? <Btn onClick={() => openQbPdf(invoice.invoice_id)} variant="primary" size="lg">⬇ QB PDF</Btn>
                 : <ExternalLink href="https://qbo.intuit.com" variant="default" size="md">Open QuickBooks</ExternalLink>}
             </div>
           ) : (
@@ -408,7 +419,7 @@ export default function CBREInvoicingPage() {
           </InfoBox>
           <div className="flex gap-3 flex-wrap">
             {invoice?.qb_pdf_url && (
-              <ExternalLink href={invoice.qb_pdf_url} variant="purple" size="lg">⬇ QB PDF{invoice.qb_invoice_number ? ` #${invoice.qb_invoice_number}` : ''}</ExternalLink>
+              <Btn onClick={() => openQbPdf(invoice.invoice_id)} variant="primary" size="lg">⬇ QB PDF{invoice.qb_invoice_number ? ` #${invoice.qb_invoice_number}` : ''}</Btn>
             )}
             <ExternalLink href="https://enterprise.serviceinsight.cbre.com/PRD40177VWS" variant="default" size="lg">🔗 Open VWAS</ExternalLink>
             <ExternalLink href={`https://mail.google.com/mail/u/0/#search/in:anywhere+${woNumber}`} variant="danger" size="lg">📧 Gmail (emfcbre@)</ExternalLink>

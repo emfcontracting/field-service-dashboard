@@ -12,6 +12,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 const PRIORITY_META = {
   high:   { label: '🔴 High',   colour: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/30',    dot: 'bg-red-500' },
@@ -53,7 +54,7 @@ export default function ReviewQueueView({ currentUser, onSelectWorkOrder, refres
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/flags');
+      const res = await apiFetch('/api/flags');
       const data = await res.json();
       setFlags(data.flags || []);
     } catch (e) {
@@ -74,7 +75,7 @@ export default function ReviewQueueView({ currentUser, onSelectWorkOrder, refres
     if (note === null) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/flags/${flag.flag_id}`, {
+      const res = await apiFetch(`/api/flags/${flag.flag_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.user_id, resolution_note: note || null }),
@@ -94,7 +95,7 @@ export default function ReviewQueueView({ currentUser, onSelectWorkOrder, refres
     if (!confirm(`Delete this flag? Cannot be undone.`)) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/flags/${flag.flag_id}?user_id=${currentUser.user_id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/flags/${flag.flag_id}?user_id=${currentUser.user_id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) { alert(`Delete failed: ${data.error}`); return; }
       await load();

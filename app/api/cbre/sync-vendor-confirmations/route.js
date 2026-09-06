@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { kindFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
+import { requireCronOrStaff } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -40,7 +41,7 @@ function connectIMAP() {
   const email = process.env.EMAIL_IMPORT_USER;
   const password = process.env.EMAIL_IMPORT_PASSWORD;
   if (!email || !password) throw new Error('IMAP credentials not configured');
-  return new Imap({ user: email, password, host: 'imap.gmail.com', port: 993, tls: true, tlsOptions: { rejectUnauthorized: false } });
+  return new Imap({ user: email, password, host: 'imap.gmail.com', port: 993, tls: true, tlsOptions: { servername: 'imap.gmail.com' } });
 }
 
 function fmtIMAPDate(date) {
@@ -103,14 +104,8 @@ export async function POST(request) { return handle(request); }
 
 async function handle(request) {
   const { searchParams } = new URL(request.url);
-  const authHeader = request.headers.get('authorization');
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}` &&
-    searchParams.get('key') !== process.env.CRON_SECRET
-  ) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = await requireCronOrStaff(request);
+  if (!auth.ok) return auth.response;
 
   const searchDays = Math.min(Math.max(parseInt(searchParams.get('searchDays') || '14', 10) || 14, 1), 90);
   const dryRun = searchParams.get('dryRun') === 'true';

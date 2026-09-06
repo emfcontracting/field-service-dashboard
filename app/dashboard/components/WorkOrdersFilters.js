@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function WorkOrdersFilters({
   searchTerm,
@@ -205,7 +206,7 @@ export default function WorkOrdersFilters({
     setSyncResult(null);
     try {
       // manual=true: the route's CRON_SECRET guard only waves through manual runs
-      const response = await fetch('/api/email-sync?manual=true');
+      const response = await apiFetch('/api/email-sync?manual=true');
       const result = await response.json();
       setSyncResult(result);
       if (result.success && result.updated > 0) {

@@ -7,6 +7,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 const PRIORITY_META = {
   high:   { label: 'High',   colour: 'bg-red-500/15    text-red-400    border-red-500/30',    dot: 'bg-red-500' },
@@ -37,7 +38,7 @@ export default function FlagsSection({ workOrder, currentUser }) {
     if (!workOrder?.wo_id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/flags?wo_id=${workOrder.wo_id}`);
+      const res = await apiFetch(`/api/flags?wo_id=${workOrder.wo_id}`);
       const data = await res.json();
       setFlags(data.flags || []);
     } catch (e) {
@@ -74,7 +75,7 @@ export default function FlagsSection({ workOrder, currentUser }) {
     }
     setBusy(true);
     try {
-      const res = await fetch('/api/flags', {
+      const res = await apiFetch('/api/flags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -110,7 +111,7 @@ export default function FlagsSection({ workOrder, currentUser }) {
     if (note === null) return;  // user cancelled
     setBusy(true);
     try {
-      const res = await fetch(`/api/flags/${flag.flag_id}`, {
+      const res = await apiFetch(`/api/flags/${flag.flag_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,7 +136,7 @@ export default function FlagsSection({ workOrder, currentUser }) {
     if (!confirm(`Delete this flag? This cannot be undone.`)) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/flags/${flag.flag_id}?user_id=${currentUser.user_id}`, {
+      const res = await apiFetch(`/api/flags/${flag.flag_id}?user_id=${currentUser.user_id}`, {
         method: 'DELETE',
       });
       const data = await res.json();

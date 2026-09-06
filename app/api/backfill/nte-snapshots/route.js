@@ -1,6 +1,7 @@
 // app/api/backfill/nte-snapshots/route.js
 // Backfill script to populate current_costs_snapshot and new_nte_amount for existing quotes
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +89,8 @@ async function calculateCurrentCosts(woId, workOrder) {
 }
 
 export async function GET(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const dryRun = searchParams.get('dry_run') !== 'false'; // Default to dry run

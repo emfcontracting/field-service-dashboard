@@ -2,6 +2,7 @@
 // Send weather alerts to field techs via SMS and email
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -48,6 +49,8 @@ const buildSmsEmail = (phone, carrier) => {
 };
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { alertType, alertMessage, alertDetails, severity } = await request.json();
     

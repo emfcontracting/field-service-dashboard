@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
+import { requireCronOrStaff, cronHeaders, appBaseUrl } from '@/lib/serverAuth';
 
 // Vercel: this route opens seven IMAP folders in sequence and parses up to 30
 // days of mail per folder. The platform default kills it mid-run, which is why
@@ -69,7 +70,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    tlsOptions: { servername: 'imap.gmail.com' }
   });
 }
 
@@ -373,13 +374,13 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
         message = `📋 CBRE Update: WO ${workOrder.wo_number} - Status: ${type}`;
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/notifications`, {
+    const response = await fetch(`${appBaseUrl()}/api/notifications`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...cronHeaders() },
       body: JSON.stringify({
         type: 'cbre_status_update',
         recipients,
-        message,
+        customMessage: message,
         workOrder: {
           wo_number: workOrder.wo_number,
           building: workOrder.building,
@@ -413,13 +414,13 @@ async function sendNotFoundNotification(woNumber, label, emailSubject) {
 
     const message = `⚠️ CBRE ${label.toUpperCase()} email for WO ${woNumber} — WO NOT IN FSM! Import it manually. (${emailSubject.substring(0, 60)})`;
 
-    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/notifications`, {
+    await fetch(`${appBaseUrl()}/api/notifications`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...cronHeaders() },
       body: JSON.stringify({
         type: 'cbre_status_update',
         recipients,
-        message,
+        customMessage: message,
         workOrder: { wo_number: woNumber, building: '(not in FSM)', cbre_status: label }
       })
     });
@@ -469,14 +470,10 @@ export async function GET(request) {
     const searchDays = parseInt(searchParams.get('days')) || 30; // Default 30 days, use ?days=90 for deeper rescan
     const skipNotify = searchParams.get('skipNotify') === 'true'; // Skip all notifications for this run
 
-    // Same guard email-import/cron uses. Vercel sends this bearer token on
-    // scheduled invocations; ?manual=true still lets the dashboard button through.
-    const authHeader = request.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      if (searchParams.get('manual') !== 'true') {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    }
+    // Scheduled run (CRON_SECRET) or a signed-in office/admin user pressing
+    // the sync button. No more ?manual=true bypass.
+    const auth = await requireCronOrStaff(request);
+    if (!auth.ok) return auth.response;
     
     // Check IMAP credentials
     const email = process.env.EMAIL_IMPORT_USER;
@@ -583,6 +580,25 @@ export async function GET(request) {
         // into the same cron window.
         if (workOrder.cbre_status === labelConfig.cbre_status && !emailIsNewerThanStatus) {
           results.skipped++;
+          continue;
+        }
+
+        // ── Stale-email guard ───────────────────────────────────────────────
+        // The status on the WO was set (by the office, the CSV sync or a newer
+        // email) AFTER this email arrived. The email is history, not news —
+        // re-applying it would silently undo a manual change. Every run scans
+        // the last 30 days, so without this guard old mails kept winning.
+        if (workOrder.cbre_status && statusSetAt && winningEmailDate && winningEmailDate <= statusSetAt) {
+          results.skipped++;
+          results.updates.push({
+            wo_number: woNumber,
+            building: workOrder.building,
+            label,
+            new_status: labelConfig.cbre_status,
+            old_status: workOrder.cbre_status,
+            stale_email: true,
+            subject: winningEmail.subject.substring(0, 80),
+          });
           continue;
         }
 

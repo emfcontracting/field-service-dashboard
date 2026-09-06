@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import zlib from 'zlib';
+import { requireCronOrStaff } from '@/lib/serverAuth';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -50,7 +51,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false },
+    tlsOptions: { servername: 'imap.gmail.com' },
   });
 }
 
@@ -192,12 +193,8 @@ function parseRemittance(body) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const authHeader = request.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      if (searchParams.get('manual') !== 'true') {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    }
+    const auth = await requireCronOrStaff(request);
+    if (!auth.ok) return auth.response;
 
     const searchDays = parseInt(searchParams.get('days')) || 35;
     const beforeDays = parseInt(searchParams.get('beforeDays')) || 0;

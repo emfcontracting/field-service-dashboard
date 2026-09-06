@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 import NotificationsTab from './NotificationsTab';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -143,7 +144,7 @@ export default function MessagesPage() {
       if (messageType === 'work_order' && selectedWO) { apiType = 'work_order_assigned'; workOrder = workOrders.find(w => w.wo_id === selectedWO); }
       else if (messageType === 'emergency' && selectedWO) { apiType = 'emergency_work_order'; workOrder = workOrders.find(w => w.wo_id === selectedWO); }
 
-      const res = await fetch('/api/notifications', {
+      const res = await apiFetch('/api/notifications', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: apiType, deliveryMethod,

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 import { getEffectiveAdminHours } from '@/lib/clientType';
 import { billableComments } from '@/lib/commentsSplit';
+import { requireStaff } from '@/lib/serverAuth';
 
 // Rate constants - MUST match CostSummarySection / Invoicing page logic
 const RT_RATE       = 64;
@@ -15,6 +16,8 @@ const ADMIN_FEE     = ADMIN_HOURS * RT_RATE; // default admin fee (UPS)
 
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const supabase = createRouteHandlerClient({ cookies });
   
   try {

@@ -32,6 +32,7 @@ import { simpleParser } from 'mailparser';
 import { buildContactLines } from '../contactParser';
 import { parseCbreDateEntered } from '../parseCbreDate';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
+import { requireAdmin } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -58,7 +59,7 @@ function connectIMAP() {
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
-    tlsOptions: { rejectUnauthorized: false }
+    tlsOptions: { servername: 'imap.gmail.com' }
   });
 }
 
@@ -277,7 +278,7 @@ function parseCBREEmail(subject, body) {
     address: '',
     city: '',
     state: '',
-    priority: 'medium',
+    priority: 'P4',
     date_entered: new Date().toISOString(),
     work_order_description: '',
     requestor: '',
@@ -315,10 +316,10 @@ function parseCBREEmail(subject, body) {
       workOrder.priority = canonical;
     } else {
       const pText = (priorityMatch[2] || '').toLowerCase();
-      if (pText.includes('emergency')) workOrder.priority = 'emergency';
-      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'high';
-      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'medium';
-      else workOrder.priority = 'low';
+      if (pText.includes('emergency')) workOrder.priority = 'P1';
+      else if (pText.includes('urgent') || pText.includes('24 hour')) workOrder.priority = 'P2';
+      else if (pText.includes('48 hour') || pText.includes('72 hour')) workOrder.priority = 'P4';
+      else workOrder.priority = 'P5';
     }
   }
 
@@ -496,6 +497,8 @@ async function buildReport(days, allowedTypes) {
 
 // GET: dry-run report
 export async function GET(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const days = Math.min(parseInt(searchParams.get('days')) || 90, 365);
@@ -528,6 +531,8 @@ export async function GET(request) {
 
 // POST: import the missing work orders of the allowed type(s).
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   const startTime = Date.now();
   try {
     const { searchParams } = new URL(request.url);

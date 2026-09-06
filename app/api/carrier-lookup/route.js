@@ -1,5 +1,6 @@
 // app/api/carrier-lookup/route.js
 import { NextResponse } from 'next/server';
+import { requireStaff } from '@/lib/serverAuth';
 
 // Map carrier names from NumVerify to our internal carrier codes
 const CARRIER_MAPPING = {
@@ -105,6 +106,8 @@ function findCarrierCode(carrierName) {
 }
 
 export async function GET(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const phone = searchParams.get('phone');
   

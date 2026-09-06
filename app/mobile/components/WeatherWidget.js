@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 const HAZARD_ICONS = {
   'lightning': '⚡',
@@ -29,7 +30,7 @@ export default function WeatherWidget({ expanded = false, onToggle }) {
 
   async function fetchWeather() {
     try {
-      const response = await fetch('/api/weather?location=lexington');
+      const response = await apiFetch('/api/weather?location=lexington');
       if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
       setWeather(data);

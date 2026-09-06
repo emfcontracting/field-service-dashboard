@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -15,6 +16,8 @@ function formatDateLocal(dateString) {
 }
 
 export async function GET(request, { params }) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   const { id } = params;
 
   try {

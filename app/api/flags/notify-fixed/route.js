@@ -8,8 +8,11 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
 import { sendSubscribedNotification } from '@/lib/notificationRecipients';
+import { requireUser } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { woId, kind, actorName } = await request.json();
     if (!woId || !kind) {

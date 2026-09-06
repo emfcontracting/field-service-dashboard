@@ -682,11 +682,19 @@ export default function CBRESyncView({ currentUser }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Compute what changes are needed for a single row based on mapping
 // ─────────────────────────────────────────────────────────────────────────────
+// Invoice lifecycle order — CBRE Sync only proposes forward moves.
+const INVOICE_STATUS_RANK = { draft: 0, sent: 1, submitted: 1, accepted: 2, rejected: 2, disputed: 2, paid: 3 };
+
 function computeProposedChanges(row, woInDb, invInDb, map) {
   const changes = [];
 
   if (map.target_type === 'invoice' && invInDb) {
-    if (invInDb.status !== map.target_status) {
+    // Never move an invoice BACKWARDS: a CBRE grid still showing CIS/CA1 for an
+    // invoice we already recorded as paid (or accepted → draft) must not undo
+    // the payment. Only forward moves are proposed.
+    const rank = INVOICE_STATUS_RANK[invInDb.status] ?? 0;
+    const targetRank = INVOICE_STATUS_RANK[map.target_status] ?? 0;
+    if (invInDb.status !== map.target_status && targetRank >= rank) {
       changes.push({
         target: 'invoice',
         field: 'status',

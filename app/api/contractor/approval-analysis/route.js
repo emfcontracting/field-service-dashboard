@@ -3,6 +3,7 @@
 // Shows what would be approved vs held if we required completed tickets for payment
 
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -10,6 +11,8 @@ const supabase = createClient(
 );
 
 export async function GET(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30');

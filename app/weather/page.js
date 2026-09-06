@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 // ── Severity config ──────────────────────────────────────────────────────────
 const SEVERITY = {
@@ -102,7 +103,7 @@ export default function WeatherPage() {
   async function fetchWeather() {
     try {
       setLoading(true);
-      const res = await fetch('/api/weather?location=all');
+      const res = await apiFetch('/api/weather?location=all');
       if (!res.ok) throw new Error('Failed to fetch weather');
       const data = await res.json();
       setWeather(data);
@@ -122,7 +123,7 @@ export default function WeatherPage() {
       const severe = weather.alerts.filter(a => a.severity === 'Extreme' || a.severity === 'Severe');
       const primary = severe[0] || weather.alerts[0];
       const alertText = `EMF WEATHER ALERT: ${primary.event}. ${primary.headline?.slice(0, 80) || 'Check forecast before outdoor work.'}`.slice(0, 160);
-      const res = await fetch('/api/weather/alert', {
+      const res = await apiFetch('/api/weather/alert', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ alertType: primary.event, alertMessage: alertText, alertDetails: primary.instruction?.slice(0, 500), severity: primary.severity }),
       });

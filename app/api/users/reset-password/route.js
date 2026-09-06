@@ -1,11 +1,15 @@
 // app/api/users/reset-password/route.js
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
-    const { userId, newPassword, requestorEmail } = body;
+    const { userId, newPassword } = body;
+    const requestorEmail = auth.principal.user.email;
 
     if (!userId || !newPassword)
       return NextResponse.json({ error: 'userId and newPassword required' }, { status: 400 });
@@ -13,23 +17,11 @@ export async function POST(request) {
     if (newPassword.length < 6)
       return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
 
-    // ── Verify requestor is an admin ────────────────────────────────────────
+    // Requestor already verified as an active admin by requireAdmin() above.
     const supabaseAnon = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
-
-    const { data: requestor, error: reqErr } = await supabaseAnon
-      .from('users')
-      .select('role, is_active')
-      .eq('email', requestorEmail)
-      .single();
-
-    if (reqErr || !requestor)
-      return NextResponse.json({ error: 'Requestor not found' }, { status: 403 });
-
-    if (!requestor.is_active || requestor.role !== 'admin')
-      return NextResponse.json({ error: 'Admin access required to reset passwords' }, { status: 403 });
 
     // ── Get target user's auth_id ────────────────────────────────────────────
     const { data: targetUser, error: targetErr } = await supabaseAnon

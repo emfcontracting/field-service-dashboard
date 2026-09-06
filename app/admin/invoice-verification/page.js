@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -148,7 +149,7 @@ export default function InvoiceVerification() {
 
     // Send to our API to extract data
     try {
-      const response = await fetch('/api/extract-invoice', {
+      const response = await apiFetch('/api/extract-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

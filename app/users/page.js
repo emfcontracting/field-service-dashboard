@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -161,7 +162,7 @@ export default function UserManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const res = await fetch('/api/admin/wages', {
+      const res = await apiFetch('/api/admin/wages', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
       if (!res.ok) return;
@@ -182,7 +183,7 @@ export default function UserManagement() {
       setSavingWage(userId);
       const { data: { session } } = await supabase.auth.getSession();
       const form = wageForm[userId] || { rt: 0, ot: 0 };
-      const res = await fetch('/api/admin/wages', {
+      const res = await apiFetch('/api/admin/wages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ user_id: userId, hourly_rate_regular: form.rt, hourly_rate_overtime: form.ot, mileage_rate: form.mi }),
@@ -213,7 +214,7 @@ export default function UserManagement() {
     if (!formData.phone) { setCarrierLookupResult({ success:false, message:'Enter a phone number first' }); return; }
     setLookingUpCarrier(true); setCarrierLookupResult(null);
     try {
-      const res  = await fetch(`/api/carrier-lookup?phone=${encodeURIComponent(formData.phone)}`);
+      const res  = await apiFetch(`/api/carrier-lookup?phone=${encodeURIComponent(formData.phone)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Lookup failed');
       if (data.carrier_code) {
@@ -247,7 +248,7 @@ export default function UserManagement() {
   async function handlePasswordReset(userId) {
     if (!newPassword || newPassword.length < 6) { alert('Minimum 6 characters'); return; }
     try {
-      const res = await fetch('/api/users/reset-password', {
+      const res = await apiFetch('/api/users/reset-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, newPassword, requestorEmail: currentUser.email }),
       });
@@ -261,7 +262,7 @@ export default function UserManagement() {
     if (!resetPw || resetPw.length < 6) { setResetError('Minimum 6 characters'); return; }
     setResetting(true); setResetError(null); setIsPinOnly(false);
     try {
-      const res = await fetch('/api/users/reset-password', {
+      const res = await apiFetch('/api/users/reset-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: resetTarget.user_id, newPassword: resetPw, requestorEmail: currentUser.email }),
       });
@@ -286,7 +287,7 @@ export default function UserManagement() {
     if (!resetPw || resetPw.length < 6) { setResetError('Minimum 6 characters'); return; }
     setResetting(true); setResetError(null);
     try {
-      const res = await fetch('/api/users/create-auth-account', {
+      const res = await apiFetch('/api/users/create-auth-account', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: resetTarget.user_id,
@@ -308,7 +309,7 @@ export default function UserManagement() {
     const confirmation = prompt(`Type "DELETE" to permanently delete ${user.first_name} ${user.last_name}.\n\nThis removes all their hours, assignments and availability records.`);
     if (confirmation !== 'DELETE') { alert('Cancelled'); return; }
     try {
-      const res = await fetch('/api/users/delete', {
+      const res = await apiFetch('/api/users/delete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.user_id, requestorEmail: currentUser.email }),
       });

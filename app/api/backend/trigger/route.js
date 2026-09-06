@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin, appBaseUrl } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -7,6 +8,8 @@ const supabase = createClient(
 );
 
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { action, params } = await request.json();
 
@@ -70,7 +73,7 @@ export async function POST(request) {
 
 async function triggerEmailImport() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/email-import/cron`, {
+    const response = await fetch(`${appBaseUrl()}/api/email-import/cron`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
@@ -99,7 +102,7 @@ async function triggerEmailImport() {
 
 async function triggerAvailabilityReminder() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/availability/reminder-cron`, {
+    const response = await fetch(`${appBaseUrl()}/api/availability/reminder-cron`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
@@ -128,7 +131,7 @@ async function triggerAvailabilityReminder() {
 
 async function triggerAgingAlert() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/aging/cron`, {
+    const response = await fetch(`${appBaseUrl()}/api/aging/cron`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
@@ -218,7 +221,7 @@ async function sendTestNotification(params) {
 
 async function syncEmailStatus() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://field-service-dashboard.vercel.app'}/api/email-sync`, {
+    const response = await fetch(`${appBaseUrl()}/api/email-sync`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

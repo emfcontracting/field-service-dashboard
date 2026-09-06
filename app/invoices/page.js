@@ -10,6 +10,7 @@ import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -442,11 +443,21 @@ export default function InvoicingPage() {
     finally { setGeneratingInvoice(false); }
   };
 
+  // QB PDFs sit in a private bucket — ask the server for a short-lived signed link.
+  async function openQbPdf(invoiceId) {
+    try {
+      const res = await apiFetch(`/api/invoices/qb-pdf?invoice_id=${encodeURIComponent(invoiceId)}`);
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error || 'Could not get PDF link');
+      window.open(json.url, '_blank', 'noopener');
+    } catch (err) { alert('❌ ' + err.message); }
+  }
+
   const pushToQuickBooks = async (invoice) => {
     if (!confirm(`Send invoice ${invoice.invoice_number} to QuickBooks?\n\nThis creates the invoice in QB (customer CBRE-UPS) and attaches the official QB PDF here for the CBRE upload.`)) return;
     setPushingToQB(true);
     try {
-      const res = await fetch('/api/quickbooks/push-invoice', {
+      const res = await apiFetch('/api/quickbooks/push-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice_id: invoice.invoice_id }),
@@ -458,7 +469,7 @@ export default function InvoicingPage() {
         (json.emailSent ? '\n\u2709\ufe0f Invoice email sent via QuickBooks.' : '\n\u26a0\ufe0f Invoice email could NOT be sent \u2014 send it from QuickBooks.') +
         (json.pdfUrl ? '\n\ud83d\udcc4 QB PDF opened in a new tab (also attached via the "QB PDF" button).' : '\n\u26a0\ufe0f PDF could not be attached \u2014 check QuickBooks directly.'));
       setSelectedItem(prev => prev?.type === 'invoice'
-        ? { ...prev, data: { ...prev.data, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl } }
+        ? { ...prev, data: { ...prev.data, qb_invoice_number: json.qbInvoiceNumber, qb_pdf_url: json.pdfUrl ? 'stored' : prev.data.qb_pdf_url } }
         : prev);
       await fetchData();
     } catch (err) { alert('\u274c ' + err.message); }
@@ -1275,10 +1286,10 @@ export default function InvoicingPage() {
                     <p className="text-sm text-slate-200 font-mono mt-0.5">QB #{selectedItem.data.qb_invoice_number}</p>
                   </div>
                   {selectedItem.data.qb_pdf_url && (
-                    <a href={selectedItem.data.qb_pdf_url} target="_blank" rel="noopener noreferrer"
+                    <button type="button" onClick={() => openQbPdf(selectedItem.data.invoice_id)}
                       className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold">
                       ⬇ QB PDF
-                    </a>
+                    </button>
                   )}
                 </div>
               ) : (

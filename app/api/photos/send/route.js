@@ -8,12 +8,15 @@
 // emfcbre@gmail.com) still detects it via the WO number in the subject.
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { requireUser } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
 const OFFICE_EMAIL = 'emfcbre@gmail.com';
 
 export async function POST(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const {

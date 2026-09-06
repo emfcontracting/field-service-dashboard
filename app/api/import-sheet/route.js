@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -6,6 +7,8 @@ const supabase = createClient(
 );
 
 export async function POST(request) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const apiKey = process.env.GOOGLE_API_KEY;
     

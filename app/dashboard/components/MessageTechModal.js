@@ -17,6 +17,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 const CHANNELS = [
   { id: 'push',  label: '📲 Push (App)', hint: 'In the mobile app; opens the ticket.' },
@@ -107,7 +108,7 @@ export default function MessageTechModal({ workOrder, supabase, currentUser, onC
       if (channel === 'push') {
         for (const r of reachable) {
           try {
-            const res = await fetch('/api/push/notify-tech', {
+            const res = await apiFetch('/api/push/notify-tech', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: r.user_id, title: woRef, body: text.trim(), data: { woId: wo.wo_id } }),
@@ -117,7 +118,7 @@ export default function MessageTechModal({ workOrder, supabase, currentUser, onC
           } catch { failed++; }
         }
       } else {
-        const res = await fetch('/api/notifications', {
+        const res = await apiFetch('/api/notifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function SendAlertModal({ stats, agingWorkOrders, leadTechs, users, preselectedTechId, onClose, onAlertSent }) {
   const [selectedTechs, setSelectedTechs] = useState(preselectedTechId ? [preselectedTechId] : []);
@@ -30,7 +31,7 @@ export default function SendAlertModal({ stats, agingWorkOrders, leadTechs, user
     setSending(true); setResults(null);
     try {
       const wos = sendToAll ? agingWorkOrders : agingWorkOrders.filter(wo=>selectedTechs.includes(wo.lead_tech_id));
-      const res = await fetch('/api/aging/send-alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workOrders:wos,targetTechIds:sendToAll?null:selectedTechs})});
+      const res = await apiFetch('/api/aging/send-alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workOrders:wos,targetTechIds:sendToAll?null:selectedTechs})});
       const data = await res.json();
       setResults(data);
       if (data.success) onAlertSent();

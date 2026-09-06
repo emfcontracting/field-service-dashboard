@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -104,7 +105,7 @@ export default function SettingsPage() {
     if (currentPassword === newPassword) { setPwError('New password must differ from current'); return; }
     setChanging(true);
     try {
-      const res  = await fetch('/api/users/change-password', {
+      const res  = await apiFetch('/api/users/change-password', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword, userEmail: currentUser?.email }),
       });

@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { notifyTech } from '@/lib/expoPush';
 import { getSupabase } from '@/lib/supabase';
+import { requireHook } from '@/lib/serverAuth';
 
 const QUOTE_MSG = {
   submitted: { title: '📤 Quote submitted to CBRE', body: (wo) => `${wo.wo_number} — waiting on CBRE approval` },
@@ -43,6 +44,8 @@ function len(v) {
 }
 
 export async function POST(request) {
+  const auth = await requireHook(request);
+  if (!auth.ok) return auth.response;
   try {
     const payload = await request.json();
     const table = payload.table;

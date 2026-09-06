@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from '@supabase/supabase-js';
 import OAuthClient from 'intuit-oauth';
+import { requireCronOrAdmin } from '@/lib/serverAuth';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -96,12 +97,8 @@ async function qbQueryAll(accessToken, realmId, entity, where) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const authHeader = request.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      if (searchParams.get('manual') !== 'true') {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    }
+    const auth = await requireCronOrAdmin(request);
+    if (!auth.ok) return auth.response;
     const days = parseInt(searchParams.get('days')) || 60;
     const dryRun = searchParams.get('dryRun') === 'true';
 

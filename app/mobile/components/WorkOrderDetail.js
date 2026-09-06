@@ -16,6 +16,7 @@ import PauseControl from './PauseControl';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { calculateExistingCosts } from '../services/quoteService';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
+import { apiFetch } from '@/lib/apiClient';
 
 // Map missing_data item -> DOM id of the matching section in this view.
 // Used by the clickable badges in the missing-data banner to scroll the tech
@@ -268,7 +269,7 @@ export default function WorkOrderDetail({
     // Validation 3: Check if Photos exist (only when online)
     if (navigator.onLine) {
       try {
-        const response = await fetch(`/api/verify-photos/${woNumber}`);
+        const response = await apiFetch(`/api/verify-photos/${woNumber}`);
         const result = await response.json();
         
         if (!result.photos_received) {

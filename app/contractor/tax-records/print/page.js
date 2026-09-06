@@ -9,6 +9,7 @@ import {
   mergeCategories,
   groupCategories,
 } from '@/lib/taxRecordCategories';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 
@@ -53,8 +54,8 @@ function TaxRecordsPrintContent() {
     setLoading(true);
     try {
       const [recordsRes, catsRes] = await Promise.all([
-        fetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`),
-        fetch(`/api/contractor/tax-categories?user_id=${user.user_id}`),
+        apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`),
+        apiFetch(`/api/contractor/tax-categories?user_id=${user.user_id}`),
       ]);
       const recordsData = await recordsRes.json();
       const catsData    = await catsRes.json();

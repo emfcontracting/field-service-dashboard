@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -7,6 +8,8 @@ const supabase = createClient(
 );
 
 export async function GET(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const logType = searchParams.get('type') || 'all';
@@ -91,6 +94,8 @@ export async function GET(request) {
 
 // POST endpoint to create a log entry
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const { log_type, message, status, metadata } = await request.json();
 

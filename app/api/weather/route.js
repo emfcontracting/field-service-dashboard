@@ -1,6 +1,7 @@
 // app/api/weather/route.js
 // Fetches weather data and alerts for South Carolina service areas
 import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/serverAuth';
 
 // NWS API is free and doesn't require an API key
 const NWS_BASE_URL = 'https://api.weather.gov';
@@ -29,6 +30,8 @@ const SEVERITY_ORDER = {
 };
 
 export async function GET(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const location = searchParams.get('location') || 'all';
   

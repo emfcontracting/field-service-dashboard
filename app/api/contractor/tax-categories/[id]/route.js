@@ -10,6 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireStaff } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -17,6 +18,8 @@ const supabase = createClient(
 );
 
 export async function PATCH(request, { params }) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { id } = await params;
     const body = await request.json();
@@ -52,6 +55,8 @@ export async function PATCH(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
+  const auth = await requireStaff(request);
+  if (!auth.ok) return auth.response;
   try {
     const { id } = await params;
 

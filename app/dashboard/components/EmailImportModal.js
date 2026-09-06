@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatDateTimeEST } from '../../mobile/utils/dateUtils';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function EmailImportModal({ onClose, onImportComplete }) {
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ export default function EmailImportModal({ onClose, onImportComplete }) {
     setError('');
 
     try {
-      const response = await fetch('/api/email-import/cron', {
+      const response = await apiFetch('/api/email-import/cron', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -57,7 +58,7 @@ export default function EmailImportModal({ onClose, onImportComplete }) {
     setSelectedEmails({});
 
     try {
-      const response = await fetch('/api/email-import');
+      const response = await apiFetch('/api/email-import');
       const data = await response.json();
 
       if (!data.success) {
@@ -127,7 +128,7 @@ export default function EmailImportModal({ onClose, onImportComplete }) {
       const emailIds = selectedIndexes.map(idx => emails[idx].emailId);
       const workOrders = selectedIndexes.map(idx => emails[idx].parsedData);
 
-      const response = await fetch('/api/email-import', {
+      const response = await apiFetch('/api/email-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emailIds, workOrders, markAsRead: true })

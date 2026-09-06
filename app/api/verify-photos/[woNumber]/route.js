@@ -3,6 +3,7 @@
 // Uses IMAP to search Gmail - just needs "photos" + WO number in subject
 import { createClient } from '@supabase/supabase-js';
 import Imap from 'imap';
+import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -23,7 +24,7 @@ function searchForPhotos(woNumber) {
       host: 'imap.gmail.com',
       port: 993,
       tls: true,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: { servername: 'imap.gmail.com' },
       authTimeout: 8000,
       connTimeout: 8000
     };
@@ -139,6 +140,8 @@ function searchForPhotos(woNumber) {
 
 // GET: Check if photos exist for a work order
 export async function GET(request, { params }) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { woNumber } = await params;
 
@@ -233,6 +236,8 @@ export async function GET(request, { params }) {
 
 // POST: Manual override
 export async function POST(request, { params }) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { woNumber } = await params;
     const body = await request.json();

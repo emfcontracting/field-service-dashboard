@@ -2,6 +2,7 @@
 // Handles push notification subscription management
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireUser } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -9,6 +10,8 @@ const supabase = createClient(
 );
 
 export async function POST(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { subscription, user_id, refreshed } = await request.json();
     
@@ -54,6 +57,8 @@ export async function POST(request) {
 
 // Handle unsubscribe
 export async function DELETE(request) {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
   try {
     const { endpoint, user_id } = await request.json();
     

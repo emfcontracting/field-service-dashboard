@@ -1,94 +1,75 @@
 // Authentication Service (WITH OFFLINE SUPPORT)
+import { apiFetch, setAppToken } from '@/lib/apiClient';
+
+async function sha256(text) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
+}
+
+async function offlineLogin(email, pin) {
+  const cachedUser = getCachedUser();
+  if (!cachedUser || cachedUser.email !== email) {
+    throw new Error('Cannot login offline. Please connect to internet for first login.');
+  }
+  const hash = await sha256(pin);
+  if (cachedUser.pin_hash && hash === cachedUser.pin_hash) {
+    console.log('✅ Offline login successful with cached credentials');
+    return cachedUser;
+  }
+  throw new Error('Invalid PIN - PIN does not match');
+}
 
 export async function loginUser(supabase, email, pin) {
-  try {
-    console.log('Attempting login with email:', email);
-    
-    // If offline, try to use cached user
-    if (!navigator.onLine) {
-      console.log('📴 Offline - checking cached user');
-      const cachedUser = getCachedUser();
-      
-      if (cachedUser && cachedUser.email === email && cachedUser.pin === pin) {
-        console.log('✅ Offline login successful with cached credentials');
-        return cachedUser;
-      } else if (cachedUser && cachedUser.email === email) {
-        throw new Error('Invalid PIN - PIN does not match');
-      } else {
-        throw new Error('Cannot login offline. Please connect to internet for first login.');
-      }
-    }
-    
-    // Online - verify with server
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-    console.log('User query result:', users, error);
-
-    if (error || !users) {
-      throw new Error('Invalid email - user not found');
-    }
-
-    if (!users.pin) {
-      throw new Error('No PIN set for this user. Contact admin to set up your PIN.');
-    }
-
-    if (users.pin !== pin) {
-      throw new Error('Invalid PIN - PIN does not match');
-    }
-
-    console.log('Login successful! User:', users);
-    
-    // Cache user data for offline use
-    cacheUser(users);
-    
-    return users;
-  } catch (err) {
-    console.error('Login error:', err);
-    
-    // If online request failed but we have cached data, try offline login
-    if (err.message?.includes('fetch') || err.message?.includes('network')) {
-      console.log('⚠️ Network error - trying cached login');
-      const cachedUser = getCachedUser();
-      
-      if (cachedUser && cachedUser.email === email && cachedUser.pin === pin) {
-        console.log('✅ Fallback offline login successful');
-        return cachedUser;
-      }
-    }
-    
-    throw err;
+  // The PIN is verified on the server (/api/auth/login); the browser never
+  // reads the users table for authentication any more.
+  if (!navigator.onLine) {
+    console.log('📴 Offline - checking cached user');
+    return offlineLogin(email, pin);
   }
+
+  let res;
+  try {
+    res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, pin }),
+    });
+  } catch (err) {
+    console.log('⚠️ Network error - trying cached login');
+    return offlineLogin(email, pin);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Login failed');
+
+  setAppToken(data.token);
+  const user = { ...data.user, pin_hash: await sha256(pin) };
+  cacheUser(user);
+  return user;
 }
 
 export async function changeUserPin(supabase, userId, newPin) {
   if (!navigator.onLine) {
     throw new Error('Cannot change PIN while offline. Please connect to internet.');
   }
-  
-  try {
-    const { error } = await supabase
-      .from('users')
-      .update({ pin: newPin })
-      .eq('user_id', userId);
+  const res = await apiFetch('/api/auth/change-pin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, newPin }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not change PIN');
 
-    if (error) throw error;
-    
-    // Update cached user with new PIN
-    const cachedUser = getCachedUser();
-    if (cachedUser && cachedUser.user_id === userId) {
-      cachedUser.pin = newPin;
-      cacheUser(cachedUser);
-    }
-    
-    return true;
-  } catch (err) {
-    console.error('Error changing PIN:', err);
-    throw err;
+  const cachedUser = getCachedUser();
+  if (cachedUser && cachedUser.user_id === userId) {
+    cachedUser.pin_hash = await sha256(newPin);
+    cacheUser(cachedUser);
   }
+  return true;
 }
 
 export function saveCredentials(email, pin) {
@@ -106,6 +87,7 @@ export function getSavedCredentials() {
 export function clearCredentials() {
   localStorage.removeItem('mobileEmail');
   localStorage.removeItem('mobilePin');
+  setAppToken(null);
 }
 
 // ==================== OFFLINE USER CACHE ====================
@@ -136,4 +118,5 @@ export function getCachedUser() {
 
 export function clearCachedUser() {
   localStorage.removeItem('cachedUser');
+  setAppToken(null);
 }

@@ -2,10 +2,14 @@
 // Creates a Supabase Auth account for a PIN-only user and links auth_id
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/serverAuth';
 
 export async function POST(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
-    const { userId, email, newPassword, requestorEmail } = await request.json();
+    const { userId, email, newPassword } = await request.json();
+    const requestorEmail = auth.principal.user.email;
 
     if (!userId || !email || !newPassword)
       return NextResponse.json({ error: 'userId, email and newPassword required' }, { status: 400 });
@@ -16,20 +20,7 @@ export async function POST(request) {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
       return NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set in Vercel environment variables' }, { status: 500 });
 
-    // ── Verify requestor is admin ─────────────────────────────────────────
-    const supabaseAnon = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
-    const { data: requestor } = await supabaseAnon
-      .from('users')
-      .select('role, is_active')
-      .eq('email', requestorEmail)
-      .single();
-
-    if (!requestor?.is_active || requestor.role !== 'admin')
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    // Requestor already verified as an active admin by requireAdmin() above.
 
     // ── Create Supabase Auth account ──────────────────────────────────────
     const supabaseAdmin = createClient(

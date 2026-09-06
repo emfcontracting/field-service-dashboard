@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import Imap from 'imap';
+import { requireAdmin } from '@/lib/serverAuth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export async function GET() {
+export async function GET(request) {
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
   try {
     const healthData = {
       timestamp: new Date().toISOString(),
@@ -199,7 +202,7 @@ async function checkImapConnection() {
       host: 'imap.gmail.com',
       port: 993,
       tls: true,
-      tlsOptions: { rejectUnauthorized: false }
+      tlsOptions: { servername: 'imap.gmail.com' }
     });
 
     let timeout = setTimeout(() => {

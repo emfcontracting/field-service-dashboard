@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiClient';
 
 const supabase = getSupabase();
 const supabaseClient = createClient(
@@ -94,7 +95,7 @@ export default function ProfitabilityView({ currentUser }) {
       if (!session) return;
 
       // Load wages
-      const wagesRes = await fetch('/api/admin/wages', {
+      const wagesRes = await apiFetch('/api/admin/wages', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
       const wagesJson = await wagesRes.json();

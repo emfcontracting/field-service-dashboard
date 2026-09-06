@@ -1,6 +1,7 @@
 // app/mobile/components/PushNotificationPrompt.js
 'use client';
 import { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function PushNotificationPrompt({ userId, onComplete }) {
   const [showPrompt, setShowPrompt] = useState(false);
@@ -109,7 +110,7 @@ export default function PushNotificationPrompt({ userId, onComplete }) {
       }
 
       // Get VAPID key
-      const res = await fetch('/api/push/send');
+      const res = await apiFetch('/api/push/send');
       const { publicKey, configured } = await res.json();
       
       if (!configured || !publicKey) {
@@ -126,7 +127,7 @@ export default function PushNotificationPrompt({ userId, onComplete }) {
       });
 
       // Save to server
-      const saveRes = await fetch('/api/push/subscribe', {
+      const saveRes = await apiFetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

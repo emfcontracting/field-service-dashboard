@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
+import { apiFetch } from '@/lib/apiClient';
 
 export default function EmailPhotosSection({ workOrder, currentUser }) {
   const { language } = useLanguage();
@@ -40,7 +41,7 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
     
     try {
       setCheckingPhotos(true);
-      const response = await fetch(`/api/verify-photos/${woNumber}`);
+      const response = await apiFetch(`/api/verify-photos/${woNumber}`);
       const result = await response.json();
       
       setPhotoStatus(result);
@@ -58,7 +59,7 @@ export default function EmailPhotosSection({ workOrder, currentUser }) {
     
     try {
       setCheckingWriteups(true);
-      const response = await fetch(`/api/verify-writeups/${woNumber}`);
+      const response = await apiFetch(`/api/verify-writeups/${woNumber}`);
       const result = await response.json();
       
       setWriteupStatus(result);

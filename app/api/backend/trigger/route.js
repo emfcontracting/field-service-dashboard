@@ -24,10 +24,6 @@ export async function POST(request) {
         result = await triggerAvailabilityReminder();
         break;
         
-      case 'aging_alert':
-        result = await triggerAgingAlert();
-        break;
-        
       case 'test_notification':
         result = await sendTestNotification(params);
         break;
@@ -41,7 +37,6 @@ export async function POST(request) {
           { error: 'Invalid action', validActions: [
             'email_import',
             'availability_reminder',
-            'aging_alert',
             'test_notification',
             'sync_email_status'
           ]},
@@ -123,35 +118,6 @@ async function triggerAvailabilityReminder() {
     return {
       success: false,
       action: 'availability_reminder',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-async function triggerAgingAlert() {
-  try {
-    const response = await fetch(`${appBaseUrl()}/api/aging/cron`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-    
-    return {
-      success: response.ok,
-      action: 'aging_alert',
-      message: response.ok ? 'Aging alert triggered successfully' : 'Aging alert failed',
-      details: data,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    return {
-      success: false,
-      action: 'aging_alert',
       message: error.message,
       timestamp: new Date().toISOString()
     };

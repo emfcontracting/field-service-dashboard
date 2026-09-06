@@ -5,7 +5,6 @@
 // Used by:
 //   - app/api/email-import/route.js        (manual paste / IMAP preview)
 //   - app/api/email-import/cron/route.js   (automatic 10-min import)
-//   - app/api/email-import/manual/route.js (import by WO number)
 //
 // The CONTACT person names + phones change from email to email, so we never
 // hardcode people — we anchor on the stable CBRE CATEGORY labels and extract

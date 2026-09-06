@@ -35,12 +35,6 @@ export const Icons = {
       <line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/>
     </svg>
   ),
-  aging: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9"/>
-      <polyline points="12 7 12 12 15 15"/>
-    </svg>
-  ),
   missingHours: () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -331,7 +325,6 @@ function SidebarNav({ userInfo, missingHoursCount, cbreDataEntryCount, reviewQue
         }).map(({ id, label, Icon, alert, cbreDataEntry, reviewQueue, approvals }) => {
           const isActive = !activeLink && activeView === id;
           const activeColor = id === 'missing-hours' ? 'bg-orange-500/10 text-orange-400'
-            : id === 'aging' ? 'bg-red-500/10 text-red-400'
             : id === 'cbre-data-entry' ? 'bg-orange-500/10 text-orange-400'
             : id === 'review-queue' ? 'bg-amber-500/10 text-amber-400'
             : 'bg-blue-600/15 text-blue-400';

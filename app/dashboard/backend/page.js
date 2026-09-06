@@ -155,7 +155,6 @@ function TriggersTab({ trigger, triggering }) {
   const triggers = [
     { id: 'email_import',          name: 'Force Email Import',       desc: 'Manually trigger the IMAP email import cron job',  icon: '📧', color: 'blue' },
     { id: 'availability_reminder', name: 'Availability Reminder',    desc: 'Send availability reminder to all technicians',     icon: '📅', color: 'emerald' },
-    { id: 'aging_alert',           name: 'Aging Work Order Alert',   desc: 'Send aging work order alerts to assigned techs',    icon: '⚠️', color: 'yellow' },
     { id: 'sync_email_status',     name: 'Sync Email Status',        desc: 'Sync work order status from Gmail labels',          icon: '🔄', color: 'purple' },
     { id: 'test_notification',     name: 'Test Notification',        desc: 'Send a test email notification to verify setup',    icon: '✉️', color: 'slate' },
   ];

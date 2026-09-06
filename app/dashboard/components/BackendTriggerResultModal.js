@@ -31,7 +31,6 @@ const ACTION_NAMES = {
   sync_email_status:     'CBRE Status Sync',
   email_import:          'Email Import',
   availability_reminder: 'Availability Reminder',
-  aging_alert:           'Aging Alert',
   test_notification:     'Test Notification',
 };
 

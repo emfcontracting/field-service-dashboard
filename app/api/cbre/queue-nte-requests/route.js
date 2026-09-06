@@ -1,19 +1,30 @@
 // app/api/cbre/queue-nte-requests/route.js
 // ─────────────────────────────────────────────────────────────────────────────
-// PRODUCER — turns work orders where EMF has submitted a quote to CBRE
-// (cbre_status = 'quote_submitted') and an NTE amount is set into "Submit NTE
-// Request" rows in approval_requests, ready for approval in the Approvals tab.
+// PRODUCER — turns written NTE increases that a technician created in FSM
+// (work_order_quotes.nte_status = 'pending', i.e. NOT yet uploaded to CBRE)
+// into "Submit NTE Request" rows in approval_requests, ready for approval in
+// the Approvals tab.
+//
+// Why quotes and not cbre_status: `cbre_status = 'quote_submitted'` is what
+// CBRE's own "Quote Submitted" confirmation e-mail (email-sync) sets AFTER the
+// request has been submitted in the Vendor Activity Website. Keying on it —
+// as the first version of this producer did — queued a duplicate request for
+// every NTE that was already at CBRE (53 rows on 2026-09-06, all rejected).
+// The technician's quote is the only signal that says "written, not sent".
 //
 // It does NOT contact CBRE. It writes queue rows only. A human approves each one
 // and submits CBRE's own prefilled form by hand. Mirrors queue-acknowledgements.
 //
-// Idempotency: the unique index uq_approval_requests_live blocks a second live
-// row per (kind, wo_id); and once submitted, markSubmitted stamps
-// cbre_nte_submitted_at, which this query excludes — so it is never re-queued.
-//
-// FIRST-RUN NOTE: NTE requests already sent to CBRE by email will surface here
-// once (they have no cbre_nte_submitted_at yet). That is why nothing is sent
-// automatically — reject in the Approvals tab any that were already handled.
+// Idempotency:
+//   • the unique index uq_approval_requests_live blocks a second live row per
+//     (kind, wo_id);
+//   • "Mark submitted" in the Approvals tab moves the quote to
+//     nte_status = 'submitted' (payload._quote_id) and stamps
+//     work_orders.cbre_nte_submitted_at, so the quote drops out of this query;
+//   • a quote that is OLDER than the last submission recorded on the WO
+//     (cbre_nte_submitted_at / cbre_quote_submitted_at / CBRE-confirmed status)
+//     is treated as already handled and skipped — that covers quotes the office
+//     uploaded by hand without pressing "Mark submitted".
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js';
@@ -35,6 +46,12 @@ const MAX_LIMIT = 50;
 
 const CBRE_WO_PATTERN = /^(C|P|PJ|ST|COU)\d+$/i;
 
+// cbre_status values that mean "CBRE already has a quote from us" — a pending
+// quote created BEFORE that status was set is a duplicate, not new work.
+const CBRE_HAS_QUOTE = ['quote_submitted', 'quote_approved'];
+// Nothing to request on these.
+const CBRE_CLOSED = ['cancelled', 'CMP', 'CA1', 'CA2', 'CIR', 'CIS', 'CPW'];
+
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';
 const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)';
 const NTE_COMMENT_TEMPLATE =
@@ -43,6 +60,11 @@ const NTE_COMMENT_TEMPLATE =
 
 export async function GET(request) { return handle(request); }
 export async function POST(request) { return handle(request); }
+
+function ts(v) {
+  const t = v ? Date.parse(v) : NaN;
+  return Number.isFinite(t) ? t : 0;
+}
 
 async function handle(request) {
   const { searchParams } = new URL(request.url);
@@ -58,33 +80,68 @@ async function handle(request) {
   const result = {
     queued: 0,
     skipped: 0,
-    excluded: { notACbreNumber: [], noBuildingCode: [], noAmount: [], problems: [] },
+    excluded: {
+      notACbreNumber: [],
+      noBuildingCode: [],
+      noAmount: [],
+      alreadySubmitted: [],   // quote older than the last submission recorded on the WO
+      closed: [],             // WO cancelled / posted at CBRE
+      problems: [],
+    },
     errors: [],
     rows: [],
   };
 
   try {
-    const { data: candidates, error: qErr } = await supabase
-      .from('work_orders')
-      // NOTE: work_orders has no ups_building_code column (that alias only
-      // exists on the acknowledgement view) - selecting it made every cron
-      // run fail with a 400 from PostgREST. The building code is parsed from
-      // `building` by buildCbrePayload.
-      .select('wo_id, wo_number, nte, cbre_status, building, priority, date_entered')
-      .eq('cbre_status', 'quote_submitted')
-      .is('cbre_nte_submitted_at', null)
-      .not('nte', 'is', null)
-      .order('date_entered', { ascending: false })
+    // 1) Written NTE increases not yet uploaded to CBRE (newest first).
+    const { data: quotes, error: qErr } = await supabase
+      .from('work_order_quotes')
+      .select('quote_id, wo_id, new_nte_amount, grand_total, request_type, created_at, submitted_at')
+      .eq('nte_status', 'pending')
+      .or('is_verbal_nte.is.null,is_verbal_nte.eq.false')
+      .order('created_at', { ascending: false })
       .limit(Math.min(limit * 6, 200));
-    if (qErr) throw new Error(`query failed: ${qErr.message}`);
-    if (!candidates?.length) return Response.json({ ...result, message: 'Nothing to submit.' });
+    if (qErr) throw new Error(`quote query failed: ${qErr.message}`);
+    if (!quotes?.length) return Response.json({ ...result, message: 'Nothing to submit.' });
 
-    for (const wo of candidates) {
+    // Newest pending quote per work order wins.
+    const latestByWo = new Map();
+    for (const q of quotes) if (!latestByWo.has(q.wo_id)) latestByWo.set(q.wo_id, q);
+
+    // 2) Their work orders.
+    const { data: wos, error: wErr } = await supabase
+      .from('work_orders')
+      .select('wo_id, wo_number, nte, cbre_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
+      .in('wo_id', [...latestByWo.keys()]);
+    if (wErr) throw new Error(`work order query failed: ${wErr.message}`);
+    const woById = new Map((wos || []).map((w) => [w.wo_id, w]));
+
+    for (const [woId, quote] of latestByWo) {
+      const wo = woById.get(woId);
+      if (!wo) continue;
+
       const num = String(wo.wo_number || '').trim();
       if (!CBRE_WO_PATTERN.test(num)) { result.excluded.notACbreNumber.push(wo.wo_number); continue; }
 
-      const amt = parseFloat(wo.nte);
-      if (!Number.isFinite(amt) || amt <= 0) { result.excluded.noAmount.push(wo.wo_number); continue; }
+      if (CBRE_CLOSED.includes(wo.cbre_status)) {
+        result.excluded.closed.push(`${num} (${wo.cbre_status})`);
+        continue;
+      }
+
+      // Already at CBRE? Compare the quote's creation with the last submission
+      // we know of. A later quote (second NTE increase / reconciliation) is new.
+      const lastSubmitted = Math.max(
+        ts(wo.cbre_nte_submitted_at),
+        ts(wo.cbre_quote_submitted_at),
+        CBRE_HAS_QUOTE.includes(wo.cbre_status) ? ts(wo.cbre_status_updated_at) : 0
+      );
+      if (lastSubmitted && ts(quote.created_at) <= lastSubmitted) {
+        result.excluded.alreadySubmitted.push(num);
+        continue;
+      }
+
+      const amt = parseFloat(quote.new_nte_amount) || parseFloat(quote.grand_total);
+      if (!Number.isFinite(amt) || amt <= 0) { result.excluded.noAmount.push(num); continue; }
 
       const built = buildCbrePayload({
         kind: 'cbre_nte',
@@ -92,13 +149,13 @@ async function handle(request) {
         buildingRaw: wo.building,
         requestorEmail: REQUESTOR_EMAIL,
         vendor: VENDOR_NAME,
-        nteAmount: wo.nte,
+        nteAmount: amt,
         comment: NTE_COMMENT_TEMPLATE,
       });
       if (built.problems.length) {
         if (built.problems.some((p) => /building/.test(p)))
-          result.excluded.noBuildingCode.push(`${wo.wo_number} (${wo.building || 'null'})`);
-        else result.excluded.problems.push(`${wo.wo_number}: ${built.problems.join('; ')}`);
+          result.excluded.noBuildingCode.push(`${num} (${wo.building || 'null'})`);
+        else result.excluded.problems.push(`${num}: ${built.problems.join('; ')}`);
         continue;
       }
 
@@ -107,8 +164,10 @@ async function handle(request) {
         wo_id: wo.wo_id,
         wo_number: wo.wo_number,
         title: `Submit NTE $${built.readable.nteAmount} for ${wo.wo_number} to CBRE`,
-        summary: `${wo.building || 'unknown site'} · NTE $${built.readable.nteAmount}`,
-        payload: { ...built.payload, _readable: built.readable },
+        summary: `${wo.building || 'unknown site'} · NTE $${built.readable.nteAmount}${quote.request_type === 'reconciliation' ? ' · reconciliation' : ''}`,
+        // _quote_id is ours (underscore keys are not sent to the form); the
+        // Approvals tab uses it to move the quote to 'submitted'.
+        payload: { ...built.payload, _quote_id: quote.quote_id, _readable: { ...built.readable, quoteId: quote.quote_id, currentNte: wo.nte } },
         status: 'pending',
       };
 
@@ -126,11 +185,11 @@ async function handle(request) {
         .single();
       if (error) {
         if (error.code === '23505') result.skipped++;         // already queued — expected
-        else result.errors.push(`${wo.wo_number}: ${error.message}`);
+        else result.errors.push(`${num}: ${error.message}`);
         continue;
       }
       result.queued++;
-      result.rows.push({ approval_id: data.approval_id, wo_number: wo.wo_number });
+      result.rows.push({ approval_id: data.approval_id, wo_number: wo.wo_number, quote_id: quote.quote_id });
       if (result.queued >= limit) break;
     }
 

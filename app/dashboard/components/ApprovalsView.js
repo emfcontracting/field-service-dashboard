@@ -297,14 +297,27 @@ export default function ApprovalsView({ userInfo }) {
       }
 
       // NTE requests: stamp so the NTE producer stops queueing this WO.
-      const nteWoIds = affected.filter((r) => r.kind === 'cbre_nte' && r.wo_id).map((r) => r.wo_id);
+      // A second NTE increase on the same WO must overwrite the stamp — the
+      // producer compares the quote's creation with the LAST submission.
+      const nteRows = affected.filter((r) => r.kind === 'cbre_nte' && r.wo_id);
+      const nteWoIds = nteRows.map((r) => r.wo_id);
       if (nteWoIds.length) {
         const { error: nteErr } = await supabase
           .from('work_orders')
           .update({ cbre_nte_submitted_at: now, cbre_nte_submitted_by: userInfo?.user_id ?? null })
-          .in('wo_id', nteWoIds)
-          .is('cbre_nte_submitted_at', null);
+          .in('wo_id', nteWoIds);
         if (nteErr) setError(`Marked sent, but the NTE stamp failed: ${nteErr.message}`);
+      }
+      // …and the technician's written quote itself: pending → submitted, the
+      // same transition the "Mark as uploaded to CBRE" button in the NTE modal makes.
+      const quoteIds = nteRows.map((r) => r.payload?._quote_id).filter(Boolean);
+      if (quoteIds.length) {
+        const { error: qErr } = await supabase
+          .from('work_order_quotes')
+          .update({ nte_status: 'submitted', submitted_at: now, submitted_by: userInfo?.email || userInfo?.first_name || 'office', updated_at: now })
+          .in('quote_id', quoteIds)
+          .eq('nte_status', 'pending');
+        if (qErr) setError(`Marked sent, but the quote status update failed: ${qErr.message}`);
       }
 
       // Completions: stamp so it is recorded as reported to CBRE.

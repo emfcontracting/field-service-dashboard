@@ -23,11 +23,14 @@ import {
 } from '../services/offline/offlineService';
 import {
   syncPendingChanges,
+  retryFailedItems,
+  getFailedItems,
   refreshFromServer,
   addSyncListener,
   startBackgroundSync,
   getPendingSyncCount
 } from '../services/offline/syncService';
+import { ACTIVE_STATUSES } from '@/app/mobile/utils/activeStatuses';
 
 export function useOffline(currentUser) {
   const [isOnline, setIsOnline] = useState(true);
@@ -174,10 +177,12 @@ export function useOffline(currentUser) {
     if (isDBReady) {
       updatePendingCount();
       updateCachedCount();
+      // Counts are also refreshed on every sync event; the interval is only a
+      // safety net (was 5 s = a full IndexedDB scan every 5 s on every phone).
       const interval = setInterval(() => {
         updatePendingCount();
         updateCachedCount();
-      }, 5000);
+      }, 60000);
       return () => clearInterval(interval);
     }
   }, [isDBReady, updatePendingCount, updateCachedCount]);
@@ -206,7 +211,7 @@ export function useOffline(currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .eq('lead_tech_id', currentUser.user_id)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+        .in('status', ACTIVE_STATUSES)
         .order('priority', { ascending: true });
 
       if (leadError) throw leadError;
@@ -227,7 +232,7 @@ export function useOffline(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
+          .in('status', ACTIVE_STATUSES);
         helperWOs = helperWOData || [];
       }
 
@@ -610,14 +615,40 @@ export function useOffline(currentUser) {
     }
     
     setSyncStatus('syncing');
-    const result = await syncPendingChanges(supabase, currentUser);
-    
+    let result;
+    try {
+      result = await syncPendingChanges(supabase, currentUser);
+    } catch (error) {
+      result = { success: false, reason: error.message };
+    }
+    // Paths that finish without a sync_completed event (nothing to sync,
+    // offline, exception) must still leave the "Syncing…" state.
+    setSyncStatus(result.success ? 'idle' : 'error');
+    if (!result.success && result.reason) setSyncError(result.reason);
+    await updatePendingCount();
+
     if (result.success) {
       await downloadForOffline(); // Re-download fresh data
     }
     
     return result;
-  }, [isOnline, supabase, currentUser, downloadForOffline]);
+  }, [isOnline, supabase, currentUser, downloadForOffline, updatePendingCount]);
+
+  // Items that gave up after 3 attempts — let the tech see and retry them.
+  const [failedSyncItems, setFailedSyncItems] = useState([]);
+  const refreshFailedItems = useCallback(async () => {
+    if (!isDBReady) return;
+    try { setFailedSyncItems(await getFailedItems()); } catch { setFailedSyncItems([]); }
+  }, [isDBReady]);
+  useEffect(() => { refreshFailedItems(); }, [refreshFailedItems, syncStatus]);
+
+  const retryFailedSync = useCallback(async () => {
+    if (!isOnline) return { success: false, reason: 'offline' };
+    await retryFailedItems();
+    const result = await forceSync();
+    await refreshFailedItems();
+    return result;
+  }, [isOnline, forceSync, refreshFailedItems]);
 
   // Get offline stats
   const getStats = useCallback(async () => {
@@ -658,6 +689,8 @@ export function useOffline(currentUser) {
     
     // Sync controls
     forceSync,
+    failedSyncItems,
+    retryFailedSync,
     downloadForOffline,  // <-- MANUAL DOWNLOAD BUTTON
     
     // Utilities

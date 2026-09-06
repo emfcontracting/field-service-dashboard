@@ -19,6 +19,7 @@ import {
   parseCbreStatus,
 } from '@/lib/cbreStatusMapping';
 import { isPostingCode, postingBadgeConfig } from '@/lib/cbrePostingStatus';
+import { fetchAll } from '@/lib/fetchAll';
 
 const supabase = getSupabase();
 const supabaseClient = createClient(
@@ -90,14 +91,17 @@ export default function CBRESyncView({ currentUser }) {
   const loadDbData = async () => {
     setLoading(true);
     try {
-      const [invRes, woRes, mapRes, logRes] = await Promise.all([
-        supabaseClient.from('invoices').select('invoice_id, invoice_number, wo_id, invoice_date, status, cbre_status, cbre_status_label, cmp_date, cbre_status_updated_at, cbre_status_acknowledged_at, total, work_order:work_orders(wo_number)'),
-        supabaseClient.from('work_orders').select('wo_id, wo_number, status, cbre_status, cbre_status_label, cbre_status_updated_at, cbre_status_acknowledged_at, acknowledged, is_locked, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date'),
+      // fetchAll pages past PostgREST's 1000-row cap — with a plain select the
+      // sync started reporting real work orders as "Missing in FSM" once the
+      // tables grew beyond 1000 rows.
+      const [invRows, woRows, mapRes, logRes] = await Promise.all([
+        fetchAll(() => supabaseClient.from('invoices').select('invoice_id, invoice_number, wo_id, invoice_date, status, cbre_status, cbre_status_label, cmp_date, cbre_status_updated_at, cbre_status_acknowledged_at, total, work_order:work_orders(wo_number)').order('invoice_id')),
+        fetchAll(() => supabaseClient.from('work_orders').select('wo_id, wo_number, status, cbre_status, cbre_status_label, cbre_status_updated_at, cbre_status_acknowledged_at, acknowledged, is_locked, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date').order('wo_id')),
         supabaseClient.from('cbre_status_mappings').select('*').eq('is_active', true),
         supabaseClient.from('cbre_sync_log').select('*').order('synced_at', { ascending: false }).limit(10),
       ]);
-      setDbInvoices(invRes.data || []);
-      setDbWOs(woRes.data || []);
+      setDbInvoices(invRows || []);
+      setDbWOs(woRows || []);
       setMappingOverrides(mapRes.data || []);
       setRecentSyncs(logRes.data || []);
     } catch (e) {

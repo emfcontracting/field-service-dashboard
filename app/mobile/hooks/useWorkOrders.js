@@ -1,6 +1,6 @@
 // useWorkOrders.js - Work Orders Management Hook (WITH DAILY HOURS, SIGNATURE & OFFLINE SUPPORT)
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { markCheckedIn, markCheckedOut } from '../utils/checkedInStore';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
@@ -15,8 +15,13 @@ import {
   deleteLocalDailyLog
 } from '../services/offline/offlineService';
 import { apiFetch } from '@/lib/apiClient';
+import { ACTIVE_STATUSES } from '@/app/mobile/utils/activeStatuses';
 
 export function useWorkOrders(currentUser) {
+  // Realtime helpers: which WOs are on screen (assignment-based tickets have a
+  // different lead_tech_id) + a debounce timer for reloads.
+  const knownWoIdsRef = useRef(new Set());
+  const realtimeTimerRef = useRef(null);
   const [workOrders, setWorkOrders] = useState([]);
   const [completedWorkOrders, setCompletedWorkOrders] = useState([]);
   const [selectedWO, setSelectedWO] = useState(null);
@@ -62,20 +67,37 @@ export function useWorkOrders(currentUser) {
             schema: 'public',
             table: 'work_orders'
           },
-          () => {
-            if (navigator.onLine) {
+          (payload) => {
+            if (!navigator.onLine) return;
+            // Only react to rows that can concern THIS tech (own lead tickets or
+            // one already on screen) and coalesce bursts of office edits into a
+            // single reload — before, every office change reloaded 3 queries on
+            // every phone.
+            const row = payload?.new || payload?.old || {};
+            const mine = row.lead_tech_id === currentUser.user_id
+              || knownWoIdsRef.current.has(row.wo_id)
+              || payload?.eventType === 'INSERT';
+            if (!mine) return;
+            clearTimeout(realtimeTimerRef.current);
+            realtimeTimerRef.current = setTimeout(() => {
               loadWorkOrders();
               loadCompletedWorkOrders();
-            }
+            }, 2500);
           }
         )
         .subscribe();
 
       return () => {
+        clearTimeout(realtimeTimerRef.current);
         supabase.removeChannel(channel);
       };
     }
   }, [currentUser, isOfflineDBInitialized]);
+
+  // Track the WO ids currently on screen for the realtime relevance check.
+  useEffect(() => {
+    knownWoIdsRef.current = new Set((workOrders || []).map((w) => w.wo_id));
+  }, [workOrders]);
 
   // Load daily logs when selected work order changes
   useEffect(() => {
@@ -116,7 +138,7 @@ export function useWorkOrders(currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .eq('lead_tech_id', currentUser.user_id)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data', 'update_required'])
+        .in('status', ACTIVE_STATUSES)
         .order('priority', { ascending: true })
         .order('date_entered', { ascending: true });
 
@@ -139,7 +161,7 @@ export function useWorkOrders(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip', 'tech_review', 'missing_data', 'update_required']);
+          .in('status', ACTIVE_STATUSES);
 
         if (helperError) throw helperError;
         helperWOs = helperWOData || [];
@@ -313,11 +335,11 @@ export function useWorkOrders(currentUser) {
         // Check for duplicate entry on same date for same user
         const { data: existing } = await supabase
           .from('daily_hours_log')
-          .select('id')
+          .select('log_id')
           .eq('wo_id', selectedWO.wo_id)
           .eq('user_id', hoursData.userId)
           .eq('work_date', hoursData.workDate)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           throw new Error('Hours already logged for this date. Edit the existing entry instead.');

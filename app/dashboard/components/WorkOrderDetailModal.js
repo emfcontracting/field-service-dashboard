@@ -226,11 +226,15 @@ export default function WorkOrderDetailModal({
   // Field-level permission for the controls below (admin overrides the freeze).
   const lockField = (f) => !canEditField(f, currentUser, selectedWO);
 
+  // Reload the per-WO data when the WO (or the two flags the invoice button
+  // depends on) changes — NOT on every keystroke in a text field. Before, the
+  // dependency was the whole selectedWO object, so typing a character fired
+  // three round-trips to Supabase.
   useEffect(() => {
     checkCanGenerateInvoice();
     loadDailyHoursLog();
     loadNteIncreases();
-  }, [selectedWO]);
+  }, [selectedWO?.wo_id, selectedWO?.acknowledged, selectedWO?.is_locked, selectedWO?.status]);
 
   const loadDailyHoursLog = async () => {
     try {

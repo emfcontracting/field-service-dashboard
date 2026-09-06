@@ -59,7 +59,7 @@ export default function WorkOrderCard({ workOrder, onClick }) {
   const { language } = useLanguage();
   
   // Highlight card border for escalation / returned-for-review
-  const isEscalation = workOrder.cbre_status === 'escalation';
+  const isEscalation = workOrder.escalation === true || workOrder.cbre_status === 'escalation';
   const isRejected = workOrder.cbre_status === 'quote_rejected' || workOrder.cbre_status === 'invoice_rejected';
   const isTechReview = workOrder.status === 'tech_review';
   const cardBorder = isTechReview

@@ -11,6 +11,7 @@ import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 import { apiFetch } from '@/lib/apiClient';
+import { fetchAll } from '@/lib/fetchAll';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -278,22 +279,35 @@ export default function InvoicingPage() {
   };
 
   const calculateAllTotals = async (workOrders) => {
+    // Two batched queries instead of two queries PER work order (N+1).
     const totals = {};
+    const ids = (workOrders || []).map(w => w.wo_id);
+    const teamByWo = {};
+    const dailyByWo = {};
+    try {
+      const [teams, daily] = await Promise.all([
+        ids.length ? fetchAll(() => supabase.from('work_order_assignments')
+          .select('wo_id, hours_regular, hours_overtime, miles').in('wo_id', ids).order('assignment_id')) : [],
+        ids.length ? fetchAll(() => supabase.from('daily_hours_log')
+          .select('wo_id, hours_regular, hours_overtime, miles').in('wo_id', ids).order('log_id')) : [],
+      ]);
+      teams.forEach(m => { (teamByWo[m.wo_id] ||= []).push(m); });
+      daily.forEach(l => { (dailyByWo[l.wo_id] ||= []).push(l); });
+    } catch (e) {
+      console.error('calculateAllTotals batch error:', e);
+    }
+
     for (const wo of workOrders) {
       try {
         const pRT = parseFloat(wo.hours_regular) || 0;
         const pOT = parseFloat(wo.hours_overtime) || 0;
         const pMi = parseFloat(wo.miles) || 0;
 
-        const { data: teams } = await supabase.from('work_order_assignments')
-          .select('hours_regular, hours_overtime, miles').eq('wo_id', wo.wo_id);
         let tRT = 0, tOT = 0, tMi = 0;
-        teams?.forEach(m => { tRT += parseFloat(m.hours_regular)||0; tOT += parseFloat(m.hours_overtime)||0; tMi += parseFloat(m.miles)||0; });
+        (teamByWo[wo.wo_id] || []).forEach(m => { tRT += parseFloat(m.hours_regular)||0; tOT += parseFloat(m.hours_overtime)||0; tMi += parseFloat(m.miles)||0; });
 
-        const { data: daily } = await supabase.from('daily_hours_log')
-          .select('hours_regular, hours_overtime, miles').eq('wo_id', wo.wo_id);
         let dRT = 0, dOT = 0, dMi = 0;
-        daily?.forEach(l => { dRT += parseFloat(l.hours_regular)||0; dOT += parseFloat(l.hours_overtime)||0; dMi += parseFloat(l.miles)||0; });
+        (dailyByWo[wo.wo_id] || []).forEach(l => { dRT += parseFloat(l.hours_regular)||0; dOT += parseFloat(l.hours_overtime)||0; dMi += parseFloat(l.miles)||0; });
 
         const totalRT = pRT+tRT+dRT, totalOT = pOT+tOT+dOT, totalMi = pMi+tMi+dMi;
         totals[wo.wo_id] =
@@ -329,10 +343,15 @@ export default function InvoicingPage() {
   };
 
   const fetchInvoices = async () => {
-    const { data } = await supabase.from('invoices')
-      .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, tech_comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
-      .order('created_at', { ascending: false });
-    setInvoices(data || []);
+    // Paged: a plain select stops at PostgREST's 1000-row cap (we are past 700).
+    let rows = [];
+    try {
+      rows = await fetchAll(() => supabase.from('invoices')
+        .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, tech_comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
+        .order('created_at', { ascending: false })
+        .order('invoice_id'));
+    } catch (e) { console.error('fetchInvoices error:', e); }
+    setInvoices(rows);
   };
 
   const acknowledgeCbreUpdate = async (invoiceId) => {

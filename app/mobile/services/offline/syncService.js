@@ -29,28 +29,58 @@ function notifySyncListeners(event) {
 
 // ==================== MAIN SYNC FUNCTION ====================
 
+// Single-flight guard: a NetInfo/online flap must not start a second sync
+// while the first one is still writing (double check-ins, double comments).
+let syncInFlight = null;
+
 export async function syncPendingChanges(supabase, currentUser) {
   if (!navigator.onLine) {
     console.log('❌ Cannot sync - offline');
     return { success: false, reason: 'offline' };
   }
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = runSync(supabase, currentUser).finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
 
-  const queue = await getSyncQueue();
-  const pendingItems = queue.filter(item => item.status === 'pending');
+async function runSync(supabase, currentUser) {
+  let queue = [];
+  let unsyncedLogsEarly = [];
+  try {
+    queue = await getSyncQueue();
+    unsyncedLogsEarly = await getUnsyncedDailyLogs();
+  } catch (error) {
+    console.error('❌ Could not read offline queue:', error);
+    notifySyncListeners({ type: 'sync_completed', result: { success: false, synced: 0, failed: 0, errors: [{ error: error.message }] } });
+    return { success: false, reason: error.message };
+  }
+  // Only sync items that belong to the signed-in tech (a previous user's
+  // leftovers must not be posted under this user's name).
+  const uid = currentUser?.user_id;
+  const pendingItems = queue
+    .filter(item => item.status === 'pending')
+    .filter(item => !uid || !item.user_id || item.user_id === uid)
+    .sort((a, b) => new Date(a.created_at || a.timestamp || 0) - new Date(b.created_at || b.timestamp || 0));
 
-  if (pendingItems.length === 0) {
+  if (pendingItems.length === 0 && unsyncedLogsEarly.length === 0) {
     console.log('✅ Nothing to sync');
     return { success: true, synced: 0 };
   }
 
   console.log(`🔄 Syncing ${pendingItems.length} pending changes...`);
-  notifySyncListeners({ type: 'sync_started', count: pendingItems.length });
+  notifySyncListeners({ type: 'sync_started', count: pendingItems.length + unsyncedLogsEarly.length });
 
   let syncedCount = 0;
   let failedCount = 0;
   const errors = [];
+  // If an item for a WO fails, skip the later items of the SAME WO this run
+  // (a check-out must never be posted before its check-in succeeded).
+  const blockedWOs = new Set();
 
+  try {
   for (const item of pendingItems) {
+    const woKey = item.data?.wo_id || item.data?.woId || null;
+    if (woKey && blockedWOs.has(woKey)) continue;
     try {
       await processQueueItem(supabase, item, currentUser);
       await updateSyncQueueItem(item.id, { status: 'synced' });
@@ -59,6 +89,7 @@ export async function syncPendingChanges(supabase, currentUser) {
     } catch (error) {
       console.error(`❌ Failed to sync item ${item.id}:`, error);
       
+      if (woKey) blockedWOs.add(woKey);
       const attempts = (item.attempts || 0) + 1;
       if (attempts >= 3) {
         await updateSyncQueueItem(item.id, { 
@@ -69,7 +100,7 @@ export async function syncPendingChanges(supabase, currentUser) {
         failedCount++;
         errors.push({ item, error: error.message });
       } else {
-        await updateSyncQueueItem(item.id, { attempts });
+        await updateSyncQueueItem(item.id, { attempts, error: error.message });
       }
     }
   }
@@ -84,11 +115,18 @@ export async function syncPendingChanges(supabase, currentUser) {
     } catch (error) {
       console.error('❌ Failed to sync daily log:', error);
       failedCount++;
+      errors.push({ item: { action: 'daily_log', data: log }, error: error.message });
     }
   }
 
   // Clean up synced items
   await clearSyncedItems();
+  } catch (error) {
+    // Never leave the UI on "Syncing…" — every exit path reports completion.
+    console.error('❌ Sync aborted:', error);
+    failedCount++;
+    errors.push({ error: error.message });
+  }
 
   const result = {
     success: failedCount === 0,
@@ -101,6 +139,21 @@ export async function syncPendingChanges(supabase, currentUser) {
   notifySyncListeners({ type: 'sync_completed', result });
 
   return result;
+}
+
+/** Re-queue items that gave up after 3 attempts so the tech can retry. */
+export async function retryFailedItems() {
+  const queue = await getSyncQueue();
+  const failed = queue.filter(item => item.status === 'failed');
+  for (const item of failed) {
+    await updateSyncQueueItem(item.id, { status: 'pending', attempts: 0, error: null });
+  }
+  return failed.length;
+}
+
+export async function getFailedItems() {
+  const queue = await getSyncQueue();
+  return queue.filter(item => item.status === 'failed');
 }
 
 // ==================== PROCESS INDIVIDUAL QUEUE ITEMS ====================
@@ -286,11 +339,11 @@ async function syncDailyLog(supabase, data) {
   // Check for existing entry
   const { data: existing } = await supabase
     .from('daily_hours_log')
-    .select('id')
+    .select('log_id')
     .eq('wo_id', wo_id)
     .eq('user_id', user_id)
     .eq('work_date', work_date)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     // Update existing
@@ -303,10 +356,10 @@ async function syncDailyLog(supabase, data) {
         tech_material_cost: tech_material_cost || 0,
         notes: notes || null
       })
-      .eq('id', existing.id);
+      .eq('log_id', existing.log_id);
 
     if (error) throw error;
-    return existing.id;
+    return existing.log_id;
   } else {
     // Insert new
     const { data: inserted, error } = await supabase
@@ -323,11 +376,11 @@ async function syncDailyLog(supabase, data) {
         notes: notes || null,
         created_at: new Date().toISOString()
       })
-      .select('id')
+      .select('log_id')
       .single();
 
     if (error) throw error;
-    return inserted.id;
+    return inserted.log_id;
   }
 }
 

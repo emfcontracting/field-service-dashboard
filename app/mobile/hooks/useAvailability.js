@@ -40,13 +40,34 @@ export function useAvailability(currentUser) {
       return;
     }
 
-    // Check if already submitted today
-    const todaySubmission = await availabilityService.checkTodaySubmission(supabase, currentUser.user_id);
+    // Already answered today (this session)? Nothing to poll — the gate is done
+    // until the date changes.
+    const todayKey = `availabilityDone:${currentUser.user_id}:${availabilityService.calculateAvailabilityWindow().today || new Date().toDateString()}`;
+    try { if (localStorage.getItem(todayKey)) { setHasSubmittedToday(true); setShowAvailabilityModal(false); setAvailabilityBlocked(false); return; } } catch {}
+
+    // Offline / server unreachable: NEVER lock the tech out. A failed query is
+    // "unknown", not "not submitted" — leave the gate open and re-check on the
+    // next tick when the connection is back.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setShowAvailabilityModal(false);
+      setAvailabilityBlocked(false);
+      return;
+    }
+    let todaySubmission;
+    try {
+      todaySubmission = await availabilityService.checkTodaySubmission(supabase, currentUser.user_id);
+    } catch (e) {
+      console.warn('availability check failed (offline?):', e?.message);
+      setShowAvailabilityModal(false);
+      setAvailabilityBlocked(false);
+      return;
+    }
 
     if (todaySubmission) {
       setHasSubmittedToday(true);
       setShowAvailabilityModal(false);
       setAvailabilityBlocked(false);
+      try { localStorage.setItem(todayKey, '1'); } catch {}
       return;
     }
 
@@ -97,6 +118,7 @@ export function useAvailability(currentUser) {
         { hasWork, reason: workReason || null, note: workNote || null }
       );
 
+      try { localStorage.setItem(`availabilityDone:${currentUser.user_id}:${availabilityService.calculateAvailabilityWindow().today || new Date().toDateString()}`, '1'); } catch {}
       setHasSubmittedToday(true);
       setShowAvailabilityModal(false);
       setAvailabilityBlocked(false);

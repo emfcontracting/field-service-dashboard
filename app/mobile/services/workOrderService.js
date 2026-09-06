@@ -1,4 +1,5 @@
 // Work Order Service - All WO-related API operations
+import { ACTIVE_STATUSES } from '@/app/mobile/utils/activeStatuses';
 
 export async function loadActiveWorkOrders(supabase, currentUser) {
   if (!currentUser) return [];
@@ -12,7 +13,7 @@ export async function loadActiveWorkOrders(supabase, currentUser) {
         lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
       `)
       .eq('lead_tech_id', currentUser.user_id)
-      .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+      .in('status', ACTIVE_STATUSES)
       .order('priority', { ascending: true })
       .order('date_entered', { ascending: true });
 
@@ -36,7 +37,7 @@ export async function loadActiveWorkOrders(supabase, currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .in('wo_id', woIds)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
+        .in('status', ACTIVE_STATUSES);
 
       if (helperError) throw helperError;
       helperWOs = helperWOData || [];

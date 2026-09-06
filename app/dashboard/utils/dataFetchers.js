@@ -1,23 +1,31 @@
 // app/dashboard/utils/dataFetchers.js
+import { fetchAll } from '@/lib/fetchAll';
 
 export async function fetchWorkOrders(supabase) {
-  const { data, error } = await supabase
-    .from('work_orders')
-    .select(`
-      *,
-      lead_tech:users!lead_tech_id(first_name, last_name, email),
-      locked_by_user:users!locked_by(first_name, last_name),
-      nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at),
-      open_flags:work_order_flags!work_order_flags_wo_id_fkey(flag_id, priority, comment, flagged_at, flagged_by, status)
-    `)
-    .order('date_entered', { ascending: true });
-
-  if (error) {
+  // The dashboard only shows open tickets (not acknowledged, not locked), so
+  // filter on the SERVER and page with fetchAll: the table is at 900+ rows and
+  // a plain select silently stops at PostgREST's 1000-row cap.
+  let data = [];
+  try {
+    data = await fetchAll(() => supabase
+      .from('work_orders')
+      .select(`
+        *,
+        lead_tech:users!lead_tech_id(first_name, last_name, email),
+        locked_by_user:users!locked_by(first_name, last_name),
+        nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at),
+        open_flags:work_order_flags!work_order_flags_wo_id_fkey(flag_id, priority, comment, flagged_at, flagged_by, status)
+      `)
+      .or('acknowledged.is.null,acknowledged.eq.false')
+      .or('is_locked.is.null,is_locked.eq.false')
+      .order('date_entered', { ascending: true })
+      .order('wo_id'));
+  } catch (error) {
     console.error('Error fetching work orders:', error);
     return [];
   }
 
-  // Filter out acknowledged and invoiced work orders
+  // Belt and braces (same rule as the server filter)
   const filteredData = (data || []).filter(wo => {
     if (wo.acknowledged) return false;
     if (wo.is_locked) return false;
@@ -33,10 +41,14 @@ export async function fetchWorkOrders(supabase) {
   if (filteredData.length > 0) {
     const woIds = filteredData.map(wo => wo.wo_id);
     
-    const { data: dailyHoursData, error: dailyError } = await supabase
-      .from('daily_hours_log')
-      .select('wo_id, hours_regular, hours_overtime, miles')
-      .in('wo_id', woIds);
+    let dailyHoursData = null, dailyError = null;
+    try {
+      dailyHoursData = await fetchAll(() => supabase
+        .from('daily_hours_log')
+        .select('wo_id, hours_regular, hours_overtime, miles')
+        .in('wo_id', woIds)
+        .order('log_id'));
+    } catch (e) { dailyError = e; }
 
     if (!dailyError && dailyHoursData) {
       // Aggregate daily hours by work order
@@ -51,10 +63,14 @@ export async function fetchWorkOrders(supabase) {
       });
 
       // Also fetch team member legacy hours from work_order_assignments
-      const { data: assignmentsData } = await supabase
-        .from('work_order_assignments')
-        .select('wo_id, hours_regular, hours_overtime, miles')
-        .in('wo_id', woIds);
+      let assignmentsData = null;
+      try {
+        assignmentsData = await fetchAll(() => supabase
+          .from('work_order_assignments')
+          .select('wo_id, hours_regular, hours_overtime, miles')
+          .in('wo_id', woIds)
+          .order('assignment_id'));
+      } catch (e) { console.error('assignments fetch error:', e); }
 
       const assignmentTotals = {};
       if (assignmentsData) {
@@ -89,7 +105,7 @@ export async function fetchUsers(supabase) {
     .from('users')
     .select('*')
     .eq('is_active', true)
-    .in('role', ['admin', 'lead_tech', 'tech', 'helper', 'office'])
+    .in('role', ['admin', 'lead_tech', 'tech', 'helper', 'office', 'office_staff'])
     .order('first_name');
 
   if (error) {

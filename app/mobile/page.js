@@ -49,6 +49,8 @@ export default function MobilePage() {
     cachedCount,
     isDownloading,
     forceSync,
+    failedSyncItems,
+    retryFailedSync,
     downloadForOffline,
     offlineCheckIn,
     offlineCheckOut,
@@ -327,6 +329,8 @@ export default function MobilePage() {
         isDownloading={isDownloading}
         onForceSync={handleForceSync}
         onDownloadOffline={handleDownloadOffline}
+        failedSyncItems={failedSyncItems}
+        onRetryFailed={retryFailedSync}
       />
     </LanguageProvider>
   );
@@ -426,6 +430,8 @@ function MobileAppContent({
   isDownloading,
   onForceSync,
   onDownloadOffline,
+  failedSyncItems = [],
+  onRetryFailed = null,
   // CARRIER SETUP
   onUpdateUser
 }) {
@@ -626,6 +632,8 @@ function MobileAppContent({
           syncStatus={syncStatus}
           onForceSync={onForceSync}
           lastSyncTime={lastSyncTime}
+          failedSyncItems={failedSyncItems}
+          onRetryFailed={onRetryFailed}
         />
         
         {/* Modals */}
@@ -664,6 +672,8 @@ function MobileAppContent({
           syncStatus={syncStatus}
           onForceSync={onForceSync}
           lastSyncTime={lastSyncTime}
+          failedSyncItems={failedSyncItems}
+          onRetryFailed={onRetryFailed}
         />
         
         <ChangePinModal
@@ -743,6 +753,8 @@ function MobileAppContent({
         cachedCount={cachedCount}
         isDownloading={isDownloading}
         lastSyncTime={lastSyncTime}
+        failedSyncItems={failedSyncItems}
+        onRetryFailed={onRetryFailed}
       />
       
       <ChangePinModal

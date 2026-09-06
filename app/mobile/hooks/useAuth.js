@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import * as authService from '../services/authService';
 import { clearCheckedIn } from '../utils/checkedInStore';
+import { setOfflineUser, clearCachesKeepQueue } from '../services/offline/offlineService';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -27,6 +28,7 @@ export function useAuth() {
       setError('');
       const user = await authService.loginUser(supabase, email, pin);
       setCurrentUser(user);
+      setOfflineUser(user?.user_id);
       authService.saveCredentials(email, pin);
       return true;
     } catch (err) {
@@ -36,10 +38,14 @@ export function useAuth() {
     }
   }
 
-  function logout() {
+  async function logout() {
     clearCheckedIn(currentUser?.user_id); // per-tech pin ends at logout
     authService.clearCredentials();
     authService.clearCachedUser(); // Also clear cached user data
+    setOfflineUser(null);
+    // Drop cached tickets/team so the next tech on this phone starts clean;
+    // unsynced queue items stay (tagged with user_id) so nothing is lost.
+    try { await clearCachesKeepQueue(); } catch (e) { console.warn('offline cache cleanup skipped:', e?.message); }
     // Force page reload to ensure clean state
     window.location.href = '/mobile';
   }

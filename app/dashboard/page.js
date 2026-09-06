@@ -1,7 +1,7 @@
 // app/dashboard/page.js
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import WorkOrdersView from './components/WorkOrdersView';
@@ -101,10 +101,26 @@ function DashboardContent() {
     setLoading(false);
   };
 
+  // Coalesced: the detail modal calls this after every field save; a burst of
+  // saves now results in one reload (plus one trailing reload if a call came
+  // in while a reload was running) instead of a full reload per call.
+  const refreshInFlight = useRef(null);
+  const refreshQueued = useRef(false);
   const refreshWorkOrders = async () => {
-    const workOrdersData = await fetchWorkOrders(supabase);
-    setWorkOrders(workOrdersData);
-    setStats(calculateStats(workOrdersData));
+    if (refreshInFlight.current) { refreshQueued.current = true; return refreshInFlight.current; }
+    refreshInFlight.current = (async () => {
+      try {
+        do {
+          refreshQueued.current = false;
+          const workOrdersData = await fetchWorkOrders(supabase);
+          setWorkOrders(workOrdersData);
+          setStats(calculateStats(workOrdersData));
+        } while (refreshQueued.current);
+      } finally {
+        refreshInFlight.current = null;
+      }
+    })();
+    return refreshInFlight.current;
   };
 
   const calculateMissingHoursCount = async () => {
@@ -118,18 +134,15 @@ function DashboardContent() {
       });
       if (eligibleWOs.length === 0) { setMissingHoursCount(0); return; }
 
-      const woIdChunks = chunkArray(eligibleWOs.map(wo => wo.wo_id), 10);
-      let allHoursData = [];
-      for (const chunk of woIdChunks) {
-        const { data } = await supabase.from('daily_hours_log')
-          .select('wo_id, hours_regular, hours_overtime').in('wo_id', chunk);
-        if (data) allHoursData = [...allHoursData, ...data];
-      }
-      const hoursPerWO = {};
-      allHoursData.forEach(e => {
-        hoursPerWO[e.wo_id] = (hoursPerWO[e.wo_id] || 0) + (parseFloat(e.hours_regular) || 0) + (parseFloat(e.hours_overtime) || 0);
-      });
-      setMissingHoursCount(eligibleWOs.filter(wo => !hoursPerWO[wo.wo_id]).length);
+      // fetchWorkOrders already aggregated daily_hours_log + assignments into
+      // total_hours_* — no need for 15 extra chunked queries on every refresh.
+      const hasHours = (wo) => {
+        if (typeof wo.total_hours_regular === 'number' || typeof wo.total_hours_overtime === 'number') {
+          return ((wo.total_hours_regular || 0) + (wo.total_hours_overtime || 0)) > 0;
+        }
+        return ((parseFloat(wo.hours_regular) || 0) + (parseFloat(wo.hours_overtime) || 0)) > 0;
+      };
+      setMissingHoursCount(eligibleWOs.filter(wo => !hasHours(wo)).length);
     } catch { setMissingHoursCount(0); }
   };
 

@@ -39,7 +39,9 @@ export default function WorkOrdersList({
   onDownloadOffline = null,
   cachedCount = 0,
   isDownloading = false,
-  lastSyncTime = null
+  lastSyncTime = null,
+  failedSyncItems = [],
+  onRetryFailed = null
 }) {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || key;
@@ -96,7 +98,10 @@ export default function WorkOrdersList({
       filtered = filtered.filter(wo => selStatuses.includes(wo.status));
     }
     if (selCbre.length) {
-      filtered = filtered.filter(wo => selCbre.includes(wo.cbre_status));
+      // Escalation lives in its own flag column (email-sync sets escalation=true),
+      // NOT in cbre_status — match both so techs actually see escalations.
+      filtered = filtered.filter(wo =>
+        selCbre.includes(wo.cbre_status) || (selCbre.includes('escalation') && wo.escalation === true));
     }
 
     // Sort
@@ -274,6 +279,35 @@ export default function WorkOrdersList({
                 ⏳ {pendingSyncCount} change{pendingSyncCount > 1 ? 's' : ''} will sync when online
               </div>
             )}
+          </div>
+        ) : failedSyncItems.length > 0 ? (
+          // ONLINE BUT SOME CHANGES GAVE UP — show them, offer a retry
+          <div className="mb-2 px-3 py-2 rounded-lg text-xs bg-red-900/50 border border-red-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span className="text-red-300 font-medium">
+                  {failedSyncItems.length} change{failedSyncItems.length > 1 ? 's' : ''} could not be uploaded
+                </span>
+              </div>
+              <button
+                onClick={onRetryFailed}
+                disabled={syncStatus === 'syncing'}
+                className="text-red-200 hover:text-white font-semibold"
+              >
+                {syncStatus === 'syncing' ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
+            <ul className="mt-1 text-[11px] text-red-200/80 space-y-0.5">
+              {failedSyncItems.slice(0, 5).map((item) => (
+                <li key={item.id}>
+                  • {String(item.action || '').replace(/_/g, ' ')}
+                  {item.data?.workDate ? ` (${item.data.workDate})` : ''}
+                  {item.error ? ` — ${String(item.error).slice(0, 80)}` : ''}
+                </li>
+              ))}
+              {failedSyncItems.length > 5 && <li>… and {failedSyncItems.length - 5} more</li>}
+            </ul>
           </div>
         ) : pendingSyncCount > 0 ? (
           // ONLINE WITH PENDING - Show sync option
@@ -628,7 +662,7 @@ export default function WorkOrdersList({
                 'cancelled': { bg: 'bg-gray-600', text: language === 'en' ? '🚫 Cancelled' : '🚫 Cancelado' },
               };
               const cbreConfig = wo.cbre_status ? cbreConfigs[wo.cbre_status] : null;
-              const isEscalation = wo.cbre_status === 'escalation';
+              const isEscalation = wo.escalation === true || wo.cbre_status === 'escalation';
               const isRejected = wo.cbre_status === 'quote_rejected' || wo.cbre_status === 'invoice_rejected';
 
               // Cost-center tint (shared logic with the dashboard table):

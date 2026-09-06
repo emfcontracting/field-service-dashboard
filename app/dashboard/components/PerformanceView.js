@@ -16,6 +16,7 @@ import {
   timeToTarget, median, facilityOf, PAUSE_REASON_LABELS,
 } from '@/lib/kpi';
 import SendAlertModal from './aging/SendAlertModal';
+import { fetchAll } from '@/lib/fetchAll';
 
 const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -53,21 +54,23 @@ export default function PerformanceView({ currentUser, onSelectWorkOrder }) {
     setLoading(true);
     try {
       const since = new Date(Date.now() - 400 * MS_D).toISOString();
-      const [woRes, pauseRes, invRes] = await Promise.all([
-        supabaseClient.from('work_orders').select(`
+      // .limit(5000) does NOT lift PostgREST's 1000-row cap — page instead.
+      const [woRows, pauseRows, invRows] = await Promise.all([
+        fetchAll(() => supabaseClient.from('work_orders').select(`
           wo_id, wo_number, building, priority, status, date_entered, date_completed,
           target_response_at, target_completion_at, time_in, waiting_reason,
           escalation, escalation_updated_at, missing_data_flagged_at, cbre_status,
           lead_tech_id, work_order_description,
           kpi_excluded, kpi_excluded_reason, kpi_excluded_at, kpi_excluded_by,
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
-        `).gte('date_entered', since).limit(5000),
-        supabaseClient.from('work_order_clock_pauses')
-          .select('wo_id, reason, started_at, ended_at').gte('started_at', since).limit(5000),
-        supabaseClient.from('invoices')
+        `).gte('date_entered', since).order('wo_id')),
+        fetchAll(() => supabaseClient.from('work_order_clock_pauses')
+          .select('wo_id, reason, started_at, ended_at').gte('started_at', since).order('started_at')),
+        fetchAll(() => supabaseClient.from('invoices')
           .select('wo_id, generated_at, cmp_date, paid_at, rejected_at, status')
-          .gte('created_at', since).limit(5000),
+          .gte('created_at', since).order('invoice_id')),
       ]);
+      const woRes = { data: woRows }, pauseRes = { data: pauseRows }, invRes = { data: invRows };
       const { data: userRows } = await supabaseClient
         .from('users')
         .select('user_id, first_name, last_name, email, role')

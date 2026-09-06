@@ -345,11 +345,13 @@ export async function getUnsyncedDailyLogs() {
   const database = getDB();
   const tx = database.transaction(STORES.DAILY_LOGS, 'readonly');
   const store = tx.objectStore(STORES.DAILY_LOGS);
-  const index = store.index('synced');
 
+  // Booleans are NOT valid IndexedDB keys — index('synced').getAll(false)
+  // threw DataError on every sync and left the app stuck on "Syncing…".
+  // Read everything and filter in JS instead.
   return new Promise((resolve, reject) => {
-    const request = index.getAll(false);
-    request.onsuccess = () => resolve(request.result || []);
+    const request = store.getAll();
+    request.onsuccess = () => resolve((request.result || []).filter((l) => !l.synced));
     request.onerror = () => reject(request.error);
   });
 }
@@ -429,6 +431,11 @@ export async function getCachedTeamMembers(woId) {
 
 // ==================== SYNC QUEUE ====================
 
+// The signed-in tech, so queue items are tagged and never replayed under the
+// name of whoever logs in next on the same phone (set from useAuth).
+let offlineUserId = null;
+export function setOfflineUser(userId) { offlineUserId = userId || null; }
+
 export async function addToSyncQueue(action, data) {
   const database = getDB();
   const tx = database.transaction(STORES.SYNC_QUEUE, 'readwrite');
@@ -437,6 +444,7 @@ export async function addToSyncQueue(action, data) {
   const queueItem = {
     action, // 'check_in', 'check_out', 'add_comment', 'update_status', 'add_hours', etc.
     data,
+    user_id: offlineUserId,
     status: 'pending',
     created_at: new Date().toISOString(),
     attempts: 0
@@ -563,6 +571,28 @@ export async function getCachedUserData(key) {
 }
 
 // ==================== UTILITIES ====================
+
+/**
+ * Logout cleanup: drop cached work orders / team data so the next user on this
+ * phone does not see the previous tech's tickets offline. Pending queue items
+ * are KEPT (they are tagged with user_id and only sync for their owner) so no
+ * unsynced hours are lost.
+ */
+export async function clearCachesKeepQueue() {
+  const database = getDB();
+  if (!database) return false;
+  const keep = new Set([STORES.SYNC_QUEUE, STORES.DAILY_LOGS]);
+  for (const storeName of Object.values(STORES)) {
+    if (keep.has(storeName)) continue;
+    const tx = database.transaction(storeName, 'readwrite');
+    await new Promise((resolve, reject) => {
+      const request = tx.objectStore(storeName).clear();
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    });
+  }
+  return true;
+}
 
 export async function clearAllOfflineData() {
   const database = getDB();

@@ -2955,7 +2955,7 @@ const sendAssignmentNotifications = async () => {
                       const hasSnapshot = quote.current_costs_snapshot !== null && quote.current_costs_snapshot !== undefined;
                       
                       // Additional work total from quote
-                      const additionalTotal = 
+                      let additionalTotal = 
                         (parseFloat(quote.labor_total) || 0) +
                         (parseFloat(quote.materials_with_markup) || 0) +
                         (parseFloat(quote.equipment_with_markup) || 0) +
@@ -2971,7 +2971,16 @@ const sendAssignmentNotifications = async () => {
                       // NOT the accrued snapshot. Detected via supersedes/sequence so the
                       // displayed NEW NTE matches the chain + create-modal (ceiling + additional).
                       const isChainFollowUp = !!quote.supersedes_quote_id || (parseInt(quote.sequence_number) || 1) > 1;
-                      if (hasSnapshot) {
+                      // Fixed-amount request: the office asked CBRE for a specific NTE
+                      // (sub work orders, reconciliation scripts) — no line items, only
+                      // new_nte_amount / grand_total / original_nte. Show exactly that;
+                      // recomputing from accrued costs printed $1,138 for a $2,335 request.
+                      const fixedAmount = additionalTotal === 0 && (parseFloat(quote.new_nte_amount) || 0) > 0;
+                      if (fixedAmount) {
+                        currentCosts = parseFloat(quote.original_nte) || 0;
+                        newNTENeeded = parseFloat(quote.new_nte_amount) || 0;
+                        additionalTotal = (parseFloat(quote.grand_total) || 0) || Math.max(0, newNTENeeded - currentCosts);
+                      } else if (hasSnapshot) {
                         // First increase → base = accrued snapshot.
                         // Follow-up    → base = previous NTE ceiling (original_nte), labor included.
                         currentCosts = isChainFollowUp
@@ -3037,14 +3046,14 @@ const sendAssignmentNotifications = async () => {
                           {/* Current Costs (first increase) / Previous Ceiling (follow-up) */}
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-blue-400">
-                              {isChainFollowUp ? 'Previous NTE Ceiling' : `Current Costs ${hasSnapshot ? '(at submission)' : 'Accrued'}`}:
+                              {fixedAmount ? 'NTE at request' : isChainFollowUp ? 'Previous NTE Ceiling' : `Current Costs ${hasSnapshot ? '(at submission)' : 'Accrued'}`}:
                             </span>
                             <span className="text-blue-400 font-semibold">${currentCosts.toFixed(2)}</span>
                           </div>
                           
                           {/* Additional Work */}
                           <div className="flex justify-between items-center text-sm">
-                            <span className="text-yellow-400">+ Additional Work Estimate:</span>
+                            <span className="text-yellow-400">{fixedAmount ? '+ Requested increase:' : '+ Additional Work Estimate:'}</span>
                             <span className="text-yellow-400 font-semibold">${additionalTotal.toFixed(2)}</span>
                           </div>
                           

@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireCronOrStaff, cronHeaders } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
 import { parseDate, dateKeyET } from '@/lib/dates';
+import { CBRE_WO_PATTERN } from '@/lib/cbreEmailParser';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -62,7 +63,6 @@ const DEFAULT_MAX_AGE_DAYS = 14;
 // CBRE work order numbers look like C3270457, P3209068, PJ3118923, ST2705334.
 // Anything else is ours (EMF-PJ-03) or another system's and must never be
 // posted into CBRE's form.
-const CBRE_WO_PATTERN = /^(C|P|PJ|ST|COU)\d+$/i;
 
 // Set these in Vercel rather than hardcoding a person into the repo.
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';

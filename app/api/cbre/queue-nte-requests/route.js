@@ -31,6 +31,7 @@ import { createClient } from '@supabase/supabase-js';
 import { buildCbrePayload } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { CBRE_WO_PATTERN } from '@/lib/cbreEmailParser';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -45,7 +46,6 @@ const supabase = createClient(
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;
 
-const CBRE_WO_PATTERN = /^(C|P|PJ|ST|COU)\d+$/i;
 
 // cbre_status values that mean "CBRE already has a quote from us" — a pending
 // quote created BEFORE that status was set is a duplicate, not new work.

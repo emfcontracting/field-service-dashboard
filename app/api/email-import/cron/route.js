@@ -8,6 +8,7 @@ import { fetchMessages, addFlags, sinceDays } from '@/lib/imap';
 import { parseCBREEmail } from '@/lib/cbreEmailParser';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { WO_REF_PATTERN } from '@/lib/cbreEmailParser';
 
 // 50 dispatch e-mails with attachments can take a while; the default 10 s
 // (hobby) / 60 s cut runs mid-loop. Vercel Pro allows up to 300.
@@ -178,7 +179,6 @@ async function logImportActivity(results) {
 // as its sub work order and leave a note on both sides. Returns the original
 // WO number when a link was made, otherwise null.
 // ─────────────────────────────────────────────────────────────────────────────
-const WO_REF_PATTERN = /\b(?:C|P|PJ|ST|COU)\d{7}\b/gi;
 
 async function linkSubWorkOrder(insertedWO, workOrder) {
   const haystack = `${workOrder.work_order_description || ''}\n${workOrder.comments || ''}`;

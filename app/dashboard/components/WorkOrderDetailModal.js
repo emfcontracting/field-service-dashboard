@@ -406,7 +406,7 @@ export default function WorkOrderDetailModal({
     const rentalWithMarkup = parseFloat(quote.rental_with_markup) || 0;
     const trailerWithMarkup = parseFloat(quote.trailer_with_markup) || 0;
     const mileageTotal = parseFloat(quote.mileage_total) || 0;
-    const additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
+    let additionalTotal = laborTotal + materialsWithMarkup + equipmentWithMarkup + rentalWithMarkup + trailerWithMarkup + mileageTotal;
     
     let existingCostsTotal = 0;
     let existingBreakdown = { labor: 0, materials: 0, equipment: 0, rental: 0, trailer: 0, mileage: 0, admin: getEffectiveAdminHours(selectedWO) * RATES.RT };
@@ -456,9 +456,17 @@ export default function WorkOrderDetailModal({
     // logic so the printed PDF matches what the dashboard shows.
     const isChainFollowUp = !!quote.supersedes_quote_id || (parseInt(quote.sequence_number) || 1) > 1;
 
+    // Fixed-amount request (sub work orders, reconciliation scripts): no line
+    // items, the requested NTE IS the number — same rule as the NTE card. The
+    // accrued-cost breakdown above still prints as backup.
+    const fixedAmount = !isReconciliation && additionalTotal === 0 && (parseFloat(quote.new_nte_amount) || 0) > 0;
+    if (fixedAmount) {
+      additionalTotal = (parseFloat(quote.grand_total) || 0) || Math.max(0, (parseFloat(quote.new_nte_amount) || 0) - (parseFloat(quote.original_nte) || 0));
+    }
+
     // Base for the NEW NTE: previous ceiling for a follow-up, accrued costs for
-    // a first increase.
-    const summaryBase = isChainFollowUp ? originalNTE : existingCostsTotal;
+    // a first increase, the NTE at request for a fixed amount.
+    const summaryBase = fixedAmount ? (parseFloat(quote.original_nte) || originalNTE) : isChainFollowUp ? originalNTE : existingCostsTotal;
 
     // Reconciliation-specific values
     const finalActualTotal = isReconciliation
@@ -470,7 +478,7 @@ export default function WorkOrderDetailModal({
 
     // For estimate mode: always recompute fresh from base + line items
     // (don't trust stored new_nte_amount — it may be stale after line item edits)
-    const projectedTotal = summaryBase + additionalTotal;
+    const projectedTotal = fixedAmount ? (parseFloat(quote.new_nte_amount) || 0) : summaryBase + additionalTotal;
     
     const newNTENeeded = isReconciliation ? finalActualTotal : projectedTotal;
     
@@ -735,11 +743,11 @@ export default function WorkOrderDetailModal({
         <div class="cost-box cost-box-green">
           <div class="cost-box-title" style="color: #065f46;">NTE INCREASE SUMMARY</div>
           <div class="summary-row">
-            <span>${isChainFollowUp ? 'Previous NTE Ceiling' : 'Current Costs Accrued'}</span>
+            <span>${fixedAmount ? 'NTE at request' : isChainFollowUp ? 'Previous NTE Ceiling' : 'Current Costs Accrued'}</span>
             <span>${summaryBase.toFixed(2)}</span>
           </div>
           <div class="summary-row">
-            <span>Additional Work Estimate</span>
+            <span>${fixedAmount ? 'Requested increase' : 'Additional Work Estimate'}</span>
             <span>${additionalTotal.toFixed(2)}</span>
           </div>
           <div class="summary-total">

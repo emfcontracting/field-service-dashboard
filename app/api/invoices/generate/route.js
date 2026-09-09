@@ -5,7 +5,7 @@ import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/
 import { calcBillable, buildActualLineItems, round2 } from '@/lib/billing';
 import { billableComments } from '@/lib/commentsSplit';
 import { requireStaff } from '@/lib/serverAuth';
-import { invoiceBlocker } from '@/lib/invoiceReadiness';
+import { isDisputeActive } from '@/lib/disputeStatus';
 
 // Rates and the cost formula live in lib/billing.js.
 
@@ -50,6 +50,21 @@ export async function POST(request) {
     if (!workOrder.acknowledged) {
       return NextResponse.json(
         { success: false, error: 'Work order must be acknowledged before generating invoice' },
+        { status: 400 }
+      );
+    }
+
+    // An escalation is not a reason to hold an invoice — it is a reason for the
+    // invoice not to exist. CBRE does not pay against a work order that is
+    // disputed, cancelled, or posted with the NTE frozen; that money comes back
+    // on a sub work order, and the sub gets its own invoice after it has run
+    // acknowledge → report completion → lock.
+    if (isDisputeActive(workOrder)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `${workOrder.wo_number} has an open escalation (${workOrder.dispute_status}) — it is worked in the Escalations tab and cannot be invoiced. Close the escalation, or bill the sub work order instead.`,
+        },
         { status: 400 }
       );
     }
@@ -198,22 +213,12 @@ export async function POST(request) {
     // ============================================================
     // Lock the work order — but only when CBRE is actually done with it.
     // ============================================================
-    // Locking is what takes the work order out of the dashboard AND out of
-    // CBRE Data Entry. While an NTE increase is still pending, the completion
-    // cannot be reported to CBRE yet, so the work order has to stay in the
-    // dashboard and run through acknowledge → completion → lock afterwards.
-    // The invoice itself is kept (held by lib/invoiceReadiness until CBRE is
-    // ready); only the lock waits.
-    const quotesForBlocker = await supabase
-      .from('work_order_quotes').select('quote_id, nte_status, new_nte_amount').eq('wo_id', wo_id);
-    const hold = invoiceBlocker(
-      { total, qb_invoice_number: null },
-      { ...workOrder, work_order_quotes: quotesForBlocker.data || [] }
-    );
-
-    const { error: lockError } = hold.blocked
-      ? { error: null }
-      : await supabase
+    // Getting here means the work order is acknowledged and free of escalations,
+    // so the invoice is real and the lock is unconditional. (An earlier version
+    // created the invoice anyway and only withheld the lock — that left an
+    // invoice standing for a work order CBRE will not pay, which is the wrong
+    // half of the problem to solve.)
+    const { error: lockError } = await supabase
       .from('work_orders')
       .update({
         is_locked: true,
@@ -240,10 +245,7 @@ export async function POST(request) {
       invoice_id: invoice.invoice_id,
       invoice_number: invoiceNumber,
       total: total,
-      // Told the caller so the office knows the work order deliberately stayed
-      // open (see the lock block above).
-      locked: !hold.blocked,
-      hold: hold.blocked ? { reason: hold.reason, label: hold.label, detail: hold.detail } : null,
+      locked: true,
     });
 
   } catch (error) {

@@ -36,6 +36,7 @@ import {
 } from '@/lib/disputeStatus';
 import { CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { exportToExcel, exportToPDF } from '@/lib/upsEscalationExport';
+import { apiFetch } from '@/lib/apiClient';
 import ActivityLogExportModal from './ActivityLogExportModal';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
@@ -68,6 +69,7 @@ export default function UPSEscalationView({ currentUser }) {
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [subWoByWo, setSubWoByWo] = useState({});      // original wo_id -> { wo_number, status, invoice }
   const [editingSubWoFor, setEditingSubWoFor] = useState(null);
+  const [linkingSubWo, setLinkingSubWo] = useState(null);
   const [subWoDraft, setSubWoDraft] = useState('');
   const [waiting, setWaiting] = useState([]);           // quote_submitted WOs (Waiting on CBRE tab)
   const [waitingLoading, setWaitingLoading] = useState(false);
@@ -231,16 +233,60 @@ export default function UPSEscalationView({ currentUser }) {
     catch { alert(text); }
   };
 
+  // Linking a sub work order MOVES the work: hours, assignments, daily logs,
+  // costs, check-in/out and the completion go to the sub, the original goes
+  // inactive and keeps the link. Clearing the field only unlinks (nothing moves
+  // back — that would have to be done deliberately).
   const saveSubWo = async (woId) => {
-    const value = (subWoDraft || '').trim().toUpperCase() || null;
-    const { error } = await supabaseClient
-      .from('work_orders')
-      .update({ dispute_sub_wo: value })
-      .eq('wo_id', woId);
-    if (error) { alert('Failed: ' + error.message); return; }
-    setDisputes(prev => prev.map(d => d.wo_id === woId ? { ...d, dispute_sub_wo: value } : d));
-    setEditingSubWoFor(null);
-    loadData();
+    const value = (subWoDraft || '').trim().toUpperCase();
+    const dispute = disputes.find(d => d.wo_id === woId);
+    if (!value) {
+      const { error } = await supabaseClient.from('work_orders').update({ dispute_sub_wo: null }).eq('wo_id', woId);
+      if (error) { alert('Failed: ' + error.message); return; }
+      setDisputes(prev => prev.map(d => d.wo_id === woId ? { ...d, dispute_sub_wo: null } : d));
+      setEditingSubWoFor(null);
+      return;
+    }
+    if (value === dispute?.dispute_sub_wo) { setEditingSubWoFor(null); return; }
+
+    setLinkingSubWo(woId);
+    try {
+      // Show what will move before moving it — this changes two work orders.
+      const preview = await apiFetch('/api/work-orders/link-sub', {
+        method: 'POST',
+        body: JSON.stringify({ original_wo_id: woId, sub_wo_number: value, dry_run: true }),
+      });
+      const p = await preview.json();
+      if (!preview.ok) { alert('⚠️ ' + (p.error || 'Could not link')); return; }
+
+      const m = p.moved || {};
+      const lines = [
+        `Link ${value} as the sub work order for ${dispute?.wo_number}?`,
+        '',
+        'This moves to ' + value + ':',
+        `  • ${m.assignments || 0} crew assignment(s), ${m.daily_logs || 0} daily hours entr(y/ies)`,
+        `  • costs: ${Object.keys(m.costs || {}).length ? Object.entries(m.costs).map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`).join(', ') : 'none'}`,
+        `  • check-in/out and the completion date`,
+        '',
+        `${dispute?.wo_number} then goes inactive — closed, linked, out of the dashboard, kept for the history.`,
+        `${value} lands in the dashboard and runs acknowledge → report completion → lock → invoice.`,
+      ];
+      if (!confirm(lines.join('\n'))) return;
+
+      const res = await apiFetch('/api/work-orders/link-sub', {
+        method: 'POST',
+        body: JSON.stringify({ original_wo_id: woId, sub_wo_number: value }),
+      });
+      const json = await res.json();
+      if (!res.ok) { alert('⚠️ ' + (json.error || 'Could not link')); return; }
+      alert('✅ ' + json.message);
+      setEditingSubWoFor(null);
+      await loadData();
+    } catch (e) {
+      alert('Failed: ' + e.message);
+    } finally {
+      setLinkingSubWo(null);
+    }
   };
 
   // ── Update functions ───────────────────────────────────────────────────────
@@ -517,6 +563,7 @@ export default function UPSEscalationView({ currentUser }) {
               invoice={invoiceByWo[d.wo_id]}
               subWo={subWoByWo[d.wo_id]}
               editingSubWo={editingSubWoFor === d.wo_id}
+              linking={linkingSubWo === d.wo_id}
               subWoDraft={editingSubWoFor === d.wo_id ? subWoDraft : (d.dispute_sub_wo || '')}
               onStartEditSubWo={() => { setEditingSubWoFor(d.wo_id); setSubWoDraft(d.dispute_sub_wo || ''); }}
               onChangeSubWo={(v) => setSubWoDraft(v)}
@@ -672,7 +719,7 @@ function TabButton({ active, onClick, label, count, total, color, hint }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function DisputeCard({
   dispute, invoice, subWo, activeTab,
-  editingSubWo, subWoDraft, onStartEditSubWo, onChangeSubWo, onSaveSubWo, onCancelSubWo,
+  editingSubWo, subWoDraft, onStartEditSubWo, onChangeSubWo, onSaveSubWo, onCancelSubWo, linking,
   editingNotes, notesDraft, onStartEditNotes, onChangeNotes, onSaveNotes, onCancelNotes,
   onTransition, onRemove, onReturn,
   transitionResolveOpen, recoveredAmountDraft, onChangeRecovered, onConfirmResolve, onCancelResolve,
@@ -753,7 +800,7 @@ function DisputeCard({
       <CbreFacts wo={dispute} />
 
       {/* Sub work order — the way money comes back on a cancelled/closed WO */}
-      {(dispute.dispute_status === 'sub_wo_requested' || dispute.dispute_sub_wo) && (
+      {(active || dispute.dispute_sub_wo) && (
         <div className="px-4 py-2.5 border-b border-[#1e1e2e] bg-sky-500/5 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-sky-400 font-semibold uppercase tracking-wider">Sub-WO</span>
           {editingSubWo ? (
@@ -761,7 +808,10 @@ function DisputeCard({
               <input value={subWoDraft} onChange={e => onChangeSubWo(e.target.value)}
                 placeholder="e.g. C3301234"
                 className="bg-[#0a0a0f] border border-[#2d2d44] text-slate-200 rounded px-2 py-1 font-mono w-36 focus:outline-none focus:border-sky-500/60" />
-              <button onClick={onSaveSubWo} className="px-2 py-1 rounded bg-sky-600 text-white font-semibold">Save</button>
+              <button onClick={onSaveSubWo} disabled={linking}
+                className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold disabled:opacity-50">
+                {linking ? 'Linking…' : 'Link & move'}
+              </button>
               <button onClick={onCancelSubWo} className="px-2 py-1 rounded bg-[#1e1e2e] border border-[#2d2d44] text-slate-400">Cancel</button>
             </>
           ) : dispute.dispute_sub_wo ? (
@@ -781,7 +831,11 @@ function DisputeCard({
             </>
           ) : (
             <>
-              <span className="text-slate-500 italic">waiting for CBRE{dispute.dispute_requested_at ? ` — requested ${fmtDate(dispute.dispute_requested_at)} (${daysSince(dispute.dispute_requested_at)} days)` : ''}</span>
+              <span className="text-slate-500 italic">
+                {dispute.dispute_requested_at
+                  ? `waiting for CBRE — requested ${fmtDate(dispute.dispute_requested_at)} (${daysSince(dispute.dispute_requested_at)} days)`
+                  : 'no sub work order yet'}
+              </span>
               <button onClick={onStartEditSubWo} className="text-blue-400 hover:text-blue-300 ml-auto">+ Link sub-WO</button>
             </>
           )}

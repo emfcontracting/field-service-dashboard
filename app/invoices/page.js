@@ -5,7 +5,7 @@ import { getSupabase } from '@/lib/supabase';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
-import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
+import { ACTIVE_DISPUTE_STATUSES, isDisputeActive } from '@/lib/disputeStatus';
 import { billableComments } from '@/lib/commentsSplit';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
@@ -393,7 +393,27 @@ export default function InvoicingPage() {
         ? buildFixedQuoteLineItems(fixedQuotePrev).map(it => ({ ...it, editable: true }))
         : buildActualLineItems(calcBillable(wo, { assignments: teams || [], dailyLogs: daily || [] })).map(it => ({ ...it, editable: true }));
 
+      // If an invoice for this work order (or for the original it replaces) was
+      // withdrawn earlier, its "work performed" text was written by hand — bring
+      // it back rather than making the office type it a second time.
       let wp = billableComments(wo) || wo.work_order_description || 'Work completed as requested.';
+      try {
+        // A sub work order also inherits the text of the original it replaces,
+        // which is the work order pointing at this number via dispute_sub_wo.
+        const { data: original } = await supabase
+          .from('work_orders').select('wo_number').eq('dispute_sub_wo', wo.wo_number).maybeSingle();
+        const numbers = [wo.wo_number, original?.wo_number].filter(Boolean);
+        const { data: archived } = await supabase
+          .from('wo_invoice_archive')
+          .select('work_performed, invoice_number, wo_number')
+          .in('wo_number', numbers)
+          .not('work_performed', 'is', null)
+          .order('withdrawn_at', { ascending: false })
+          .limit(1);
+        if (archived?.[0]?.work_performed) wp = archived[0].work_performed;
+      } catch {
+        // no archive table / nothing archived — the generated text stands
+      }
       setWorkPerformedText(wp);
       setPreviewWO(wo);
       setPreviewLineItems(items);
@@ -405,7 +425,20 @@ export default function InvoicingPage() {
   };
 
   const finalizeInvoice = async () => {
-    if (!previewWO || !confirm('Finalize and generate this invoice?\n\nThis locks the work order — unless the invoice goes on hold (open NTE request, over NTE, dispute), in which case it stays in the dashboard.')) return;
+    if (!previewWO) return;
+    // An escalation means the invoice must not exist at all — CBRE does not pay
+    // against a disputed, cancelled or NTE-frozen work order. The money comes
+    // back on a sub work order, which gets its own invoice once it has run
+    // acknowledge → report completion → lock.
+    if (isDisputeActive(previewWO)) {
+      alert(`⚠️ ${previewWO.wo_number} has an open escalation (${previewWO.dispute_status}).\n\nIt is worked in the Escalations tab and cannot be invoiced. Close the escalation, or bill the sub work order instead.`);
+      return;
+    }
+    if (!previewWO.acknowledged) {
+      alert(`⚠️ ${previewWO.wo_number} has not been acknowledged yet.\n\nReport the completion to CBRE first — an invoice before that is one CBRE has no completed work order for.`);
+      return;
+    }
+    if (!confirm('Finalize and generate this invoice?\n\nThis locks the work order.')) return;
     setGeneratingInvoice(true);
     try {
       const subtotal = previewLineItems.reduce((s,i) => s+i.amount, 0);
@@ -429,24 +462,12 @@ export default function InvoicingPage() {
       ]);
       if (lie) throw lie;
 
-      // Locking is what takes the work order out of the dashboard AND out of
-      // CBRE Data Entry. While an NTE increase is still pending, the completion
-      // cannot be reported to CBRE yet, so the work order has to stay in the
-      // dashboard and run through acknowledge → completion → lock afterwards.
-      const { data: holdQuotes } = await supabase.from('work_order_quotes')
-        .select('quote_id, nte_status, new_nte_amount').eq('wo_id', previewWO.wo_id);
-      const hold = invoiceBlocker(
-        { total: subtotal, qb_invoice_number: null },
-        { ...previewWO, work_order_quotes: holdQuotes || [] }
-      );
-      if (!hold.blocked) {
-        const { error: we } = await supabase.from('work_orders').update({ is_locked:true, locked_at:new Date().toISOString(), locked_by:null }).eq('wo_id', previewWO.wo_id);
-        if (we) throw we;
-      }
+      // Acknowledged and free of escalations by the guards above, so the lock
+      // is unconditional.
+      const { error: we } = await supabase.from('work_orders').update({ is_locked:true, locked_at:new Date().toISOString(), locked_by:null }).eq('wo_id', previewWO.wo_id);
+      if (we) throw we;
 
-      alert(hold.blocked
-        ? `✅ Invoice generated (on hold)\n\nTotal: $${subtotal.toFixed(2)}\n\n⏸️ ${hold.label}\n${hold.detail}\n\nThe work order stays in the dashboard so you can still run acknowledge → report completion → lock once this clears.`
-        : `✅ Invoice generated!\n\nTotal: $${subtotal.toFixed(2)}`);
+      alert(`✅ Invoice generated!\n\nTotal: $${subtotal.toFixed(2)}`);
       setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText('');
       setAcknowledgedWOs(prev => prev.filter(w => w.wo_id !== previewWO.wo_id));
       await fetchData(); setActiveTab('invoiced');

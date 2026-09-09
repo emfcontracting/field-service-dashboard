@@ -13,6 +13,11 @@ import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/services/quoteService';
 import { apiFetch } from '@/lib/apiClient';
+import * as XLSX from 'xlsx';
+import { BULK_ACTIONS, planSummary } from '@/lib/invoiceBulkActions';
+import InvoiceBulkBar from './InvoiceBulkBar';
+import InvoicesLegend from './InvoicesLegend';
+import { statusConfigFor } from '@/lib/invoiceStatus';
 import { fetchAll } from '@/lib/fetchAll';
 import { calcBillable, calcTotal, buildActualLineItems } from '@/lib/billing';
 import { fmtDate } from '@/lib/dates';
@@ -23,16 +28,10 @@ import { invoiceBlocker, INVOICE_WO_SELECT } from '@/lib/invoiceReadiness';
 const supabase = getSupabase();
 
 // ── Status helpers ──────────────────────────────────────────────────────────
-const STATUS_CONFIG = {
-  draft:    { label: 'Draft',                          color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-  approved: { label: 'Uploaded to CBRE',               color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-  accepted: { label: 'Accepted – Submitted to AP',     color: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  synced:   { label: 'Accepted – Submitted to AP',     color: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  paid:     { label: 'Paid',                           color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-  rejected: { label: 'Rejected',                       color: 'bg-red-500/15 text-red-400 border-red-500/30' },
-};
+// The config itself lives in lib/invoiceStatus so the legend can use it without
+// importing this page (which imports the legend).
 const statusBadge = (status) => {
-  const cfg = STATUS_CONFIG[status] || { label: status?.toUpperCase(), color: 'bg-slate-500/15 text-slate-400 border-slate-500/30' };
+  const cfg = statusConfigFor(status);
   return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.color}`}>{cfg.label}</span>;
 };
 
@@ -551,32 +550,114 @@ export default function InvoicingPage() {
   };
 
   // ── Bulk mark-as-paid ─────────────────────────────────────────────────────────────
-  const bulkMarkAsPaid = async () => {
-    const ids = Array.from(selectedInvoiceIds);
-    if (!ids.length) return;
-    if (!confirm(`Mark ${ids.length} invoice${ids.length !== 1 ? 's' : ''} as paid?`)) return;
-
+  // One runner for every bulk action. The plan decides which rows are touched —
+  // see lib/invoiceBulkActions for why that matters more than the action itself.
+  const runBulkAction = async (key, plan, inputs) => {
+    const action = BULK_ACTIONS[key];
+    if (!action || !plan?.apply.length) return;
     setBulkMarking(true);
     try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('invoices')
-        .update({ status: 'paid', paid_at: now })
-        .in('invoice_id', ids);
-      if (error) throw error;
+      let changed = 0;
+      const patched = new Map();
 
-      // Optimistic update
+      if (action.patchPerRow) {
+        // Appending a note depends on what each row already says, so it cannot
+        // go out as one statement.
+        for (const inv of plan.apply) {
+          const patch = action.patchPerRow(inv, inputs);
+          const { error } = await supabase.from('invoices').update(patch).eq('invoice_id', inv.invoice_id);
+          if (error) throw error;
+          patched.set(inv.invoice_id, patch);
+          changed += 1;
+        }
+      } else {
+        const patch = action.patch(inputs);
+        const ids = plan.apply.map(i => i.invoice_id);
+        for (let i = 0; i < ids.length; i += 200) {
+          const slice = ids.slice(i, i + 200);
+          const { error } = await supabase.from('invoices').update(patch).in('invoice_id', slice);
+          if (error) throw error;
+          slice.forEach(id => patched.set(id, patch));
+          changed += slice.length;
+        }
+      }
+
       setInvoices(prev => prev.map(inv =>
-        ids.includes(inv.invoice_id) ? { ...inv, status: 'paid', paid_at: now } : inv
-      ));
+        patched.has(inv.invoice_id) ? { ...inv, ...patched.get(inv.invoice_id) } : inv));
       setSelectedInvoiceIds(new Set());
       setLastSelectedIndex(null);
-      alert(`✅ Marked ${ids.length} invoice${ids.length !== 1 ? 's' : ''} as paid`);
+      alert(`✅ ${action.label} — ${changed} invoice${changed !== 1 ? 's' : ''} updated` +
+        (plan.skip.length ? `\n${plan.skip.length} left untouched: ${planSummary(plan)}` : ''));
     } catch (err) {
       alert('❌ ' + err.message);
     } finally {
       setBulkMarking(false);
     }
+  };
+
+  // Real invoices get created in QuickBooks, one call each, so this asks first,
+  // skips the ones on hold, and reports per invoice instead of pretending it is
+  // a single operation that either worked or did not.
+  const bulkPushToQuickBooks = async (selection) => {
+    const todo = selection.filter(i => !i.qb_invoice_number);
+    if (!todo.length) { alert('All selected invoices are already in QuickBooks.'); return; }
+    const held = todo.filter(i => invoiceBlocker(i).blocked);
+    const send = todo.filter(i => !invoiceBlocker(i).blocked);
+    const lines = [
+      `Create ${send.length} invoice${send.length !== 1 ? 's' : ''} in QuickBooks?`,
+      '',
+      'These become real invoices in QB (customer CBRE-UPS) and each is e-mailed from there.',
+      selection.length - todo.length ? `${selection.length - todo.length} already in QuickBooks — skipped.` : '',
+      held.length ? `⚠️ ${held.length} on hold (NTE pending, over NTE, dispute) — skipped. Send those one at a time if you mean it.` : '',
+    ].filter(Boolean);
+    if (!send.length) { alert(lines.join('\n') + '\n\nNothing left to send.'); return; }
+    if (!confirm(lines.join('\n'))) return;
+
+    setBulkMarking(true);
+    const ok = [], failed = [];
+    try {
+      for (const inv of send) {
+        try {
+          const res = await apiFetch('/api/quickbooks/push-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ invoice_id: inv.invoice_id }),
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error || 'push failed');
+          ok.push(`${inv.invoice_number} → QB #${json.qbInvoiceNumber}`);
+        } catch (e) {
+          failed.push(`${inv.invoice_number}: ${e.message}`);
+        }
+      }
+      alert(`QuickBooks: ${ok.length} created${failed.length ? `, ${failed.length} failed` : ''}` +
+        (failed.length ? `\n\n${failed.slice(0, 8).join('\n')}` : ''));
+      await fetchData();
+    } finally {
+      setBulkMarking(false);
+    }
+  };
+
+  const exportSelection = (selection) => {
+    const rows = selection.map(inv => ({
+      'Invoice #': inv.invoice_number,
+      'Work Order': inv.work_order?.wo_number || '',
+      'Building': inv.work_order?.building || '',
+      'Invoice Date': inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('en-US') : '',
+      'Total': parseFloat(inv.total) || 0,
+      'Status': inv.status,
+      'QuickBooks #': inv.qb_invoice_number || '',
+      'CBRE Posting': inv.work_order?.cbre_posting_status || '',
+      'Approved to Pay': inv.approved_to_pay_at ? new Date(inv.approved_to_pay_at).toLocaleDateString('en-US') : '',
+      'Paid On': inv.paid_at ? new Date(inv.paid_at).toLocaleDateString('en-US') : '',
+      'Paid Amount': inv.paid_amount != null ? parseFloat(inv.paid_amount) : '',
+      'Cheque': inv.payment_reference || '',
+      'On Hold': invoiceBlocker(inv).blocked ? invoiceBlocker(inv).label : '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoices');
+    XLSX.writeFile(wb, `EMF-Invoices-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   // ── Checkbox click handler with shift+click range select ─────────────────────────────────────────────
@@ -626,9 +707,10 @@ export default function InvoicingPage() {
     acc[code] = invoices.filter(i => i.work_order?.cbre_posting_status === code).length;
     return acc;
   }, {});
-  const selectedTotal = filteredInvoices
-    .filter(i => selectedInvoiceIds.has(i.invoice_id))
-    .reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+  // The bulk bar works on the invoice OBJECTS, not just their ids: every action
+  // has to know each row's status before it decides whether it applies to it.
+  const selectedInvoices = filteredInvoices.filter(i => selectedInvoiceIds.has(i.invoice_id));
+  const selectedTotal = selectedInvoices.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
 
   const deleteInvoice = async (invoiceId, woId) => {
     if (prompt('Enter admin password:') !== 'EMF2024!') { alert('❌ Invalid password'); return; }
@@ -885,23 +967,15 @@ export default function InvoicingPage() {
               ) : (
                 <>
                 {/* Bulk action bar (only when items selected) */}
-                {selectedInvoiceIds.size > 0 && (
-                  <div className="sticky top-0 z-10 bg-blue-600/20 border-y border-blue-500/40 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
-                    <div className="text-sm text-slate-200">
-                      <strong className="text-blue-300">{selectedInvoiceIds.size}</strong> selected
-                      <span className="text-slate-500 ml-2">· Total: 
-                        <span className="text-emerald-400 font-mono font-bold">${selectedTotal.toFixed(2)}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Btn onClick={() => { setSelectedInvoiceIds(new Set()); setLastSelectedIndex(null); }}
-                        variant="ghost" size="sm">Clear</Btn>
-                      <Btn onClick={bulkMarkAsPaid} disabled={bulkMarking} variant="success" size="sm">
-                        {bulkMarking ? 'Marking…' : `💰 Mark ${selectedInvoiceIds.size} as Paid`}
-                      </Btn>
-                    </div>
-                  </div>
-                )}
+                <InvoiceBulkBar
+                  selected={selectedInvoices}
+                  total={selectedTotal}
+                  busy={bulkMarking}
+                  onClear={() => { setSelectedInvoiceIds(new Set()); setLastSelectedIndex(null); }}
+                  onRun={runBulkAction}
+                  onPushToQB={bulkPushToQuickBooks}
+                  onExport={exportSelection}
+                />
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1028,6 +1102,7 @@ export default function InvoicingPage() {
                     💡 Tip: Click checkboxes to select. Hold <kbd className="px-1 py-0.5 bg-[#1e1e2e] border border-[#2d2d44] rounded text-[10px] font-mono">Shift</kbd> + click for range select.
                   </div>
                 )}
+                <InvoicesLegend />
                 </>
               )}
             </Card>

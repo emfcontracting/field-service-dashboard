@@ -8,18 +8,21 @@
 // at all (it comes from UPS via Corpay), which is why the section is no longer
 // called "CBRE Sync".
 //
-//   CBRE Status   — the weekly CBRE work-order export (status, posting, CMP)
-//   UPS Payments  — the UPS procurement payment report (marks invoices paid)
+//   CBRE Status      — the weekly CBRE work-order export (status, posting, CMP)
+//   UPS Payments     — the UPS procurement payment report (marks invoices paid)
+//   CBRE Open Orders — the CBRE "grid": everything still open on their side
 // ─────────────────────────────────────────────────────────────────────────────
 'use client';
 
 import { useState } from 'react';
 import CBRESyncView from './CBRESyncView';
 import UPSPaymentsSyncView from './UPSPaymentsSyncView';
+import CBREGridSyncView from './CBREGridSyncView';
 
 const TABS = [
   { id: 'cbre',     label: '🔄 CBRE Status',  hint: 'weekly work order export' },
   { id: 'payments', label: '💵 UPS Payments', hint: 'payment report from UPS BaSE' },
+  { id: 'grid',     label: '📋 CBRE Open Orders', hint: 'what CBRE still has open' },
 ];
 
 export default function SyncView({ currentUser }) {
@@ -45,9 +48,9 @@ export default function SyncView({ currentUser }) {
       </div>
 
       {/* CBRESyncView brings its own page chrome; the payments tab is plain. */}
-      {tab === 'cbre'
-        ? <CBRESyncView currentUser={currentUser} />
-        : <div className="p-4 md:p-6"><UPSPaymentsSyncView currentUser={currentUser} /></div>}
+      {tab === 'cbre' && <CBRESyncView currentUser={currentUser} />}
+      {tab === 'payments' && <div className="p-4 md:p-6"><UPSPaymentsSyncView currentUser={currentUser} /></div>}
+      {tab === 'grid' && <div className="p-4 md:p-6"><CBREGridSyncView currentUser={currentUser} /></div>}
     </div>
   );
 }

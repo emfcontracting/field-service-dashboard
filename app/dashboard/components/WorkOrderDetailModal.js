@@ -220,6 +220,9 @@ export default function WorkOrderDetailModal({
   const [showCbreModal, setShowCbreModal] = useState(false);
   const [showMsgTech, setShowMsgTech] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  // Both ends of a sub work order: the original this one replaces, or the sub
+  // that replaces this one. { role: 'sub'|'parent', wo } or null.
+  const [subLink, setSubLink] = useState(null);
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
@@ -966,6 +969,34 @@ export default function WorkOrderDetailModal({
   // Re-fetch the current WO from the DB and update local state. Used by the
   // submission status section after a refresh/override so the icons + badges
   // update without a full page reload.
+
+  // A sub work order and the original it replaces have to find each other from
+  // either side: the original carries dispute_sub_wo, the sub carries nothing,
+  // so the sub is found by looking for whoever points at its number.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!selectedWO?.wo_number) { setSubLink(null); return; }
+      try {
+        if (selectedWO.dispute_sub_wo) {
+          const { data } = await supabase.from('work_orders')
+            .select('wo_id, wo_number, building, status, cbre_status, dispute_status')
+            .eq('wo_number', selectedWO.dispute_sub_wo).maybeSingle();
+          if (!cancelled) setSubLink(data ? { role: 'sub', wo: data } : { role: 'sub', wo: { wo_number: selectedWO.dispute_sub_wo } });
+          return;
+        }
+        const { data } = await supabase.from('work_orders')
+          .select('wo_id, wo_number, building, status, cbre_status, dispute_status, dispute_amount')
+          .eq('dispute_sub_wo', selectedWO.wo_number).maybeSingle();
+        if (!cancelled) setSubLink(data ? { role: 'parent', wo: data } : null);
+      } catch {
+        if (!cancelled) setSubLink(null);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selectedWO?.wo_number, selectedWO?.dispute_sub_wo, supabase]);
+
   const reloadSelectedWO = async () => {
     try {
       const { data, error } = await supabase
@@ -1954,6 +1985,31 @@ const sendAssignmentNotifications = async () => {
 
           {/* ── Details Tab ── */}
           {activeTab !== 'profitability' && (<>
+          {/* Sub work order link — visible from both ends */}
+          {subLink && (
+            <div className={`rounded-lg border px-3 py-2 text-sm flex flex-wrap items-center gap-2 ${
+              subLink.role === 'sub'
+                ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-200'
+                : 'bg-sky-500/10 border-sky-500/30 text-sky-200'}`}>
+              {subLink.role === 'sub' ? (
+                <>
+                  <span className="font-semibold">🔗 Replaced by sub work order</span>
+                  <span className="font-mono text-slate-100">{subLink.wo.wo_number}</span>
+                  {subLink.wo.wo_id
+                    ? <span className="text-slate-400 text-xs">· {subLink.wo.status}{subLink.wo.cbre_status ? ` / ${String(subLink.wo.cbre_status).replace(/_/g, ' ')}` : ''}</span>
+                    : <span className="text-amber-400 text-xs">· not in FSM yet</span>}
+                  <span className="text-slate-500 text-xs ml-auto">Hours, costs and the invoice live on the sub.</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">↩ Sub work order for</span>
+                  <span className="font-mono text-slate-100">{subLink.wo.wo_number}</span>
+                  <span className="text-slate-400 text-xs">· {subLink.wo.building || ''}</span>
+                  <span className="text-slate-500 text-xs ml-auto">Bill this one — the original is closed at CBRE.</span>
+                </>
+              )}
+            </div>
+          )}
           {/* Client type marker + admin-hours override (CBRE/UPS differentiation) */}
           <ClientBillingStrip
             wo={selectedWO}

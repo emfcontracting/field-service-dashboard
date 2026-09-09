@@ -9,6 +9,7 @@ import { getSubmissionStatus, SUBMISSION_META, tooltipFor } from '@/lib/submissi
 import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingStatus';
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { parseDate, daysBetweenET } from '@/lib/dates';
+import { DISPUTE_STATUS } from '@/lib/disputeStatus';
 
 // CBRE posting-status badge (CPW/CIS/CIR/CA1/CA2/CMP) — separate track from the
 // active cbre_status. Shows the CBRE-side processing stage of a completed WO.
@@ -229,6 +230,26 @@ const isNewWorkOrder = (wo) => {
 
 // Returns true if this WO has a CBRE status change that hasn't been acknowledged yet.
 // Compares cbre_status_updated_at against cbre_status_acknowledged_at.
+// ─────────────────────────────────────────────────────────────────────────────
+// Which of the three baskets a work order is in. Without this you cannot tell
+// a normal ticket from one being worked in the Escalations tab, or from a
+// billing sub work order, and every question needs a lookup.
+// ─────────────────────────────────────────────────────────────────────────────
+function DisputeBadge({ wo }) {
+  if (!wo?.dispute_status) return null;
+  const cfg = DISPUTE_STATUS[wo.dispute_status];
+  if (!cfg) return null;
+  const sub = wo.dispute_sub_wo;
+  return (
+    <span
+      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${cfg.badge}`}
+      title={`${cfg.label}${sub ? ` — sub work order ${sub}` : ''}${wo.dispute_amount ? ` — $${Number(wo.dispute_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} at risk` : ''}`}
+    >
+      {cfg.emoji} {sub || cfg.short}
+    </span>
+  );
+}
+
 const hasUnackCbreUpdate = (wo) => {
   if (!wo.cbre_status_updated_at) return false;
   if (!wo.cbre_status_acknowledged_at) return true;
@@ -384,6 +405,7 @@ export default function WorkOrdersTable({
                         </span>
                       )}
                       <PostingStatusBadge wo={wo} />
+                      <DisputeBadge wo={wo} />
                       <CbreAckBadge wo={wo} />
                       {isUnackCbre && (
                         <button

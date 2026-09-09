@@ -932,11 +932,23 @@ export default function WorkOrderDetailModal({
     setEditingHours(prev => ({ ...prev, [key]: value }));
   };
 
+  // Fields that must never be saved empty: the work order number is the
+  // identity every other table, e-mail and CBRE form keys on. The inline
+  // inputs save on blur, so clearing one by accident used to wipe it
+  // (C3297218 lost its number on 2026-09-08 that way).
+  const REQUIRED_FIELDS = { wo_number: 'Work Order #', building: 'Building' };
+
   const handleUpdateField = async (field, value) => {
     // Never write a field this user is not allowed to change, even if the
     // control somehow stayed enabled.
     if (!canEditField(field, currentUser, selectedWO)) {
       alert(`You cannot edit this field: ${whyBlocked(field, currentUser, selectedWO)}`);
+      return;
+    }
+    if (REQUIRED_FIELDS[field] && !String(value ?? '').trim()) {
+      alert(`${REQUIRED_FIELDS[field]} cannot be empty.`);
+      // put the stored value back into the input
+      await reloadSelectedWO();
       return;
     }
     try {

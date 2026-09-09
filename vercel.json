@@ -25,6 +25,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cbre/queue-arrivals?limit=25&notify=false",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cbre/sync-vendor-confirmations?searchDays=14",
       "schedule": "*/15 * * * *"
     },

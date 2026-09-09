@@ -42,6 +42,7 @@ const KIND_META = {
   cbre_complete:    { label: 'Complete',       tone: 'emerald', hint: 'Reports completion (start/end times) to CBRE.' },
   cbre_target_date: { label: 'Target Date',    tone: 'cyan',    hint: 'Changes the completion target date.' },
   cbre_tag_equipment:{ label: 'Tag Equipment', tone: 'indigo',  hint: 'Tags an equipment barcode to the work order.' },
+  cbre_arrival:     { label: 'Site Arrival',   tone: 'violet',  hint: "Reports the technician's actual arrival on site. CBRE's Response Rate is calculated from this." },
   other:            { label: 'Other',            tone: 'slate',  hint: '' },
 };
 
@@ -336,6 +337,17 @@ export default function ApprovalsView({ userInfo }) {
         if (compErr) setError(`Marked sent, but the completion stamp failed: ${compErr.message}`);
       }
 
+      // Site arrivals: stamp so the arrivals producer stops queueing this WO.
+      const arrWoIds = affected.filter((r) => r.kind === 'cbre_arrival' && r.wo_id).map((r) => r.wo_id);
+      if (arrWoIds.length) {
+        const { error: arrErr } = await supabase
+          .from('work_orders')
+          .update({ cbre_arrival_submitted_at: now, cbre_arrival_submitted_by: userInfo?.user_id ?? null })
+          .in('wo_id', arrWoIds)
+          .is('cbre_arrival_submitted_at', null);   // never overwrite the first report
+        if (arrErr) setError(`Marked sent, but the arrival stamp failed: ${arrErr.message}`);
+      }
+
       setSelected(new Set());
       setNotice(`${ids.length} marked as submitted.`);
       await load();
@@ -526,6 +538,12 @@ export default function ApprovalsView({ userInfo }) {
                     </div>
                     <p className="text-slate-300 text-sm mt-1">{r.title}</p>
                     {r.summary && <p className="text-slate-500 text-xs mt-0.5">{r.summary}</p>}
+                    {/* A producer that could not vouch for its own numbers says so
+                        here, right under the title, rather than burying it in the
+                        expanded payload where it would be approved unread. */}
+                    {readable?.warning && (
+                      <p className="text-amber-400 text-xs mt-1">⚠ {readable.warning}</p>
+                    )}
                     {r.send_error && (
                       <p className="text-red-400 text-xs mt-1">Send failed: {r.send_error}</p>
                     )}

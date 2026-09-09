@@ -14,7 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { fetchMessages, sinceDays } from '@/lib/imap';
-import { kindFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
+import { kindsFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
 
@@ -35,6 +35,7 @@ const WO_STAMP = {
   cbre_acknowledge: (now) => ({ cbre_acknowledged_at: now, cbre_acknowledged_via: 'vendor_app_form' }),
   cbre_nte:         (now) => ({ cbre_nte_submitted_at: now }),
   cbre_complete:    (now) => ({ cbre_completion_submitted_at: now, completion_transferred: true, completion_transferred_at: now }),
+  cbre_arrival:     (now) => ({ cbre_arrival_submitted_at: now }),
 };
 
 // IMAP lives in lib/imap.js.
@@ -84,8 +85,11 @@ async function handle(request) {
       const woNum = field(text, 'Work Order #');
       if (!actionVal || !woNum) { result.unmatched.push('parse-failed (Action/WO# not found)'); continue; }
 
-      const kind = kindFromActionValue(actionVal);
-      if (!kind) { result.unmatched.push(`${woNum}: unknown action "${actionVal}"`); continue; }
+      // One Action string can belong to several kinds ("Update Next Arrival
+      // Time" is both the manual ETA and the automatic arrival report), so we
+      // look for an open row of ANY of them and take the kind from the row.
+      const kinds = kindsFromActionValue(actionVal);
+      if (!kinds.length) { result.unmatched.push(`${woNum}: unknown action "${actionVal}"`); continue; }
 
       const { data: wo, error: woErr } = await supabase
         .from('work_orders')
@@ -98,9 +102,9 @@ async function handle(request) {
       // The most recent submitted (or approved-but-unmarked) row of this kind.
       const { data: rows, error: rErr } = await supabase
         .from('approval_requests')
-        .select('approval_id, status, confirmed_at')
+        .select('approval_id, status, confirmed_at, kind')
         .eq('wo_id', wo.wo_id)
-        .eq('kind', kind)
+        .in('kind', kinds)
         .in('status', ['sent', 'approved'])
         .is('confirmed_at', null)
         .order('sent_at', { ascending: false, nullsFirst: false })
@@ -110,6 +114,7 @@ async function handle(request) {
       const row = rows && rows[0];
       if (!row) { result.skipped++; continue; }   // already confirmed, or nothing sent
 
+      const kind = row.kind;                       // the row's own kind, not a guess
       const whenIso = (e.date instanceof Date ? e.date : new Date(e.date)).toISOString();
       const label = ACTIONS[kind]?.value || kind;
 

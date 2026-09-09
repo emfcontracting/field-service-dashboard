@@ -265,6 +265,8 @@ async function handle(request) {
             type: 'approval_needed',
             recipients: staff || [],
             customMessage: message,
+            // Office-bound: the button belongs in the dashboard, not the app.
+            linkTarget: 'dashboard',
             deliveryMethod,
           }),
         });

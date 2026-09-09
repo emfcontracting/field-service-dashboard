@@ -63,6 +63,54 @@ const createTransporter = () => {
 };
 
 // Build HTML email template for work order assignments
+// ─────────────────────────────────────────────────────────────────────────────
+// Where a notification button should land.
+//
+// The same custom-message mail goes to two very different people: a technician
+// in the field, for whom /mobile is right, and the office, for whom it is
+// useless — they are at a desk and need the work order open in the dashboard.
+// CBRE status mails (escalation, quote rejected, invoice rejected …) only ever
+// go to the office account, so those say linkTarget: 'dashboard'.
+//
+// Both links are offered either way: the primary button follows linkTarget and
+// a quiet second line carries the other, because the office lead does read
+// these on his phone sometimes.
+// ─────────────────────────────────────────────────────────────────────────────
+const APP_BASE = 'https://field-service-dashboard.vercel.app';
+
+const dashboardLink = (woNumber) =>
+  woNumber
+    ? `${APP_BASE}/dashboard?view=workorders&wo=${encodeURIComponent(woNumber)}`
+    : `${APP_BASE}/dashboard`;
+
+const mobileLink = (woNumber) =>
+  woNumber ? `${APP_BASE}/mobile?wo=${encodeURIComponent(woNumber)}` : `${APP_BASE}/mobile`;
+
+function buildActionButtons(woNumber, linkTarget = 'mobile') {
+  const toDashboard = linkTarget === 'dashboard';
+  const primaryHref  = toDashboard ? dashboardLink(woNumber) : mobileLink(woNumber);
+  const primaryLabel = toDashboard
+    ? (woNumber ? `🖥️ Open ${woNumber} in the Dashboard` : '🖥️ Open the Dashboard')
+    : '📱 Open Mobile App';
+  const secondHref  = toDashboard ? mobileLink(woNumber) : dashboardLink(woNumber);
+  const secondLabel = toDashboard ? 'or open it in the mobile app' : 'or open it in the dashboard';
+  return `
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${primaryHref}"
+         style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+        ${primaryLabel}
+      </a>
+      <div style="margin-top: 10px;">
+        <a href="${secondHref}" style="color: #9ca3af; font-size: 12px; text-decoration: underline;">${secondLabel}</a>
+      </div>
+    </div>`;
+}
+
+const buildActionLinksText = (woNumber, linkTarget = 'mobile') =>
+  linkTarget === 'dashboard'
+    ? `\n\nOpen in the dashboard: ${dashboardLink(woNumber)}\nMobile app: ${mobileLink(woNumber)}`
+    : `\n\nOpen in the mobile app: ${mobileLink(woNumber)}\nDashboard: ${dashboardLink(woNumber)}`;
+
 const buildAssignmentEmailHTML = (workOrder, recipientName, isEmergency = false) => {
   const priorityColor = isEmergency ? '#dc2626' : 
     workOrder.priority === 'P2' ? '#f97316' :
@@ -464,7 +512,13 @@ export async function POST(request) {
   const auth = await requireUserOrCron(request);
   if (!auth.ok) return auth.response;
   try {
-    const { type, recipients, workOrder, quote, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = await request.json();
+    const body = await request.json();
+    const { type, recipients, workOrder, quote, customMessage, deliveryMethod = 'email', actorName, missingDataItems, updateRequiredItems } = body;
+    // Office-bound notifications open the work order in the dashboard; anything
+    // aimed at a technician keeps the mobile app. CBRE status updates only go
+    // to the office account, so they default to the dashboard even when the
+    // caller says nothing.
+    const linkTarget = body.linkTarget || (type === 'cbre_status_update' ? 'dashboard' : 'mobile');
     
     if (!type || !recipients || recipients.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -529,8 +583,10 @@ export async function POST(request) {
             htmlMessage = buildCbreNteSubmittedEmailHTML(workOrder, quote, actorName, recipientName);
           } else if (customMessage) {
             // Custom message email
-            subject = '💬 Message from EMF Contracting';
-            textMessage = customMessage;
+            subject = workOrder?.wo_number
+              ? `💬 ${workOrder.wo_number} — Message from EMF Contracting`
+              : '💬 Message from EMF Contracting';
+            textMessage = customMessage + buildActionLinksText(workOrder?.wo_number, linkTarget);
             htmlMessage = `
               <!DOCTYPE html>
               <html>
@@ -546,12 +602,7 @@ export async function POST(request) {
                       <div style="background-color: #374151; border-radius: 8px; padding: 15px; margin-bottom: 20px; white-space: pre-wrap;">
                         ${customMessage}
                       </div>
-                      <div style="text-align: center; margin: 25px 0;">
-                        <a href="https://field-service-dashboard.vercel.app/mobile" 
-                           style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-                          📱 Open Mobile App
-                        </a>
-                      </div>
+                      ${buildActionButtons(workOrder?.wo_number, linkTarget)}
                     </div>
                     <div style="background-color: #111827; padding: 15px; text-align: center; border-top: 1px solid #374151;">
                       <p style="margin: 0; color: #6b7280; font-size: 12px;">EMF Contracting LLC</p>
@@ -697,14 +748,22 @@ export async function POST(request) {
         }
       } else if (user_id && customMessage) {
         // Custom message push notification
+        // Same rule as the e-mail: the office lands in the dashboard on the
+        // work order, a technician in the mobile app.
+        const pushUrl = linkTarget === 'dashboard'
+          ? (workOrder?.wo_number ? `/dashboard?view=workorders&wo=${encodeURIComponent(workOrder.wo_number)}` : '/dashboard')
+          : (workOrder?.wo_number ? `/mobile?wo=${encodeURIComponent(workOrder.wo_number)}` : '/mobile');
         const pushPayload = {
-          title: '💬 Message from EMF Contracting',
+          title: workOrder?.wo_number
+            ? `💬 ${workOrder.wo_number} — EMF Contracting`
+            : '💬 Message from EMF Contracting',
           body: customMessage.substring(0, 100) + (customMessage.length > 100 ? '...' : ''),
           icon: '/emf-logo.png',
           badge: '/emf-logo.png',
-          tag: 'custom-message',
+          tag: workOrder?.wo_number ? `wo-${workOrder.wo_number}-message` : 'custom-message',
           data: {
-            url: '/mobile'
+            url: pushUrl,
+            wo_number: workOrder?.wo_number || null,
           }
         };
 

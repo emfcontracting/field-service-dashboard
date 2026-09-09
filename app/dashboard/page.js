@@ -51,6 +51,33 @@ function DashboardContent() {
     pending_cbre_quote: 0, quoted: 0, quote_approved: 0
   });
 
+  // Deep link from a notification e-mail: /dashboard?wo=C3272452 opens that
+  // work order straight away. The office gets these mails for tickets that are
+  // often NOT in the open list any more (acknowledged, invoiced, escalated),
+  // so when it is not among the loaded ones it is fetched by number rather
+  // than silently doing nothing.
+  const deepLinkedWO = useRef(null);
+  useEffect(() => {
+    const target = (searchParams.get('wo') || '').trim().toUpperCase();
+    if (!target || deepLinkedWO.current === target) return;
+    if (loading) return;
+    deepLinkedWO.current = target;
+
+    const openIt = async () => {
+      const inList = workOrders.find(w => String(w.wo_number || '').toUpperCase() === target);
+      if (inList) { setSelectedWO(inList); return; }
+      const { data } = await supabase
+        .from('work_orders')
+        .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
+        .eq('wo_number', target)
+        .maybeSingle();
+      if (data) setSelectedWO(data);
+      else alert(`Work order ${target} is not in FSM.`);
+    };
+    openIt();
+  }, [searchParams, loading, workOrders]);
+
+
 
   const chunkArray = (array, size) => {
     const chunks = [];

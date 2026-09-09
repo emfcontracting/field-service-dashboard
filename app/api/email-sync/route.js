@@ -232,6 +232,9 @@ async function sendNotification(type, workOrder, emailSubject, newNTE = null) {
         type: 'cbre_status_update',
         recipients,
         customMessage: message,
+        // These only ever go to the office account — the button opens the work
+        // order in the dashboard, not in the field app.
+        linkTarget: 'dashboard',
         workOrder: {
           wo_number: workOrder.wo_number,
           building: workOrder.building,
@@ -272,6 +275,7 @@ async function sendNotFoundNotification(woNumber, label, emailSubject) {
         type: 'cbre_status_update',
         recipients,
         customMessage: message,
+        linkTarget: 'dashboard',
         workOrder: { wo_number: woNumber, building: '(not in FSM)', cbre_status: label }
       })
     });

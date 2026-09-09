@@ -275,6 +275,20 @@ export default function WorkOrdersView({
     }
   };
 
+  // Banner chip: open the work order the status change belongs to. Opening it
+  // IS the acknowledgement — the office has seen the change — so the marker is
+  // cleared at the same time. The ✓ next to the chip acknowledges without
+  // opening, for the ones that need no second look.
+  const openCbreWO = async (wo) => {
+    try {
+      await selectWorkOrderEnhanced(wo);
+    } catch (err) {
+      console.error('Failed to open work order from CBRE banner:', err);
+      onSelectWorkOrder(wo);   // open it anyway, just without the team members
+    }
+    handleAcknowledgeCbre(wo.wo_id);
+  };
+
   const handleAcknowledgeAllCbre = async () => {
     if (unackCbreWOs.length === 0) return;
     try {
@@ -304,7 +318,7 @@ export default function WorkOrdersView({
                   {unackCbreWOs.length} {unackCbreWOs.length === 1 ? 'work order has' : 'work orders have'} new CBRE status updates
                 </div>
                 <div className="text-amber-300/70 text-xs mt-0.5">
-                  Click a WO# below or the 🔔 NEW badge in the table to acknowledge — markers stay until you do.
+                  Click a WO# below to open it (that acknowledges it too), or ✓ to just clear the marker.
                 </div>
               </div>
             </div>
@@ -316,21 +330,33 @@ export default function WorkOrdersView({
             </button>
           </div>
 
-          {/* Quick chips: WO numbers — click to acknowledge individually */}
+          {/* Quick chips: WO number opens the work order (and acknowledges), ✓ acknowledges only */}
           <div className="mt-3 pt-3 border-t border-amber-500/30 flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
             {unackCbreWOs.slice(0, 50).map(wo => {
               const cbreLabel = (wo.cbre_status || '').replace(/_/g, ' ');
               return (
-                <button
+                <span
                   key={wo.wo_id}
-                  onClick={() => handleAcknowledgeCbre(wo.wo_id)}
-                  className="bg-amber-950/60 hover:bg-amber-700/60 border border-amber-500/40 hover:border-amber-300 text-amber-200 hover:text-white text-[10px] font-mono px-2 py-1 rounded transition flex items-center gap-1"
-                  title={`${wo.building || ''} — ${cbreLabel} — click to acknowledge`}
+                  className="bg-amber-950/60 border border-amber-500/40 hover:border-amber-300 rounded flex items-stretch overflow-hidden transition"
                 >
-                  <span className="font-bold">{wo.wo_number}</span>
-                  <span className="text-amber-400/70">·</span>
-                  <span className="opacity-80">{cbreLabel}</span>
-                </button>
+                  <button
+                    onClick={() => openCbreWO(wo)}
+                    className="hover:bg-amber-700/60 text-amber-200 hover:text-white text-[10px] font-mono px-2 py-1 transition flex items-center gap-1"
+                    title={`${wo.building || ''} — ${cbreLabel} — click to open the work order`}
+                  >
+                    <span className="font-bold">{wo.wo_number}</span>
+                    <span className="text-amber-400/70">·</span>
+                    <span className="opacity-80">{cbreLabel}</span>
+                  </button>
+                  <button
+                    onClick={() => handleAcknowledgeCbre(wo.wo_id)}
+                    className="border-l border-amber-500/40 hover:bg-amber-600/70 text-amber-400/80 hover:text-white text-[10px] px-1.5 transition"
+                    title={`Acknowledge ${wo.wo_number} without opening it`}
+                    aria-label={`Acknowledge ${wo.wo_number}`}
+                  >
+                    ✓
+                  </button>
+                </span>
               );
             })}
             {unackCbreWOs.length > 50 && (

@@ -5,6 +5,7 @@ import { getFixedQuoteForInvoice, buildFixedQuoteLineItems } from '@/app/mobile/
 import { calcBillable, buildActualLineItems, round2 } from '@/lib/billing';
 import { billableComments } from '@/lib/commentsSplit';
 import { requireStaff } from '@/lib/serverAuth';
+import { invoiceBlocker } from '@/lib/invoiceReadiness';
 
 // Rates and the cost formula live in lib/billing.js.
 
@@ -195,9 +196,24 @@ export async function POST(request) {
     }
 
     // ============================================================
-    // Lock the work order
+    // Lock the work order — but only when CBRE is actually done with it.
     // ============================================================
-    const { error: lockError } = await supabase
+    // Locking is what takes the work order out of the dashboard AND out of
+    // CBRE Data Entry. While an NTE increase is still pending, the completion
+    // cannot be reported to CBRE yet, so the work order has to stay in the
+    // dashboard and run through acknowledge → completion → lock afterwards.
+    // The invoice itself is kept (held by lib/invoiceReadiness until CBRE is
+    // ready); only the lock waits.
+    const quotesForBlocker = await supabase
+      .from('work_order_quotes').select('quote_id, nte_status, new_nte_amount').eq('wo_id', wo_id);
+    const hold = invoiceBlocker(
+      { total, qb_invoice_number: null },
+      { ...workOrder, work_order_quotes: quotesForBlocker.data || [] }
+    );
+
+    const { error: lockError } = hold.blocked
+      ? { error: null }
+      : await supabase
       .from('work_orders')
       .update({
         is_locked: true,
@@ -223,7 +239,11 @@ export async function POST(request) {
       success: true,
       invoice_id: invoice.invoice_id,
       invoice_number: invoiceNumber,
-      total: total
+      total: total,
+      // Told the caller so the office knows the work order deliberately stayed
+      // open (see the lock block above).
+      locked: !hold.blocked,
+      hold: hold.blocked ? { reason: hold.reason, label: hold.label, detail: hold.detail } : null,
     });
 
   } catch (error) {

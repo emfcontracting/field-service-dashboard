@@ -401,7 +401,7 @@ export default function InvoicingPage() {
   };
 
   const finalizeInvoice = async () => {
-    if (!previewWO || !confirm('Finalize and generate this invoice?\n\nThis will lock the work order.')) return;
+    if (!previewWO || !confirm('Finalize and generate this invoice?\n\nThis locks the work order — unless the invoice goes on hold (open NTE request, over NTE, dispute), in which case it stays in the dashboard.')) return;
     setGeneratingInvoice(true);
     try {
       const subtotal = previewLineItems.reduce((s,i) => s+i.amount, 0);
@@ -425,10 +425,24 @@ export default function InvoicingPage() {
       ]);
       if (lie) throw lie;
 
-      const { error: we } = await supabase.from('work_orders').update({ is_locked:true, locked_at:new Date().toISOString(), locked_by:null }).eq('wo_id', previewWO.wo_id);
-      if (we) throw we;
+      // Locking is what takes the work order out of the dashboard AND out of
+      // CBRE Data Entry. While an NTE increase is still pending, the completion
+      // cannot be reported to CBRE yet, so the work order has to stay in the
+      // dashboard and run through acknowledge → completion → lock afterwards.
+      const { data: holdQuotes } = await supabase.from('work_order_quotes')
+        .select('quote_id, nte_status, new_nte_amount').eq('wo_id', previewWO.wo_id);
+      const hold = invoiceBlocker(
+        { total: subtotal, qb_invoice_number: null },
+        { ...previewWO, work_order_quotes: holdQuotes || [] }
+      );
+      if (!hold.blocked) {
+        const { error: we } = await supabase.from('work_orders').update({ is_locked:true, locked_at:new Date().toISOString(), locked_by:null }).eq('wo_id', previewWO.wo_id);
+        if (we) throw we;
+      }
 
-      alert(`✅ Invoice generated!\n\nTotal: $${subtotal.toFixed(2)}`);
+      alert(hold.blocked
+        ? `✅ Invoice generated (on hold)\n\nTotal: $${subtotal.toFixed(2)}\n\n⏸️ ${hold.label}\n${hold.detail}\n\nThe work order stays in the dashboard so you can still run acknowledge → report completion → lock once this clears.`
+        : `✅ Invoice generated!\n\nTotal: $${subtotal.toFixed(2)}`);
       setShowInvoicePreview(false); setPreviewWO(null); setPreviewLineItems([]); setWorkPerformedText('');
       setAcknowledgedWOs(prev => prev.filter(w => w.wo_id !== previewWO.wo_id));
       await fetchData(); setActiveTab('invoiced');

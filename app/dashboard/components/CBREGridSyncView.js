@@ -27,7 +27,7 @@ import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
 import {
   parseGridExport, reconcileGrid, gridSummary,
   GRID_OUTCOME, GRID_REFRESHABLE, GRID_CREATABLE,
-  gridStampPatch, gridNewWorkOrder, GRID_APPROVES,
+  gridStampPatch, gridNewWorkOrder, approvingRows,
 } from '@/lib/cbreGridReport';
 
 const supabase = getSupabase();
@@ -57,7 +57,9 @@ export default function CBREGridSyncView({ currentUser }) {
   const summary = useMemo(() => rows ? gridSummary(rows) : {}, [rows]);
   const refreshable = useMemo(() => (rows || []).filter(r => GRID_REFRESHABLE.includes(r.outcome)), [rows]);
   const creatable   = useMemo(() => (rows || []).filter(r => GRID_CREATABLE.includes(r.outcome)), [rows]);
-  const approvals   = useMemo(() => (rows || []).filter(r => GRID_APPROVES.includes(r.outcome)), [rows]);
+  // Every row that moves cbre_status forward — including ones filed under
+  // "we already billed" or "closed here", where the approval still counts.
+  const approvals   = useMemo(() => approvingRows(rows), [rows]);
 
   const reset = () => {
     setRows(null); setApplied(null); setError(''); setFileName(''); setCreateSelected(new Set());

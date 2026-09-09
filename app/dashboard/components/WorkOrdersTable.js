@@ -11,6 +11,7 @@ import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { parseDate, daysBetweenET } from '@/lib/dates';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
 import StatusTrack from './StatusTrack';
+import WorkOrdersLegend from './WorkOrdersLegend';
 
 // The posting STAGE is drawn by <StatusTrack track="posting">; what the track
 // cannot show is when the money is due, so that is all this adds — and only
@@ -541,6 +542,8 @@ export default function WorkOrdersTable({
           </tbody>
         </table>
       </div>
+
+      <WorkOrdersLegend />
     </div>
   );
 }

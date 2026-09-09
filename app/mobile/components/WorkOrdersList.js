@@ -136,7 +136,7 @@ export default function WorkOrdersList({
           valB = parseDate(b.date_entered)?.getTime() || 0;
           break;
         case 'priority': {
-          const rank = { P1: 9, P2: 8, P3: 7, P4: 6, P5: 5, P6: 4, P10: 3, P11: 2, P23: 1 };
+          const rank = { P1: 9, P2: 8, P3: 7, P4: 6, P5: 5, P6: 4, P7: 4, P10: 3, P11: 2, P23: 1 };
           valA = rank[extractPriorityCode(a.priority)] || 0;
           valB = rank[extractPriorityCode(b.priority)] || 0;
           break;

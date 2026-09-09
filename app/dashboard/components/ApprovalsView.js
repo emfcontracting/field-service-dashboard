@@ -337,6 +337,21 @@ export default function ApprovalsView({ userInfo }) {
         if (compErr) setError(`Marked sent, but the completion stamp failed: ${compErr.message}`);
       }
 
+      // Holds: a cbre_target_date row can be a plain manual change OR the hold
+      // report the queue-holds producer built. Only the latter carries a hold
+      // reason in its payload, and only the latter should stamp — otherwise a
+      // routine date change would silence the hold reporter for good.
+      const holdWoIds = affected
+        .filter((r) => r.kind === 'cbre_target_date' && r.wo_id && r.payload?._readable?.holdReason)
+        .map((r) => r.wo_id);
+      if (holdWoIds.length) {
+        const { error: hErr } = await supabase
+          .from('work_orders')
+          .update({ cbre_hold_reported_at: now, cbre_hold_reported_by: userInfo?.user_id ?? null })
+          .in('wo_id', holdWoIds);
+        if (hErr) setError(`Marked sent, but the hold stamp failed: ${hErr.message}`);
+      }
+
       // Site arrivals: stamp so the arrivals producer stops queueing this WO.
       const arrWoIds = affected.filter((r) => r.kind === 'cbre_arrival' && r.wo_id).map((r) => r.wo_id);
       if (arrWoIds.length) {

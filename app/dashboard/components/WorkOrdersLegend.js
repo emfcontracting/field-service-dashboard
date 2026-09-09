@@ -20,7 +20,8 @@ import { CLIENT_STYLES } from '@/lib/clientType';
 import { SUBMISSION_META } from '@/lib/submissionStatus';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
 import { CBRE_GRID_STATUS } from '@/lib/cbreGridStatus';
-import { CBRE_POSTING_STATUS, CBRE_POSTING_ORDER } from '@/lib/cbrePostingStatus';
+import { CBRE_POSTING_STATUS, CBRE_POSTING_ORDER, CBRE_POSTING_OFF_PATH } from '@/lib/cbrePostingStatus';
+import { AGING_LEVELS, AGING_WARN_DAYS, AGING_FLAG_DAYS, AGING_CLOSE_DAYS, AGING_GRACE_DAYS, AGING_DOCUMENTED_DAYS } from '@/lib/agingRisk';
 import { DISPATCH_ORDER, DISPATCH_OFF_PATH } from '@/lib/statusTracks';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
 import StatusTrack from './StatusTrack';
@@ -131,8 +132,37 @@ export default function WorkOrdersLegend() {
               ))}.
               Hover a segment for its name. CIR or CMP starts the 75-day payout clock.
             </Row>
+            {Object.entries(CBRE_POSTING_OFF_PATH).map(([code, implies]) => (
+              <Row key={code} mark={<Chip className={CBRE_POSTING_STATUS[code]?.badge}>{CBRE_POSTING_STATUS[code]?.emoji} {code}</Chip>}>
+                {CBRE_POSTING_STATUS[code]?.label} — <span className="text-slate-600">not a stage</span>; the invoice is standing there.
+                It only proves the invoice got as far as {implies}. {CBRE_POSTING_STATUS[code]?.action}
+              </Row>
+            ))}
             <Row mark={<Chip className="bg-emerald-500/10 text-emerald-400/90 border-emerald-500/25">💵 42d</Chip>}>
               Days until the payment is due. Turns red and reads <span className="font-mono">due</span> once the date has passed.
+            </Row>
+          </Group>
+
+          <Group title="Close-out clock">
+            <Row mark={<Chip className={AGING_LEVELS.watch.badge}>{AGING_LEVELS.watch.emoji} 45d</Chip>}>
+              Days past the completion target. CBRE&apos;s own countdown has not started yet —
+              this is our warning from {AGING_WARN_DAYS} days, while there is still room to move.
+            </Row>
+            <Row mark={<Chip className={AGING_LEVELS.at_risk.badge}>{AGING_LEVELS.at_risk.emoji} 55d</Chip>}>
+              At {AGING_FLAG_DAYS} days past target CBRE flags the work order and e-mails
+              &quot;Will Be Closed in {AGING_GRACE_DAYS} Days&quot;. Once that e-mail has been read into
+              FSM the badge counts down to CBRE&apos;s own stated date instead of ours.
+            </Row>
+            <Row mark={<Chip className={AGING_LEVELS.past_due.badge}>{AGING_LEVELS.past_due.emoji} 74d</Chip>}>
+              Past {AGING_CLOSE_DAYS} days ({AGING_FLAG_DAYS} + {AGING_GRACE_DAYS}) — closed, and a closed
+              work order <span className="text-slate-300">cannot be reopened for billing</span>; only a sub
+              work order recovers it. The handbook still says {AGING_DOCUMENTED_DAYS} days; the machine says {AGING_CLOSE_DAYS}.
+            </Row>
+            <Row mark={<span className="text-slate-500 text-[11px]">no badge</span>}>
+              Nothing is shown once the work order is closed here, sits in Escalations, has reached
+              CBRE&apos;s posting chain, or has been invoiced — the timer can no longer take it.
+              Hover any badge to see which date it counted from: CBRE&apos;s own target, or ours
+              estimated from the dispatch date and priority when CBRE never sent one.
             </Row>
           </Group>
 

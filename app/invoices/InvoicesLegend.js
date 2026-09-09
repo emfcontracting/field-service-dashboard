@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { STATUS_CONFIG } from '@/lib/invoiceStatus';
 import { BULK_ACTIONS } from '@/lib/invoiceBulkActions';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
-import { CBRE_POSTING_STATUS, CBRE_POSTING_ORDER } from '@/lib/cbrePostingStatus';
+import { CBRE_POSTING_STATUS, CBRE_POSTING_ORDER, CBRE_POSTING_OFF_PATH } from '@/lib/cbrePostingStatus';
 import StatusTrack from '@/app/dashboard/components/StatusTrack';
 
 const Row = ({ mark, children }) => (
@@ -89,6 +89,12 @@ export default function InvoicesLegend() {
               ))}.
               Filled segments are stages already cleared. CIR or CMP starts the 75-day payout clock.
             </Row>
+            {Object.entries(CBRE_POSTING_OFF_PATH).map(([code, implies]) => (
+              <Row key={code} mark={<Pill className={CBRE_POSTING_STATUS[code]?.badge}>{CBRE_POSTING_STATUS[code]?.emoji} {code}</Pill>}>
+                {CBRE_POSTING_STATUS[code]?.label}. Not a stage — the invoice reached {implies} and stopped.
+                {' '}{CBRE_POSTING_STATUS[code]?.action}
+              </Row>
+            ))}
             <Row mark={<Pill className="bg-emerald-500/10 text-emerald-400/90 border-emerald-500/25">💵 11/19/2026</Pill>}>
               When the payment is due, counted from that posting.
             </Row>

@@ -234,7 +234,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
 
         let priority = 'P4';
         const priorityStr = String(row[2] || '').toUpperCase().trim();
-        if (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P10', 'P11', 'P23'].includes(priorityStr)) {
+        if (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P10', 'P11', 'P23'].includes(priorityStr)) {
           priority = priorityStr;
         }
 
@@ -588,6 +588,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }) {
                                   <option value="P4">📢 P4 · Non-Urgent</option>
                                   <option value="P5">🛠️ P5 · Handyman</option>
                                   <option value="P6">🔧 P6 · Tech/Vendor</option>
+                                  <option value="P7">⏸ P7 · SLA Extended</option>
                                   <option value="P10">🗓️ P10 · PM</option>
                                   <option value="P11">✅ P11 · PM Compliance</option>
                                   <option value="P23">📣 P23 · Complaints</option>

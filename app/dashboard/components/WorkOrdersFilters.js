@@ -65,6 +65,7 @@ export default function WorkOrdersFilters({
     { value: 'P4', label: '📢 P4 · Non-Urgent', color: 'bg-yellow-600' },
     { value: 'P5', label: '🛠️ P5 · Handyman', color: 'bg-green-600' },
     { value: 'P6', label: '🔧 P6 · Tech/Vendor', color: 'bg-gray-600' },
+    { value: 'P7', label: '⏸ P7 · SLA Extended', color: 'bg-sky-700' },
     { value: 'P10', label: '🗓️ P10 · PM', color: 'bg-blue-600' },
     { value: 'P11', label: '✅ P11 · PM Compliance', color: 'bg-sky-600' },
     { value: 'P23', label: '📣 P23 · Complaints', color: 'bg-violet-600' }

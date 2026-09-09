@@ -2145,6 +2145,7 @@ const sendAssignmentNotifications = async () => {
                 <option value="P4">📢 P4 · Non-Urgent</option>
                 <option value="P5">🛠️ P5 · Handyman</option>
                 <option value="P6">🔧 P6 · Tech/Vendor</option>
+                <option value="P7">⏸ P7 · SLA Extended</option>
                 <option value="P10">🗓️ P10 · PM</option>
                 <option value="P11">✅ P11 · PM Compliance</option>
                 <option value="P23">📣 P23 · Complaints</option>

@@ -11,6 +11,7 @@ export const PRIORITY_BADGES = {
   'P4': { text: '🔵 P4 - Non-Urgent', color: 'bg-blue-600', sort: 4 },
   'P5': { text: '🟢 P5 - Handyman', color: 'bg-green-600', sort: 5 },
   'P6': { text: '🟣 P6 - Tech/Vendor', color: 'bg-purple-600', sort: 6 },
+  'P7': { text: '⏸ P7 - SLA Extended', color: 'bg-sky-700', sort: 7 },
   'P10': { text: '🔷 P10 - PM', color: 'bg-cyan-600', sort: 10 },
   'P11': { text: '💎 P11 - PM Compliance', color: 'bg-indigo-600', sort: 11 },
   'P23': { text: '💬 P23 - Complaints', color: 'bg-pink-600', sort: 23 },

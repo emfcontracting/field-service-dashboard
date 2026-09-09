@@ -102,7 +102,7 @@ async function handle(request) {
       // The most recent submitted (or approved-but-unmarked) row of this kind.
       const { data: rows, error: rErr } = await supabase
         .from('approval_requests')
-        .select('approval_id, status, confirmed_at, kind')
+        .select('approval_id, status, confirmed_at, kind, payload')
         .eq('wo_id', wo.wo_id)
         .in('kind', kinds)
         .in('status', ['sent', 'approved'])
@@ -137,6 +137,11 @@ async function handle(request) {
       // 2) keep the auto producers from re-queueing (mirror markSubmitted).
       if (WO_STAMP[kind]) {
         await supabase.from('work_orders').update(WO_STAMP[kind](whenIso)).eq('wo_id', wo.wo_id);
+      }
+      // A target-date change is only a hold report when the producer said so in
+      // the payload; a routine date change must not stamp it.
+      if (kind === 'cbre_target_date' && row.payload?._readable?.holdReason) {
+        await supabase.from('work_orders').update({ cbre_hold_reported_at: whenIso }).eq('wo_id', wo.wo_id);
       }
 
       // 3) note it on the work order.

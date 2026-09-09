@@ -29,6 +29,14 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cbre/queue-holds?limit=25",
+      "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cbre/import-closeout-notices?days=30",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cbre/sync-vendor-confirmations?searchDays=14",
       "schedule": "*/15 * * * *"
     },

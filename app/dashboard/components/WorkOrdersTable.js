@@ -10,8 +10,28 @@ import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingS
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { parseDate, daysBetweenET } from '@/lib/dates';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
+import { agingRisk, isAgingExposed, AGING_LEVELS } from '@/lib/agingRisk';
 import StatusTrack from './StatusTrack';
 import WorkOrdersLegend from './WorkOrdersLegend';
+
+// CBRE closes out aging work orders at the end of each month, and once closed
+// they "cannot be reopened for billing" — that is how the fifteen sub work
+// orders happened. Only shown where it can still be acted on: open in FSM, not
+// already in the Escalations tab, not in CBRE's posting chain, not invoiced.
+const AgingBadge = ({ wo }) => {
+  if (!isAgingExposed(wo)) return null;
+  const risk = agingRisk(wo);
+  if (!risk || (risk.level !== 'at_risk' && risk.level !== 'past_due')) return null;
+  const cfg = AGING_LEVELS[risk.level];
+  return (
+    <span
+      title={risk.note}
+      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border cursor-help ${cfg.badge}`}
+    >
+      {cfg.emoji} {risk.days}d
+    </span>
+  );
+};
 
 // The posting STAGE is drawn by <StatusTrack track="posting">; what the track
 // cannot show is when the money is due, so that is all this adds — and only
@@ -416,6 +436,7 @@ export default function WorkOrdersTable({
                       <StatusTrack track="dispatch" wo={wo} size="mini" />
                       <StatusTrack track="posting" wo={wo} size="mini" />
                       <PayoutBadge wo={wo} />
+                      <AgingBadge wo={wo} />
                       <DisputeBadge wo={wo} />
                       <CbreAckBadge wo={wo} />
                       {isUnackCbre && (

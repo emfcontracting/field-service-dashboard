@@ -22,6 +22,7 @@ import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
+import { gridBadgeConfig, daysSinceGridSeen } from '@/lib/cbreGridStatus';
 import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
@@ -2250,6 +2251,55 @@ const sendAssignmentNotifications = async () => {
               </div>
             )}
           </div>
+
+          {/* CBRE Open List (read-only) — the dispatch lifecycle from the CBRE
+              open-orders export. A third, separate thing: `status` is where our
+              crew is, `cbre_status` is where the quote conversation stands, the
+              posting block below is how far CBRE is through paying, and this is
+              simply what CBRE's own open list said the last time we imported it.
+              Only QUA is carried into cbre_status; the rest is shown, never
+              interpreted. An old "last seen" here on a work order we still have
+              open is the aging warning. */}
+          {(() => {
+            const cfg = gridBadgeConfig(selectedWO.cbre_grid_status);
+            if (!cfg) return null;
+            const days = daysSinceGridSeen(selectedWO.cbre_grid_seen_at);
+            const past = selectedWO.cbre_past_target_days;
+            const stale = days != null && days > 30;
+            return (
+              <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
+                <div className="flex justify-between items-start gap-3 flex-wrap">
+                  <div>
+                    <label className="block text-sm text-slate-300 font-semibold mb-1">📋 CBRE Open List</label>
+                    <p className="text-xs text-slate-400">
+                      What CBRE&apos;s own list of open work orders said — from the grid export, not from us
+                    </p>
+                  </div>
+                  <div title={cfg.label} className={`px-3 py-1.5 rounded-lg text-sm font-bold border ${cfg.badge}`}>
+                    {cfg.emoji} {cfg.short}
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                  <span className="text-slate-400">{cfg.label}</span>
+                  {days != null && (
+                    <span className={stale ? 'text-amber-400' : 'text-slate-500'}>
+                      {days === 0 ? 'listed there today' : `last listed there ${days} day${days === 1 ? '' : 's'} ago`}
+                    </span>
+                  )}
+                  {past != null && (
+                    <span className={past > 60 ? 'text-red-400' : past > 0 ? 'text-amber-400' : 'text-slate-500'}>
+                      {past > 0 ? `${past} days past CBRE target` : `${-past} days before target`}
+                    </span>
+                  )}
+                </div>
+                {stale && !selectedWO.acknowledged && !selectedWO.is_locked && (
+                  <div className="mt-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded px-2 py-1">
+                    Still open here, but CBRE has not listed it as open for {days} days. CBRE closes at 60 — worth checking the portal before it ages out.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* CBRE Posting Status (read-only) — separate track from active cbre_status.
               Populated by the weekly CBRE Sync sheet upload. Shows the CBRE-side

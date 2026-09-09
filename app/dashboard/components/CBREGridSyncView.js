@@ -27,7 +27,7 @@ import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
 import {
   parseGridExport, reconcileGrid, gridSummary,
   GRID_OUTCOME, GRID_REFRESHABLE, GRID_CREATABLE,
-  gridStampPatch, gridNewWorkOrder,
+  gridStampPatch, gridNewWorkOrder, GRID_APPROVES,
 } from '@/lib/cbreGridReport';
 
 const supabase = getSupabase();
@@ -35,6 +35,7 @@ const supabase = getSupabase();
 const fmtDate = (d) => d ? new Date(String(d).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
 const TONE = {
+  emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
   slate: 'bg-slate-500/10 border-slate-600/30 text-slate-400',
   amber: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
   red:   'bg-red-500/10 border-red-500/30 text-red-400',
@@ -56,6 +57,7 @@ export default function CBREGridSyncView({ currentUser }) {
   const summary = useMemo(() => rows ? gridSummary(rows) : {}, [rows]);
   const refreshable = useMemo(() => (rows || []).filter(r => GRID_REFRESHABLE.includes(r.outcome)), [rows]);
   const creatable   = useMemo(() => (rows || []).filter(r => GRID_CREATABLE.includes(r.outcome)), [rows]);
+  const approvals   = useMemo(() => (rows || []).filter(r => GRID_APPROVES.includes(r.outcome)), [rows]);
 
   const reset = () => {
     setRows(null); setApplied(null); setError(''); setFileName(''); setCreateSelected(new Set());
@@ -102,7 +104,8 @@ export default function CBREGridSyncView({ currentUser }) {
       const rec = reconcileGrid(orders, woByNumber, fsmOpen);
       setRows(rec);
       setCreateSelected(new Set(rec.filter(r => r.outcome === 'missing_fsm').map(r => r.wo_number)));
-      setTab(rec.some(r => r.outcome === 'missing_fsm') ? 'missing_fsm' : 'open_both');
+      setTab(rec.some(r => r.outcome === 'nte_approved') ? 'nte_approved'
+           : rec.some(r => r.outcome === 'missing_fsm') ? 'missing_fsm' : 'open_both');
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -117,6 +120,7 @@ export default function CBREGridSyncView({ currentUser }) {
       '',
       'That records the grid status, how many days past target, and that CBRE listed it as open today.',
     ];
+    if (approvals.length) lines.push('', `${approvals.length} of them also move to "quote approved" — CBRE has decided the NTE and FSM still shows it waiting. Nothing else about the CBRE status is touched.`);
     if (toCreate.length) lines.push('', `${toCreate.length} work order(s) CBRE dispatched but FSM never received will be created as pending — without an NTE, because the grid export does not carry one.`);
     if (!confirm(lines.join('\n'))) return;
 
@@ -134,7 +138,7 @@ export default function CBREGridSyncView({ currentUser }) {
         const { error: iErr } = await supabase.from('work_orders').insert(payload);
         if (iErr) failed.push(`creating ${toCreate.length}: ${iErr.message}`); else created = toCreate.length;
       }
-      setApplied({ stamped, created, failed });
+      setApplied({ stamped, created, approved: approvals.length, failed });
     } finally {
       setApplying(false);
     }
@@ -174,6 +178,13 @@ export default function CBREGridSyncView({ currentUser }) {
 
       {rows && (
         <>
+          {approvals.length > 0 && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              <strong>{approvals.length} NTE request{approvals.length !== 1 ? 's have' : ' has'} been approved at CBRE</strong> while FSM still shows them waiting.
+              Applying moves them to &quot;quote approved&quot;, which is what lets the completion be reported and the work billed.
+            </div>
+          )}
+
           {gone > 0 && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
               <strong>{gone} work order{gone !== 1 ? 's' : ''} open here that CBRE no longer lists.</strong> CBRE closes at 60 days;
@@ -199,6 +210,7 @@ export default function CBREGridSyncView({ currentUser }) {
           <div className="flex flex-wrap items-center gap-3 bg-[#0d0d14] border border-[#1e1e2e] rounded-xl p-4">
             <div className="text-sm text-slate-400">
               <span className="text-slate-100 font-semibold">{refreshable.length}</span> get today&apos;s grid detail
+              {approvals.length > 0 && <> · <span className="text-emerald-400 font-semibold">{approvals.length}</span> move to quote approved</>}
               {creatable.length > 0 && <> · <span className="text-slate-100 font-semibold">{createSelected.size}</span> of {creatable.length} missing would be created</>}
             </div>
             <button onClick={apply} disabled={applying || (!refreshable.length && !createSelected.size)}
@@ -209,7 +221,7 @@ export default function CBREGridSyncView({ currentUser }) {
 
           {applied && (
             <div className={`rounded-lg border px-4 py-3 text-sm ${applied.failed.length ? TONE.amber : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
-              {applied.stamped} work order{applied.stamped !== 1 ? 's' : ''} refreshed{applied.created ? `, ${applied.created} created` : ''}.
+              {applied.stamped} work order{applied.stamped !== 1 ? 's' : ''} refreshed{applied.approved ? `, ${applied.approved} moved to quote approved` : ''}{applied.created ? `, ${applied.created} created` : ''}.
               {applied.failed.length > 0 && <div className="mt-1 text-xs text-red-400">{applied.failed.slice(0, 5).join(' · ')}</div>}
             </div>
           )}

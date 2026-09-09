@@ -11,6 +11,7 @@
 -- dispute_status in ('open','escalated','sub_wo_requested','superseded').
 -- So the flags can be honest again.
 --
+-- Block 0: teach the dispute_status check constraint the new state.
 -- Block 1: the 15 originals with a linked sub work order → 'superseded'
 --          (closed, replaced — NOT 'resolved', no money has come back yet;
 --          the sub work order carries the invoice) and their acknowledged /
@@ -21,6 +22,16 @@
 -- ============================================================================
 
 begin;
+
+-- ── Block 0 — the check constraint has to know the new state first ──────────
+-- work_orders_dispute_status_check was last written in 2026-09-06_dispute_sub_wo.sql
+-- and lists the states as they were then.
+alter table public.work_orders
+  drop constraint if exists work_orders_dispute_status_check;
+alter table public.work_orders
+  add constraint work_orders_dispute_status_check
+  check (dispute_status is null or dispute_status in
+    ('open', 'escalated', 'sub_wo_requested', 'superseded', 'resolved', 'written_off'));
 
 -- ── Block 1 — originals replaced by a sub work order ────────────────────────
 update public.work_orders w

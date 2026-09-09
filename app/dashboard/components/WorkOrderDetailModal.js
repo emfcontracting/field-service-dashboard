@@ -23,6 +23,7 @@ import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { gridBadgeConfig, daysSinceGridSeen } from '@/lib/cbreGridStatus';
+import StatusTrack from './StatusTrack';
 import SubmissionStatusSection from './SubmissionStatusSection';
 import FlagsSection from './FlagsSection';
 import ActivityLogExportModal from './ActivityLogExportModal';
@@ -2279,8 +2280,10 @@ const sendAssignmentNotifications = async () => {
                     {cfg.emoji} {cfg.short}
                   </div>
                 </div>
+                {/* The whole dispatch chain, so the stages already passed are
+                    visible instead of only the one CBRE currently reports. */}
+                <StatusTrack track="dispatch" wo={selectedWO} size="full" className="mt-3" />
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-                  <span className="text-slate-400">{cfg.label}</span>
                   {days != null && (
                     <span className={stale ? 'text-amber-400' : 'text-slate-500'}>
                       {days === 0 ? 'listed there today' : `last listed there ${days} day${days === 1 ? '' : 's'} ago`}
@@ -2308,7 +2311,7 @@ const sendAssignmentNotifications = async () => {
             const cfg = postingBadgeConfig(selectedWO.cbre_posting_status);
             if (!cfg) return null;
             const payout = computePostingPayoutDate(selectedWO);
-            const currentStep = cfg.step;
+
             return (
               <div className="bg-[#0d0d14] border border-[#2d2d44] rounded-xl p-4">
                 <div className="flex justify-between items-start mb-3">
@@ -2321,31 +2324,9 @@ const sendAssignmentNotifications = async () => {
                   </div>
                 </div>
 
-                {/* Progress chain CPW → CMP */}
-                <div className="flex items-center gap-1 mb-2">
-                  {CBRE_POSTING_ORDER.map((code, i) => {
-                    const stepCfg = CBRE_POSTING_STATUS[code];
-                    const reached = stepCfg.step <= currentStep;
-                    const isCurrent = stepCfg.step === currentStep;
-                    return (
-                      <div key={code} className="flex items-center gap-1 flex-1 last:flex-none">
-                        <div
-                          title={stepCfg.label}
-                          className={`flex items-center justify-center rounded-md text-[10px] font-bold font-mono px-1.5 py-1 border transition
-                            ${isCurrent ? stepCfg.badge + ' ring-1 ring-offset-0'
-                              : reached ? 'bg-slate-700/40 text-slate-300 border-slate-600/40'
-                              : 'bg-[#0a0a0f] text-slate-700 border-[#1e1e2e]'}`}>
-                          {code}
-                        </div>
-                        {i < CBRE_POSTING_ORDER.length - 1 && (
-                          <div className={`h-px flex-1 ${reached && stepCfg.step < currentStep ? 'bg-slate-600' : 'bg-[#1e1e2e]'}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="text-xs text-slate-400">{cfg.label}</div>
+                {/* Same chain component as the open list above and the invoice
+                    panel, so one shape means one thing everywhere. */}
+                <StatusTrack track="posting" wo={selectedWO} size="full" className="mb-2" />
 
                 {/* CMP payout countdown */}
                 {payout && (

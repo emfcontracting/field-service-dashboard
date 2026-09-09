@@ -10,20 +10,24 @@ import { postingBadgeConfig, computePostingPayoutDate } from '@/lib/cbrePostingS
 import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { parseDate, daysBetweenET } from '@/lib/dates';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
-import { gridBadgeConfig, daysSinceGridSeen } from '@/lib/cbreGridStatus';
+import StatusTrack from './StatusTrack';
 
-// CBRE posting-status badge (CPW/CIS/CIR/CA1/CA2/CMP) — separate track from the
-// active cbre_status. Shows the CBRE-side processing stage of a completed WO.
-const PostingStatusBadge = ({ wo }) => {
-  const cfg = postingBadgeConfig(wo.cbre_posting_status);
-  if (!cfg) return null;
+// The posting STAGE is drawn by <StatusTrack track="posting">; what the track
+// cannot show is when the money is due, so that is all this adds — and only
+// once the payout clock is actually running (CIR or later).
+const PayoutBadge = ({ wo }) => {
   const payout = computePostingPayoutDate(wo);
-  const tip = payout
-    ? `CBRE: ${cfg.label} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`
-    : `CBRE: ${cfg.label}`;
+  if (!payout) return null;
+  const cfg = postingBadgeConfig(wo.cbre_posting_status);
+  const overdue = payout.daysRemaining <= 0;
   return (
-    <span title={tip} className={`${cfg.badge} text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-help`}>
-      {cfg.emoji} {cfg.short}
+    <span
+      title={`${cfg?.label || 'Posted at CBRE'} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`}
+      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border cursor-help ${
+        overdue ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                : 'bg-emerald-500/10 text-emerald-400/90 border-emerald-500/25'}`}
+    >
+      💵 {overdue ? 'due' : `${payout.daysRemaining}d`}
     </span>
   );
 };
@@ -236,26 +240,6 @@ const isNewWorkOrder = (wo) => {
 // a normal ticket from one being worked in the Escalations tab, or from a
 // billing sub work order, and every question needs a lookup.
 // ─────────────────────────────────────────────────────────────────────────────
-// What CBRE's own open list said the last time we imported it. Display only —
-// a different question from cbre_status (the quote conversation) and from
-// cbre_posting_status (how far CBRE is through paying).
-function GridStatusBadge({ wo }) {
-  const cfg = gridBadgeConfig(wo?.cbre_grid_status);
-  if (!cfg) return null;
-  const days = daysSinceGridSeen(wo.cbre_grid_seen_at);
-  const past = wo.cbre_past_target_days;
-  const title = [
-    `CBRE open list: ${cfg.label}`,
-    days == null ? null : days === 0 ? 'seen there today' : `last seen there ${days} day${days === 1 ? '' : 's'} ago`,
-    past == null ? null : past > 0 ? `${past} days past target` : `${-past} days before target`,
-  ].filter(Boolean).join(' · ');
-  return (
-    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${cfg.badge}`} title={title}>
-      {cfg.emoji} {cfg.short}
-    </span>
-  );
-}
-
 function DisputeBadge({ wo }) {
   if (!wo?.dispute_status) return null;
   const cfg = DISPUTE_STATUS[wo.dispute_status];
@@ -425,8 +409,12 @@ export default function WorkOrdersTable({
                           🚨 ESC
                         </span>
                       )}
-                      <PostingStatusBadge wo={wo} />
-                      <GridStatusBadge wo={wo} />
+                      {/* Two ordered CBRE chains, each drawn as a whole so the
+                          stages already passed are visible — not just the one
+                          the work order happens to stand on. */}
+                      <StatusTrack track="dispatch" wo={wo} size="mini" />
+                      <StatusTrack track="posting" wo={wo} size="mini" />
+                      <PayoutBadge wo={wo} />
                       <DisputeBadge wo={wo} />
                       <CbreAckBadge wo={wo} />
                       {isUnackCbre && (

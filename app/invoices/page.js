@@ -6,6 +6,7 @@ import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
 import { ACTIVE_DISPUTE_STATUSES, isDisputeActive } from '@/lib/disputeStatus';
+import StatusTrack from '@/app/dashboard/components/StatusTrack';
 import { billableComments } from '@/lib/commentsSplit';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
@@ -968,17 +969,25 @@ export default function InvoicingPage() {
                                   💳 Approved to Pay · {new Date(inv.approved_to_pay_at).toLocaleDateString()}
                                 </span>
                               )}
+                              {/* The whole CPW → CMP chain rather than the single
+                                  code: on an invoice line what matters is how far
+                                  through CBRE's approval this money has come. */}
                               {inv.work_order?.cbre_posting_status && (() => {
-                                const cfg = postingBadgeConfig(inv.work_order.cbre_posting_status);
-                                if (!cfg) return null;
                                 const payout = computePostingPayoutDate(inv.work_order);
-                                const tip = payout
-                                  ? `CBRE: ${cfg.label} · payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining}d)`
-                                  : `CBRE: ${cfg.label}`;
                                 return (
-                                  <span title={tip} className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold border ${cfg.badge}`}>
-                                    {cfg.emoji} {cfg.short}
-                                    {payout && <span className="ml-1 opacity-70">· {payout.date.toLocaleDateString()}</span>}
+                                  <span className="inline-flex items-center gap-1.5 w-fit">
+                                    <StatusTrack track="posting" wo={inv.work_order} size="mini" />
+                                    {payout && (
+                                      <span
+                                        title={`Payout ~${payout.date.toLocaleDateString()} (${payout.daysRemaining} days)`}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                          payout.daysRemaining <= 0
+                                            ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                                            : 'bg-emerald-500/10 text-emerald-400/90 border-emerald-500/25'}`}
+                                      >
+                                        💵 {payout.date.toLocaleDateString()}
+                                      </span>
+                                    )}
                                   </span>
                                 );
                               })()}

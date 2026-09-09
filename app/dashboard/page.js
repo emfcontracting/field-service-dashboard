@@ -16,7 +16,7 @@ import ProfitabilityView from './components/ProfitabilityView';
 import CashFlowView from './components/CashFlowView';
 import PerformanceView from './components/PerformanceView';
 import UPSEscalationView from './components/UPSEscalationView';
-import CBRESyncView from './components/CBRESyncView';
+import SyncView from './components/SyncView';
 import CBREDataEntryView from './components/CBREDataEntryView';
 import ReviewQueueView from './components/ReviewQueueView';
 import ApprovalsView from './components/ApprovalsView';
@@ -153,7 +153,7 @@ function DashboardContent() {
       case 'ups-escalation':
         return <UPSEscalationView currentUser={currentUser} />;
       case 'cbre-sync':
-        return <CBRESyncView currentUser={currentUser} />;
+        return <SyncView currentUser={currentUser} />;
       case 'cbre-data-entry':
         return <CBREDataEntryView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} />;
       case 'approvals':

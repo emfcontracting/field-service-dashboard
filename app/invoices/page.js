@@ -14,6 +14,7 @@ import { apiFetch } from '@/lib/apiClient';
 import { fetchAll } from '@/lib/fetchAll';
 import { calcBillable, calcTotal, buildActualLineItems } from '@/lib/billing';
 import { fmtDate } from '@/lib/dates';
+import { invoiceBlocker, INVOICE_WO_SELECT } from '@/lib/invoiceReadiness';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -201,7 +202,9 @@ export default function InvoicingPage() {
 
     // Status filter
     if (statusFilter === 'awaiting') {
-      list = list.filter(inv => AWAITING_STATUSES.includes(inv.status));
+      list = list.filter(inv => AWAITING_STATUSES.includes(inv.status) && !invoiceBlocker(inv).blocked);
+    } else if (statusFilter === 'blocked') {
+      list = list.filter(inv => invoiceBlocker(inv).blocked);
     } else if (statusFilter === 'paid') {
       list = list.filter(inv => inv.status === 'paid');
     } else if (statusFilter === 'rejected') {
@@ -333,7 +336,7 @@ export default function InvoicingPage() {
     let rows = [];
     try {
       rows = await fetchAll(() => supabase.from('invoices')
-        .select('*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, tech_comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name))')
+        .select(`*, work_order:work_orders(wo_id, wo_number, building, work_order_description, comments, tech_comments, nte, dispute_status, dispute_reason, cbre_posting_status, cbre_posting_label, cbre_posting_updated_at, cmp_date, lead_tech:users!lead_tech_id(first_name, last_name), ${INVOICE_WO_SELECT})`)
         .order('created_at', { ascending: false })
         .order('invoice_id'));
     } catch (e) { console.error('fetchInvoices error:', e); }
@@ -444,13 +447,20 @@ export default function InvoicingPage() {
   }
 
   const pushToQuickBooks = async (invoice) => {
+    // CBRE pays up to the approved NTE — sending an invoice while the increase
+    // is still pending loses the difference. The server refuses this too.
+    const blocker = invoiceBlocker(invoice);
+    if (blocker.blocked && !confirm(
+      `⏸️ ${blocker.label}\n\n${blocker.detail}\n\nSending this to QuickBooks now is almost certainly premature. Send anyway?`
+    )) return;
+    const force = blocker.blocked;   // the office just confirmed it knowingly
     if (!confirm(`Send invoice ${invoice.invoice_number} to QuickBooks?\n\nThis creates the invoice in QB (customer CBRE-UPS) and attaches the official QB PDF here for the CBRE upload.`)) return;
     setPushingToQB(true);
     try {
       const res = await apiFetch('/api/quickbooks/push-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice_id: invoice.invoice_id }),
+        body: JSON.stringify({ invoice_id: invoice.invoice_id, ...(force ? { force: true } : {}) }),
       });
       const json = await res.json();
       if (!json.success) {
@@ -564,7 +574,11 @@ export default function InvoicingPage() {
   };
 
   // ── Filter counts (for the filter pills) ──────────────────────────────────────────────────────
-  const awaitingCount = invoices.filter(i => AWAITING_STATUSES.includes(i.status)).length;
+  // Blocked = complete but CBRE is not ready for it (NTE pending, WO closed,
+  // open dispute). Kept out of "Awaiting Payment" so the list stays a list of
+  // invoices that can actually be sent.
+  const blockedCount  = invoices.filter(i => invoiceBlocker(i).blocked).length;
+  const awaitingCount = invoices.filter(i => AWAITING_STATUSES.includes(i.status) && !invoiceBlocker(i).blocked).length;
   const paidCount     = invoices.filter(i => i.status === 'paid').length;
   const rejectedCount = invoices.filter(i => i.status === 'rejected').length;
   // Counts per CBRE posting code (CPW/CIS/CIR/CA1/CA2/CMP) for the filter pills
@@ -748,6 +762,13 @@ export default function InvoicingPage() {
                         }`}>
                         💰 Awaiting Payment <span className="opacity-70">({awaitingCount})</span>
                       </button>
+                      <button onClick={() => setStatusFilter('blocked')}
+                        title="Complete, but CBRE is not ready: NTE request pending, work order closed, or an open dispute"
+                        className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                          statusFilter === 'blocked' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}>
+                        ⏸️ On Hold <span className="opacity-70">({blockedCount})</span>
+                      </button>
                       <button onClick={() => setStatusFilter('paid')}
                         className={`px-3 py-1 rounded text-xs font-semibold transition ${
                           statusFilter === 'paid' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
@@ -921,6 +942,15 @@ export default function InvoicingPage() {
                                     {payout && <span className="ml-1 opacity-70">· {payout.date.toLocaleDateString()}</span>}
                                   </span>
                                 );
+                              })()}
+                              {(() => {
+                                const b = invoiceBlocker(inv);
+                                return b.blocked ? (
+                                  <span title={b.detail}
+                                    className="inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                                    ⏸️ {b.label}
+                                  </span>
+                                ) : null;
                               })()}
                               {inv.work_order?.dispute_status && (
                                 <span title={`${DISPUTE_STATUS[inv.work_order.dispute_status]?.label} — see UPS Escalation tab`}

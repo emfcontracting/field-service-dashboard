@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { requireCronOrAdmin, serviceClient, SUPERUSER_EMAIL } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { invoiceBlocker, INVOICE_WO_SELECT } from '@/lib/invoiceReadiness';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -114,8 +115,12 @@ async function buildDigest(db) {
     db.from('approval_requests').select('approval_id', { count: 'exact', head: true }).eq('status', 'pending').lt('created_at', new Date(now - 48 * H).toISOString()),
     db.from('work_orders').select('wo_number, cbre_quote_submitted_at, cbre_status_updated_at').eq('cbre_status', 'quote_submitted'),
     db.from('work_orders').select('wo_number, dispute_requested_at, dispute_sub_wo').eq('dispute_status', 'sub_wo_requested').is('dispute_sub_wo', null),
-    db.from('invoices').select('invoice_id, work_order:work_orders!inner(dispute_status, status)').eq('status', 'draft').lt('created_at', new Date(now - 14 * D).toISOString())
-      .is('work_order.dispute_status', null).neq('work_order.status', 'cancelled'),
+    // Old drafts worth chasing. Anything the invoice guard puts on hold (NTE
+    // request pending at CBRE, work order closed there, open dispute) is
+    // waiting for CBRE, not for us — invoiceBlocker() filters those out below.
+    db.from('invoices').select(`invoice_id, total, qb_invoice_number, qb_invoice_id, quickbooks_invoice_id, work_order:work_orders!inner(${INVOICE_WO_SELECT})`)
+      .eq('status', 'draft').lt('created_at', new Date(now - 14 * D).toISOString())
+      .neq('work_order.status', 'cancelled'),
     db.from('work_orders').select('wo_id', { count: 'exact', head: true }).eq('escalation', true)
       .not('status', 'in', '(completed,cancelled,rejected)').or('is_locked.is.null,is_locked.eq.false'),
   ]);
@@ -124,12 +129,19 @@ async function buildDigest(db) {
     return t && now - new Date(t).getTime() > 14 * D;
   });
   const subWoOld = (subWo || []).filter((w) => w.dispute_requested_at && now - new Date(w.dispute_requested_at).getTime() > 21 * D);
+  // Split the old drafts: the office can act on one group, the other is waiting
+  // for CBRE (NTE approval, sub work order) and must not read as our backlog.
+  const staleDrafts = (staleDraftRows || []).map((inv) => ({ inv, blocker: invoiceBlocker(inv, inv.work_order) }));
+  const draftsActionable = staleDrafts.filter((d) => !d.blocker.blocked);
+  const draftsOnHold = staleDrafts.filter((d) => d.blocker.blocked);
+  const onHoldValue = draftsOnHold.reduce((sum, d) => sum + (parseFloat(d.inv.total) || 0), 0);
 
   const signals = [
     { label: 'Approvals pending > 48 h', value: approvalsOld || 0, warn: (approvalsOld || 0) > 0, hint: 'Dashboard → Approvals' },
     { label: 'NTE requests waiting at CBRE > 14 days', value: waitingOld.length, warn: waitingOld.length > 0, hint: 'UPS Escalation → Waiting on CBRE (copy list for CBRE)', detail: waitingOld.map((w) => w.wo_number).slice(0, 15).join(', ') },
     { label: 'Sub-WO requests without answer > 21 days', value: subWoOld.length, warn: subWoOld.length > 0, hint: 'UPS Escalation → Sub-WO req.', detail: subWoOld.map((w) => w.wo_number).join(', ') },
-    { label: 'Draft invoices older than 14 days (excluding disputed WOs)', value: (staleDraftRows || []).length, warn: (staleDraftRows || []).length > 0, hint: 'Invoicing' },
+    { label: 'Draft invoices older than 14 days (ready to send)', value: draftsActionable.length, warn: draftsActionable.length > 0, hint: 'Invoicing', detail: draftsActionable.map((d) => d.inv.work_order?.wo_number).filter(Boolean).slice(0, 15).join(', ') },
+    { label: 'Invoices on hold (CBRE not ready)', value: draftsOnHold.length, warn: false, hint: `Invoicing → On Hold · $${onHoldValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} parked`, detail: draftsOnHold.map((d) => `${d.inv.work_order?.wo_number || '?'} (${d.blocker.reason})`).slice(0, 15).join(', ') },
     { label: 'Active work orders in escalation', value: openEsc || 0, warn: (openEsc || 0) > 0, hint: 'Work Orders → Escalation filter' },
   ];
 

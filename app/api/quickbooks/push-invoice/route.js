@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getQbAccessToken, qbErrorResponse } from '@/lib/quickbooks';
 import { requireStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { invoiceBlocker, INVOICE_WO_SELECT } from '@/lib/invoiceReadiness';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -98,8 +99,20 @@ async function POST_impl(request) {
     }
 
     const { data: wo } = await supabase
-      .from('work_orders').select('wo_id, wo_number, building')
+      .from('work_orders').select(`wo_id, wo_number, building, ${INVOICE_WO_SELECT}`)
       .eq('wo_id', invoice.wo_id).single();
+
+    // CBRE pays up to the approved NTE. Pushing an invoice while the NTE
+    // increase is still pending — or against a work order CBRE has closed —
+    // creates a QuickBooks invoice that cannot be collected, and QB numbers
+    // cannot be reused. `force: true` from the caller overrides deliberately.
+    const blocker = invoiceBlocker(invoice, wo);
+    if (blocker.blocked && body.force !== true) {
+      return NextResponse.json(
+        { success: false, error: `${blocker.label}: ${blocker.detail}`, code: 'invoice_on_hold', blocker },
+        { status: 409 }
+      );
+    }
 
     // ── Resolve QB customer + items by name (robust against id changes) ─────
     const { accessToken, realmId } = await getQbAccessToken(supabase);

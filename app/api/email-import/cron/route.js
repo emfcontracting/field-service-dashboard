@@ -173,7 +173,7 @@ async function logImportActivity(results) {
 
 // Main cron handler
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub work order linking (UPS Escalation).
+// Sub work order linking (Escalations).
 // If the new WO's text mentions another WO number that is currently disputed
 // (open / escalated / sub_wo_requested) and has no sub-WO yet, record this WO
 // as its sub work order and leave a note on both sides. Returns the original
@@ -207,7 +207,7 @@ async function linkSubWorkOrder(insertedWO, workOrder) {
     .eq('wo_id', orig.wo_id);
   await supabase
     .from('work_orders')
-    .update({ comments: `${workOrder.comments || ''}\n[Sub-WO for disputed ${orig.wo_number} — see UPS Escalation]`.trim() })
+    .update({ comments: `${workOrder.comments || ''}\n[Sub-WO for disputed ${orig.wo_number} — see Escalations]`.trim() })
     .eq('wo_id', insertedWO.wo_id);
   return orig.wo_number;
 }
@@ -405,7 +405,7 @@ async function GET_impl(request) {
 
         // Sub work order for a disputed WO? CBRE usually names the original
         // ("sub WO for C2756337", "replaces C2756337") in the description.
-        // Link it so the UPS Escalation tracker shows the money is on its way.
+        // Link it so the Escalations tracker shows the money is on its way.
         try {
           const linked = await linkSubWorkOrder(insertedWO, workOrder);
           if (linked) {

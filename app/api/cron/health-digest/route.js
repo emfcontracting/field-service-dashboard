@@ -138,8 +138,8 @@ async function buildDigest(db) {
 
   const signals = [
     { label: 'Approvals pending > 48 h', value: approvalsOld || 0, warn: (approvalsOld || 0) > 0, hint: 'Dashboard → Approvals' },
-    { label: 'NTE requests waiting at CBRE > 14 days', value: waitingOld.length, warn: waitingOld.length > 0, hint: 'UPS Escalation → Waiting on CBRE (copy list for CBRE)', detail: waitingOld.map((w) => w.wo_number).slice(0, 15).join(', ') },
-    { label: 'Sub-WO requests without answer > 21 days', value: subWoOld.length, warn: subWoOld.length > 0, hint: 'UPS Escalation → Sub-WO req.', detail: subWoOld.map((w) => w.wo_number).join(', ') },
+    { label: 'NTE requests waiting at CBRE > 14 days', value: waitingOld.length, warn: waitingOld.length > 0, hint: 'Escalations → Waiting on CBRE (copy list for CBRE)', detail: waitingOld.map((w) => w.wo_number).slice(0, 15).join(', ') },
+    { label: 'Sub-WO requests without answer > 21 days', value: subWoOld.length, warn: subWoOld.length > 0, hint: 'Escalations → Sub-WO req.', detail: subWoOld.map((w) => w.wo_number).join(', ') },
     { label: 'Draft invoices older than 14 days (ready to send)', value: draftsActionable.length, warn: draftsActionable.length > 0, hint: 'Invoicing', detail: draftsActionable.map((d) => d.inv.work_order?.wo_number).filter(Boolean).slice(0, 15).join(', ') },
     { label: 'Invoices on hold (CBRE not ready)', value: draftsOnHold.length, warn: false, hint: `Invoicing → On Hold · $${onHoldValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} parked`, detail: draftsOnHold.map((d) => `${d.inv.work_order?.wo_number || '?'} (${d.blocker.reason})`).slice(0, 15).join(', ') },
     { label: 'Active work orders in escalation', value: openEsc || 0, warn: (openEsc || 0) > 0, hint: 'Work Orders → Escalation filter' },

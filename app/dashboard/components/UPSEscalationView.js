@@ -1,12 +1,22 @@
 // app/dashboard/components/UPSEscalationView.js
 // ─────────────────────────────────────────────────────────────────────────────
-// ADMIN-ONLY: UPS Escalation tracker for disputed CBRE work orders
+// ADMIN-ONLY: Escalations — every work order stuck at CBRE or UPS
 //
-// Lifecycle: Open → Escalated to UPS / Sub-WO requested → Resolved / Written Off
-// Each WO has dispute_status, dispute_reason, dispute_notes, dispute_amount,
-// and timestamps for each transition. "Sub-WO requested" is the state for WOs
-// that are dead at CBRE (cancelled / closed without invoice): the money comes
-// back through a sub work order, which is linked in dispute_sub_wo.
+// Lifecycle: Open → Escalated to UPS / Sub-WO requested → Closed (Sub-WO) →
+// Resolved / Written Off. Each WO has dispute_status, dispute_reason,
+// dispute_notes, dispute_amount and timestamps for each transition.
+//
+// While a work order sits in one of the ACTIVE_DISPUTE_STATUSES it is worked
+// HERE and nowhere else: the dashboard, CBRE Data Entry and the Invoicing
+// "Ready" list all hide it. Leaving the tab is therefore a deliberate act —
+// "Back to Dashboard" (the completion still has to be reported to CBRE) or
+// "Back to Invoicing" (it was reported, the work order can be billed).
+//
+// "Sub-WO requested" is the state for WOs that are dead at CBRE (cancelled,
+// closed without invoice, or posted with the NTE frozen): the money comes back
+// through a sub work order, linked in dispute_sub_wo. Once that sub exists the
+// original goes to "superseded" — closed and linked, but not recovered; only
+// the sub work order can be resolved.
 //
 // The extra "Waiting on CBRE" tab is not a dispute list: it shows work orders
 // whose NTE request sits in quote_submitted at CBRE, oldest first, so a
@@ -22,7 +32,9 @@ import {
   STATUS_TRANSITIONS,
   buildTransitionUpdate,
   disputeBadgeClasses,
+  isDisputeActive,
 } from '@/lib/disputeStatus';
+import { CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
 import { exportToExcel, exportToPDF } from '@/lib/upsEscalationExport';
 import ActivityLogExportModal from './ActivityLogExportModal';
 
@@ -108,12 +120,18 @@ export default function UPSEscalationView({ currentUser }) {
       const { data: wos } = await supabaseClient
         .from('work_orders')
         .select(`
-          wo_id, wo_number, building, status, nte,
+          wo_id, wo_number, building, status, nte, cbre_nte,
           date_completed, work_order_description,
           dispute_status, dispute_reason, dispute_notes,
           dispute_opened_at, dispute_escalated_at, dispute_resolved_at,
           dispute_requested_at, dispute_sub_wo,
-          dispute_amount, dispute_recovered_amount, cbre_status,
+          dispute_amount, dispute_recovered_amount,
+          cbre_status, cbre_status_label, cbre_status_updated_at,
+          cbre_posting_status, cbre_posting_label, cbre_posting_updated_at,
+          cbre_last_synced_at, cbre_nte_submitted_at, cbre_quote_submitted_at,
+          cbre_completion_submitted_at, completion_transferred,
+          acknowledged, is_locked,
+          work_order_quotes(quote_id, nte_status, new_nte_amount, original_nte, created_at),
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .not('dispute_status', 'is', null)
@@ -261,6 +279,26 @@ export default function UPSEscalationView({ currentUser }) {
     setTransitionFor(null);
   };
 
+  // Leaving the tab. Which door depends on whether the completion has already
+  // been reported to CBRE: if not, the WO goes back to the dashboard and runs
+  // acknowledge → report completion → lock; if it has, it can be billed right
+  // away and belongs in Invoicing's "Ready" list. Either way the escalation is
+  // closed out — nothing may sit in two places at once.
+  const returnToWorkflow = async (wo, target) => {
+    const label = target === 'invoicing' ? 'Invoicing (Ready)' : 'the dashboard';
+    if (!confirm(`Close this escalation and send ${wo.wo_number} back to ${label}?`)) return;
+    const now = new Date().toISOString();
+    const update = {
+      dispute_status: 'resolved',
+      dispute_resolved_at: now,
+      is_locked: false, locked_at: null, locked_by: null,
+    };
+    if (target === 'dashboard') { update.acknowledged = false; update.acknowledged_at = null; }
+    const { error } = await supabaseClient.from('work_orders').update(update).eq('wo_id', wo.wo_id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    setDisputes(prev => prev.map(d => d.wo_id === wo.wo_id ? { ...d, ...update } : d));
+  };
+
   const removeDispute = async (woId) => {
     if (!confirm('Remove this dispute entirely? This will clear all dispute tracking for the WO.')) return;
     const { error } = await supabaseClient
@@ -310,6 +348,7 @@ export default function UPSEscalationView({ currentUser }) {
       open:             { count: disputes.filter(d => d.dispute_status === 'open').length,             total: calc('open') },
       escalated:        { count: disputes.filter(d => d.dispute_status === 'escalated').length,        total: calc('escalated') },
       sub_wo_requested: { count: disputes.filter(d => d.dispute_status === 'sub_wo_requested').length, total: calc('sub_wo_requested') },
+      superseded:       { count: disputes.filter(d => d.dispute_status === 'superseded').length,       total: calc('superseded') },
       resolved:         { count: disputes.filter(d => d.dispute_status === 'resolved').length,         total: calcRecovered() },
       written_off:      { count: disputes.filter(d => d.dispute_status === 'written_off').length,      total: calc('written_off') },
     };
@@ -331,9 +370,9 @@ export default function UPSEscalationView({ currentUser }) {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">📞 UPS Escalation</h1>
+          <h1 className="text-xl font-bold text-slate-100">⚠️ Escalations</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            CBRE-disputed WOs — track follow-up with UPS directly
+            Every work order stuck at CBRE or UPS. While one sits here it is out of the dashboard, CBRE Data Entry and Invoicing.
           </p>
         </div>
 
@@ -398,15 +437,15 @@ export default function UPSEscalationView({ currentUser }) {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {Object.entries(DISPUTE_STATUS).map(([key, cfg]) => (
           <div key={key} className={`border rounded-xl p-4 ${cfg.bg}`}>
             <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
               {cfg.emoji} {cfg.short}
             </div>
-            <div className={`text-2xl font-bold ${cfg.color}`}>{fmt(stats[key].total)}</div>
+            <div className={`text-2xl font-bold ${cfg.color}`}>{fmt(stats[key]?.total)}</div>
             <div className="text-xs text-slate-600 mt-1">
-              {stats[key].count} WO{stats[key].count !== 1 ? 's' : ''}
+              {stats[key]?.count || 0} WO{(stats[key]?.count || 0) !== 1 ? 's' : ''}
               {key === 'resolved' && ' recovered'}
             </div>
           </div>
@@ -421,8 +460,8 @@ export default function UPSEscalationView({ currentUser }) {
             active={activeTab === key}
             onClick={() => setActiveTab(key)}
             label={`${cfg.emoji} ${cfg.short}`}
-            count={stats[key].count}
-            total={stats[key].total}
+            count={stats[key]?.count || 0}
+            total={stats[key]?.total || 0}
             color={cfg.color}
           />
         ))}
@@ -501,6 +540,7 @@ export default function UPSEscalationView({ currentUser }) {
                 }
               }}
               onRemove={() => removeDispute(d.wo_id)}
+              onReturn={(target) => returnToWorkflow(d, target)}
               transitionResolveOpen={transitionFor === d.wo_id}
               recoveredAmountDraft={recoveredAmount[d.wo_id] || ''}
               onChangeRecovered={(v) => setRecoveredAmount(prev => ({ ...prev, [d.wo_id]: v }))}
@@ -517,9 +557,10 @@ export default function UPSEscalationView({ currentUser }) {
         <div>• <strong className="text-orange-400">Escalated</strong> = Contacted UPS (Deontye Archie), waiting on response</div>
         <div>• <strong className="text-sky-400">Sub-WO requested</strong> = WO is dead at CBRE (cancelled / closed without invoice); sub work order requested from CBRE — link it here when it arrives (the e-mail import links it automatically when the sub-WO names the original)</div>
         <div>• <strong className="text-amber-400">Waiting on CBRE</strong> = not a dispute: NTE requests still sitting in quote_submitted. Older than {WAITING_WARN_DAYS} days = send the list to CBRE before they age out</div>
+        <div>• <strong className="text-indigo-400">Closed — Replaced by Sub-WO</strong> = the sub work order exists and is linked; this one is finished and carries no hours, costs or invoice any more. Not "recovered" — only the sub-WO can be resolved</div>
         <div>• <strong className="text-emerald-400">Resolved</strong> = Got paid via UPS direct — money recovered</div>
         <div>• <strong className="text-slate-500">Written Off</strong> = Unable to recover, accept the loss</div>
-        <div className="text-slate-700 mt-1">💡 Disputed WOs are automatically excluded from Cash Flow forecasts</div>
+        <div className="text-slate-700 mt-1">💡 While a work order is Open, Escalated, Sub-WO requested or Closed-Replaced it is hidden from the dashboard, CBRE Data Entry and Invoicing, and left out of Cash Flow. Use <strong>Back to Dashboard</strong> / <strong>Back to Invoicing</strong> to put it back in the flow.</div>
       </div>
 
       {/* Activity Log Bulk Export Modal */}
@@ -530,6 +571,82 @@ export default function UPSEscalationView({ currentUser }) {
           onClose={() => setShowActivityLog(false)}
           title={`📥 Activity Log Export — ${exportableDisputes.length} active dispute${exportableDisputes.length !== 1 ? 's' : ''}`}
         />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// What CBRE has on this work order. The two numbers that decide everything are
+// the NTE CBRE actually carries and what we want to bill: `nte` on the work
+// order is unreliable because it also holds verbal approvals that never reached
+// the portal, so the official figure is cbre_nte and, failing that, the
+// original_nte recorded on the first quote.
+// ─────────────────────────────────────────────────────────────────────────────
+function CbreFacts({ wo }) {
+  const posting = wo.cbre_posting_status ? CBRE_POSTING_STATUS[String(wo.cbre_posting_status).toUpperCase().trim()] : null;
+  const quotes = wo.work_order_quotes || [];
+  const newest = quotes.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0] || null;
+  const origs = quotes.map(q => parseFloat(q.original_nte)).filter(Number.isFinite);
+  const official = wo.cbre_nte != null ? parseFloat(wo.cbre_nte)
+                 : (origs.length ? Math.min(...origs) : parseFloat(wo.nte) || 0);
+  const wanted = parseFloat(wo.dispute_amount) || parseFloat(newest?.new_nte_amount) || 0;
+  const gap = wanted - official;
+  // Posted at CBRE means the NTE is frozen: the portal takes no increase after
+  // that, so anything above it can only come back on a sub work order.
+  const nteFrozen = !!posting && gap > 0.01;
+  const verbalOnly = quotes.some(q => q.nte_status === 'verbal_approved') && !quotes.some(q => q.nte_status === 'approved');
+
+  return (
+    <div className="px-4 py-2.5 border-b border-[#1e1e2e] bg-[#0a0a0f]/40 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500 uppercase tracking-wider font-semibold">At CBRE</span>
+        {posting ? (
+          <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${posting.badge}`}
+                title={`Posting status recorded ${fmtDate(wo.cbre_posting_updated_at)}`}>
+            {posting.emoji} {posting.short} — {posting.label}
+          </span>
+        ) : (
+          <span className="text-slate-600">not posted</span>
+        )}
+        {wo.cbre_status && (
+          <span className="px-2 py-0.5 rounded border border-slate-700/50 bg-slate-700/20 text-slate-300 text-[10px]">
+            {String(wo.cbre_status).replace(/_/g, ' ')}
+          </span>
+        )}
+        {newest && (
+          <span className="text-slate-500">
+            quote <span className="text-slate-300">{String(newest.nte_status).replace(/_/g, ' ')}</span>
+            {newest.created_at ? ` · ${daysSince(newest.created_at)} days old` : ''}
+          </span>
+        )}
+        {wo.cbre_last_synced_at && (
+          <span className="text-slate-700 ml-auto">synced {fmtDate(wo.cbre_last_synced_at)}</span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span className="text-slate-500">NTE at CBRE: <span className="font-mono text-slate-300">{fmt(official)}</span></span>
+        <span className="text-slate-500">We want to bill: <span className="font-mono text-slate-300">{fmt(wanted)}</span></span>
+        {gap > 0.01 && (
+          <span className="text-amber-400">short by <span className="font-mono">{fmt(gap)}</span></span>
+        )}
+        <span className="text-slate-600">
+          {wo.completion_transferred || wo.cbre_completion_submitted_at
+            ? `completion reported ${fmtDate(wo.cbre_completion_submitted_at)}`
+            : 'completion not reported'}
+        </span>
+      </div>
+
+      {nteFrozen && (
+        <div className="text-[11px] text-orange-300 bg-orange-500/10 border border-orange-500/25 rounded px-2 py-1">
+          Posted at CBRE ({posting.short}) — the portal takes no NTE increase any more. {fmt(gap)} can only come back on a sub work order.
+        </div>
+      )}
+      {verbalOnly && (
+        <div className="text-[11px] text-slate-400 bg-slate-500/10 border border-slate-600/30 rounded px-2 py-1">
+          The increase on this work order was only approved verbally — good for our records, never entered as a number at CBRE.
+        </div>
       )}
     </div>
   );
@@ -557,11 +674,16 @@ function DisputeCard({
   dispute, invoice, subWo, activeTab,
   editingSubWo, subWoDraft, onStartEditSubWo, onChangeSubWo, onSaveSubWo, onCancelSubWo,
   editingNotes, notesDraft, onStartEditNotes, onChangeNotes, onSaveNotes, onCancelNotes,
-  onTransition, onRemove,
+  onTransition, onRemove, onReturn,
   transitionResolveOpen, recoveredAmountDraft, onChangeRecovered, onConfirmResolve, onCancelResolve,
 }) {
   const transitions = STATUS_TRANSITIONS[dispute.dispute_status] || [];
   const reasonLabel = DISPUTE_REASONS[dispute.dispute_reason]?.label || dispute.dispute_reason || '—';
+  const active = isDisputeActive(dispute);
+  // Completion already reported to CBRE → the WO can go straight to Invoicing;
+  // otherwise it has to run through the dashboard again.
+  const completionReported = !!(dispute.completion_transferred || dispute.cbre_completion_submitted_at);
+  const returnTarget = completionReported && dispute.acknowledged ? 'invoicing' : 'dashboard';
 
   // Date timeline based on current status
   const timeline = [];
@@ -626,6 +748,9 @@ function DisputeCard({
           ))}
         </div>
       )}
+
+      {/* What CBRE has on this work order — the facts the decision hangs on */}
+      <CbreFacts wo={dispute} />
 
       {/* Sub work order — the way money comes back on a cancelled/closed WO */}
       {(dispute.dispute_status === 'sub_wo_requested' || dispute.dispute_sub_wo) && (
@@ -723,9 +848,29 @@ function DisputeCard({
             </button>
           ))}
         </div>
-        <button onClick={onRemove}
-          title="Remove dispute tracking entirely"
-          className="text-xs text-red-500/50 hover:text-red-400">🗑 Remove</button>
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* The two doors out of the tab. While a work order sits here it is
+              hidden from the dashboard, CBRE Data Entry and Invoicing, so
+              putting it back has to be a deliberate click. */}
+          {active && (
+            returnTarget === 'invoicing' ? (
+              <button onClick={() => onReturn('invoicing')}
+                title="Completion is already reported to CBRE — close the escalation and put this work order in the Invoicing Ready list"
+                className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition">
+                💵 Back to Invoicing
+              </button>
+            ) : (
+              <button onClick={() => onReturn('dashboard')}
+                title="Completion still has to be reported to CBRE — close the escalation and put this work order back in the dashboard for acknowledge → completion → lock"
+                className="px-2.5 py-1 rounded text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition">
+                📋 Back to Dashboard
+              </button>
+            )
+          )}
+          <button onClick={onRemove}
+            title="Remove dispute tracking entirely"
+            className="text-xs text-red-500/50 hover:text-red-400">🗑 Remove</button>
+        </div>
       </div>
     </div>
   );
@@ -795,6 +940,7 @@ function getBtnClass(variant) {
     success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
     orange:  'bg-orange-600 hover:bg-orange-500 text-white',
     sky:     'bg-sky-600 hover:bg-sky-500 text-white',
+    indigo:  'bg-indigo-600 hover:bg-indigo-500 text-white',
     default: 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300 hover:bg-[#2d2d44]',
     ghost:   'text-slate-500 hover:text-slate-300 hover:bg-[#1e1e2e]',
   }[variant] || 'bg-[#1e1e2e] border border-[#2d2d44] text-slate-300';

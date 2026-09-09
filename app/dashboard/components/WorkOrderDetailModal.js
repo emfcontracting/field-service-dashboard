@@ -28,6 +28,8 @@ import ActivityLogExportModal from './ActivityLogExportModal';
 import SendToCbreModal from './SendToCbreModal';
 import CbreConfirmations from './CbreConfirmations';
 import MessageTechModal from './MessageTechModal';
+import MarkDisputedModal from '@/app/components/MarkDisputedModal';
+import { DISPUTE_STATUS, isDisputeActive } from '@/lib/disputeStatus';
 import { canEditField, whyBlocked, ADMIN_ONLY_FIELDS } from '@/lib/woFieldPermissions';
 import { 
   getLocalDateString, 
@@ -217,6 +219,7 @@ export default function WorkOrderDetailModal({
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showCbreModal, setShowCbreModal] = useState(false);
   const [showMsgTech, setShowMsgTech] = useState(false);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
@@ -1881,6 +1884,23 @@ const sendAssignmentNotifications = async () => {
             >
               ✉️ Message Crew
             </button>
+            {isDisputeActive(selectedWO) ? (
+              <a
+                href="/dashboard?view=ups-escalation"
+                className="bg-amber-600/20 border border-amber-500/50 text-amber-300 hover:bg-amber-600/40 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
+                title={`${DISPUTE_STATUS[selectedWO.dispute_status]?.label} — this work order is being worked in the Escalations tab and is out of the normal flow`}
+              >
+                ⚠️ {DISPUTE_STATUS[selectedWO.dispute_status]?.short || 'Escalated'}
+              </a>
+            ) : (
+              <button
+                onClick={() => setShowDisputeModal(true)}
+                className="bg-amber-700 hover:bg-amber-600 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
+                title="Move this work order to the Escalations tab — it leaves the dashboard, CBRE Data Entry and Invoicing until the problem is settled"
+              >
+                ⚠️ Escalate
+              </button>
+            )}
             <button
               onClick={downloadCompletionCertificate}
               className="bg-green-600 hover:bg-green-700 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap"
@@ -3533,6 +3553,19 @@ const sendAssignmentNotifications = async () => {
           supabase={supabase}
           currentUser={currentUser}
           onClose={() => setShowCbreModal(false)}
+        />
+      )}
+
+      {showDisputeModal && (
+        <MarkDisputedModal
+          workOrder={selectedWO}
+          onClose={() => setShowDisputeModal(false)}
+          onSaved={async () => {
+            setShowDisputeModal(false);
+            await reloadSelectedWO();
+            refreshWorkOrders?.();
+            onClose?.();     // it now lives in the Escalations tab, not here
+          }}
         />
       )}
 

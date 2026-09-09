@@ -187,7 +187,7 @@ export default function CashFlowView({ currentUser }) {
 
   const loadPendingWOs = async () => {
     // Acknowledged + not locked + completed = ready to invoice but not yet invoiced
-    // Exclude disputed WOs — they go to UPS Escalation tab
+    // Exclude disputed WOs — they go to the Escalations tab
     const { data: wos } = await supabaseClient
       .from('work_orders')
       .select(`

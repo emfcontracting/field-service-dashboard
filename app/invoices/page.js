@@ -5,6 +5,7 @@ import { getSupabase } from '@/lib/supabase';
 import GlobalWOSearch from '../components/GlobalWOSearch';
 import AppShell from '@/app/components/AppShell';
 import MarkDisputedModal from '@/app/components/MarkDisputedModal';
+import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
 import { billableComments } from '@/lib/commentsSplit';
 import { buildEffectiveMapping } from '@/lib/cbreStatusMapping';
 import { DISPUTE_STATUS, disputeBadgeClasses } from '@/lib/disputeStatus';
@@ -240,7 +241,7 @@ export default function InvoicingPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Deep-link: when arriving from another view (e.g. UPS Escalation) with
+  // Deep-link: when arriving from another view (e.g. Escalations) with
   // ?invoiceId=<uuid> (or ?invoiceNo=INV-...), jump to the Invoices tab and
   // open that invoice automatically — no manual search needed.
   useEffect(() => {
@@ -272,9 +273,12 @@ export default function InvoicingPage() {
 
   const fetchAcknowledgedWorkOrders = async () => {
     // Oldest first — work the backlog from the top down
+    // An open escalation keeps the work order out of here as well: it is being
+    // worked in the Escalations tab and must not be invoiced in the meantime.
     const { data, error } = await supabase.from('work_orders')
       .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
       .eq('acknowledged', true).eq('is_locked', false)
+      .or(`dispute_status.is.null,dispute_status.not.in.(${ACTIVE_DISPUTE_STATUSES.join(',')})`)
       .order('acknowledged_at', { ascending: true });
     if (!error) {
       setAcknowledgedWOs(data || []);
@@ -967,7 +971,7 @@ export default function InvoicingPage() {
                                 ) : null;
                               })()}
                               {inv.work_order?.dispute_status && (
-                                <span title={`${DISPUTE_STATUS[inv.work_order.dispute_status]?.label} — see UPS Escalation tab`}
+                                <span title={`${DISPUTE_STATUS[inv.work_order.dispute_status]?.label} — see Escalations tab`}
                                   className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${disputeBadgeClasses(inv.work_order.dispute_status)}`}>
                                   {DISPUTE_STATUS[inv.work_order.dispute_status]?.emoji} DISPUTED
                                 </span>
@@ -1372,7 +1376,7 @@ export default function InvoicingPage() {
                       });
                       setSelectedItem(null);
                     }} variant="orange" size="lg" className="w-full">
-                      🔴 Mark as CBRE Disputed (UPS Escalation)
+                      🔴 Mark as CBRE Disputed (Escalations)
                     </Btn>
                   )}
                   {selectedItem.data.work_order?.dispute_status && (
@@ -1384,7 +1388,7 @@ export default function InvoicingPage() {
                         Status: {DISPUTE_STATUS[selectedItem.data.work_order.dispute_status]?.label}
                       </p>
                       <a href="/dashboard?view=ups-escalation" className="text-xs text-blue-400 hover:underline mt-1 inline-block">
-                        → Manage in UPS Escalation tab
+                        → Manage in Escalations tab
                       </a>
                     </div>
                   )}

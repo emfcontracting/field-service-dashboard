@@ -1,7 +1,7 @@
 // app/components/MarkDisputedModal.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Reusable modal to mark a Work Order (and its invoice if any) as disputed.
-// Used from: Invoice Detail Modal, WO Detail Modal, UPS Escalation page.
+// Used from: Invoice Detail Modal, WO Detail Modal, Escalations page.
 // ─────────────────────────────────────────────────────────────────────────────
 'use client';
 
@@ -77,7 +77,7 @@ export default function MarkDisputedModal({
             <ul className="mt-1 list-disc list-inside space-y-0.5 text-yellow-300/80">
               <li>Open a new dispute (Status: Open)</li>
               <li>Remove this WO/Invoice from Cash Flow forecasts</li>
-              <li>Add it to the UPS Escalation tab for follow-up</li>
+              <li>Add it to the Escalations tab for follow-up</li>
             </ul>
           </div>
 

@@ -1,10 +1,18 @@
 // app/dashboard/utils/dataFetchers.js
 import { fetchAll } from '@/lib/fetchAll';
+import { ACTIVE_DISPUTE_STATUSES, isDisputeActive } from '@/lib/disputeStatus';
 
 export async function fetchWorkOrders(supabase) {
-  // The dashboard only shows open tickets (not acknowledged, not locked), so
-  // filter on the SERVER and page with fetchAll: the table is at 900+ rows and
-  // a plain select silently stops at PostgREST's 1000-row cap.
+  // The dashboard only shows open tickets (not acknowledged, not locked, no
+  // open escalation), so filter on the SERVER and page with fetchAll: the table
+  // is at 900+ rows and a plain select silently stops at PostgREST's 1000-row
+  // cap.
+  //
+  // A work order with an open escalation is being worked in the Escalations
+  // tab. It must not sit here too: it cannot be acknowledged or completed to
+  // CBRE until the problem is settled, and before this it was only kept out by
+  // forcing acknowledged/is_locked on it — the invoicing lever, used for
+  // something it was never meant for.
   let data = [];
   try {
     data = await fetchAll(() => supabase
@@ -18,6 +26,7 @@ export async function fetchWorkOrders(supabase) {
       `)
       .or('acknowledged.is.null,acknowledged.eq.false')
       .or('is_locked.is.null,is_locked.eq.false')
+      .or(`dispute_status.is.null,dispute_status.not.in.(${ACTIVE_DISPUTE_STATUSES.join(',')})`)
       .order('date_entered', { ascending: true })
       .order('wo_id'));
   } catch (error) {
@@ -29,6 +38,7 @@ export async function fetchWorkOrders(supabase) {
   const filteredData = (data || []).filter(wo => {
     if (wo.acknowledged) return false;
     if (wo.is_locked) return false;
+    if (isDisputeActive(wo)) return false;
     return true;
   });
 

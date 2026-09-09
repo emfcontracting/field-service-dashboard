@@ -50,10 +50,19 @@ const MAX_LIMIT = 50;
 // cbre_status values that mean "CBRE already has a quote from us" — a pending
 // quote created BEFORE that status was set is a duplicate, not new work.
 const CBRE_HAS_QUOTE = ['quote_submitted', 'quote_approved'];
-// Nothing to request on these. CPW ("closed, waiting paperwork") is NOT in the
-// list: CBRE still expects our invoice there, and an NTE increase is exactly
-// what such a WO usually needs.
+// Nothing to request on these.
 const CBRE_CLOSED = ['cancelled', 'CMP', 'CA1', 'CA2', 'CIR', 'CIS'];
+// Once CBRE has posted a work order, its NTE is frozen — the portal takes no
+// further increase, CPW ("closed, waiting paperwork") included. Money above the
+// posted NTE can only be billed on a NEW work order CBRE issues for it (a sub
+// work order), so these are queued as nothing and reported separately.
+// The posting status is tracked on its own column because cbre_status keeps
+// moving afterwards (a quote submission sets it to quote_submitted).
+const CBRE_POSTED = ['CPW', 'CIS', 'CA1', 'CA2', 'CIR', 'CMP'];
+const postedStatus = (wo) =>
+  CBRE_POSTED.find((s) => s === wo?.cbre_posting_status) ||
+  CBRE_POSTED.find((s) => s === wo?.cbre_status) ||
+  null;
 
 const REQUESTOR_EMAIL = process.env.CBRE_REQUESTOR_EMAIL || 'emfcontractingsc@gmail.com';
 const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)';
@@ -89,7 +98,8 @@ async function handle(request) {
       noAmount: [],
       noIncrease: [],         // quote amount does not exceed the current NTE
       alreadySubmitted: [],   // quote older than the last submission recorded on the WO
-      closed: [],             // WO cancelled / posted at CBRE
+      closed: [],             // WO cancelled at CBRE
+      needsSubWo: [],         // posted at CBRE (CPW …) — NTE frozen, ask CBRE for a sub work order
       problems: [],
     },
     errors: [],
@@ -115,7 +125,7 @@ async function handle(request) {
     // 2) Their work orders.
     const { data: wos, error: wErr } = await supabase
       .from('work_orders')
-      .select('wo_id, wo_number, nte, cbre_nte, cbre_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
+      .select('wo_id, wo_number, nte, cbre_nte, cbre_status, cbre_posting_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
       .in('wo_id', [...latestByWo.keys()]);
     if (wErr) throw new Error(`work order query failed: ${wErr.message}`);
     const woById = new Map((wos || []).map((w) => [w.wo_id, w]));
@@ -129,6 +139,15 @@ async function handle(request) {
 
       if (CBRE_CLOSED.includes(wo.cbre_status)) {
         result.excluded.closed.push(`${num} (${wo.cbre_status})`);
+        continue;
+      }
+
+      // Posted at CBRE → the NTE cannot be raised any more. Sending the form
+      // anyway is wasted: it is accepted and then ignored. What this work order
+      // needs is a sub work order from CBRE.
+      const posted = postedStatus(wo);
+      if (posted) {
+        result.excluded.needsSubWo.push(`${num} (${posted} — needs a sub work order)`);
         continue;
       }
 

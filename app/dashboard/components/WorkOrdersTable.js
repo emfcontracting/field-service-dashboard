@@ -11,8 +11,26 @@ import { getClientType, CLIENT_STYLES } from '@/lib/clientType';
 import { parseDate, daysBetweenET } from '@/lib/dates';
 import { DISPUTE_STATUS } from '@/lib/disputeStatus';
 import { agingRisk, isAgingExposed, AGING_LEVELS } from '@/lib/agingRisk';
+import { openPauseOf, PAUSE_BADGE } from '@/lib/clockPause';
 import StatusTrack from './StatusTrack';
 import WorkOrdersLegend from './WorkOrdersLegend';
+
+// The technician pressed pause in the field app — "waiting for parts", "no site
+// access". That has been written to the work order all along and shown to the
+// office nowhere: the job simply sat there looking unworked. The reason is on
+// the work order row itself, so this costs no extra query.
+const PauseBadge = ({ wo }) => {
+  const p = openPauseOf(wo);
+  if (!p) return null;
+  return (
+    <span
+      title={`${p.label}${p.since ? ` — since ${p.since.toLocaleDateString('en-US')}` : ''}. The clock is stopped: this time does not count against the completion target.`}
+      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border cursor-help ${PAUSE_BADGE}`}
+    >
+      {p.emoji} {p.short}{p.days != null ? ` · ${p.days}d` : ''}
+    </span>
+  );
+};
 
 // CBRE closes out aging work orders at the end of each month, and once closed
 // they "cannot be reopened for billing" — that is how the fifteen sub work
@@ -436,6 +454,7 @@ export default function WorkOrdersTable({
                       <StatusTrack track="dispatch" wo={wo} size="mini" />
                       <StatusTrack track="posting" wo={wo} size="mini" />
                       <PayoutBadge wo={wo} />
+                      <PauseBadge wo={wo} />
                       <AgingBadge wo={wo} />
                       <DisputeBadge wo={wo} />
                       <CbreAckBadge wo={wo} />

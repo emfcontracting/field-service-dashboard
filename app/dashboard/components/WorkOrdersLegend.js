@@ -22,6 +22,7 @@ import { DISPUTE_STATUS } from '@/lib/disputeStatus';
 import { CBRE_GRID_STATUS } from '@/lib/cbreGridStatus';
 import { CBRE_POSTING_STATUS, CBRE_POSTING_ORDER, CBRE_POSTING_OFF_PATH } from '@/lib/cbrePostingStatus';
 import { AGING_LEVELS, AGING_WARN_DAYS, AGING_FLAG_DAYS, AGING_CLOSE_DAYS, AGING_GRACE_DAYS, AGING_DOCUMENTED_DAYS } from '@/lib/agingRisk';
+import { PAUSE_REASONS, PAUSE_BADGE } from '@/lib/clockPause';
 import { DISPATCH_ORDER, DISPATCH_OFF_PATH } from '@/lib/statusTracks';
 import { PRIORITY_CODES } from '@/lib/priorityCodes';
 import StatusTrack from './StatusTrack';
@@ -105,6 +106,23 @@ export default function WorkOrdersLegend() {
             </Row>
             <Row mark={<Chip className="bg-amber-500/20 text-amber-400 border-amber-500/30">💰 NTE</Chip>}>
               An NTE increase was written here but has not been submitted to CBRE.
+            </Row>
+          </Group>
+
+          <Group title="Clock paused">
+            {Object.entries(PAUSE_REASONS).map(([key, cfg]) => (
+              <Row key={key} mark={<Chip className={PAUSE_BADGE}>{cfg.emoji} {cfg.short}</Chip>}>
+                {cfg.label}
+                {cfg.tech
+                  ? ' — set by the technician in the field app.'
+                  : ' — set here or by the CBRE sync.'}
+                {key === 'parts_ordered' && ' The number beside it is how many days it has stood there.'}
+              </Row>
+            ))}
+            <Row mark={<span className="text-slate-500 text-[11px]">what it does</span>}>
+              A paused work order&apos;s time does not count against its completion target, and the hold
+              reporter sends CBRE a target-date extension so it does not age out while it waits.
+              Open the work order to see the technician&apos;s note and to end the pause.
             </Row>
           </Group>
 

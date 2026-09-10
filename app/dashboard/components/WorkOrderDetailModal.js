@@ -22,6 +22,7 @@ import { exportSingleWOCostDetail } from '../utils/exportHelpers';
 import { applyQuoteApproval } from '@/lib/quoteApproval';
 import { getStatusColor, getPriorityColor, formatDate } from '../utils/styleHelpers';
 import { postingBadgeConfig, computePostingPayoutDate, CBRE_POSTING_ORDER, CBRE_POSTING_STATUS } from '@/lib/cbrePostingStatus';
+import { PAUSE_REASONS } from '@/lib/clockPause';
 import { gridBadgeConfig, daysSinceGridSeen } from '@/lib/cbreGridStatus';
 import StatusTrack from './StatusTrack';
 import SubmissionStatusSection from './SubmissionStatusSection';
@@ -225,6 +226,11 @@ export default function WorkOrderDetailModal({
   // Both ends of a sub work order: the original this one replaces, or the sub
   // that replaces this one. { role: 'sub'|'parent', wo } or null.
   const [subLink, setSubLink] = useState(null);
+  // The open stop-the-clock pause, if the technician set one in the field app.
+  // The work order row carries the reason; the note and who set it live on the
+  // pause row, so it is loaded here rather than passed in.
+  const [openPause, setOpenPause] = useState(null);
+  const [endingPause, setEndingPause] = useState(false);
   const [showMissingDataModal, setShowMissingDataModal] = useState(false);
   const [missingDataModalMode, setMissingDataModalMode] = useState('create'); // 'create' | 'edit'
   const [resolvingMissingData, setResolvingMissingData] = useState(false);
@@ -998,6 +1004,74 @@ export default function WorkOrderDetailModal({
     load();
     return () => { cancelled = true; };
   }, [selectedWO?.wo_number, selectedWO?.dispute_sub_wo, supabase]);
+
+  // The open pause and who set it. Keyed on waiting_reason so ending a pause
+  // (which clears it) re-runs this and empties the panel.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!selectedWO?.wo_id || !selectedWO?.waiting_reason) { setOpenPause(null); return; }
+      try {
+        const { data } = await supabase
+          .from('work_order_clock_pauses')
+          .select('pause_id, reason, note, source, started_at, created_by')
+          .eq('wo_id', selectedWO.wo_id)
+          .is('ended_at', null)
+          .order('started_at', { ascending: false })
+          .limit(1);
+        const row = data?.[0] || null;
+        if (!row) {
+          // waiting_reason set but no open pause row — the work order still
+          // says it is waiting, so show that rather than nothing.
+          if (!cancelled) setOpenPause({ reason: selectedWO.waiting_reason, started_at: selectedWO.waiting_since, orphan: true });
+          return;
+        }
+        // The user is fetched separately: the FK constraint name is not
+        // something to guess at inside a select.
+        let who = null;
+        if (row.created_by) {
+          const { data: u } = await supabase
+            .from('users').select('first_name, last_name').eq('user_id', row.created_by).maybeSingle();
+          who = u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : null;
+        }
+        if (!cancelled) setOpenPause({ ...row, who });
+      } catch {
+        if (!cancelled) setOpenPause(null);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selectedWO?.wo_id, selectedWO?.waiting_reason, selectedWO?.waiting_since, supabase]);
+
+  // End the pause from the office. Mirrors closePause() in the field app:
+  // close the row, then clear the work order's waiting flag. If the second
+  // write fails the badge would lie, so it is reported rather than swallowed.
+  const endPause = async () => {
+    if (!openPause || endingPause) return;
+    setEndingPause(true);
+    try {
+      const now = new Date().toISOString();
+      if (openPause.pause_id) {
+        const { error } = await supabase
+          .from('work_order_clock_pauses')
+          .update({ ended_at: now })
+          .eq('pause_id', openPause.pause_id)
+          .is('ended_at', null);
+        if (error) throw error;
+      }
+      const { error: woErr } = await supabase
+        .from('work_orders')
+        .update({ waiting_reason: null, waiting_since: null })
+        .eq('wo_id', selectedWO.wo_id);
+      if (woErr) throw woErr;
+      setSelectedWO((prev) => ({ ...prev, waiting_reason: null, waiting_since: null }));
+      setOpenPause(null);
+    } catch (e) {
+      alert(`Could not end the pause: ${e.message}`);
+    } finally {
+      setEndingPause(false);
+    }
+  };
 
   const reloadSelectedWO = async () => {
     try {
@@ -1987,6 +2061,45 @@ const sendAssignmentNotifications = async () => {
 
           {/* ── Details Tab ── */}
           {activeTab !== 'profitability' && (<>
+          {/* The technician stopped the clock in the field app. Shown before
+              everything else because it explains why nothing is happening on
+              this job — the single question the office asks about a stalled
+              work order. */}
+          {openPause && (() => {
+            const meta = PAUSE_REASONS[openPause.reason] || PAUSE_REASONS.other;
+            const since = openPause.started_at ? new Date(openPause.started_at) : null;
+            const days = since && !isNaN(since) ? Math.floor((Date.now() - since.getTime()) / 86400000) : null;
+            return (
+              <div className="rounded-lg border px-3 py-2 text-sm bg-amber-500/10 border-amber-500/30 text-amber-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{meta.emoji} Clock paused — {meta.label}</span>
+                  {since && !isNaN(since) && (
+                    <span className="text-amber-200/70 text-xs">
+                      since {since.toLocaleDateString('en-US')}{days != null ? ` · ${days} day${days === 1 ? '' : 's'}` : ''}
+                    </span>
+                  )}
+                  {openPause.who && <span className="text-amber-200/70 text-xs">· set by {openPause.who}</span>}
+                  {openPause.source === 'tech' && <span className="text-amber-200/70 text-xs">· from the field app</span>}
+                  <button
+                    onClick={endPause}
+                    disabled={endingPause}
+                    className="ml-auto text-xs font-semibold px-2 py-1 rounded border border-amber-400/50 hover:bg-amber-500/20 disabled:opacity-50"
+                  >
+                    {endingPause ? 'Ending…' : '▶ End pause'}
+                  </button>
+                </div>
+                {openPause.note && (
+                  <p className="text-amber-200/90 text-xs mt-1 whitespace-pre-wrap">&ldquo;{openPause.note}&rdquo;</p>
+                )}
+                <p className="text-amber-200/50 text-[11px] mt-1">
+                  This time does not count against the completion target. It is also what the hold reporter
+                  sends CBRE as a target-date extension, so the work order does not age out while it waits.
+                  {openPause.orphan && ' (No open pause record — the work order carries the flag on its own.)'}
+                </p>
+              </div>
+            );
+          })()}
+
           {/* Sub work order link — visible from both ends */}
           {subLink && (
             <div className={`rounded-lg border px-3 py-2 text-sm flex flex-wrap items-center gap-2 ${

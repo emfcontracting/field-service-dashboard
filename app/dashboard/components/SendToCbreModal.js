@@ -19,7 +19,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { buildCbrePayload, ACTIONS, to12h, parseTs, tzParts, tzDate } from '@/lib/cbreVendorForm';
+import { buildCbrePayload, ACTIONS, to12h, parseTs, tzParts, tzDate, fmtDate } from '@/lib/cbreVendorForm';
 import { billableComments } from '@/lib/commentsSplit';
 
 // Mirrors the producer defaults (app/api/cbre/*). Override with NEXT_PUBLIC_* if
@@ -32,9 +32,17 @@ const VENDOR_NAME =
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const safeUuid = (v) => (typeof v === 'string' && UUID_REGEX.test(v) ? v : null);
 
-// The Action options this dialog offers, in order. Acknowledge + NTE excluded
-// (they are produced automatically).
+// The Action options this dialog offers, in order.
+//
+// Acknowledge and NTE also have automatic producers (app/api/cbre/*), and for
+// the normal case those are what fire. They are offered here too because the
+// automatic run is deliberately narrow — the acknowledgement producer skips
+// anything older than fourteen days, and both skip a work order whose building
+// code will not resolve — and something has to be able to acknowledge the
+// leftovers by hand. A live queue row of the same kind blocks the second one
+// (unique index), so a manual request cannot collide with the producer's.
 const CHOICES = [
+  { kind: 'cbre_acknowledge',   label: '👍 Acknowledge Work',      desc: 'Tell CBRE we accept the work order. Normally automatic — use this for one the producer skipped.' },
   { kind: 'cbre_complete',      label: '✅ Complete Work Order',   desc: 'Report completion (start/end) to CBRE.' },
   { kind: 'cbre_nte',           label: '💵 Submit NTE Request',    desc: 'Request an NTE increase (carries a dollar amount).' },
   { kind: 'cbre_comment',       label: '💬 Add Comment',           desc: 'Add a comment to the work order.' },
@@ -181,6 +189,22 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wo.wo_id]);
 
+  // Acknowledge needs a comment and it lands on CBRE's permanent record, so it
+  // is prefilled with the same wording the automatic producer uses — a manual
+  // acknowledgement should not read differently from an automatic one. Two
+  // versions, because "assigned to technician" would be a false statement on a
+  // work order nobody has been given yet. Only fills an empty box; whatever the
+  // person has typed wins.
+  useEffect(() => {
+    if (kind !== 'cbre_acknowledge' || comment.trim()) return;
+    const assigned = wo.assigned_to_field_at;
+    const day = fmtDate(assigned || wo.date_entered) || 'receipt';
+    setComment(assigned
+      ? `Work order received and accepted by EMF Contracting LLC. Assigned to technician on ${day}.`
+      : `Work order received and accepted by EMF Contracting LLC on ${day}. Technician assignment to follow.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, wo.wo_id]);
+
   const meta = ACTIONS[kind];
 
   function buildInput() {
@@ -208,7 +232,11 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
   function localProblems() {
     const p = [];
     if (!wo.wo_number) p.push('This work order has no WO number.');
-    if ((kind === 'cbre_comment' || kind === 'cbre_decline') && !comment.trim())
+    // CBRE's form marks Comment/Reason required for all three of these. An
+    // earlier version read the form's nested visibility rules and concluded
+    // Acknowledge did not need one; that was wrong, and the submissions came
+    // back. Trust the rendered form.
+    if ((kind === 'cbre_comment' || kind === 'cbre_decline' || kind === 'cbre_acknowledge') && !comment.trim())
       p.push('A comment / reason is required.');
     if (kind === 'cbre_tag_equipment' && !assetBarcode.trim()) p.push('Asset barcode is required.');
     if (kind === 'cbre_nte' && !(parseFloat(nteAmount) > 0)) p.push('Enter a valid NTE amount.');
@@ -378,15 +406,25 @@ export default function SendToCbreModal({ workOrder, supabase, currentUser, onCl
 
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-400">
-                Comment / Reason {(kind === 'cbre_comment' || kind === 'cbre_decline') && <span className="text-rose-400">*</span>}
+                Comment / Reason {(kind === 'cbre_comment' || kind === 'cbre_decline' || kind === 'cbre_acknowledge') && <span className="text-rose-400">*</span>}
               </label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
                 className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-3 py-2 text-sm text-slate-100"
-                placeholder={kind === 'cbre_decline' ? 'Why is this being declined?' : 'Optional note for CBRE'}
+                placeholder={
+                  kind === 'cbre_decline' ? 'Why is this being declined?'
+                  : kind === 'cbre_acknowledge' ? 'Required by CBRE for this action'
+                  : 'Optional note for CBRE'
+                }
               />
+              {kind === 'cbre_acknowledge' && (
+                <p className="text-[11px] text-slate-500">
+                  Goes onto CBRE&apos;s permanent record. Prefilled with the same wording the automatic
+                  acknowledgement uses — change it if this one needs saying differently.
+                </p>
+              )}
             </div>
 
             {error && <p className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">{error}</p>}

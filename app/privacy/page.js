@@ -3,8 +3,8 @@
 // additionally requires the app itself to link to it. No auth, no data
 // fetching — this page must render for a reviewer who is not logged in.
 export const metadata = {
-  title: 'Privacy Policy — FSM Mobile',
-  description: 'How PCS LLC handles data in the FSM Mobile app and the FSM dashboard.',
+  title: 'Privacy Policy — PCS Fieldservice',
+  description: 'How PCS LLC handles data in the PCS Fieldservice app and dashboard.',
 };
 
 const EFFECTIVE = 'September 23, 2026';
@@ -25,15 +25,16 @@ export default function PrivacyPolicy() {
       <article className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-1">Privacy Policy</h1>
         <p className="text-sm text-slate-500 mb-8">
-          FSM Mobile and the FSM dashboard · Effective {EFFECTIVE}
+          PCS Fieldservice · Effective {EFFECTIVE}
         </p>
 
         <Section title="Who we are">
           <p>
-            FSM Mobile and the FSM dashboard are operated by PCS LLC (&ldquo;we&rdquo;). The apps are
+            PCS Fieldservice — the mobile app and the dashboard — is operated by PCS LLC (&ldquo;we&rdquo;). They are
             work tools for field-service technicians and office staff at the contracting
-            companies that license them. They are not consumer apps and are not offered to
-            the general public.
+            companies that license the product. Each customer deployment carries that
+            customer's own branding. These are not consumer apps and are not offered to the
+            general public.
           </p>
         </Section>
 

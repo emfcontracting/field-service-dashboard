@@ -307,31 +307,74 @@ async function GET_impl(request) {
         // skipping blindly, so the KPI clock follows the LATEST target.
         if (existingWONumbers.has(workOrder.wo_number)) {
           try {
-            if (workOrder.target_completion_at || workOrder.target_response_at) {
-              const { data: existing } = await supabase
-                .from('work_orders')
-                .select('wo_id, priority, target_response_at, target_completion_at, comments')
-                .eq('wo_number', workOrder.wo_number)
-                .single();
+            const { data: existing } = await supabase
+              .from('work_orders')
+              .select('wo_id, priority, target_response_at, target_completion_at, comments, cbre_status, cbre_status_updated_at')
+              .eq('wo_number', workOrder.wo_number)
+              .single();
+
+            if (existing) {
+              const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+              const patch = {};
+              const notes = [];
+
+              // ── The WO came back to us ──────────────────────────────────
+              // A dispatch mail for a ticket that is sitting on `reassigned`
+              // means CBRE handed it back to EMF. Nothing used to clear that
+              // status, so the WO stayed marked as somebody else's for the
+              // rest of its life — three of them were worked and completed by
+              // our own techs while still flagged reassigned. Clear it and
+              // write the round trip into the comments, so "went away and came
+              // back" stays distinguishable from "never left".
+              if (existing.cbre_status === 'reassigned') {
+                const since = existing.cbre_status_updated_at
+                  ? new Date(existing.cbre_status_updated_at).toLocaleString('en-US', { timeZone: 'America/New_York' })
+                  : 'unknown date';
+                patch.cbre_status = null;
+                patch.cbre_status_updated_at = new Date().toISOString();
+                notes.push(
+                  `[CBRE BACK WITH US] ${ts}\n` +
+                  `Was reassigned away on ${since} — re-dispatched to EMF, CBRE status cleared.\n` +
+                  `Email: ${email.subject?.substring(0, 160) || '—'}`
+                );
+                results.returned = (results.returned || 0) + 1;
+                console.log(`↩ WO ${workOrder.wo_number}: reassigned → back with us`);
+              }
+
+              // ── Targets ─────────────────────────────────────────────────
+              // A re-dispatch is also how CBRE communicates priority/target
+              // changes, so the KPI clock follows the LATEST target.
               const diffs = (a, b) => {
                 if (!a && !b) return false;
                 if (!a || !b) return true;
                 return Math.abs(new Date(a) - new Date(b)) > 60000;
               };
-              if (existing && (
-                    diffs(existing.target_completion_at, workOrder.target_completion_at) ||
-                    diffs(existing.target_response_at, workOrder.target_response_at))) {
-                const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-                const note = `[CBRE RE-DISPATCH — targets updated] ${ts}\n` +
-                  `Priority: ${workOrder.priority_code || '—'} · Target Completion: ${workOrder.target_completion_at || '—'}`;
+              const targetsChanged =
+                (workOrder.target_completion_at || workOrder.target_response_at) && (
+                  diffs(existing.target_completion_at, workOrder.target_completion_at) ||
+                  diffs(existing.target_response_at, workOrder.target_response_at));
+
+              if (targetsChanged) {
+                patch.target_response_at = workOrder.target_response_at;
+                patch.target_completion_at = workOrder.target_completion_at;
+                notes.push(
+                  `[CBRE RE-DISPATCH — targets updated] ${ts}\n` +
+                  `Priority: ${workOrder.priority_code || '—'} · Target Completion: ${workOrder.target_completion_at || '—'}`
+                );
+              }
+
+              if (Object.keys(patch).length > 0) {
+                if (notes.length > 0) {
+                  const note = notes.join('\n\n');
+                  patch.comments = existing.comments ? `${existing.comments}\n\n${note}` : note;
+                }
                 await supabase
                   .from('work_orders')
-                  .update({
-                    target_response_at: workOrder.target_response_at,
-                    target_completion_at: workOrder.target_completion_at,
-                    comments: existing.comments ? `${existing.comments}\n\n${note}` : note,
-                  })
+                  .update(patch)
                   .eq('wo_id', existing.wo_id);
+              }
+
+              if (targetsChanged) {
                 await supabase.from('work_order_target_history').insert({
                   wo_id: existing.wo_id,
                   priority: workOrder.priority_code || null,
@@ -346,7 +389,7 @@ async function GET_impl(request) {
               }
             }
           } catch (tErr) {
-            console.error(`Target update failed for ${workOrder.wo_number}:`, tErr.message);
+            console.error(`Re-dispatch handling failed for ${workOrder.wo_number}:`, tErr.message);
           }
           results.duplicates++;
           seenUids.push(email.uid);

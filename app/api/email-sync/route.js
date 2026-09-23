@@ -443,7 +443,15 @@ async function GET_impl(request) {
         // email) AFTER this email arrived. The email is history, not news —
         // re-applying it would silently undo a manual change. Every run scans
         // the last 30 days, so without this guard old mails kept winning.
-        if (workOrder.cbre_status && statusSetAt && winningEmailDate && winningEmailDate <= statusSetAt) {
+        //
+        // CLEARING a status counts as setting one. This used to read
+        // `workOrder.cbre_status && …`, so the guard switched itself off the
+        // moment the office emptied the field: a work order that had been
+        // reassigned away and came back was cleared by hand, and 30 minutes
+        // later the same old reassignment mail put `reassigned` straight back.
+        // The manual clear stamps cbre_status_updated_at, which is all this
+        // guard needs — the value itself is irrelevant.
+        if (statusSetAt && winningEmailDate && winningEmailDate <= statusSetAt) {
           results.skipped++;
           results.updates.push({
             wo_number: woNumber,

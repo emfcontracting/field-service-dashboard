@@ -17,6 +17,7 @@ import { fetchMessages, sinceDays } from '@/lib/imap';
 import { kindsFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
+import { acknowledgeSubmittedCompletions, autoAcknowledgeNote } from '@/lib/completionAcknowledge';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -138,6 +139,18 @@ async function handle(request) {
       if (WO_STAMP[kind]) {
         await supabase.from('work_orders').update(WO_STAMP[kind](whenIso)).eq('wo_id', wo.wo_id);
       }
+      // A confirmed completion means CBRE has the work order closed on their
+      // side and is waiting for the invoice — the same single step as the
+      // "Acknowledge Completion & Lock" button, done without the office having
+      // to walk back into the ticket.
+      let autoAcked = false;
+      if (kind === 'cbre_complete') {
+        const { count, error: ackErr } = await acknowledgeSubmittedCompletions(
+          supabase, [wo.wo_id], whenIso, null
+        );
+        if (ackErr) result.errors.push(`${woNum}: acknowledge failed: ${ackErr.message}`);
+        autoAcked = count > 0;
+      }
       // A target-date change is only a hold report when the producer said so in
       // the payload; a routine date change must not stamp it.
       if (kind === 'cbre_target_date' && row.payload?._readable?.holdReason) {
@@ -145,7 +158,8 @@ async function handle(request) {
       }
 
       // 3) note it on the work order.
-      const note = `[CBRE VENDOR APP CONFIRMED] ${whenIso.slice(0, 16).replace('T', ' ')}\n✓ ${label} confirmed by CBRE/Smartsheet`;
+      const note = `[CBRE VENDOR APP CONFIRMED] ${whenIso.slice(0, 16).replace('T', ' ')}\n✓ ${label} confirmed by CBRE/Smartsheet`
+        + (autoAcked ? `\n\n${autoAcknowledgeNote(whenIso)}` : '');
       const merged = wo.comments ? `${wo.comments}\n\n${note}` : note;
       const { error: cErr } = await supabase.from('work_orders').update({ comments: merged }).eq('wo_id', wo.wo_id);
       if (cErr) result.errors.push(`${woNum}: comment update failed: ${cErr.message}`);

@@ -29,6 +29,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { acknowledgeSubmittedCompletions } from '@/lib/completionAcknowledge';
 import { FIELD_LABEL } from '@/lib/cbreVendorForm';
 
 const supabase = getSupabase();
@@ -335,6 +336,15 @@ export default function ApprovalsView({ userInfo }) {
           .in('wo_id', compWoIds)
           .is('cbre_completion_submitted_at', null);
         if (compErr) setError(`Marked sent, but the completion stamp failed: ${compErr.message}`);
+
+        // Reporting the completion to CBRE is what makes the work order ready
+        // to invoice — the same single step as the "Acknowledge Completion &
+        // Lock" button, which the office otherwise had to press afterwards on
+        // every single ticket.
+        const { error: ackErr2 } = await acknowledgeSubmittedCompletions(
+          supabase, compWoIds, now, userInfo?.user_id ?? null
+        );
+        if (ackErr2) setError(`Marked sent, but the acknowledge failed: ${ackErr2.message}`);
       }
 
       // Holds: a cbre_target_date row can be a plain manual change OR the hold

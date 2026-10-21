@@ -323,8 +323,11 @@ export default function CBREDataEntryView({ currentUser, onSelectWorkOrder }) {
 
           {/* Start / End — what goes into the CBRE form */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-            <TimeBox label="Start · first check-in" value={startAt ? fmtDateTime(startAt) : null} />
-            <TimeBox label={`End · ${source === 'check-in + completion date' ? 'completion date (no check-out)' : 'last check-out'}`} value={endAt ? fmtDateTime(endAt) : null} />
+            <TimeBox label={`Start · ${source === 'daily hours log' ? 'first day logged (no clock time)' : 'first check-in'}`} value={startAt ? fmtDateTime(startAt) : null} />
+            <TimeBox label={`End · ${
+              source === 'daily hours log'            ? 'last day logged (no clock time)' :
+              source === 'check-in + completion date' ? 'completion date (no check-out)'  :
+                                                        'last check-out'}`} value={endAt ? fmtDateTime(endAt) : null} />
           </div>
 
           {(bucket === 'waiting' || bucket === 'rejected') && (

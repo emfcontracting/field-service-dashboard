@@ -7,11 +7,19 @@
 //   2) table `work_orders`,        event UPDATE   → flagged / returned from invoice
 //
 // Supabase sends: { type, table, schema, record, old_record }.
+//
+// It does a second, unrelated job: the moment a change makes a completion
+// reportable to CBRE, the approval row is queued right here instead of waiting
+// for the next 15-minute sweep. The webhook is the right place for it because
+// it watches the TABLE, not the caller — the dashboard, the mobile app, the
+// e-mail import, the grid import and SQL run by hand all pass through it. The
+// sweep stays as the net. See lib/queueCompletionNow.js.
 
 import { NextResponse } from 'next/server';
 import { notifyTech } from '@/lib/expoPush';
 import { getSupabase } from '@/lib/supabase';
 import { requireHook } from '@/lib/serverAuth';
+import { queueCompletionNow, completionTriggerChanged } from '@/lib/queueCompletionNow';
 
 const QUOTE_MSG = {
   submitted: { title: '📤 Quote submitted to CBRE', body: (wo) => `${wo.wo_number} — waiting on CBRE approval` },
@@ -81,7 +89,20 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ ok: true, table, results });
+    // ── Queue a reportable completion immediately ──────────────────────────
+    // Never allowed to break the notification above, so it runs last and
+    // swallows its own errors. A quote change counts: approving one is exactly
+    // what lifts the "NTE quote pending" block off a finished job.
+    let queued = null;
+    const woId = rec.wo_id;   // both tables carry it
+    const relevant = table === 'work_order_quotes'
+      ? rec.nte_status !== old.nte_status
+      : completionTriggerChanged(rec, old);
+    if (woId && relevant) {
+      queued = await queueCompletionNow(woId);
+    }
+
+    return NextResponse.json({ ok: true, table, results, queued });
   } catch (err) {
     console.error('wo-notify-hook error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

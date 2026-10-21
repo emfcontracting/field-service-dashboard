@@ -24,6 +24,7 @@ import { getSupabase } from '@/lib/supabase';
 import { fetchAll } from '@/lib/fetchAll';
 import { CBRE_WO_PATTERN } from '@/lib/cbreEmailParser';
 import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
+import { applyQuoteApproval } from '@/lib/quoteApproval';
 import {
   parseGridExport, reconcileGrid, gridSummary,
   GRID_OUTCOME, GRID_REFRESHABLE, GRID_CREATABLE,
@@ -133,25 +134,45 @@ export default function CBREGridSyncView({ currentUser }) {
       '',
       'That records the grid status, how many days past target, and that CBRE listed it as open today.',
     ];
-    if (approvals.length) lines.push('', `${approvals.length} of them also move to "quote approved" — CBRE has decided the NTE and FSM still shows it waiting. Nothing else about the CBRE status is touched.`);
+    if (approvals.length) lines.push('', `${approvals.length} of them also move to "quote approved" — CBRE has decided the NTE and FSM still shows it waiting. The approved amount is carried over from the newest open quote onto the work order, exactly as the approval e-mail does it. Nothing else about the CBRE status is touched.`);
     if (toCreate.length) lines.push('', `${toCreate.length} work order(s) CBRE dispatched but FSM never received will be created as pending — without an NTE, because the grid export does not carry one.`);
     if (!confirm(lines.join('\n'))) return;
 
     setApplying(true);
     const seenAt = new Date().toISOString();
-    let stamped = 0, created = 0; const failed = [];
+    let stamped = 0, created = 0, nteApplied = 0; const failed = []; const nteNotes = [];
     try {
       for (const r of refreshable) {
         const { error: uErr } = await supabase.from('work_orders')
           .update(gridStampPatch(r, seenAt)).eq('wo_id', r.wo.wo_id);
-        if (uErr) failed.push(`${r.wo_number}: ${uErr.message}`); else stamped += 1;
+        if (uErr) { failed.push(`${r.wo_number}: ${uErr.message}`); continue; }
+        stamped += 1;
+
+        // The status alone is not the whole fact. "CBRE approved the quote"
+        // also means the work order's NTE is now the approved amount and our
+        // own quote row is settled — the approval e-mail has always applied
+        // both through this helper, and the grid used to apply neither. Work
+        // orders then sat at the old NTE with the quote still on "submitted",
+        // which is exactly what keeps a finished job out of Approvals: the
+        // completion check refuses to report anything whose cost exceeds the
+        // NTE or whose quote is still open. Four work orders were stranded
+        // that way by one import run on 2026-10-05.
+        if (r.approves_nte) {
+          try {
+            const res = await applyQuoteApproval(supabase, r.wo.wo_id);
+            if (res.applied) nteApplied += 1;
+            else if (res.reason && !/already in sync/i.test(res.reason)) nteNotes.push(`${r.wo_number}: ${res.reason}`);
+          } catch (e) {
+            failed.push(`${r.wo_number} (NTE): ${e.message}`);
+          }
+        }
       }
       if (toCreate.length) {
         const payload = toCreate.map(r => ({ ...gridNewWorkOrder(r, fileName), cbre_grid_seen_at: seenAt }));
         const { error: iErr } = await supabase.from('work_orders').insert(payload);
         if (iErr) failed.push(`creating ${toCreate.length}: ${iErr.message}`); else created = toCreate.length;
       }
-      setApplied({ stamped, created, approved: approvals.length, failed });
+      setApplied({ stamped, created, approved: approvals.length, nteApplied, nteNotes, failed });
     } finally {
       setApplying(false);
     }
@@ -252,7 +273,8 @@ export default function CBREGridSyncView({ currentUser }) {
 
           {applied && (
             <div className={`rounded-lg border px-4 py-3 text-sm ${applied.failed.length ? TONE.amber : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
-              {applied.stamped} work order{applied.stamped !== 1 ? 's' : ''} refreshed{applied.approved ? `, ${applied.approved} moved to quote approved` : ''}{applied.created ? `, ${applied.created} created` : ''}.
+              {applied.stamped} work order{applied.stamped !== 1 ? 's' : ''} refreshed{applied.approved ? `, ${applied.approved} moved to quote approved` : ''}{applied.nteApplied ? `, ${applied.nteApplied} NTE amount${applied.nteApplied !== 1 ? 's' : ''} carried over` : ''}{applied.created ? `, ${applied.created} created` : ''}.
+              {applied.nteNotes?.length > 0 && <div className="mt-1 text-xs text-amber-400">No amount to carry over: {applied.nteNotes.slice(0, 5).join(' · ')}</div>}
               {applied.failed.length > 0 && <div className="mt-1 text-xs text-red-400">{applied.failed.slice(0, 5).join(' · ')}</div>}
             </div>
           )}

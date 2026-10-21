@@ -27,7 +27,7 @@ import { ACTIVE_DISPUTE_STATUSES } from '@/lib/disputeStatus';
 import {
   parseGridExport, reconcileGrid, gridSummary,
   GRID_OUTCOME, GRID_REFRESHABLE, GRID_CREATABLE,
-  gridStampPatch, gridNewWorkOrder, approvingRows,
+  gridStampPatch, gridNewWorkOrder, approvingRows, unknownCodeRows,
 } from '@/lib/cbreGridReport';
 
 const supabase = getSupabase();
@@ -52,6 +52,7 @@ export default function CBREGridSyncView({ currentUser }) {
   const [rows, setRows] = useState(null);
   const [applied, setApplied] = useState(null);
   const [tab, setTab] = useState('open_both');
+  const [report, setReport] = useState(null);
   const [createSelected, setCreateSelected] = useState(() => new Set());
 
   const summary = useMemo(() => rows ? gridSummary(rows) : {}, [rows]);
@@ -60,9 +61,10 @@ export default function CBREGridSyncView({ currentUser }) {
   // Every row that moves cbre_status forward — including ones filed under
   // "we already billed" or "closed here", where the approval still counts.
   const approvals   = useMemo(() => approvingRows(rows), [rows]);
+  const unknownCodes = useMemo(() => unknownCodeRows(rows), [rows]);
 
   const reset = () => {
-    setRows(null); setApplied(null); setError(''); setFileName(''); setCreateSelected(new Set());
+    setRows(null); setApplied(null); setError(''); setFileName(''); setCreateSelected(new Set()); setReport(null);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -74,9 +76,10 @@ export default function CBREGridSyncView({ currentUser }) {
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
-      const { orders, problems } = parseGridExport(raw);
+      const { orders, problems, kind, partial } = parseGridExport(raw);
       if (problems.length) { setError(problems.join(' · ')); return; }
       if (!orders.length)  { setError('No work orders in this file.'); return; }
+      setReport({ kind, partial });
 
       const numbers = [...new Set(orders.map(o => o.wo_number))];
       const woByNumber = {};
@@ -92,18 +95,26 @@ export default function CBREGridSyncView({ currentUser }) {
       // The other direction needs everything FSM still has open. Escalated work
       // orders are left out — they are being worked in the Escalations tab and
       // their absence from the grid is already known and accounted for.
-      const openRows = await fetchAll(() => supabase
-        .from('work_orders')
-        .select('wo_id, wo_number, status, cbre_status, acknowledged, is_locked, dispute_status, date_entered, building')
-        .or('acknowledged.is.null,acknowledged.eq.false')
-        .or('is_locked.is.null,is_locked.eq.false')
-        .order('wo_id'));
-      const fsmOpen = (openRows || []).filter(w =>
-        CBRE_WO_PATTERN.test(String(w.wo_number || '').trim()) &&
-        !w.acknowledged && !w.is_locked &&
-        !ACTIVE_DISPUTE_STATUSES.includes(w.dispute_status));
+      //
+      // Only a FULL open list licenses that question at all: against the
+      // past-due report, every work order that simply is not overdue yet would
+      // look like it had left the grid. So a partial report skips both the
+      // query and the comparison.
+      let fsmOpen = [];
+      if (!partial) {
+        const openRows = await fetchAll(() => supabase
+          .from('work_orders')
+          .select('wo_id, wo_number, status, cbre_status, acknowledged, is_locked, dispute_status, date_entered, building')
+          .or('acknowledged.is.null,acknowledged.eq.false')
+          .or('is_locked.is.null,is_locked.eq.false')
+          .order('wo_id'));
+        fsmOpen = (openRows || []).filter(w =>
+          CBRE_WO_PATTERN.test(String(w.wo_number || '').trim()) &&
+          !w.acknowledged && !w.is_locked &&
+          !ACTIVE_DISPUTE_STATUSES.includes(w.dispute_status));
+      }
 
-      const rec = reconcileGrid(orders, woByNumber, fsmOpen);
+      const rec = reconcileGrid(orders, woByNumber, fsmOpen, { partial });
       setRows(rec);
       setCreateSelected(new Set(rec.filter(r => r.outcome === 'missing_fsm').map(r => r.wo_number)));
       setTab(rec.some(r => r.outcome === 'nte_approved') ? 'nte_approved'
@@ -158,8 +169,9 @@ export default function CBREGridSyncView({ currentUser }) {
       <div>
         <h2 className="text-lg font-bold text-slate-100">📋 CBRE Open Orders</h2>
         <p className="text-slate-500 text-sm mt-0.5">
-          Everything CBRE still has open on their side. Compared with FSM in both directions:
-          what they dispatched and we never received, and what we still have open that they no longer list.
+          Takes either CBRE list: the full open-orders export, or the shorter &quot;open past due&quot; report. Compared with FSM in
+          both directions — what they dispatched and we never received, and what we still have open that they no longer list.
+          The second question is only asked of the full export, because a past-due list leaves out everything that is merely on time.
         </p>
       </div>
 
@@ -180,6 +192,23 @@ export default function CBREGridSyncView({ currentUser }) {
 
       {rows && (
         <>
+          {report?.partial && (
+            <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300">
+              <strong>Past-due list — a part of CBRE&apos;s open orders, not all of it.</strong> Only work orders already past their
+              target date are in this file, so nothing is concluded from a work order being absent: &quot;gone from the grid&quot; is
+              not reported here. Upload the full open-orders export for that question.
+            </div>
+          )}
+
+          {unknownCodes.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+              <strong>{unknownCodes.length} row{unknownCodes.length !== 1 ? 's' : ''} carry a status code we have no meaning for:{' '}
+              {[...new Set(unknownCodes.map(r => r.grid_code))].join(', ')}.</strong>{' '}
+              The code is recorded exactly as CBRE wrote it, and nothing is derived from it — no quote is marked approved on this
+              basis. {unknownCodes.slice(0, 8).map(r => r.wo_number).join(', ')}{unknownCodes.length > 8 ? ` +${unknownCodes.length - 8} more` : ''}
+            </div>
+          )}
+
           {approvals.length > 0 && (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
               <strong>{approvals.length} NTE request{approvals.length !== 1 ? 's have' : ' has'} been approved at CBRE</strong> while FSM still shows them waiting.

@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
 import { calcBillable, sumHours } from '@/lib/billing';
+import { fetchAll } from '@/lib/fetchAll';
 
 const supabase = getSupabase();
 // One shared browser client (lib/supabase) — a client per file meant ~20
@@ -59,6 +60,7 @@ export default function ProfitabilityView({ currentUser }) {
   const [sortDir, setSortDir]       = useState('desc');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch]         = useState('');
+  const [loadError, setLoadError]   = useState(null);
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -68,6 +70,7 @@ export default function ProfitabilityView({ currentUser }) {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -91,7 +94,10 @@ export default function ProfitabilityView({ currentUser }) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - rangeDays);
 
-      const { data: wos } = await supabaseClient
+      // Page it: a plain select stops at PostgREST's 1000-row cap without
+      // saying so, and "This Year" is past that (1031 work orders on
+      // 2026-11-03), so the report silently dropped the oldest ones.
+      const wos = await fetchAll(() => supabaseClient
         .from('work_orders')
         .select(`
           wo_id, wo_number, building, status, nte,
@@ -102,17 +108,31 @@ export default function ProfitabilityView({ currentUser }) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .gte('date_entered', cutoff.toISOString())
-        .order('date_entered', { ascending: false });
+        .order('date_entered', { ascending: false })
+        .order('wo_id'));
 
       setWorkOrders(wos || []);
 
-      // Load daily hours for all WOs in batch
+      // Load daily hours for all WOs, in chunks.
+      // One .in() with every id builds the whole list into the URL — 1000 ids
+      // is 37,000 characters and PostgREST answers 400. The error was dropped
+      // on the floor (`const { data: allHours }` with no `error`), so the map
+      // stayed empty and EVERY hour and mile disappeared from the report at
+      // once: 15,591 hours missing from "This Year", leaving material and
+      // admin fees to make up the margin. 30/60/90 days stayed under the
+      // limit, which is why only the longest range looked wrong.
       const woIds = (wos || []).map(w => w.wo_id);
       if (woIds.length > 0) {
-        const { data: allHours } = await supabaseClient
-          .from('daily_hours_log')
-          .select('wo_id, user_id, hours_regular, hours_overtime, miles, tech_material_cost')
-          .in('wo_id', woIds);
+        const CHUNK = 100;
+        const allHours = [];
+        for (let i = 0; i < woIds.length; i += CHUNK) {
+          const { data, error } = await supabaseClient
+            .from('daily_hours_log')
+            .select('wo_id, user_id, hours_regular, hours_overtime, miles, tech_material_cost')
+            .in('wo_id', woIds.slice(i, i + CHUNK));
+          if (error) throw error;          // never silently cost-free again
+          allHours.push(...(data || []));
+        }
 
         const map = {};
         (allHours || []).forEach(h => {
@@ -129,7 +149,12 @@ export default function ProfitabilityView({ currentUser }) {
         setHoursMap(map);
       }
     } catch (e) {
+      // Visible, not just in the console: a half-loaded profitability report
+      // is worse than none — the numbers look plausible and are wrong.
       console.error('ProfitabilityView error:', e);
+      setLoadError(e.message || String(e));
+      setWorkOrders([]);
+      setHoursMap({});
     } finally {
       setLoading(false);
     }
@@ -185,6 +210,12 @@ export default function ProfitabilityView({ currentUser }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-slate-200 p-4 md:p-6 space-y-5">
+
+      {loadError && (
+        <div className="rounded-lg border border-red-500/60 bg-red-900/30 px-4 py-3 text-sm text-red-200">
+          <strong>Report incomplete — nothing below is reliable.</strong> {loadError}
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">

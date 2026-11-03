@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { useRequireRole, GateScreen } from '@/app/components/useRequireRole';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,6 +19,8 @@ function formatDateLocal(dateString) {
 }
 
 export default function SubcontractorInvoiceReview() {
+  // This page has no layout of its own, so the gate lives here.
+  const { ready, user: signedIn } = useRequireRole(['admin'], { superuserOnly: true });
   const [invoices, setInvoices] = useState([]);
   const [users, setUsers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -27,10 +30,25 @@ export default function SubcontractorInvoiceReview() {
   const [loadingComparison, setLoadingComparison] = useState(false);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  // Reviewing your own invoice is not a review. The signed-in person's own
+  // invoices are out of this list by default; the toggle is there because
+  // they still have to be marked sent and paid from somewhere.
+  const [myUserIds, setMyUserIds] = useState(new Set());
+  const [includeMine, setIncludeMine] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (ready) loadData();
+  }, [ready]);
+
+  // Switching your own invoices back off must also close one that is open,
+  // otherwise the detail pane keeps showing what the list no longer has.
+  useEffect(() => {
+    if (!includeMine && selectedInvoice && myUserIds.has(selectedInvoice.user_id)) {
+      setSelectedInvoice(null);
+      setInvoiceItems([]);
+      setEmfData([]);
+    }
+  }, [includeMine, myUserIds, selectedInvoice]);
 
   async function loadData() {
     try {
@@ -43,12 +61,27 @@ export default function SubcontractorInvoiceReview() {
 
       const { data: usersData } = await supabase
         .from('users')
-        .select('user_id, first_name, last_name, email');
+        .select('user_id, first_name, last_name, email, auth_id, same_person_as');
 
       const usersMap = {};
       (usersData || []).forEach(u => {
         usersMap[u.user_id] = u;
       });
+
+      // Which users rows are "me". The person signing in as ADMIN EMF is the
+      // same human as the technician row the SUB-… invoices belong to — two
+      // rows, two e-mail addresses, no shared key. users.same_person_as holds
+      // that link, and it counts in both directions so it only has to be set
+      // on one of the two rows.
+      const ids = new Set();
+      if (signedIn?.user_id) {
+        ids.add(signedIn.user_id);
+        if (signedIn.same_person_as) ids.add(signedIn.same_person_as);
+        for (const u of usersData || []) {
+          if (u.same_person_as === signedIn.user_id) ids.add(u.user_id);
+        }
+      }
+      setMyUserIds(ids);
 
       setInvoices(invoicesData || []);
       setUsers(usersMap);
@@ -141,7 +174,11 @@ export default function SubcontractorInvoiceReview() {
 
   const hasDiscrepancy = discrepancies.regularHours || discrepancies.otHours || discrepancies.miles || discrepancies.techMaterial;
 
+  const myInvoiceCount = invoices.filter(inv => myUserIds.has(inv.user_id)).length;
+
   const filteredInvoices = invoices.filter(inv => {
+    // Your own invoices: hidden unless you ask for them.
+    if (!includeMine && myUserIds.has(inv.user_id)) return false;
     const user = users[inv.user_id];
     const matchesSearch = searchTerm === '' || 
       inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -152,6 +189,8 @@ export default function SubcontractorInvoiceReview() {
 
     return matchesSearch && matchesFilter;
   });
+
+  if (!ready) return <GateScreen />;
 
   if (loading) {
     return (
@@ -207,6 +246,19 @@ export default function SubcontractorInvoiceReview() {
                     {f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
+                {myInvoiceCount > 0 && (
+                  <button
+                    onClick={() => setIncludeMine(v => !v)}
+                    title="Your own invoices are left out of the review — switch them on when you need to mark one sent or paid."
+                    className={`px-3 py-1 rounded-lg text-sm ml-auto ${
+                      includeMine
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-[#0d0d14] text-slate-500 hover:bg-[#1e1e2e]'
+                    }`}
+                  >
+                    {includeMine ? `Hide mine (${myInvoiceCount})` : `Show mine (${myInvoiceCount})`}
+                  </button>
+                )}
               </div>
             </div>
 

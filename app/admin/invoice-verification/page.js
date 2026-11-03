@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { fmtDate, fmtDateTime } from '@/lib/dates';
+import { useRequireRole, GateScreen } from '@/app/components/useRequireRole';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -12,6 +13,8 @@ const supabase = createClient(
 );
 
 export default function InvoiceVerification() {
+  // No layout around /admin, so the login/role gate lives here.
+  const { ready } = useRequireRole(['admin'], { superuserOnly: true });
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef(null);
@@ -46,9 +49,10 @@ export default function InvoiceVerification() {
   const [entryMode, setEntryMode] = useState('manual');
 
   useEffect(() => {
+    if (!ready) return;
     loadUsers();
     loadSavedVerifications();
-  }, []);
+  }, [ready]);
 
   async function loadUsers() {
     try {
@@ -403,6 +407,8 @@ export default function InvoiceVerification() {
     Math.abs(diff.otHours) > 0.1 ||
     Math.abs(diff.miles) > 0.5
   );
+
+  if (!ready) return <GateScreen />;
 
   if (loading) {
     return (

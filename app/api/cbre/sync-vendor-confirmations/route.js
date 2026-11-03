@@ -18,6 +18,7 @@ import { kindsFromActionValue, ACTIONS } from '@/lib/cbreVendorForm';
 import { requireCronOrStaff } from '@/lib/serverAuth';
 import { withCronRun } from '@/lib/cronRun';
 import { acknowledgeSubmittedCompletions, autoAcknowledgeNote } from '@/lib/completionAcknowledge';
+import { applySubmissionStatus } from '@/lib/cbreSubmissionStatus';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -43,9 +44,12 @@ const REJECT_SUBJECT = 'Vendor App Submission Rejection';
 // automatic producers do not re-queue an already-submitted item.
 const WO_STAMP = {
   cbre_acknowledge: (now) => ({ cbre_acknowledged_at: now, cbre_acknowledged_via: 'vendor_app_form' }),
-  cbre_nte:         (now) => ({ cbre_nte_submitted_at: now }),
+  cbre_nte:         (now) => ({ cbre_nte_submitted_at: now, cbre_quote_submitted_at: now, cbre_quote_submitted_via: 'vendor_app_form' }),
   cbre_complete:    (now) => ({ cbre_completion_submitted_at: now, completion_transferred: true, completion_transferred_at: now }),
   cbre_arrival:     (now) => ({ cbre_arrival_submitted_at: now }),
+  // cbre_decline has no timestamp column of its own; the status write below
+  // is the whole record. Listed here so the kind is visibly accounted for.
+  cbre_decline:     () => ({}),
 };
 
 // IMAP lives in lib/imap.js.
@@ -159,8 +163,17 @@ async function handle(request) {
 
       // 2) keep the auto producers from re-queueing (mirror markSubmitted).
       if (WO_STAMP[kind]) {
-        await supabase.from('work_orders').update(WO_STAMP[kind](whenIso)).eq('wo_id', wo.wo_id);
+        const patch = WO_STAMP[kind](whenIso);
+        if (Object.keys(patch).length) {
+          await supabase.from('work_orders').update(patch).eq('wo_id', wo.wo_id);
+        }
       }
+      // The same cbre_status write the Approvals tab makes when the office
+      // marks a row submitted by hand — this is the path for the rows it
+      // forgot. Guarded, so a confirmation that arrives after CBRE has already
+      // approved the quote cannot pull the work order back.
+      const { error: statusErr } = await applySubmissionStatus(supabase, kind, [wo.wo_id], whenIso);
+      if (statusErr) result.errors.push(`${woNum}: CBRE status update failed: ${statusErr.message}`);
       // A confirmed completion means CBRE has the work order closed on their
       // side and is waiting for the invoice — the same single step as the
       // "Acknowledge Completion & Lock" button, done without the office having

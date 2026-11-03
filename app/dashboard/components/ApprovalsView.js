@@ -30,6 +30,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { acknowledgeSubmittedCompletions } from '@/lib/completionAcknowledge';
+import { applySubmissionStatus } from '@/lib/cbreSubmissionStatus';
 import { FIELD_LABEL } from '@/lib/cbreVendorForm';
 
 const supabase = getSupabase();
@@ -309,6 +310,30 @@ export default function ApprovalsView({ userInfo }) {
           .update({ cbre_nte_submitted_at: now, cbre_nte_submitted_by: userInfo?.user_id ?? null })
           .in('wo_id', nteWoIds);
         if (nteErr) setError(`Marked sent, but the NTE stamp failed: ${nteErr.message}`);
+
+        // …and the status the rest of the app reads. Without it the request is
+        // invisible: the StatsCards tile, the "Waiting on CBRE" tab and the
+        // health digest all filter on cbre_status = 'quote_submitted'.
+        // Guarded in lib/cbreSubmissionStatus.js so it can never pull a work
+        // order back from quote_approved.
+        const { error: nteStatusErr } = await applySubmissionStatus(supabase, 'cbre_nte', nteWoIds, now);
+        if (nteStatusErr) setError(`Marked sent, but the CBRE status update failed: ${nteStatusErr.message}`);
+
+        // The amount we asked for, per work order — the payload carries it as
+        // the form's NTE field, which is what was actually submitted.
+        for (const r of nteRows) {
+          const amount = Number(r.payload?.['5wAdLAyzm']);
+          const { error: amtErr } = await supabase
+            .from('work_orders')
+            .update({
+              cbre_quote_submitted_at: now,
+              cbre_quote_submitted_by: userInfo?.user_id ?? null,
+              cbre_quote_submitted_via: 'vendor_app_form',
+              ...(Number.isFinite(amount) ? { cbre_quote_submitted_amount: amount } : {}),
+            })
+            .eq('wo_id', r.wo_id);
+          if (amtErr) { setError(`Marked sent, but the quote stamp failed: ${amtErr.message}`); break; }
+        }
       }
       // …and the technician's written quote itself: pending → submitted, the
       // same transition the "Mark as uploaded to CBRE" button in the NTE modal makes.
@@ -320,6 +345,20 @@ export default function ApprovalsView({ userInfo }) {
           .in('quote_id', quoteIds)
           .eq('nte_status', 'pending');
         if (qErr) setError(`Marked sent, but the quote status update failed: ${qErr.message}`);
+      }
+
+      // Declines: we have told CBRE we are not taking this work order. Nothing
+      // was written back here until 2026-11-03, so a declined ticket was
+      // indistinguishable from one nobody had touched. Daniel's decision: set
+      // cbre_status = 'cancelled' at the moment we submit, rather than waiting
+      // for CBRE's cancellation mail — that mail sets the same value later and
+      // email-sync is idempotent.
+      const declineWoIds = affected
+        .filter((r) => r.kind === 'cbre_decline' && r.wo_id)
+        .map((r) => r.wo_id);
+      if (declineWoIds.length) {
+        const { error: decErr } = await applySubmissionStatus(supabase, 'cbre_decline', declineWoIds, now);
+        if (decErr) setError(`Marked sent, but the decline status update failed: ${decErr.message}`);
       }
 
       // Completions: stamp so it is recorded as reported to CBRE, and close the

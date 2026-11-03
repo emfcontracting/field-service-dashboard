@@ -30,6 +30,15 @@ const supabase = createClient(
 const FROM_ADDR = 'forms@app.smartsheet.com';
 const SUBJECT_MATCH = 'Confirmation - Vendor App Submission';
 
+// The other half of the loop: CBRE can DECLINE a submission, and that arrives
+// as its own mail with its own subject. Nothing read it until 2026-11-03, so
+// every target-date request ever declined still sat at 'sent' on our side —
+// all 41 of them — and the office had no way to know. Matched on subject
+// alone, deliberately: the confirmation comes from forms@app.smartsheet.com
+// while the decline is sent by the sheet's automation, and the exact sender is
+// not something we should depend on.
+const REJECT_SUBJECT = 'Vendor App Submission Rejection';
+
 // Per-kind work-order stamp applied when a confirmation closes the loop, so the
 // automatic producers do not re-queue an already-submitted item.
 const WO_STAMP = {
@@ -45,6 +54,16 @@ async function fetchConfirmations(searchDays) {
     account: 'import',
     box: 'INBOX',
     criteria: [['FROM', FROM_ADDR], ['SUBJECT', SUBJECT_MATCH], sinceDays(searchDays)],
+    bodyPreference: 'text',
+  });
+  return messages;
+}
+
+async function fetchRejections(searchDays) {
+  const { messages } = await fetchMessages({
+    account: 'import',
+    box: 'INBOX',
+    criteria: [['SUBJECT', REJECT_SUBJECT], sinceDays(searchDays)],
     bodyPreference: 'text',
   });
   return messages;
@@ -74,7 +93,10 @@ async function handle(request) {
   const searchDays = Math.min(Math.max(parseInt(searchParams.get('searchDays') || '14', 10) || 14, 1), 90);
   const dryRun = searchParams.get('dryRun') === 'true';
 
-  const result = { scanned: 0, confirmed: 0, skipped: 0, unmatched: [], errors: [], rows: [] };
+  const result = {
+    scanned: 0, confirmed: 0, skipped: 0, unmatched: [], errors: [], rows: [],
+    rejectionsScanned: 0, rejected: 0, rejectionsUnmatched: [], rejectedRows: [],
+  };
 
   try {
     const emails = await fetchConfirmations(searchDays);
@@ -168,7 +190,76 @@ async function handle(request) {
       result.rows.push({ wo_number: woNum, kind, action: label });
     }
 
-    return Response.json({ ...result, message: `Confirmed ${result.confirmed} of ${result.scanned} scanned.` });
+    // ── Declines ────────────────────────────────────────────────────────────
+    // Same parse, opposite outcome. A decline is never acted on automatically:
+    // the row is marked rejected and the reason written onto the work order, so
+    // a person decides what to do instead. Nothing is re-queued.
+    const rejections = await fetchRejections(searchDays);
+    result.rejectionsScanned = rejections.length;
+
+    for (const e of rejections) {
+      const text = bodyText(e);
+      const actionVal = field(text, 'Action');
+      const woNum = field(text, 'Work Order #');
+      if (!actionVal || !woNum) { result.rejectionsUnmatched.push('parse-failed (Action/WO# not found)'); continue; }
+
+      const kinds = kindsFromActionValue(actionVal);
+      if (!kinds.length) { result.rejectionsUnmatched.push(`${woNum}: unknown action "${actionVal}"`); continue; }
+
+      const { data: wo, error: woErr } = await supabase
+        .from('work_orders')
+        .select('wo_id, wo_number, comments')
+        .eq('wo_number', woNum)
+        .maybeSingle();
+      if (woErr) { result.errors.push(`${woNum}: ${woErr.message}`); continue; }
+      if (!wo) { result.rejectionsUnmatched.push(`${woNum}: work order not found`); continue; }
+
+      const { data: rows, error: rErr } = await supabase
+        .from('approval_requests')
+        .select('approval_id, status, kind, reject_reason')
+        .eq('wo_id', wo.wo_id)
+        .in('kind', kinds)
+        .in('status', ['sent', 'approved'])
+        .order('sent_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (rErr) { result.errors.push(`${woNum}: ${rErr.message}`); continue; }
+      const row = rows && rows[0];
+      if (!row) { result.skipped++; continue; }
+
+      const whenIso = (e.date instanceof Date ? e.date : new Date(e.date)).toISOString();
+      const label = ACTIONS[row.kind]?.value || row.kind;
+
+      if (dryRun) {
+        result.rejectedRows.push({ wo_number: woNum, kind: row.kind, action: label, would_reject: row.approval_id });
+        result.rejected++;
+        continue;
+      }
+
+      const { error: uErr } = await supabase
+        .from('approval_requests')
+        .update({
+          status: 'rejected',
+          decided_at: whenIso,
+          reject_reason: row.reject_reason || `Declined by CBRE (${label})`,
+        })
+        .eq('approval_id', row.approval_id)
+        .in('status', ['sent', 'approved']);   // idempotent guard
+      if (uErr) { result.errors.push(`${woNum}: ${uErr.message}`); continue; }
+
+      const note = `[CBRE VENDOR APP DECLINED] ${whenIso.slice(0, 16).replace('T', ' ')}\n✗ ${label} was declined by CBRE. Nothing was changed on their side — decide what to send instead.`;
+      const merged = wo.comments ? `${wo.comments}\n\n${note}` : note;
+      const { error: cErr } = await supabase.from('work_orders').update({ comments: merged }).eq('wo_id', wo.wo_id);
+      if (cErr) result.errors.push(`${woNum}: comment update failed: ${cErr.message}`);
+
+      result.rejected++;
+      result.rejectedRows.push({ wo_number: woNum, kind: row.kind, action: label });
+    }
+
+    return Response.json({
+      ...result,
+      message: `Confirmed ${result.confirmed} of ${result.scanned} scanned; ${result.rejected} decline(s) of ${result.rejectionsScanned}.`,
+    });
   } catch (e) {
     return Response.json({ ...result, error: e.message }, { status: 500 });
   }

@@ -74,6 +74,22 @@ const HOLD_TEXT = {
 
 const holdComment = (reason, since) => (HOLD_TEXT[reason] || HOLD_TEXT.other)(since);
 
+// Every state in which CBRE has DECIDED the quote. "On hold pending CBRE quote
+// approval" is then simply untrue, and the approver can see that it is: on
+// 2026-11-03 we asked for an extension on C3299884 with that sentence while
+// CBRE had approved its quote on 2026-10-01, and the request came back
+// declined within three hours. waiting_reason had never been cleared.
+const QUOTE_DECIDED = [
+  'quote_approved', 'quote_rejected', 'cancelled',
+  'CPW', 'CIS', 'CA1', 'CA2', 'CIR', 'CMP', 'invoice_rejected',
+];
+
+/** Is the reason we would put on CBRE's record still true? */
+const reasonStillHolds = (wo) => {
+  if (wo.waiting_reason !== 'cbre_approval') return true;
+  return !QUOTE_DECIDED.includes(wo.cbre_status) && !QUOTE_DECIDED.includes(wo.cbre_posting_status);
+};
+
 async function GET_impl(request) { return handle(request); }
 async function POST_impl(request) { return handle(request); }
 
@@ -104,7 +120,11 @@ async function handle(request) {
     dryRun,
     limit,
     extensionDays,
-    excluded: { notExposed: [], notAging: [], notACbreNumber: [], noBuildingCode: [] },
+    excluded: {
+      notExposed: [], notAging: [], notACbreNumber: [], noBuildingCode: [],
+      reasonResolved: [],   // the hold reason stopped being true
+      alreadyComplete: [],  // the crew is finished; this belongs in the completion queue
+    },
     byReason: {},
     byLevel: {},
     rows: [],
@@ -118,7 +138,7 @@ async function handle(request) {
         'wo_id', 'wo_number', 'building', 'priority', 'status',
         'date_entered', 'created_at', 'target_completion_at', 'date_completed',
         'waiting_reason', 'waiting_since',
-        'cbre_hold_reported_at', 'cbre_posting_status',
+        'cbre_hold_reported_at', 'cbre_posting_status', 'cbre_status',
         'qb_invoice_number', 'vwas_invoice_submitted',
         'acknowledged', 'is_locked', 'dispute_status',
       ].join(','))
@@ -147,6 +167,20 @@ async function handle(request) {
         result.excluded.notExposed.push(wo.wo_number);
         continue;
       }
+      // Nothing we put on CBRE's permanent record may be false by the time it
+      // is read. A reason that has since been settled is exactly that.
+      if (!reasonStillHolds(wo)) {
+        result.excluded.reasonResolved.push(`${wo.wo_number} (${wo.waiting_reason} → ${wo.cbre_status || wo.cbre_posting_status})`);
+        continue;
+      }
+      // The crew is done. What CBRE needs then is the completion, not more
+      // time — asking for an extension on a finished job reads as a vendor who
+      // has lost track of it, and queue-completions already handles the rest.
+      if (wo.status === 'completed') {
+        result.excluded.alreadyComplete.push(wo.wo_number);
+        continue;
+      }
+
       const risk = agingRisk(wo);
       if (!risk || !levels.includes(risk.level)) {
         result.excluded.notAging.push(`${wo.wo_number} (${risk ? `${risk.level}, ${risk.days}d` : 'no basis'})`);

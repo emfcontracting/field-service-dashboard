@@ -104,6 +104,15 @@ function htmlToPipeRows(html) {
     .join('\n');
 }
 
+// Why a message could not be parsed, in one short line. Only built for the
+// dryRun report — it is the difference between "the mail never arrived in a
+// readable form" and "the table looks different than we think".
+function parseDiag(e, text) {
+  const t = String(e?.text || ''), h = String(e?.html || '');
+  const head = String(text || '').replace(/\s+/g, ' ').slice(0, 120);
+  return `text=${t.length} html=${h.length} parsed=${String(text || '').length} head="${head}"`;
+}
+
 function bodyText(e) {
   // A real plaintext part that already carries the table wins.
   const text = e?.text && e.text.trim() ? e.text : '';
@@ -144,7 +153,12 @@ async function handle(request) {
       const text = bodyText(e);
       const actionVal = field(text, 'Action');
       const woNum = field(text, 'Work Order #');
-      if (!actionVal || !woNum) { result.unmatched.push('parse-failed (Action/WO# not found)'); continue; }
+      if (!actionVal || !woNum) {
+        result.unmatched.push(
+          dryRun ? `parse-failed · ${parseDiag(e, text)}` : 'parse-failed (Action/WO# not found)'
+        );
+        continue;
+      }
 
       // One Action string can belong to several kinds ("Update Next Arrival
       // Time" is both the manual ETA and the automatic arrival report), so we
@@ -248,7 +262,12 @@ async function handle(request) {
       const text = bodyText(e);
       const actionVal = field(text, 'Action');
       const woNum = field(text, 'Work Order #');
-      if (!actionVal || !woNum) { result.rejectionsUnmatched.push('parse-failed (Action/WO# not found)'); continue; }
+      if (!actionVal || !woNum) {
+        result.rejectionsUnmatched.push(
+          dryRun ? `parse-failed · ${parseDiag(e, text)}` : 'parse-failed (Action/WO# not found)'
+        );
+        continue;
+      }
 
       const kinds = kindsFromActionValue(actionVal);
       if (!kinds.length) { result.rejectionsUnmatched.push(`${woNum}: unknown action "${actionVal}"`); continue; }

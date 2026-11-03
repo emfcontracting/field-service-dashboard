@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import WorkOrdersTable, { hasUnackCbreUpdate } from './WorkOrdersTable';
 import StatsCards from './StatsCards';
-import WorkOrdersFilters from './WorkOrdersFilters';
+import WorkOrdersFilters, { NO_VALUE } from './WorkOrdersFilters';
 import ExportDropdown from './ExportDropdown';
 import { exportCostDetailCSV } from '../utils/exportHelpers';
 import { extractPriorityCode } from '@/lib/priorityCodes';
@@ -70,7 +70,9 @@ export default function WorkOrdersView({
     // matches on update_required_flagged_at instead of status.
     if (statusFilter !== 'all') {
       const matchStatus = (wo, val) =>
-        val === 'update_required' ? !!wo.update_required_flagged_at : wo.status === val;
+        val === 'update_required' ? !!wo.update_required_flagged_at
+        : val === NO_VALUE       ? !wo.status
+        : wo.status === val;
 
       if (Array.isArray(statusFilter)) {
         filtered = filtered.filter(wo => statusFilter.some(val => matchStatus(wo, val)));
@@ -84,7 +86,9 @@ export default function WorkOrdersView({
     // cbre_status value — match it against the flag instead.
     if (cbreStatusFilter !== 'all') {
       const matchCbre = (wo, val) =>
-        val === 'escalation' ? wo.escalation === true : wo.cbre_status === val;
+        val === 'escalation' ? wo.escalation === true
+        : val === NO_VALUE   ? !wo.cbre_status
+        : wo.cbre_status === val;
       if (Array.isArray(cbreStatusFilter)) {
         filtered = filtered.filter(wo => cbreStatusFilter.some(val => matchCbre(wo, val)));
       } else {
@@ -93,9 +97,17 @@ export default function WorkOrdersView({
     }
 
     // Priority filter - match by canonical P-code (handles "P1", "P1 - Emergency", etc.)
+    // Priority filter - match by canonical P-code, and fall back to the raw
+    // value so legacy entries like "emergency" (which maps to no P-code) are
+    // still reachable. NO_VALUE matches rows with no priority at all.
     if (priorityFilter !== 'all') {
       const codes = Array.isArray(priorityFilter) ? priorityFilter : [priorityFilter];
-      filtered = filtered.filter(wo => codes.includes(extractPriorityCode(wo.priority)));
+      const matchPriority = (wo) => {
+        if (!wo.priority) return codes.includes(NO_VALUE);
+        const code = extractPriorityCode(wo.priority);
+        return code ? codes.includes(code) : codes.includes(String(wo.priority).trim());
+      };
+      filtered = filtered.filter(matchPriority);
     }
 
     // Tech filter - handle both single value and array
@@ -388,6 +400,7 @@ export default function WorkOrdersView({
         users={users}
         onNewWorkOrder={onNewWorkOrder}
         onImport={onImport}
+        workOrders={workOrders}
         nteFilter={nteFilter}
         setNteFilter={setNteFilter}
         pendingNTECount={pendingNTECount}

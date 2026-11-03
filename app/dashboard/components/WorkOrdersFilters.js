@@ -1,8 +1,36 @@
 // app/dashboard/components/WorkOrdersFilters.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '@/lib/apiClient';
+import { extractPriorityCode } from '@/lib/priorityCodes';
+
+// ── Filtering for what is actually there ─────────────────────────────────────
+// Every dropdown used to offer a fixed, hand-written list, so a value the data
+// really contained but the list did not know was impossible to filter for.
+// On 2026-11-03 that was 110 of 229 open work orders with no CBRE status at
+// all, 13 whose cbre_status carried a posting code (CMP, CPW), and 4 still on
+// the legacy priority "emergency" — none of them reachable through any
+// combination of checkboxes.
+//
+// The curated list still defines order, labels and colours. Anything else the
+// loaded work orders contain is appended, and an explicit "no value" entry is
+// added whenever at least one row has none.
+export const NO_VALUE = '__none__';
+
+function withPresentValues(base, rows, read, noneLabel) {
+  const known = new Set(base.map((o) => o.value));
+  const extra = new Map();
+  let hasNone = false;
+  for (const r of rows || []) {
+    const v = read(r);
+    if (v === null || v === undefined || v === '') { hasNone = true; continue; }
+    if (!known.has(v) && !extra.has(v)) extra.set(v, { value: v, label: v, color: 'bg-slate-700' });
+  }
+  const out = [...base, ...extra.values()];
+  if (hasNone) out.push({ value: NO_VALUE, label: noneLabel, color: 'bg-slate-800' });
+  return out;
+}
 
 export default function WorkOrdersFilters({
   searchTerm,
@@ -21,7 +49,8 @@ export default function WorkOrdersFilters({
   exportDropdown,
   nteFilter,
   setNteFilter,
-  pendingNTECount = 0
+  pendingNTECount = 0,
+  workOrders = []
 }) {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
@@ -46,7 +75,7 @@ export default function WorkOrdersFilters({
 
   const allUsers = [...techs, ...admins];
 
-  const statusOptions = [
+  const STATUS_BASE = [
     { value: 'missing_data', label: '🚩 Missing Data', color: 'bg-red-600 animate-pulse' },
     { value: 'update_required', label: '🔵 Update Required', color: 'bg-blue-600 animate-pulse' },
     { value: 'pending', label: 'Pending', color: 'bg-slate-600' },
@@ -58,7 +87,7 @@ export default function WorkOrdersFilters({
     { value: 'completed', label: 'Completed', color: 'bg-emerald-600' }
   ];
 
-  const priorityOptions = [
+  const PRIORITY_BASE = [
     { value: 'P1', label: '🚨 P1 · Emergency', color: 'bg-red-600' },
     { value: 'P2', label: '⚡ P2 · Urgent', color: 'bg-orange-600' },
     { value: 'P3', label: '🔥 P3 · Urgent (Non-Emerg.)', color: 'bg-amber-600' },
@@ -71,7 +100,7 @@ export default function WorkOrdersFilters({
     { value: 'P23', label: '📣 P23 · Complaints', color: 'bg-violet-600' }
   ];
 
-  const cbreStatusOptions = [
+  const CBRE_BASE = [
     { value: 'escalation', label: '🚨 Escalation', color: 'bg-red-600' },
     { value: 'quote_approved', label: '✅ Approved', color: 'bg-emerald-600' },
     { value: 'quote_rejected', label: '❌ Quote Rejected', color: 'bg-red-700' },
@@ -81,6 +110,25 @@ export default function WorkOrdersFilters({
     { value: 'pending_quote', label: '📋 Pending', color: 'bg-orange-600' },
     { value: 'cancelled', label: '🚫 Cancelled', color: 'bg-slate-600' }
   ];
+
+  // The lists the dropdowns actually render: curated entries first, then
+  // whatever else is in the data, then "no value" if any row has none.
+  const statusOptions = useMemo(
+    () => withPresentValues(STATUS_BASE, workOrders, (wo) => wo.status, '— no status —'),
+    [workOrders]
+  );
+  const priorityOptions = useMemo(
+    () => withPresentValues(
+      PRIORITY_BASE, workOrders,
+      (wo) => extractPriorityCode(wo.priority) || (wo.priority ? String(wo.priority).trim() : null),
+      '— no priority —'
+    ),
+    [workOrders]
+  );
+  const cbreStatusOptions = useMemo(
+    () => withPresentValues(CBRE_BASE, workOrders, (wo) => wo.cbre_status, '— no CBRE status —'),
+    [workOrders]
+  );
 
   useEffect(() => {
     const handleClickOutside = (e) => {

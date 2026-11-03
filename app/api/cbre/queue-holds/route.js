@@ -33,6 +33,7 @@ import { withCronRun } from '@/lib/cronRun';
 import { CBRE_WO_PATTERN } from '@/lib/cbreEmailParser';
 import { buildCbrePayload, fmtDate } from '@/lib/cbreVendorForm';
 import { agingRisk, isAgingExposed } from '@/lib/agingRisk';
+import { extensionEligibility, extensionComment, problemCodeOwner, problemCode, FILL_IN } from '@/lib/cbreExtensionPolicy';
 import { siteCode } from '@/lib/siteDistances';
 
 export const dynamic = 'force-dynamic';
@@ -55,40 +56,11 @@ const VENDOR_NAME = process.env.CBRE_VENDOR_NAME || 'EMF Contracting LLC(Gaston)
 // and a target change on every hold would be noise on their record.
 const REPORTABLE_LEVELS = ['at_risk', 'past_due'];
 
-// How each hold reads on CBRE's permanent record. Plain, factual, and it names
-// the date the wait started so the note can be checked.
-const HOLD_TEXT = {
-  parts_ordered: (since) =>
-    `On hold awaiting material${since ? ` since ${since}` : ''}. Requesting a target completion date extension so the work order is not closed out while parts are on order.`,
-  equipment_backorder: (since) =>
-    `On hold — equipment on back order${since ? ` since ${since}` : ''}. Requesting a target completion date extension so the work order is not closed out while we wait on the supplier.`,
-  cbre_approval: (since) =>
-    `On hold pending CBRE quote approval${since ? ` since ${since}` : ''}. Requesting a target completion date extension so the work order is not closed out while the quote is with the approver.`,
-  site_access: (since) =>
-    `On hold — no site access${since ? ` since ${since}` : ''}. Requesting a target completion date extension.`,
-  return_trip_wait: (since) =>
-    `On hold awaiting return-trip release${since ? ` since ${since}` : ''}. Requesting a target completion date extension.`,
-  other: (since) =>
-    `On hold${since ? ` since ${since}` : ''}. Requesting a target completion date extension so the work order is not closed out.`,
-};
-
-const holdComment = (reason, since) => (HOLD_TEXT[reason] || HOLD_TEXT.other)(since);
-
-// Every state in which CBRE has DECIDED the quote. "On hold pending CBRE quote
-// approval" is then simply untrue, and the approver can see that it is: on
-// 2026-11-03 we asked for an extension on C3299884 with that sentence while
-// CBRE had approved its quote on 2026-10-01, and the request came back
-// declined within three hours. waiting_reason had never been cleared.
-const QUOTE_DECIDED = [
-  'quote_approved', 'quote_rejected', 'cancelled',
-  'CPW', 'CIS', 'CA1', 'CA2', 'CIR', 'CMP', 'invoice_rejected',
-];
-
-/** Is the reason we would put on CBRE's record still true? */
-const reasonStillHolds = (wo) => {
-  if (wo.waiting_reason !== 'cbre_approval') return true;
-  return !QUOTE_DECIDED.includes(wo.cbre_status) && !QUOTE_DECIDED.includes(wo.cbre_posting_status);
-};
+// WHAT MAY BE SUBMITTED AT ALL now lives in lib/cbreExtensionPolicy.js, which
+// encodes CBRE's guidance of 2026-11-03 and the wording they themselves gave
+// as acceptable. The old HOLD_TEXT table is gone: five of its six sentences
+// were on CBRE's published list of reasons that get declined, "On hold pending
+// CBRE quote approval" word for word among them.
 
 async function GET_impl(request) { return handle(request); }
 async function POST_impl(request) { return handle(request); }
@@ -122,9 +94,9 @@ async function handle(request) {
     extensionDays,
     excluded: {
       notExposed: [], notAging: [], notACbreNumber: [], noBuildingCode: [],
-      reasonResolved: [],   // the hold reason stopped being true
-      alreadyComplete: [],  // the crew is finished; this belongs in the completion queue
+      notAllowed: [],       // CBRE's own rules say this one may not be asked for
     },
+    byOwner: {},            // UPS vs CBRE problem codes, for sizing
     byReason: {},
     byLevel: {},
     rows: [],
@@ -139,6 +111,7 @@ async function handle(request) {
         'date_entered', 'created_at', 'target_completion_at', 'date_completed',
         'waiting_reason', 'waiting_since',
         'cbre_hold_reported_at', 'cbre_posting_status', 'cbre_status',
+        'cbre_status_updated_at', 'work_order_description',
         'qb_invoice_number', 'vwas_invoice_submitted',
         'acknowledged', 'is_locked', 'dispute_status',
       ].join(','))
@@ -167,17 +140,13 @@ async function handle(request) {
         result.excluded.notExposed.push(wo.wo_number);
         continue;
       }
-      // Nothing we put on CBRE's permanent record may be false by the time it
-      // is read. A reason that has since been settled is exactly that.
-      if (!reasonStillHolds(wo)) {
-        result.excluded.reasonResolved.push(`${wo.wo_number} (${wo.waiting_reason} → ${wo.cbre_status || wo.cbre_posting_status})`);
-        continue;
-      }
-      // The crew is done. What CBRE needs then is the completion, not more
-      // time — asking for an extension on a finished job reads as a vendor who
-      // has lost track of it, and queue-completions already handles the rest.
-      if (wo.status === 'completed') {
-        result.excluded.alreadyComplete.push(wo.wo_number);
+      // CBRE decides what may be asked; we only ask where their own guidance
+      // says a request will be read.
+      const owner = problemCodeOwner(wo);
+      result.byOwner[owner || 'unknown'] = (result.byOwner[owner || 'unknown'] || 0) + 1;
+      const eligible = extensionEligibility(wo);
+      if (!eligible.allowed) {
+        result.excluded.notAllowed.push(`${wo.wo_number} (${problemCode(wo) || 'no code'}: ${eligible.reason})`);
         continue;
       }
 
@@ -193,6 +162,12 @@ async function handle(request) {
       }
 
       const since = wo.waiting_since ? fmtDate(wo.waiting_since) : null;
+      const comment = extensionComment(eligible.kind, {
+        approvedAt: eligible.approvedAt,
+        targetAt: eligible.targetAt,
+        waitingSince: wo.waiting_since,
+        proposedTarget: targetStr,
+      });
       const { payload, readable, problems } = buildCbrePayload({
         kind: 'cbre_target_date',
         woNumber: wo.wo_number,
@@ -200,7 +175,7 @@ async function handle(request) {
         requestorEmail: REQUESTOR_EMAIL,
         vendor: VENDOR_NAME,
         targetAt: target,
-        comment: holdComment(wo.waiting_reason, since),
+        comment,
       });
       if (problems.length) {
         result.errors.push(`${wo.wo_number}: ${problems.join('; ')}`);
@@ -210,11 +185,16 @@ async function handle(request) {
       payload._readable = {
         ...readable,
         holdReason: wo.waiting_reason,
+        policyKind: eligible.kind,
+        problemCode: problemCode(wo),
+        problemOwner: owner,
         waitingSince: wo.waiting_since || null,
         proposedTarget: targetStr,
         // Says out loud that the date is ours, not CBRE's, and not confirmed by
         // anyone — change it in the form if you know better.
-        warning: `Proposed target ${targetStr} is ${extensionDays} days out and is our estimate, not a confirmed date. Change it on the form if you know when the work can actually be done.`,
+        warning: eligible.needsOfficeDetail
+          ? `Replace every ${FILL_IN} before submitting — CBRE declines a parts request that does not give the original delivery date, the reason for the delay and the revised date. Proposed target ${targetStr} is ${extensionDays} days out and is our estimate.`
+          : `Proposed target ${targetStr} is ${extensionDays} days out and is our estimate, not a confirmed date. Change it on the form if you know when the work can actually be done.`,
         agingDays: risk.days,
         agingLevel: risk.level,
         agingBasis: risk.source,
@@ -233,6 +213,7 @@ async function handle(request) {
         summary: [
           code,
           wo.waiting_reason.replace(/_/g, ' '),
+          eligible.needsOfficeDetail ? 'NEEDS DETAIL BEFORE SENDING' : null,
           since ? `waiting since ${since}` : null,
           `${risk.days}d past target`,
           risk.level === 'past_due' ? 'PAST CBRE cut-off' : `closes in ${risk.daysToClose}d`,

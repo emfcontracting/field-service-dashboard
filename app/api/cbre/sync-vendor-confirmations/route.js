@@ -114,12 +114,19 @@ function parseDiag(e, text) {
 }
 
 function bodyText(e) {
-  // A real plaintext part that already carries the table wins.
-  const text = e?.text && e.text.trim() ? e.text : '';
-  if (text && text.includes('|')) return text;
+  // The HTML wins whenever there is any, because it is the only place the
+  // table structure survives. mailparser hands us a `text` field even for
+  // these html-only mails — it converts the HTML itself — and that conversion
+  // flattens the table into prose. Worse, it does contain pipe characters, but
+  // in the footer ("© 2026 Smartsheet Inc. | Contact | Privacy Policy | …"),
+  // not in a table. A first attempt at this preferred `text` whenever it held
+  // a pipe and therefore never looked at the HTML at all: 95 of 95 mails still
+  // failed to parse, with text=2105 html=7837 in the dry run.
   const rows = htmlToPipeRows(e?.html);
   if (rows) return rows;
-  return text || String(e?.html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+  const text = String(e?.text || '');
+  if (text.trim()) return text;
+  return String(e?.html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
 }
 
 // The confirmation body is a table of "| Label | Value |" rows.

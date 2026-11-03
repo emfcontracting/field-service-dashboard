@@ -73,10 +73,42 @@ async function fetchRejections(searchDays) {
   return messages;
 }
 
-// Prefer the plaintext part; fall back to a rough de-tagged HTML.
+// Smartsheet sends these as a SINGLE text/html part — there is no text/plain
+// (verified on the raw MIME of a confirmation from 2026-11-03:
+// `Content-Type: text/html; charset="UTF-8"`, no multipart). Until then this
+// fell through to a flat tag strip, which contains no "| Label | Value |" rows
+// at all, so field() below matched nothing and this route confirmed exactly
+// zero of 673 submitted rows since it was written. The pipe table it was
+// built against is Gmail's rendering of the mail, not the mail.
+//
+// So the rows are rebuilt from the HTML table: cell ends become "|", row ends
+// become line breaks. Values arrive split across one <span> per word, hence
+// the whitespace collapse. Both the confirmation and the rejection loop parse
+// through here.
+const HTML_ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
+
+export function htmlToPipeRows(html) {
+  return String(html || '')
+    .replace(/<\s*br\s*\/?>/gi, ' ')
+    .replace(/<\/\s*t[dh]\s*>/gi, ' \u0002 ')     // cell boundary
+    .replace(/<\/\s*tr\s*>/gi, ' \u0002\u0001')   // row boundary
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&([a-zA-Z]+|#\d+);/g, (m, n) => (HTML_ENTITIES[n] !== undefined ? HTML_ENTITIES[n] : m))
+    .replace(/\s+/g, ' ')
+    .split('\u0001')
+    .map((row) => row.split('\u0002').map((c) => c.trim()).filter(Boolean))
+    .filter((cells) => cells.length)
+    .map((cells) => '| ' + cells.join(' | ') + ' |')
+    .join('\n');
+}
+
 function bodyText(e) {
-  if (e.text && e.text.trim()) return e.text;
-  return String(e.html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+  // A real plaintext part that already carries the table wins.
+  const text = e?.text && e.text.trim() ? e.text : '';
+  if (text && text.includes('|')) return text;
+  const rows = htmlToPipeRows(e?.html);
+  if (rows) return rows;
+  return text || String(e?.html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
 }
 
 // The confirmation body is a table of "| Label | Value |" rows.

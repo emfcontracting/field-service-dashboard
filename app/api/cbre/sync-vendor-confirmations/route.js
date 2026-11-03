@@ -87,7 +87,9 @@ async function fetchRejections(searchDays) {
 // through here.
 const HTML_ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
 
-export function htmlToPipeRows(html) {
+// Not exported: a Next.js route file should only export its handlers and the
+// route segment config.
+function htmlToPipeRows(html) {
   return String(html || '')
     .replace(/<\s*br\s*\/?>/gi, ' ')
     .replace(/<\/\s*t[dh]\s*>/gi, ' \u0002 ')     // cell boundary

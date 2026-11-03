@@ -98,6 +98,7 @@ async function handle(request) {
       noAmount: [],
       noIncrease: [],         // quote amount does not exceed the current NTE
       alreadySubmitted: [],   // quote older than the last submission recorded on the WO
+      archived: [],           // archived in FSM — written off, nothing to ask for
       closed: [],             // WO cancelled at CBRE
       needsSubWo: [],         // posted at CBRE (CPW …) — NTE frozen, ask CBRE for a sub work order
       problems: [],
@@ -125,7 +126,7 @@ async function handle(request) {
     // 2) Their work orders.
     const { data: wos, error: wErr } = await supabase
       .from('work_orders')
-      .select('wo_id, wo_number, nte, cbre_nte, cbre_status, cbre_posting_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at')
+      .select('wo_id, wo_number, nte, cbre_nte, cbre_status, cbre_posting_status, cbre_status_updated_at, building, priority, date_entered, cbre_quote_submitted_at, cbre_nte_submitted_at, archived_at')
       .in('wo_id', [...latestByWo.keys()]);
     if (wErr) throw new Error(`work order query failed: ${wErr.message}`);
     const woById = new Map((wos || []).map((w) => [w.wo_id, w]));
@@ -133,6 +134,9 @@ async function handle(request) {
     for (const [woId, quote] of latestByWo) {
       const wo = woById.get(woId);
       if (!wo) continue;
+      // Archived: the work order is written off, do not ask CBRE for money
+      // on it, however live its quote still looks.
+      if (wo.archived_at) { result.excluded.archived.push(wo.wo_number); continue; }
 
       const num = String(wo.wo_number || '').trim();
       if (!CBRE_WO_PATTERN.test(num)) { result.excluded.notACbreNumber.push(wo.wo_number); continue; }

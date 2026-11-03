@@ -54,6 +54,8 @@ export default function BulkOperationsTab() {
       let query = supabase
         .from('work_orders')
         .select('*')
+        // Archived work orders must not become bulk-update targets.
+        .is('archived_at', null)
         .order('date_entered', { ascending: false });
 
       // Apply filters

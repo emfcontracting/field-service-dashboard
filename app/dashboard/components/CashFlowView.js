@@ -201,6 +201,8 @@ export default function CashFlowView({ currentUser }) {
       .eq('is_locked', false)
       .eq('status', 'completed')
       .is('dispute_status', null)
+      // Archived money is written off, not forecast (lib/workOrderArchive.js).
+      .is('archived_at', null)
       .order('date_completed', { ascending: true });
 
     const woList = wos || [];
@@ -220,6 +222,7 @@ export default function CashFlowView({ currentUser }) {
       `)
       .in('status', ['assigned', 'in_progress', 'pending', 'tech_review'])
       .is('dispute_status', null)
+      .is('archived_at', null)
       .order('date_entered', { ascending: false });
     setOpenWOs(wos || []);
   };

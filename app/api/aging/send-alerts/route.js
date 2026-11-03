@@ -279,6 +279,8 @@ export async function GET(request) {
       `)
       .not('lead_tech_id', 'is', null)
       .not('status', 'in', '("completed","needs_return")')
+      // No aging alerts to technicians about archived work orders.
+      .is('archived_at', null)
       .eq('acknowledged', false);
 
     if (error) throw error;

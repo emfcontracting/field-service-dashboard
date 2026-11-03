@@ -470,6 +470,8 @@ export async function refreshFromServer(supabase, currentUser) {
       `)
       .eq('lead_tech_id', currentUser.user_id)
       .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+      // An archived work order must not sit on a technician's phone.
+      .is('archived_at', null)
       .order('priority', { ascending: true });
 
     const { data: assignments } = await supabase
@@ -487,7 +489,9 @@ export async function refreshFromServer(supabase, currentUser) {
           lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
         `)
         .in('wo_id', woIds)
-        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip']);
+        .in('status', ['assigned', 'in_progress', 'pending', 'needs_return', 'return_trip'])
+        // An archived work order must not sit on a technician's phone.
+        .is('archived_at', null);
       helperWOs = helperWOData || [];
     }
 

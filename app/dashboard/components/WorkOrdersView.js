@@ -8,6 +8,7 @@ import WorkOrdersFilters from './WorkOrdersFilters';
 import ExportDropdown from './ExportDropdown';
 import { exportCostDetailCSV } from '../utils/exportHelpers';
 import { extractPriorityCode } from '@/lib/priorityCodes';
+import { ARCHIVE_REASONS, archiveWarnings, archiveWorkOrders } from '@/lib/workOrderArchive';
 
 export default function WorkOrdersView({ 
   workOrders, 
@@ -20,6 +21,8 @@ export default function WorkOrdersView({
   onImport,
   refreshWorkOrders,
   isSuperuser = false,
+  isAdmin = false,
+  currentUser = null,
   missingHoursCount = 0,
   onMissingHoursClick
 }) {
@@ -36,9 +39,13 @@ export default function WorkOrdersView({
   const [showCheckboxes, setShowCheckboxes] = useState(false);
   const [isExportingCombined, setIsExportingCombined] = useState(false);
   
-  // Bulk delete (superuser only)
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Bulk archive (admin only). Deleting for good moved to the Archive tab on
+  // 2026-11-03 — out of the list, so it takes two deliberate steps.
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('cbre_cancelled');
+  const [archiveNote, setArchiveNote] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
+  const currentUserId = currentUser?.user_id ?? null;
 
   // Apply filters whenever workOrders or filters change
   useEffect(() => {
@@ -209,43 +216,35 @@ export default function WorkOrdersView({
     }
   };
 
-  // Handle bulk delete (superuser only)
-  const handleBulkDelete = async () => {
+  // Handle bulk archive (admin only). One statement for the whole selection;
+  // the work orders stay in the table, they just leave the dashboard list.
+  const handleBulkArchive = async () => {
     if (selectedWOs.size === 0) return;
-    
-    setIsDeleting(true);
-    
+    setIsArchiving(true);
     try {
-      const woIds = Array.from(selectedWOs);
-      
-      await supabase
-        .from('work_order_assignments')
-        .delete()
-        .in('wo_id', woIds);
-      
-      await supabase
-        .from('daily_hours_log')
-        .delete()
-        .in('wo_id', woIds);
-      
-      const { error } = await supabase
-        .from('work_orders')
-        .delete()
-        .in('wo_id', woIds);
-      
+      const { error } = await archiveWorkOrders(supabase, Array.from(selectedWOs), {
+        reason: archiveReason,
+        note: archiveNote.trim() || null,
+        userId: currentUserId || null,
+      });
       if (error) throw error;
-      
       await refreshWorkOrders();
       setSelectedWOs(new Set());
-      setShowDeleteConfirm(false);
-      
+      setShowArchiveModal(false);
+      setArchiveNote('');
     } catch (error) {
-      console.error('Error deleting work orders:', error);
-      alert('Error deleting work orders: ' + error.message);
+      console.error('Error archiving work orders:', error);
+      alert('Error archiving work orders: ' + error.message);
     } finally {
-      setIsDeleting(false);
+      setIsArchiving(false);
     }
   };
+
+  // The selected work orders that still have money or an open answer in them.
+  const selectedWithWarnings = filteredWorkOrders
+    .filter((wo) => selectedWOs.has(wo.wo_id))
+    .map((wo) => ({ wo, warnings: archiveWarnings(wo) }))
+    .filter((x) => x.warnings.length > 0);
 
   // Get selected WO numbers for display
   const getSelectedWONumbers = () => {
@@ -425,12 +424,13 @@ export default function WorkOrdersView({
                 )}
               </button>
 
-              {isSuperuser && (
+              {(isAdmin || isSuperuser) && (
                 <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-bold text-white flex items-center gap-2"
+                  onClick={() => setShowArchiveModal(true)}
+                  className="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded font-bold text-white flex items-center gap-2"
+                  title="Move out of the dashboard into the Archive tab. Nothing is deleted."
                 >
-                  🗑️ Delete Selected
+                  📦 Move to Archive
                 </button>
               )}
             </div>
@@ -441,37 +441,68 @@ export default function WorkOrdersView({
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-[#0d0d14] rounded-lg p-6 max-w-md w-full mx-4 border border-red-500">
-            <h3 className="text-xl font-bold text-red-400 mb-4">⚠️ Confirm Delete</h3>
-            <p className="text-slate-300 mb-4">
-              Are you sure you want to permanently delete <strong className="text-white">{selectedWOs.size} work order(s)</strong>?
+      {/* Archive Modal — admin only. Warns about money, never blocks. */}
+      {showArchiveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0d0d14] rounded-lg p-6 max-w-lg w-full border border-slate-600 max-h-[85vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-slate-100 mb-1">📦 Move to Archive</h3>
+            <p className="text-slate-400 text-sm mb-4">
+              {selectedWOs.size} work order(s) leave the dashboard and show up under Archive.
+              Nothing is deleted — you can restore them there at any time.
             </p>
-            <p className="text-red-400 text-sm mb-6">
-              This will also delete all related assignments, daily hours logs, and cannot be undone!
-            </p>
+
+            <label className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Reason</label>
+            <select
+              value={archiveReason}
+              onChange={(e) => setArchiveReason(e.target.value)}
+              className="w-full bg-[#14141f] border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 mb-3"
+            >
+              {ARCHIVE_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+
+            <label className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Note (optional)</label>
+            <input
+              value={archiveNote}
+              onChange={(e) => setArchiveNote(e.target.value)}
+              placeholder="e.g. covered by P3374674"
+              className="w-full bg-[#14141f] border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 mb-4"
+            />
+
+            {selectedWithWarnings.length > 0 && (
+              <div className="rounded-lg border border-amber-500/60 bg-amber-900/20 p-3 mb-4">
+                <div className="text-amber-300 font-semibold text-sm mb-2">
+                  ⚠️ {selectedWithWarnings.length} of these still have something open
+                </div>
+                <ul className="space-y-1 text-xs text-amber-200/90">
+                  {selectedWithWarnings.map(({ wo, warnings }) => (
+                    <li key={wo.wo_id}>
+                      <span className="font-semibold">{wo.wo_number}</span> — {warnings.join(' · ')}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-[11px] text-amber-200/70 mt-2">
+                  Archiving them is allowed. They just stop being visible on the dashboard,
+                  so settle them first if the money still has to come in.
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-slate-500 mb-4 truncate">Selected: {getSelectedWONumbers()}</div>
+
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
+                onClick={() => setShowArchiveModal(false)}
+                disabled={isArchiving}
                 className="bg-[#2d2d44] hover:bg-[#3d3d5e] px-4 py-2 rounded font-semibold"
               >
                 Cancel
               </button>
               <button
-                onClick={handleBulkDelete}
-                disabled={isDeleting}
-                className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded font-bold flex items-center gap-2"
+                onClick={handleBulkArchive}
+                disabled={isArchiving}
+                className="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded font-bold flex items-center gap-2"
               >
-                {isDeleting ? (
-                  <>
-                    <span className="animate-spin">⏳</span> Deleting...
-                  </>
-                ) : (
-                  <>🗑️ Yes, Delete All</>
-                )}
+                {isArchiving ? (<><span className="animate-spin">⏳</span> Archiving...</>) : (<>📦 Move to Archive</>)}
               </button>
             </div>
           </div>

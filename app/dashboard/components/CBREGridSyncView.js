@@ -108,6 +108,9 @@ export default function CBREGridSyncView({ currentUser }) {
           .select('wo_id, wo_number, status, cbre_status, acknowledged, is_locked, dispute_status, date_entered, building')
           .or('acknowledged.is.null,acknowledged.eq.false')
           .or('is_locked.is.null,is_locked.eq.false')
+          // Archived work orders are not 'open in FSM' — without this they
+          // would be reported as gone from CBRE's grid at every sync.
+          .is('archived_at', null)
           .order('wo_id'));
         fsmOpen = (openRows || []).filter(w =>
           CBRE_WO_PATTERN.test(String(w.wo_number || '').trim()) &&

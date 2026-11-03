@@ -208,6 +208,14 @@ export default function GlobalWOSearch({ onClose }) {
                       <div>
                         <div className="flex items-center gap-3">
                           <span className="text-xl font-bold">{wo.wo_number}</span>
+                          {/* Global search deliberately finds archived work
+                              orders too — it exists to find anything. The badge
+                              is so nobody acts on one without noticing. */}
+                          {wo.archived_at && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 align-middle">
+                              ARCHIVED
+                            </span>
+                          )}
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${priority.bg}`}>
                             {priority.text}
                           </span>

@@ -113,8 +113,10 @@ async function buildDigest(db) {
   // ── Business signals ───────────────────────────────────────────────────────
   const [{ count: approvalsOld }, { data: waiting }, { data: subWo }, { data: staleDraftRows }, { count: openEsc }] = await Promise.all([
     db.from('approval_requests').select('approval_id', { count: 'exact', head: true }).eq('status', 'pending').lt('created_at', new Date(now - 48 * H).toISOString()),
-    db.from('work_orders').select('wo_number, cbre_quote_submitted_at, cbre_status_updated_at').eq('cbre_status', 'quote_submitted'),
-    db.from('work_orders').select('wo_number, dispute_requested_at, dispute_sub_wo').eq('dispute_status', 'sub_wo_requested').is('dispute_sub_wo', null),
+    // .is('archived_at', null) on each: an archived work order is written off,
+    // and nagging about it every morning is exactly what the archive is for.
+    db.from('work_orders').select('wo_number, cbre_quote_submitted_at, cbre_status_updated_at').eq('cbre_status', 'quote_submitted').is('archived_at', null),
+    db.from('work_orders').select('wo_number, dispute_requested_at, dispute_sub_wo').eq('dispute_status', 'sub_wo_requested').is('dispute_sub_wo', null).is('archived_at', null),
     // Old drafts worth chasing. Anything the invoice guard puts on hold (NTE
     // request pending at CBRE, work order closed there, open dispute) is
     // waiting for CBRE, not for us — invoiceBlocker() filters those out below.
@@ -122,7 +124,7 @@ async function buildDigest(db) {
       .eq('status', 'draft').lt('created_at', new Date(now - 14 * D).toISOString())
       .neq('work_order.status', 'cancelled'),
     db.from('work_orders').select('wo_id', { count: 'exact', head: true }).eq('escalation', true)
-      .not('status', 'in', '(completed,cancelled,rejected)').or('is_locked.is.null,is_locked.eq.false'),
+      .not('status', 'in', '(completed,cancelled,rejected)').or('is_locked.is.null,is_locked.eq.false').is('archived_at', null),
   ]);
   const waitingOld = (waiting || []).filter((w) => {
     const t = w.cbre_quote_submitted_at || w.cbre_status_updated_at;

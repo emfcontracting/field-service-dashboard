@@ -173,6 +173,13 @@ export const NAV_ITEMS = [
       <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
     </svg>
   ), officeOrAdmin: true },
+  { id: 'archive',        label: 'Archive',        Icon: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="5" rx="1"/>
+      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+      <line x1="10" y1="12" x2="14" y2="12"/>
+    </svg>
+  ), adminOnly: true },
 ];
 
 export const QUICK_LINKS = [
@@ -469,6 +476,9 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
           .select('wo_id')
           .not('lead_tech_id', 'is', null)
           .in('status', ['assigned', 'in_progress', 'completed'])
+          // An archived work order never gets hours, so it would sit in this
+          // badge for good.
+          .is('archived_at', null)
           .gte('date_entered', cutoff.toISOString());
 
         if (!eligibleWOs?.length) { setMissingHoursCount(0); return; }

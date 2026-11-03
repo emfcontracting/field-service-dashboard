@@ -212,6 +212,8 @@ export function useOffline(currentUser) {
         `)
         .eq('lead_tech_id', currentUser.user_id)
         .in('status', ACTIVE_STATUSES)
+        // An archived work order must not sit on a technician's phone.
+        .is('archived_at', null)
         .order('priority', { ascending: true });
 
       if (leadError) throw leadError;
@@ -232,7 +234,9 @@ export function useOffline(currentUser) {
             lead_tech:users!work_orders_lead_tech_id_fkey(first_name, last_name)
           `)
           .in('wo_id', woIds)
-          .in('status', ACTIVE_STATUSES);
+          .in('status', ACTIVE_STATUSES)
+        // An archived work order must not sit on a technician's phone.
+        .is('archived_at', null);
         helperWOs = helperWOData || [];
       }
 

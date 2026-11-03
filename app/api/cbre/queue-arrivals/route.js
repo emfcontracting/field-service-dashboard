@@ -126,6 +126,8 @@ async function handle(request) {
         'cbre_arrival_submitted_at', 'cbre_completion_submitted_at', 'completion_transferred',
         'acknowledged', 'is_locked', 'dispute_status', 'dispute_sub_wo',
       ].join(','))
+      // Never report an arrival on a work order we have archived.
+      .is('archived_at', null)
       .not('time_in', 'is', null)
       .is('cbre_arrival_submitted_at', null)
       .order('created_at', { ascending: false })

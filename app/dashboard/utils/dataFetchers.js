@@ -21,12 +21,15 @@ export async function fetchWorkOrders(supabase) {
         *,
         lead_tech:users!lead_tech_id(first_name, last_name, email),
         locked_by_user:users!locked_by(first_name, last_name),
-        nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at),
+        nte_quotes:work_order_quotes(quote_id, is_verbal_nte, nte_status, created_at, new_nte_amount),
         open_flags:work_order_flags!work_order_flags_wo_id_fkey(flag_id, priority, comment, flagged_at, flagged_by, status)
       `)
       .or('acknowledged.is.null,acknowledged.eq.false')
       .or('is_locked.is.null,is_locked.eq.false')
       .or(`dispute_status.is.null,dispute_status.not.in.(${ACTIVE_DISPUTE_STATUSES.join(',')})`)
+      // Archived work orders live in their own tab. They are not deleted and
+      // not gone — they are simply out of the way (lib/workOrderArchive.js).
+      .is('archived_at', null)
       .order('date_entered', { ascending: true })
       .order('wo_id'));
   } catch (error) {
@@ -39,6 +42,7 @@ export async function fetchWorkOrders(supabase) {
     if (wo.acknowledged) return false;
     if (wo.is_locked) return false;
     if (isDisputeActive(wo)) return false;
+    if (wo.archived_at) return false;
     return true;
   });
 
@@ -256,4 +260,4 @@ export async function updateTeamMember(supabase, assignmentId, updates) {
   }
 
   return true;
-}
+}

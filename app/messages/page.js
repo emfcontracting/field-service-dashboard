@@ -99,6 +99,7 @@ export default function MessagesPage() {
       const { data } = await supabase.from('work_orders')
         .select('wo_id, wo_number, building, priority, status')
         .in('status', ['pending', 'assigned', 'in_progress'])
+        .is('archived_at', null)
         .order('date_entered', { ascending: false }).limit(50);
       setWorkOrders(data || []);
     } catch (err) { console.error(err); }

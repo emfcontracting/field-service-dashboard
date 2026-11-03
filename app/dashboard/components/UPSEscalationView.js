@@ -192,7 +192,9 @@ export default function UPSEscalationView({ currentUser }) {
       const { data: wos } = await supabaseClient
         .from('work_orders')
         .select('wo_id, wo_number, building, status, nte, date_entered, cbre_status, cbre_status_updated_at, cbre_quote_submitted_at, dispute_status')
-        .eq('cbre_status', 'quote_submitted');
+        .eq('cbre_status', 'quote_submitted')
+        // Archived work orders are out of play (lib/workOrderArchive.js). Nothing left to chase there.
+        .is('archived_at', null);
       const list = wos || [];
       // Amount requested = newest written quote on the WO (fallback: current NTE).
       const ids = list.map(w => w.wo_id);

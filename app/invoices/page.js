@@ -279,6 +279,8 @@ export default function InvoicingPage() {
       .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
       .eq('acknowledged', true).eq('is_locked', false)
       .or(`dispute_status.is.null,dispute_status.not.in.(${ACTIVE_DISPUTE_STATUSES.join(',')})`)
+      // Archived work orders are out of play (lib/workOrderArchive.js).
+      .is('archived_at', null)
       .order('acknowledged_at', { ascending: true });
     if (!error) {
       setAcknowledgedWOs(data || []);

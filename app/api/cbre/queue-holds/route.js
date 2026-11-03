@@ -115,6 +115,8 @@ async function handle(request) {
         'qb_invoice_number', 'vwas_invoice_submitted',
         'acknowledged', 'is_locked', 'dispute_status',
       ].join(','))
+      // Never ask CBRE for more time on a work order we have archived.
+      .is('archived_at', null)
       .not('waiting_reason', 'is', null)
       .is('cbre_hold_reported_at', null)
       .order('waiting_since', { ascending: true, nullsFirst: false })   // longest wait first

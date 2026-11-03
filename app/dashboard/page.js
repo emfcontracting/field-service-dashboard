@@ -22,6 +22,7 @@ import ReviewQueueView from './components/ReviewQueueView';
 import ApprovalsView from './components/ApprovalsView';
 import { fetchWorkOrders, fetchUsers } from './utils/dataFetchers';
 import { useCurrentUser } from '../components/CurrentUserContext';
+import ArchiveView from './components/ArchiveView';
 import { calculateStats } from './utils/calculations';
 import { parseDate } from '@/lib/dates';
 
@@ -37,7 +38,7 @@ function DashboardContent() {
 
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
-  const { user: currentUser, isSuperuser } = useCurrentUser();   // resolved once by AppShell
+  const { user: currentUser, isSuperuser, isAdmin } = useCurrentUser();   // resolved once by AppShell
   const [selectedWO, setSelectedWO] = useState(null);
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -164,7 +165,12 @@ function DashboardContent() {
   const handleMissingHoursClick = () => router.push('/dashboard?view=missing-hours');
 
   const renderActiveView = () => {
-    switch (activeView) {
+    // The nav hides Archive for non-admins; this stops the URL from working
+    // too, by sending them to the work order list instead. Not a security
+    // boundary — work_orders has no RLS — but it keeps the tab out of reach
+    // of anyone who should not be in it.
+    const view = activeView === 'archive' && !isAdmin ? 'workorders' : activeView;
+    switch (view) {
       case 'calendar':
         return <CalendarView workOrders={workOrders} users={users} supabase={supabase} refreshWorkOrders={refreshWorkOrders} onSelectWorkOrder={setSelectedWO} />;
       case 'missing-hours':
@@ -185,6 +191,8 @@ function DashboardContent() {
         return <CBREDataEntryView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} />;
       case 'approvals':
         return <ApprovalsView userInfo={currentUser} />;
+      case 'archive':
+        return <ArchiveView currentUser={currentUser} isSuperuser={isSuperuser} onSelectWorkOrder={setSelectedWO} />;
       case 'review-queue':
         return <ReviewQueueView currentUser={currentUser} onSelectWorkOrder={setSelectedWO} refreshWorkOrders={refreshWorkOrders} />;
       case 'workorders':
@@ -198,6 +206,8 @@ function DashboardContent() {
             onImport={() => setShowImportModal(true)}
             refreshWorkOrders={refreshWorkOrders}
             isSuperuser={isSuperuser}
+            isAdmin={isAdmin}
+            currentUser={currentUser}
             missingHoursCount={missingHoursCount}
             onMissingHoursClick={handleMissingHoursClick}
             onGlobalSearch={() => setShowGlobalSearch(true)}

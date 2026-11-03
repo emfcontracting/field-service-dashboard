@@ -158,6 +158,8 @@ export default function CBREInvoicingPage() {
       .select('*, lead_tech:users!lead_tech_id(first_name, last_name, email)')
       .eq('acknowledged', true).eq('is_locked', false)
       .or('client.eq.CBRE,client.eq.UPS,client.is.null')
+      // Archived work orders are out of play (lib/workOrderArchive.js).
+      .is('archived_at', null)
       .order('acknowledged_at', { ascending: false });
     setWorkOrders(data || []);
   };

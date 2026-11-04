@@ -248,6 +248,8 @@ const generateWorkOrder = (index, status, cbreStatus = null, woType = 'regular')
   return {
     wo_id: `demo-wo-${String(index).padStart(3, '0')}`,
     wo_number: woNumber,
+    // C-numbers are CBRE work, ST/P/PJ are UPS (drives the client banner and admin hours)
+    client_type: String(woNumber).startsWith('C') ? 'CBRE' : 'UPS',
     building: building.name,
     address: building.address,
     work_order_description: description,

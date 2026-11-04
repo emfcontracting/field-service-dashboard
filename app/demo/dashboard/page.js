@@ -3,6 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { archivo } from '../fonts';
+import '../demo-theme.css';
+import '../demo-dashboard.css';
 import DemoDashboardHeader from '../components/DemoDashboardHeader';
 import WorkOrdersView from '../../dashboard/components/WorkOrdersView';
 import AvailabilityView from '../../dashboard/components/AvailabilityView';
@@ -17,19 +20,12 @@ import { DEMO_USERS } from '../mockData';
 // Demo Banner Component
 function DemoBanner({ onReset }) {
   return (
-    <div className="flex items-center justify-between gap-3 flex-wrap border border-[#1e1e2e] bg-[#0d0d14] rounded-[3px] px-3 sm:px-4 py-2 mb-4 text-xs sm:text-sm">
-      <p className="text-slate-400 min-w-0">
-        <span className="text-slate-100 font-semibold">Demo</span>
-        <span className="hidden sm:inline"> with sample data. Changes stay in this browser.</span>
-      </p>
-      <div className="flex items-center gap-1">
-        <Link href="/demo" className="px-2.5 py-1 rounded-[3px] text-slate-400 hover:text-slate-100 hover:bg-[#1e1e2e] transition">
-          Overview
-        </Link>
-        <button onClick={onReset} className="px-2.5 py-1 rounded-[3px] text-slate-100 border border-[#2d2d44] hover:bg-[#1e1e2e] transition">
-          Reset demo
-        </button>
-      </div>
+    <div className="lp-strip lp-strip-boxed">
+      <span><strong>Demo</strong> with sample data. Changes stay in this browser.</span>
+      <span className="lp-strip-actions">
+        <Link href="/demo" className="lp-strip-link">Overview</Link>
+        <button onClick={onReset} className="lp-strip-btn">Reset demo</button>
+      </span>
     </div>
   );
 }
@@ -253,7 +249,7 @@ export default function DemoDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-4 md:p-6">
+    <div className={`lp-demo lp-demo-dash ${archivo.variable} p-3 sm:p-4 md:p-6`}>
       <div className="max-w-7xl mx-auto">
         <DemoBanner onReset={handleReset} />
         

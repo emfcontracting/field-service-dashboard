@@ -17,9 +17,7 @@ export default function DemoDashboardHeader({ activeView, setActiveView, missing
     <div className="mb-4 sm:mb-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <Link href="/demo" className="flex items-center gap-3 min-w-0">
-          <span className="w-9 h-9 bg-slate-200 text-[#0d0d14] rounded-[3px] grid place-items-center text-[11px] font-black tracking-tight flex-shrink-0">
-            PCS
-          </span>
+          <span className="lp-mark-sm lp-mark-lg" aria-hidden="true">PCS</span>
           <span className="min-w-0">
             <span className="block text-slate-100 font-bold text-base sm:text-lg leading-tight truncate">PCS FieldService</span>
             <span className="block text-slate-500 text-xs leading-tight truncate">Summit Mechanical Services</span>

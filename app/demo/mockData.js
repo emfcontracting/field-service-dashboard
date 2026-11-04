@@ -151,51 +151,51 @@ export const getCBREStatusBadge = (cbreStatus) => {
   switch (cbreStatus) {
     case 'escalation':
       return {
-        text: '🚨 ESCALATION',
+        text: 'Escalation',
         color: 'bg-red-600 text-red-100',
-        shortText: '🚨 ESC'
+        shortText: 'ESC'
       };
     case 'quote_approved':
       return {
-        text: '✅ QUOTE APPROVED',
+        text: 'Quote approved',
         color: 'bg-green-600 text-green-100',
-        shortText: '✅ Approved'
+        shortText: 'Approved'
       };
     case 'quote_rejected':
       return {
-        text: '❌ QUOTE REJECTED',
+        text: 'Quote rejected',
         color: 'bg-red-700 text-red-100',
-        shortText: '❌ Rejected'
+        shortText: 'Rejected'
       };
     case 'quote_submitted':
       return {
-        text: '📤 QUOTE SUBMITTED',
+        text: 'Quote submitted',
         color: 'bg-blue-600 text-blue-100',
-        shortText: '📤 Submitted'
+        shortText: 'Submitted'
       };
     case 'reassigned':
       return {
-        text: '🔄 REASSIGNED',
+        text: 'Reassigned',
         color: 'bg-purple-600 text-purple-100',
-        shortText: '🔄 Reassign'
+        shortText: 'Reassign'
       };
     case 'pending_quote':
       return {
-        text: '📋 PENDING QUOTE',
+        text: 'Pending quote',
         color: 'bg-orange-600 text-orange-100',
-        shortText: '📋 Pending'
+        shortText: 'Pending'
       };
     case 'invoice_rejected':
       return {
-        text: '❌ INVOICE REJECTED',
+        text: 'Invoice rejected',
         color: 'bg-red-800 text-red-100',
-        shortText: '❌ Inv Rej'
+        shortText: 'Inv Rej'
       };
     case 'cancelled':
       return {
-        text: '🚫 CANCELLED',
+        text: 'Cancelled',
         color: 'bg-gray-600 text-gray-100',
-        shortText: '🚫 Cancel'
+        shortText: 'Cancel'
       };
     default:
       return null;
@@ -521,7 +521,8 @@ export const generateDemoInvoices = (workOrders) => {
   
   // Only create invoices for some completed work orders
   const completedWOs = workOrders.filter(wo => wo.status === 'completed');
-  const numInvoices = Math.min(completedWOs.length, randomBetween(3, 6));
+  // Leave two completed work orders uninvoiced so the demo's "Ready" tab has work in it.
+  const numInvoices = Math.max(0, Math.min(completedWOs.length - 2, randomBetween(2, 4)));
   
   for (let i = 0; i < numInvoices; i++) {
     const wo = completedWOs[i];

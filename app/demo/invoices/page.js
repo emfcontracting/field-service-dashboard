@@ -3,52 +3,24 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { archivo } from '../fonts';
+import '../demo-theme.css';
 import { getMockSupabase, resetMockSupabase } from '../mockSupabase';
 
-// Demo Banner Component
+// Demo strip
 function DemoBanner({ onReset }) {
-  const [isVisible, setIsVisible] = useState(true);
-  
-  if (!isVisible) return null;
-  
   return (
-    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 sm:px-4 py-2 sm:py-3 mb-3 sm:mb-4 rounded-lg">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="text-xl sm:text-2xl">🎯</span>
-          <div>
-            <span className="font-bold text-sm sm:text-base">Demo Mode</span>
-            <span className="text-amber-100 text-xs sm:text-sm ml-2 hidden sm:inline">
-              - Exploring with sample data. Changes are temporary.
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <Link
-            href="/demo"
-            className="bg-white/20 hover:bg-white/30 px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition"
-          >
-            ← Home
-          </Link>
-          <button
-            onClick={onReset}
-            className="bg-white/20 hover:bg-white/30 px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition"
-          >
-            🔄 Reset
-          </button>
-          <button
-            onClick={() => setIsVisible(false)}
-            className="hover:bg-white/20 p-1 rounded transition"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
+    <div className="lp-strip lp-strip-boxed">
+      <span><strong>Demo</strong> with sample data. Changes stay in this browser.</span>
+      <span className="lp-strip-actions">
+        <Link href="/demo" className="lp-strip-link">Overview</Link>
+        <button onClick={onReset} className="lp-strip-btn">Reset demo</button>
+      </span>
     </div>
   );
 }
 
-export default function DemoInvoicingPage() {
+function DemoInvoicingPageInner() {
   const supabase = getMockSupabase();
   
   const [acknowledgedWOs, setAcknowledgedWOs] = useState([]);
@@ -138,11 +110,9 @@ export default function DemoInvoicingPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xl sm:text-2xl">⚡</span>
-            </div>
+            <span className="lp-mark-sm lp-mark-lg" aria-hidden="true">PCS</span>
             <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">💰 Invoicing</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">Invoicing</h1>
               <p className="text-gray-400 text-xs sm:text-sm mt-0.5 sm:mt-1">Generate and manage invoices</p>
             </div>
           </div>
@@ -460,6 +430,15 @@ export default function DemoInvoicingPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// The demo pages share the landing page's zinc / gunmetal look (demo-theme.css).
+export default function DemoInvoicingPage() {
+  return (
+    <div className={`lp-demo ${archivo.variable}`}>
+      <DemoInvoicingPageInner />
     </div>
   );
 }

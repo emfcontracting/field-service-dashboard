@@ -5,15 +5,8 @@
 // depends on or leaks into the dashboard's Tailwind theme.
 
 import Link from 'next/link';
-import { Archivo } from 'next/font/google';
+import { archivo } from './fonts';
 import './landing.css';
-
-const archivo = Archivo({
-  subsets: ['latin'],
-  axes: ['wdth'],
-  display: 'swap',
-  variable: '--lp-font',
-});
 
 // One CBRE work order, start to finish. The hero panel lights these in order.
 const CHAIN = [

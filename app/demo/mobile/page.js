@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { archivo } from '../fonts';
+import '../demo-theme.css';
 import { DEMO_USERS, generateDemoWorkOrders, getCBREStatusBadge } from '../mockData';
 
 // Get field workers for demo
@@ -38,21 +40,21 @@ function getPriorityColor(priority) {
 
 function getPriorityBadge(priority) {
   switch (priority?.toLowerCase()) {
-    case 'emergency': return '🔴';
-    case 'high': return '🟠';
-    case 'medium': return '🟡';
-    default: return '🟢';
+    case 'emergency': return <span className="lp-pri lp-pri-emergency" aria-label="Emergency" />;
+    case 'high': return <span className="lp-pri lp-pri-high" aria-label="High" />;
+    case 'medium': return <span className="lp-pri lp-pri-medium" aria-label="Medium" />;
+    default: return <span className="lp-pri lp-pri-low" aria-label="Normal" />;
   }
 }
 
 function getStatusBadge(status) {
   switch (status) {
-    case 'in_progress': return '🔧 In Progress';
-    case 'assigned': return '📋 Assigned';
-    case 'completed': return '✅ Completed';
-    case 'pending': return '⏳ Pending';
-    case 'tech_review': return '🔍 Tech Review';
-    case 'return_trip': return '🔄 Return Trip';
+    case 'in_progress': return 'In Progress';
+    case 'assigned': return 'Assigned';
+    case 'completed': return 'Completed';
+    case 'pending': return 'Pending';
+    case 'tech_review': return 'Tech Review';
+    case 'return_trip': return 'Return Trip';
     default: return status;
   }
 }
@@ -60,16 +62,9 @@ function getStatusBadge(status) {
 // Demo Banner Component
 function DemoBanner({ onBack }) {
   return (
-    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span>🎯</span>
-          <span className="text-sm font-medium">Demo Mode</span>
-        </div>
-        <Link href="/demo" className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs">
-          ← Demo Home
-        </Link>
-      </div>
+    <div className="lp-strip">
+      <span><strong>Demo</strong> with sample data</span>
+      <Link href="/demo" className="lp-strip-link">Overview</Link>
     </div>
   );
 }
@@ -84,9 +79,7 @@ function LoginScreen({ onLogin, error, setError }) {
       <DemoBanner />
       
       <div className="flex flex-col items-center justify-center p-6 pt-12">
-        <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4">
-          <span className="text-white text-4xl font-bold">P</span>
-        </div>
+        <span className="lp-mark-sm lp-mark-xl mb-4" aria-hidden="true">PCS</span>
         
         <h1 className="text-2xl font-bold mb-1">PCS FieldService</h1>
         <p className="text-gray-400 mb-6">Mobile Tech App</p>
@@ -195,15 +188,12 @@ function WorkOrdersList({
       <div className="bg-gray-800 p-3 sticky top-0 z-10">
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-bold">P</span>
-            </div>
+            <span className="lp-mark-sm" aria-hidden="true">PCS</span>
             <div>
               <div className="flex items-center gap-2">
-                <p className="font-bold text-sm leading-tight">👋 {currentUser.first_name}</p>
-                <span className="text-xs bg-green-600 px-1.5 py-0.5 rounded">🌐</span>
+                <p className="font-bold text-sm leading-tight">{currentUser.first_name}</p>
               </div>
-              <p className="text-[10px] text-gray-400 leading-tight">{currentUser.role.replace('_', ' ').toUpperCase()}</p>
+              <p className="text-[10px] text-gray-400 leading-tight">{currentUser.role.replace('_', ' ')}</p>
             </div>
           </div>
           <button
@@ -216,8 +206,7 @@ function WorkOrdersList({
 
         <div className="mb-2 px-3 py-2 rounded-lg text-xs bg-blue-900/50 border border-blue-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span>📥</span>
-            <span className="text-blue-300">
+                        <span className="text-blue-300">
               {workOrders.length} work orders loaded for demo
             </span>
           </div>
@@ -231,7 +220,7 @@ function WorkOrdersList({
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0">
-            🌐 EN
+            EN
           </button>
           
           {(currentUser.role === 'admin' || currentUser.role === 'office') && (
@@ -239,20 +228,20 @@ function WorkOrdersList({
               href="/demo/dashboard"
               className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0"
             >
-              💻 Dashboard
+              Dashboard
             </Link>
           )}
           <button
             onClick={onShowCompleted}
             className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0"
           >
-            ✅ Completed
+            Completed
           </button>
           <button
             onClick={onShowChangePin}
             className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0"
           >
-            🔒 PIN
+            PIN
           </button>
         </div>
       </div>
@@ -264,8 +253,7 @@ function WorkOrdersList({
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">☀️</span>
-              <div>
+                            <div>
                 <span className="font-bold">72°F</span>
                 <span className="text-gray-400 text-sm ml-2">Columbia, SC</span>
               </div>
@@ -274,10 +262,10 @@ function WorkOrdersList({
           </div>
           {weatherExpanded && (
             <div className="mt-3 pt-3 border-t border-gray-700 grid grid-cols-4 gap-2 text-center text-xs">
-              <div><div className="text-lg">🌅</div><div className="text-gray-400">68°</div></div>
-              <div><div className="text-lg">☀️</div><div className="text-gray-400">75°</div></div>
-              <div><div className="text-lg">⛅</div><div className="text-gray-400">71°</div></div>
-              <div><div className="text-lg">🌙</div><div className="text-gray-400">62°</div></div>
+              <div><div className="text-gray-500">7 am</div><div className="font-semibold">68°</div></div>
+              <div><div className="text-gray-500">Noon</div><div className="font-semibold">75°</div></div>
+              <div><div className="text-gray-500">4 pm</div><div className="font-semibold">71°</div></div>
+              <div><div className="text-gray-500">9 pm</div><div className="font-semibold">62°</div></div>
             </div>
           )}
         </div>
@@ -292,7 +280,6 @@ function WorkOrdersList({
         <div className="space-y-3">
           {workOrders.length === 0 ? (
             <div className="bg-gray-800 rounded-lg p-8 text-center">
-              <div className="text-4xl mb-3">📋</div>
               <p className="text-gray-400 text-lg">No active work orders</p>
               <p className="text-gray-500 text-sm mt-2">Check back later for new assignments</p>
             </div>
@@ -398,7 +385,7 @@ function WorkOrderDetail({
   };
 
   const handleSaveHours = () => {
-    alert('✅ Hours Saved - Demo Only');
+    alert('Hours Saved - Demo Only');
   };
 
   // Calculate costs (matching original)
@@ -449,14 +436,14 @@ function WorkOrderDetail({
                 className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-sm"
                 title="Dashboard"
               >
-                💻
+                Dashboard
               </Link>
             )}
             <button
               onClick={onShowChangePin}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm"
             >
-              🔒
+              PIN
             </button>
             <button
               onClick={onLogout}
@@ -477,7 +464,7 @@ function WorkOrderDetail({
         <div className="space-y-4">
           {/* Work Order Details */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3 text-blue-400">📋 Work Order Details</h3>
+            <h3 className="font-bold mb-3 text-blue-400">Work Order Details</h3>
             <div className="space-y-2 text-sm">
               <div>
                 <span className="text-gray-400">Building:</span>
@@ -514,20 +501,20 @@ function WorkOrderDetail({
 
           {/* Quick Actions */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">⚡ Quick Actions</h3>
+            <h3 className="font-bold mb-3">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => alert('Print WO - Demo Only')}
                 className="bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold"
               >
-                🖨️ Print WO
+                Print WO
               </button>
               {status !== 'completed' && !wo.customer_signature && (
                 <button
                   onClick={() => alert('Get Signature - Demo Only')}
                   className="bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold"
                 >
-                  ✍️ Get Signature
+                  Get Signature
                 </button>
               )}
               {wo.customer_signature && (
@@ -535,14 +522,14 @@ function WorkOrderDetail({
                   onClick={() => alert('View Certificate - Demo Only')}
                   className="bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold"
                 >
-                  📄 Certificate
+                  Certificate
                 </button>
               )}
               <button
                 onClick={() => alert('Download CSV - Demo Only')}
                 className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold"
               >
-                📥 My Hours CSV
+                My Hours CSV
               </button>
             </div>
           </div>
@@ -554,7 +541,7 @@ function WorkOrderDetail({
                 <button
                   onClick={() => {
                     onCheckIn();
-                    alert('✅ Checked In - Demo Only');
+                    alert('Checked In - Demo Only');
                   }}
                   className="bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
                 >
@@ -563,11 +550,11 @@ function WorkOrderDetail({
                 <button
                   onClick={() => {
                     onCheckOut();
-                    alert('⏸ Checked Out - Demo Only');
+                    alert('Checked Out - Demo Only');
                   }}
                   className="bg-orange-600 hover:bg-orange-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
                 >
-                  ⏸ Check Out
+                  Check Out
                 </button>
               </div>
               {wo.time_in && (
@@ -585,7 +572,7 @@ function WorkOrderDetail({
 
           {/* Primary Assignment */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">👤 Primary Assignment</h3>
+            <h3 className="font-bold mb-3">Primary Assignment</h3>
             <div className="bg-gray-700 rounded-lg p-3">
               <p className="font-semibold">
                 {wo.lead_tech?.first_name || currentUser.first_name} {wo.lead_tech?.last_name || currentUser.last_name}
@@ -595,24 +582,24 @@ function WorkOrderDetail({
 
           {/* Update Status */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">📊 Update Status</h3>
+            <h3 className="font-bold mb-3">Update Status</h3>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               disabled={status === 'completed'}
               className="w-full px-4 py-3 bg-blue-600 rounded-lg text-white font-semibold text-center"
             >
-              <option value="assigned">📋 Assigned</option>
-              <option value="in_progress">🔧 In Progress</option>
-              <option value="pending">⏳ Pending</option>
-              <option value="tech_review">🔍 Tech Review</option>
-              <option value="return_trip">🔄 Return Trip</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="pending">Pending</option>
+              <option value="tech_review">Tech Review</option>
+              <option value="return_trip">Return Trip</option>
             </select>
           </div>
 
           {/* Additional Costs - Materials, Equipment, Trailer, Rental */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">💵 Additional Costs</h3>
+            <h3 className="font-bold mb-3">Additional Costs</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-400">Material Cost $</label>
@@ -659,13 +646,13 @@ function WorkOrderDetail({
               onClick={() => alert('Costs Saved - Demo Only')}
               className="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-semibold mt-3"
             >
-              💾 Save Costs
+              Save Costs
             </button>
           </div>
 
           {/* NTE Increases */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">📈 NTE Increases</h3>
+            <h3 className="font-bold mb-3">NTE Increases</h3>
             <p className="text-gray-400 text-sm mb-3">Request additional budget when costs exceed NTE</p>
             <button
               onClick={() => alert('Request NTE Increase - Demo Only')}
@@ -677,7 +664,7 @@ function WorkOrderDetail({
 
           {/* Primary Tech Daily Hours */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">⏱️ My Daily Hours</h3>
+            <h3 className="font-bold mb-3">My Daily Hours</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-400">Regular Hours</label>
@@ -725,7 +712,7 @@ function WorkOrderDetail({
               onClick={handleSaveHours}
               className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold mt-3"
             >
-              💾 Save Hours
+              Save Hours
             </button>
             
             {/* Hours Log History */}
@@ -750,7 +737,7 @@ function WorkOrderDetail({
 
           {/* Team Members Daily Hours */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">👥 Team Members</h3>
+            <h3 className="font-bold mb-3">Team Members</h3>
             <button
               onClick={() => alert('Add Team Member - Demo Only')}
               className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-semibold mb-3"
@@ -791,7 +778,7 @@ function WorkOrderDetail({
 
           {/* Email Photos Section */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">📸 Photos</h3>
+            <h3 className="font-bold mb-3">Photos</h3>
             <p className="text-gray-400 text-sm mb-3">
               Email photos to the office for this work order
             </p>
@@ -800,20 +787,20 @@ function WorkOrderDetail({
                 onClick={() => alert('Email Photos - Demo Only')}
                 className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold"
               >
-                📧 Email Photos to Office
+                Email Photos to Office
               </button>
               <button
                 onClick={() => alert('Email Receipts - Demo Only')}
                 className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold"
               >
-                🧾 Email Receipts
+                Email Receipts
               </button>
             </div>
           </div>
 
           {/* Cost Summary Section */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">💰 Cost Summary</h3>
+            <h3 className="font-bold mb-3">Cost Summary</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between py-2 border-b border-gray-700">
                 <span className="text-gray-400">Labor ({totalHours} hrs @ ${laborRate})</span>
@@ -879,7 +866,7 @@ function WorkOrderDetail({
 
           {/* Comments and Notes */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="font-bold mb-3">💬 Comments and Notes</h3>
+            <h3 className="font-bold mb-3">Comments and Notes</h3>
             <div className="mb-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg p-3">
               {comments ? (
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">
@@ -913,10 +900,10 @@ function WorkOrderDetail({
                       : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600'
                   }`}
                 >
-                  {commentSaveStatus === 'saving' && '⏳ Saving...'}
-                  {commentSaveStatus === 'success' && '✅ Saved!'}
-                  {commentSaveStatus === 'error' && '❌ Error - Tap to Retry'}
-                  {commentSaveStatus === 'idle' && '💾 Save Comment'}
+                  {commentSaveStatus === 'saving' && 'Saving...'}
+                  {commentSaveStatus === 'success' && 'Saved!'}
+                  {commentSaveStatus === 'error' && 'Error - Tap to Retry'}
+                  {commentSaveStatus === 'idle' && 'Save Comment'}
                 </button>
               </>
             )}
@@ -927,11 +914,11 @@ function WorkOrderDetail({
             <button
               onClick={() => {
                 onComplete();
-                alert('✅ Work Order Completed - Demo Only');
+                alert('Work Order Completed - Demo Only');
               }}
               className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-bold text-lg transition active:scale-95"
             >
-              ✅ Complete Work Order
+              Complete Work Order
             </button>
           )}
         </div>
@@ -957,7 +944,6 @@ function CompletedWorkOrders({ currentUser, completedWorkOrders, onBack, onSelec
       <div className="p-4">
         {completedWorkOrders.length === 0 ? (
           <div className="bg-gray-800 rounded-lg p-8 text-center">
-            <div className="text-4xl mb-3">✅</div>
             <p className="text-gray-400">No completed work orders</p>
           </div>
         ) : (
@@ -970,7 +956,7 @@ function CompletedWorkOrders({ currentUser, completedWorkOrders, onBack, onSelec
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className="font-bold">{wo.wo_number}</span>
-                  <span className="text-xs bg-green-600 px-2 py-1 rounded">✅ Completed</span>
+                  <span className="text-xs bg-green-600 px-2 py-1 rounded">Completed</span>
                 </div>
                 <p className="text-sm text-gray-400">{wo.building}</p>
                 <p className="text-xs text-gray-500 mt-1">Completed: {formatDate(wo.date_completed)}</p>
@@ -1066,7 +1052,7 @@ function ChangePinModal({ show, onClose }) {
 }
 
 // MAIN COMPONENT
-export default function DemoMobilePage() {
+function DemoMobilePageInner() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedWO, setSelectedWO] = useState(null);
   const [showCompletedPage, setShowCompletedPage] = useState(false);
@@ -1164,5 +1150,14 @@ export default function DemoMobilePage() {
         onClose={() => setShowChangePinModal(false)}
       />
     </>
+  );
+}
+
+// The demo pages share the landing page's zinc / gunmetal look (demo-theme.css).
+export default function DemoMobilePage() {
+  return (
+    <div className={`lp-demo ${archivo.variable}`}>
+      <DemoMobilePageInner />
+    </div>
   );
 }

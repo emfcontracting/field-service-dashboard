@@ -30,14 +30,58 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const WO_SELECT = `wo_id, wo_number, building, status, nte, client_type, lead_tech_id,
-  hours_regular, hours_overtime, miles, material_cost, emf_equipment_cost, rental_cost, trailer_cost,
+const WO_SELECT = `wo_id, wo_number, building, status, nte, client, client_type, lead_tech_id,
+  hours, hours_regular, hours_overtime, miles, labor_cost, mileage_rate,
+  material_cost, emf_equipment_cost, rental_cost, trailer_cost,
   time_in, time_out, date_completed, comments, tech_comments,
+  comments_spanish, comments_original_language, include_admin_hours,
+  photos_received, photos_verified_at, photos_email_subject, photos_email_reference,
+  writeups_received, writeups_verified_at, writeups_email_subject,
+  receipts_received, receipts_verified_at, receipts_email_subject,
+  missing_data_items, missing_data_comment, missing_data_flagged_by, missing_data_flagged_at,
+  update_required_items, update_required_comment, update_required_flagged_by, update_required_flagged_at,
   acknowledged, is_locked, dispute_status, dispute_sub_wo, dispute_amount, dispute_notes,
   customer_signature, customer_name`;
 
-const COST_FIELDS = ['hours_regular', 'hours_overtime', 'miles', 'material_cost',
+// Money and hours: moved to the sub, zeroed on the original.
+const COST_FIELDS = ['hours', 'hours_regular', 'hours_overtime', 'miles', 'labor_cost', 'material_cost',
                      'emf_equipment_cost', 'rental_cost', 'trailer_cost'];
+
+// Proof the work was documented. These are not files — technicians e-mail the
+// photos to the office and verify-photos sets the flag — so what moves is the
+// status plus the subject line that points at the mail. Without this the sub
+// shows "photos missing" and the office chases a technician for pictures that
+// were sent months ago: true on five of the fifteen pairs linked before
+// 2026-11-04.
+const DOC_FIELDS = [
+  'photos_received', 'photos_verified_at', 'photos_email_subject', 'photos_email_reference',
+  'writeups_received', 'writeups_verified_at', 'writeups_email_subject',
+  'receipts_received', 'receipts_verified_at', 'receipts_email_subject',
+];
+
+// Carried over only where the sub has nothing of its own.
+const CARRY_FIELDS = ['client', 'client_type', 'mileage_rate', 'include_admin_hours',
+                      'comments_spanish', 'comments_original_language'];
+
+// An open "missing data" / "update required" flag belongs to the work, so it
+// follows it. Only if the sub carries none of its own.
+const FLAG_FIELDS = [
+  ['missing_data_items', 'missing_data_comment', 'missing_data_flagged_by', 'missing_data_flagged_at'],
+  ['update_required_items', 'update_required_comment', 'update_required_flagged_by', 'update_required_flagged_at'],
+];
+
+// Every table hanging off a work order. The first two were already moved; the
+// rest were not, which is how check-in/out rows, clock pauses, flags, target
+// history and written quotes stayed behind on a work order nobody looks at.
+const CHILD_TABLES = [
+  'work_order_assignments',
+  'daily_hours_log',
+  'work_order_time_log',
+  'work_order_clock_pauses',
+  'work_order_flags',
+  'work_order_target_history',
+  'work_order_quotes',
+];
 
 export async function POST(request) {
   const auth = await requireStaff(request);
@@ -92,17 +136,25 @@ export async function POST(request) {
     }
 
     // ── What moves ────────────────────────────────────────────────────────────
-    const [{ data: assignments }, { data: dailyLogs }, { data: invoices }] = await Promise.all([
-      supabase.from('work_order_assignments').select('assignment_id').eq('wo_id', original.wo_id),
-      supabase.from('daily_hours_log').select('log_id').eq('wo_id', original.wo_id),
-      supabase.from('invoices').select('invoice_id, invoice_number, status, qb_invoice_number').eq('wo_id', original.wo_id),
-    ]);
+    const childCounts = {};
+    for (const table of CHILD_TABLES) {
+      const { count, error } = await supabase
+        .from(table).select('wo_id', { count: 'exact', head: true }).eq('wo_id', original.wo_id);
+      if (error) throw new Error(`counting ${table} failed: ${error.message}`);
+      childCounts[table] = count || 0;
+    }
+    const { data: invoices } = await supabase
+      .from('invoices').select('invoice_id, invoice_number, status, qb_invoice_number').eq('wo_id', original.wo_id);
+
+    const docs = Object.fromEntries(
+      DOC_FIELDS.map((f) => [f, original[f]]).filter(([, v]) => v !== null && v !== undefined && v !== false)
+    );
 
     const moved = {
-      assignments: assignments?.length || 0,
-      daily_logs: dailyLogs?.length || 0,
+      rows: childCounts,
       costs: Object.fromEntries(COST_FIELDS.map((f) => [f, original[f]]).filter(([, v]) => Number(v) > 0)),
       times: { time_in: original.time_in, time_out: original.time_out, date_completed: original.date_completed },
+      documentation: docs,
       lead_tech: !sub.lead_tech_id && original.lead_tech_id ? original.lead_tech_id : null,
       invoices: (invoices || []).map((i) => i.invoice_number),
     };
@@ -130,28 +182,36 @@ export async function POST(request) {
       date_completed: sub.date_completed || original.date_completed,
       customer_signature: sub.customer_signature || original.customer_signature,
       customer_name: sub.customer_name || original.customer_name,
-      client_type: sub.client_type || original.client_type,
       lead_tech_id: sub.lead_tech_id || original.lead_tech_id,
       comments: [
         sub.comments || '',
-        `[SUB WORK ORDER — ${now.slice(0, 10)}] Billing sub work order for ${original.wo_number}. Hours, costs, check-in/out and the work performed were moved here. ${original.wo_number} is no longer active — look it up there for the full history.`,
+        `[SUB WORK ORDER — ${now.slice(0, 10)}] Billing sub work order for ${original.wo_number}. Hours, costs, check-in/out, clock pauses, flags, written quotes and the photo/write-up/receipt status were all moved here. The photos themselves are in the office mailbox under ${original.wo_number}. ${original.wo_number} is no longer active — look it up there for the full history.`,
         original.tech_comments ? `--- Technician comments from ${original.wo_number} ---\n${original.tech_comments}` : '',
       ].filter(Boolean).join('\n\n'),
       tech_comments: sub.tech_comments || original.tech_comments,
     };
     for (const f of COST_FIELDS) subUpdate[f] = Number(sub[f]) || Number(original[f]) || 0;
+    for (const f of CARRY_FIELDS) subUpdate[f] = sub[f] ?? original[f] ?? null;
+    // Documentation status: never downgrade something the sub already has.
+    for (const f of DOC_FIELDS) {
+      const own = sub[f];
+      subUpdate[f] = (own === null || own === undefined || own === false) ? (original[f] ?? own ?? null) : own;
+    }
+    // A flag moves as a set or not at all — half a flag is worse than none.
+    for (const group of FLAG_FIELDS) {
+      const subHasOwn = group.some((f) => sub[f] !== null && sub[f] !== undefined);
+      if (!subHasOwn) for (const f of group) subUpdate[f] = original[f] ?? null;
+    }
 
     const { error: subErr } = await supabase.from('work_orders').update(subUpdate).eq('wo_id', sub.wo_id);
     if (subErr) throw new Error(`updating ${subNumber} failed: ${subErr.message}`);
 
-    // Hours and logs follow the money.
-    if (moved.assignments) {
-      const { error } = await supabase.from('work_order_assignments').update({ wo_id: sub.wo_id }).eq('wo_id', original.wo_id);
-      if (error) throw new Error(`moving assignments failed: ${error.message}`);
-    }
-    if (moved.daily_logs) {
-      const { error } = await supabase.from('daily_hours_log').update({ wo_id: sub.wo_id }).eq('wo_id', original.wo_id);
-      if (error) throw new Error(`moving daily hours failed: ${error.message}`);
+    // Everything that hangs off the work order follows the money: hours, team,
+    // check-in/out, clock pauses, flags, target history and the written quotes.
+    for (const table of CHILD_TABLES) {
+      if (!childCounts[table]) continue;
+      const { error } = await supabase.from(table).update({ wo_id: sub.wo_id }).eq('wo_id', original.wo_id);
+      if (error) throw new Error(`moving ${table} failed: ${error.message}`);
     }
 
     // The original goes inactive: no costs, no invoicing flags, linked, closed.
@@ -160,7 +220,7 @@ export async function POST(request) {
       dispute_sub_wo: subNumber,
       dispute_notes: [
         original.dispute_notes || '',
-        `${stamp} — Closed — replaced by sub work order ${subNumber}. Hours, costs and the work performed were moved there; this work order stays for the history only.`,
+        `${stamp} — Closed — replaced by sub work order ${subNumber}. Hours, costs, check-in/out, clock pauses, flags and written quotes were moved there; this work order stays for the history only.`,
       ].filter(Boolean).join('\n'),
       acknowledged: false, acknowledged_at: null,
       is_locked: false, locked_at: null, locked_by: null,

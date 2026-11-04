@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { archivo } from '../fonts';
+import ThemeToggle from '../components/ThemeToggle';
 import '../demo-theme.css';
 import { DEMO_USERS, generateDemoWorkOrders, getCBREStatusBadge } from '../mockData';
 
@@ -64,7 +65,10 @@ function DemoBanner({ onBack }) {
   return (
     <div className="lp-strip">
       <span><strong>Demo</strong> with sample data</span>
-      <Link href="/demo" className="lp-strip-link">Overview</Link>
+      <span className="lp-strip-actions">
+        <ThemeToggle />
+        <Link href="/demo" className="lp-strip-link">Overview</Link>
+      </span>
     </div>
   );
 }

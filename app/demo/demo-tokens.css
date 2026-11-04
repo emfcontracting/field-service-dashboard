@@ -1,0 +1,142 @@
+/* app/demo/demo-tokens.css — colour tokens for every demo page, light and dark.
+
+   Light is the default. Dark applies when the visitor's system prefers it,
+   unless they picked light with the toggle, or when they picked dark.
+   The toggle writes data-pcs-theme="light|dark" on <html> (ThemeToggle.js).
+   Everything is scoped to .lp (landing) and .lp-demo (app demos). */
+
+.lp, .lp-demo {
+  color-scheme: light;
+  --zinc: #e3e7ea;        /* page */
+  --zinc-deep: #d4dadf;   /* banded sections */
+  --plate: #f3f5f6;       /* cards */
+  --plate-2: #e8ecee;     /* table heads, raised gradient end */
+  --well: #dde2e6;        /* inputs, secondary buttons */
+  --well-2: #ccd3d8;      /* hover on wells */
+  --rule: #c3cad0;
+  --rule-strong: #a9b2b9;
+  --ink: #1d2328;         /* main text */
+  --ink-2: #2f373e;
+  --slate: #56616b;
+  --steel: #76828c;
+  --faint: #9aa4ac;
+  --solid: #1d2328;       /* primary fills (buttons, marks, strips) */
+  --solid-hi: #0f1316;
+  --solid-ink: #f3f5f6;   /* text on --solid */
+  --hl: #ffffff;          /* top-edge highlight on plates */
+  --grain: rgba(255, 255, 255, 0.18);
+  --overlay: rgba(20, 25, 29, 0.55);
+  --focus: #1f6fd6;
+  --wash: rgba(29, 35, 40, 0.07);
+
+  --ok: #1f7a4d;   --ok-hi: #17603c;   --ok-ink: #1b6b44;   --ok-tint: #dcece3;   --ok-line: #a9cdb8;
+  --bad: #a8322b;  --bad-hi: #8a2822;  --bad-ink: #a12d26;  --bad-tint: #f1dedb;  --bad-line: #dcb0ab;
+  --warn: #a57a0c; --warn-hi: #87630a; --warn-ink: #86620a; --warn-tint: #f3ead0; --warn-line: #dcc98e;
+  --orng: #b4610f; --orng-hi: #93500c; --orng-ink: #9a520c; --orng-tint: #f4e3d2; --orng-line: #e0c09d;
+  --info-ink: #24588f; --info-tint: #dde6f0; --info-line: #aec2d8;
+  --sky-ink: #24628a;  --sky-tint: #dbe9f1;  --sky-line: #a8c8da;
+  --vio-ink: #55447f;  --vio-tint: #e6e1ef;  --vio-line: #c4bad8;
+  --pri-medium: #c9a227;
+  --strip-bg: #1d2328;
+  --strip-ink: #c9d1d8;
+  --strip-edge: #46515a;
+}
+
+/* Dark: same machined idea, lights off. Graphite plates, zinc type,
+   the primary fill flips to bright zinc so actions still read first. */
+:root[data-pcs-theme="dark"] .lp,
+:root[data-pcs-theme="dark"] .lp-demo {
+  color-scheme: dark;
+  --zinc: #14181b;
+  --zinc-deep: #101316;
+  --plate: #1b2024;
+  --plate-2: #20262b;
+  --well: #262d33;
+  --well-2: #2f373e;
+  --rule: #323a41;
+  --rule-strong: #48525b;
+  --ink: #e6eaed;
+  --ink-2: #c9d0d6;
+  --slate: #9aa5ae;
+  --steel: #7a858f;
+  --faint: #5c666f;
+  --solid: #e3e7ea;
+  --solid-hi: #ffffff;
+  --solid-ink: #14181b;
+  --hl: rgba(255, 255, 255, 0.04);
+  --grain: rgba(255, 255, 255, 0.012);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --focus: #7fb2f0;
+  --wash: rgba(255, 255, 255, 0.05);
+
+  --ok: #2a8f5c;   --ok-hi: #33a86c;   --ok-ink: #5fd497;   --ok-tint: #16261e;   --ok-line: #2c5a43;
+  --bad: #b8443c;  --bad-hi: #cc5047;  --bad-ink: #f08a80;  --bad-tint: #2a1b1a;  --bad-line: #5e3330;
+  --warn: #a8801a; --warn-hi: #bf9322; --warn-ink: #e8be5a; --warn-tint: #29231a; --warn-line: #5c4c22;
+  --orng: #b9661a; --orng-hi: #cf7624; --orng-ink: #f0a25a; --orng-tint: #2b2017; --orng-line: #5f4325;
+  --info-ink: #8fb8e6; --info-tint: #18222d; --info-line: #2f4560;
+  --sky-ink: #7cc0e0;  --sky-tint: #16242c;  --sky-line: #2c4b5b;
+  --vio-ink: #b5a6e0;  --vio-tint: #221e2d;  --vio-line: #463d5e;
+  --pri-medium: #d8b03a;
+  --strip-bg: #0c0f11;
+  --strip-ink: #aeb8c0;
+  --strip-edge: #323a41;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-pcs-theme="light"]) .lp,
+  :root:not([data-pcs-theme="light"]) .lp-demo {
+    color-scheme: dark;
+    --zinc: #14181b;
+    --zinc-deep: #101316;
+    --plate: #1b2024;
+    --plate-2: #20262b;
+    --well: #262d33;
+    --well-2: #2f373e;
+    --rule: #323a41;
+    --rule-strong: #48525b;
+    --ink: #e6eaed;
+    --ink-2: #c9d0d6;
+    --slate: #9aa5ae;
+    --steel: #7a858f;
+    --faint: #5c666f;
+    --solid: #e3e7ea;
+    --solid-hi: #ffffff;
+    --solid-ink: #14181b;
+    --hl: rgba(255, 255, 255, 0.04);
+    --grain: rgba(255, 255, 255, 0.012);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --focus: #7fb2f0;
+    --wash: rgba(255, 255, 255, 0.05);
+
+    --ok: #2a8f5c;   --ok-hi: #33a86c;   --ok-ink: #5fd497;   --ok-tint: #16261e;   --ok-line: #2c5a43;
+    --bad: #b8443c;  --bad-hi: #cc5047;  --bad-ink: #f08a80;  --bad-tint: #2a1b1a;  --bad-line: #5e3330;
+    --warn: #a8801a; --warn-hi: #bf9322; --warn-ink: #e8be5a; --warn-tint: #29231a; --warn-line: #5c4c22;
+    --orng: #b9661a; --orng-hi: #cf7624; --orng-ink: #f0a25a; --orng-tint: #2b2017; --orng-line: #5f4325;
+    --info-ink: #8fb8e6; --info-tint: #18222d; --info-line: #2f4560;
+    --sky-ink: #7cc0e0;  --sky-tint: #16242c;  --sky-line: #2c4b5b;
+    --vio-ink: #b5a6e0;  --vio-tint: #221e2d;  --vio-line: #463d5e;
+    --pri-medium: #d8b03a;
+    --strip-bg: #0c0f11;
+    --strip-ink: #aeb8c0;
+    --strip-edge: #323a41;
+  }
+}
+
+/* Theme toggle (ThemeToggle.js): a two-way "Light / Dark" switch that
+   takes its colour from wherever it sits (nav or demo strip). */
+.lp-theme-toggle {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; border-radius: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  font: inherit; font-size: 12px; line-height: 1;
+}
+.lp-theme-toggle button {
+  padding: 5px 9px; border-radius: 2px; border: 0; cursor: pointer;
+  background: transparent; color: inherit; font: inherit; opacity: 0.7;
+}
+.lp-theme-toggle button:hover { opacity: 1; }
+.lp-theme-toggle button[aria-pressed="true"] {
+  opacity: 1; font-weight: 700;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.lp-theme-toggle button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

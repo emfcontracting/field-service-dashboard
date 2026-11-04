@@ -1,32 +1,17 @@
 /* app/demo/demo-theme.css — puts the demo's field-app and invoicing pages in
-   the same zinc / gunmetal look as the landing page.
+   the landing page's machined look, light and dark.
 
    Those pages are written with the product's dark Tailwind classes. Inside
-   .lp-demo this file maps each of them onto the light machined palette, so
-   the page logic stays untouched. Plain (unlayered) CSS beats Tailwind's
-   @layer utilities, and the .lp-demo prefix keeps it out of the real app. */
+   .lp-demo this file maps each of them onto the demo tokens
+   (demo-tokens.css), so the page logic stays untouched. Plain (unlayered)
+   CSS beats Tailwind's @layer utilities, and the .lp-demo prefix keeps it
+   out of the real app. */
 
 .lp-demo {
-  --zinc: #e3e7ea;
-  --zinc-deep: #d4dadf;
-  --plate: #f3f5f6;
-  --plate-2: #e8ecee;
-  --well: #dde2e6;
-  --rule: #bfc6cc;
-  --gunmetal: #1d2328;
-  --gunmetal-hi: #0f1316;
-  --ink-2: #2f373e;
-  --slate: #56616b;
-  --steel: #76828c;
-  --ok: #1f7a4d;     --ok-hi: #17603c;   --ok-tint: #dcece3;  --ok-line: #a9cdb8;
-  --bad: #a8322b;    --bad-hi: #8a2822;  --bad-tint: #f1dedb; --bad-line: #dcb0ab;
-  --warn: #a5650c;   --warn-hi: #87520a; --warn-tint: #f3e6d0;
-  --info: #24588f;   --info-tint: #dde6f0; --info-line: #aec2d8;
-
   font-family: var(--lp-font), system-ui, sans-serif;
-  color: var(--gunmetal);
+  color: var(--ink);
   background:
-    repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, var(--grain) 0 1px, transparent 1px 3px),
     var(--zinc);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -34,39 +19,39 @@
 
 /* Surfaces */
 .lp-demo .bg-gray-900, .lp-demo .bg-black { background: transparent; }
-.lp-demo .bg-gray-800 { background: var(--plate); border: 1px solid var(--rule); box-shadow: inset 0 1px 0 #fff; }
+.lp-demo .bg-gray-800 { background: var(--plate); border: 1px solid var(--rule); box-shadow: inset 0 1px 0 var(--hl); }
 .lp-demo .sticky.bg-gray-800 { border-width: 0 0 1px; }
 .lp-demo .bg-gray-700, .lp-demo .bg-gray-750 { background: var(--well); }
-.lp-demo .bg-gray-600 { background: #ccd3d8; }
-.lp-demo .hover\:bg-gray-600:hover, .lp-demo .hover\:bg-gray-700:hover, .lp-demo .hover\:bg-gray-750:hover { background: #ccd3d8; }
-.lp-demo .bg-black\/80, .lp-demo .bg-opacity-75 { background: rgba(20, 25, 29, 0.55); }
+.lp-demo .bg-gray-600 { background: var(--well-2); }
+.lp-demo .hover\:bg-gray-600:hover, .lp-demo .hover\:bg-gray-700:hover, .lp-demo .hover\:bg-gray-750:hover { background: var(--well-2); }
+.lp-demo .bg-black\/80, .lp-demo .bg-opacity-75 { background: var(--overlay); }
 
 /* Text */
-.lp-demo .text-white { color: var(--gunmetal); }
+.lp-demo .text-white { color: var(--ink); }
 .lp-demo .text-gray-300 { color: var(--ink-2); }
 .lp-demo .text-gray-400 { color: var(--slate); }
 .lp-demo .text-gray-500 { color: var(--steel); }
-.lp-demo .hover\:text-white:hover { color: var(--gunmetal-hi); }
-.lp-demo .text-green-400, .lp-demo .text-green-500 { color: var(--ok); }
-.lp-demo .text-red-400, .lp-demo .text-red-500 { color: var(--bad); }
+.lp-demo .hover\:text-white:hover { color: var(--solid-hi); }
+.lp-demo .text-green-400, .lp-demo .text-green-500 { color: var(--ok-ink); }
+.lp-demo .text-red-400, .lp-demo .text-red-500 { color: var(--bad-ink); }
 .lp-demo .hover\:text-red-300:hover { color: var(--bad-hi); }
-.lp-demo .text-orange-500, .lp-demo .text-yellow-400, .lp-demo .text-yellow-500 { color: var(--warn); }
-.lp-demo .text-blue-300, .lp-demo .text-blue-400 { color: var(--info); }
-.lp-demo .hover\:text-blue-300:hover { color: var(--gunmetal); }
+.lp-demo .text-orange-500, .lp-demo .text-yellow-400, .lp-demo .text-yellow-500 { color: var(--warn-ink); }
+.lp-demo .text-blue-300, .lp-demo .text-blue-400 { color: var(--info-ink); }
+.lp-demo .hover\:text-blue-300:hover { color: var(--ink); }
 
 /* Borders */
 .lp-demo .border-gray-600, .lp-demo .border-gray-700 { border-color: var(--rule); }
 .lp-demo .border-blue-400, .lp-demo .border-blue-700 { border-color: var(--info-line); }
 .lp-demo .border-green-400, .lp-demo .border-green-700 { border-color: var(--ok-line); }
 .lp-demo .border-red-500, .lp-demo .border-red-700 { border-color: var(--bad-line); }
-.lp-demo .focus\:border-blue-500:focus { border-color: var(--gunmetal); }
-.lp-demo input, .lp-demo select, .lp-demo textarea { color: var(--gunmetal); }
+.lp-demo .focus\:border-blue-500:focus { border-color: var(--ink); }
+.lp-demo input, .lp-demo select, .lp-demo textarea { color: var(--ink); }
 .lp-demo input::placeholder, .lp-demo textarea::placeholder { color: var(--steel); }
-.lp-demo input:focus, .lp-demo select:focus, .lp-demo textarea:focus { outline: 2px solid var(--gunmetal); outline-offset: 1px; }
+.lp-demo input:focus, .lp-demo select:focus, .lp-demo textarea:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
 
-/* Solid action colors: white type on top, whatever the children say */
-.lp-demo :is(.bg-blue-500, .bg-blue-600, .bg-purple-600) { background: var(--gunmetal); color: var(--plate); }
-.lp-demo :is(.hover\:bg-blue-700, .hover\:bg-purple-700):hover { background: var(--gunmetal-hi); }
+/* Solid action colours: their own type colour, whatever the children say */
+.lp-demo :is(.bg-blue-500, .bg-blue-600, .bg-purple-600) { background: var(--solid); color: var(--solid-ink); }
+.lp-demo :is(.hover\:bg-blue-700, .hover\:bg-purple-700):hover { background: var(--solid-hi); }
 .lp-demo .bg-green-600 { background: var(--ok); color: #fff; }
 .lp-demo .hover\:bg-green-700:hover { background: var(--ok-hi); }
 .lp-demo :is(.bg-red-600, .bg-red-700, .bg-red-800) { background: var(--bad); color: #fff; }
@@ -75,16 +60,18 @@
 .lp-demo .hover\:bg-orange-700:hover { background: var(--warn-hi); }
 .lp-demo :is(.bg-blue-600, .bg-blue-500, .bg-purple-600, .bg-green-600, .bg-red-600, .bg-red-700, .bg-red-800, .bg-orange-600, .bg-yellow-600) :is(.text-white, .text-gray-300, .text-gray-400) { color: inherit; }
 .lp-demo :is(.text-red-100, .text-green-100, .text-blue-100, .text-purple-100, .text-orange-100) { color: #fff; }
+.lp-demo :is(.bg-blue-500, .bg-blue-600, .bg-purple-600) :is(.text-blue-100, .text-purple-100),
+.lp-demo :is(.bg-blue-500, .bg-blue-600, .bg-purple-600):is(.text-blue-100, .text-purple-100) { color: var(--solid-ink); }
 
 /* Tinted notices */
 .lp-demo :is(.bg-blue-900\/50, .bg-blue-900\/30) { background: var(--info-tint); }
 .lp-demo :is(.bg-green-900\/30, .bg-green-900\/50) { background: var(--ok-tint); }
 .lp-demo :is(.bg-red-900\/30, .bg-red-900\/50) { background: var(--bad-tint); }
-.lp-demo .bg-white\/20 { background: rgba(29, 35, 40, 0.08); }
-.lp-demo .hover\:bg-white\/30:hover, .lp-demo .hover\:bg-white\/20:hover { background: rgba(29, 35, 40, 0.14); }
+.lp-demo .bg-white\/20 { background: var(--wash); }
+.lp-demo .hover\:bg-white\/30:hover, .lp-demo .hover\:bg-white\/20:hover { background: var(--wash); }
 
-/* Any leftover gradient becomes a flat gunmetal plate */
-.lp-demo [class*="bg-gradient"] { background: var(--gunmetal); color: var(--plate); }
+/* Any leftover gradient becomes a flat solid plate */
+.lp-demo [class*="bg-gradient"] { background: var(--solid); color: var(--solid-ink); }
 
 /* Machined corners: small radii, pills stay pills */
 .lp-demo .rounded { border-radius: 2px; }
@@ -99,34 +86,36 @@
 .lp-mark-sm {
   display: inline-grid; place-items: center; flex-shrink: 0;
   width: 32px; height: 32px; border-radius: 3px;
-  background: var(--gunmetal, #1d2328); color: var(--plate, #f3f5f6);
+  background: var(--solid); color: var(--solid-ink);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -2px 0 rgba(0,0,0,0.35);
   font-size: 10px; font-weight: 800; font-stretch: 125%; letter-spacing: 0.02em;
 }
 .lp-mark-lg { width: 44px; height: 44px; font-size: 12px; }
+.lp-mark-xl { width: 72px; height: 72px; font-size: 18px; border-radius: 4px; }
 
 .lp-strip {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 8px 14px; font-size: 13px;
-  background: var(--gunmetal); color: #c9d1d8;
+  background: var(--strip-bg); color: var(--strip-ink);
+  border-bottom: 1px solid var(--strip-edge);
 }
 .lp-strip strong { color: #fff; font-weight: 700; }
-.lp-strip-boxed { border-radius: 3px; margin-bottom: 18px; }
-.lp-strip-actions { display: flex; gap: 6px; align-items: center; }
+.lp-strip-boxed { border-radius: 3px; margin-bottom: 18px; border: 1px solid var(--strip-edge); }
+.lp-strip-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .lp-strip-link, .lp-strip-btn {
   padding: 4px 10px; border-radius: 3px; color: #e6ebef; font-size: 13px;
   background: transparent; border: 1px solid transparent; cursor: pointer;
 }
 .lp-strip-link:hover { background: rgba(255,255,255,0.08); }
-.lp-strip-btn { border-color: #46515a; }
+.lp-strip-btn { border-color: var(--strip-edge); }
 .lp-strip-btn:hover { background: rgba(255,255,255,0.08); }
+.lp-strip .lp-theme-toggle { color: #e6ebef; }
 
 .lp-pri {
   display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-  vertical-align: middle; box-shadow: 0 0 0 2px rgba(29,35,40,0.12);
+  vertical-align: middle; box-shadow: 0 0 0 2px var(--wash);
 }
 .lp-pri-emergency { background: var(--bad); }
-.lp-pri-high { background: var(--warn); }
-.lp-pri-medium { background: #c9a227; }
+.lp-pri-high { background: var(--orng); }
+.lp-pri-medium { background: var(--pri-medium); }
 .lp-pri-low { background: var(--ok); }
-.lp-mark-xl { width: 72px; height: 72px; font-size: 18px; border-radius: 4px; }

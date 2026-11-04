@@ -6,6 +6,7 @@
 
 import Link from 'next/link';
 import { archivo } from './fonts';
+import ThemeToggle from './components/ThemeToggle';
 import './landing.css';
 
 // One CBRE work order, start to finish. The hero panel lights these in order.
@@ -77,6 +78,7 @@ export default function DemoLandingPage() {
             <Link href="/demo/dashboard">Dashboard</Link>
             <Link href="/demo/mobile">Field app</Link>
             <Link href="/demo/invoices">Invoicing</Link>
+            <ThemeToggle />
             <a href="#contact" className="lp-nav-cta">Talk to us</a>
           </nav>
         </div>

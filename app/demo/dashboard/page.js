@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { archivo } from '../fonts';
+import ThemeToggle from '../components/ThemeToggle';
 import '../demo-theme.css';
 import '../demo-dashboard.css';
 import DemoDashboardHeader from '../components/DemoDashboardHeader';
@@ -23,6 +24,7 @@ function DemoBanner({ onReset }) {
     <div className="lp-strip lp-strip-boxed">
       <span><strong>Demo</strong> with sample data. Changes stay in this browser.</span>
       <span className="lp-strip-actions">
+        <ThemeToggle />
         <Link href="/demo" className="lp-strip-link">Overview</Link>
         <button onClick={onReset} className="lp-strip-btn">Reset demo</button>
       </span>

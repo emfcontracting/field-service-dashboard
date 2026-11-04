@@ -92,9 +92,16 @@ class MockSupabaseClient {
   // Mock auth for demo
   auth = {
     getUser: async () => ({ data: { user: { id: 'demo-user', email: 'demo@pcsfield.demo' } }, error: null }),
+    getSession: async () => ({ data: { session: null }, error: null }),
     signOut: async () => ({ error: null })
   };
 }
+
+const NOOP_BUILDER_METHODS = new Set([
+  'textSearch', 'overlaps', 'containedBy', 'rangeGt', 'rangeGte', 'rangeLt', 'rangeLte',
+  'rangeAdjacent', 'likeAllOf', 'likeAnyOf', 'ilikeAllOf', 'ilikeAnyOf', 'csv', 'geojson',
+  'explain', 'returns', 'throwOnError', 'abortSignal', 'rollback', 'setHeader',
+]);
 
 class MockQueryBuilder {
   constructor(client, table) {
@@ -107,6 +114,76 @@ class MockQueryBuilder {
     this.updateData = null;
     this.insertData = null;
     this.deleteMode = false;
+    this.postFilters = [];
+    this.maybeSingleResult = false;
+    this.rangeFrom = null;
+    this.rangeTo = null;
+
+    // The demo renders the real dashboard components. When they start using a
+    // query-builder method this mock does not implement yet, chain it as a
+    // no-op instead of crashing the whole page.
+    // Only names that are real PostgREST builder methods get stubbed — plain
+    // state fields (singleResult, limitCount…) must stay undefined.
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        if (prop in target) return Reflect.get(target, prop, receiver);
+        if (typeof prop === 'string' && NOOP_BUILDER_METHODS.has(prop)) return () => receiver;
+        return undefined;
+      },
+    });
+  }
+
+  // ── Extra PostgREST filters (applied generically after the table handler) ──
+  neq(field, value)   { this.postFilters.push({ op: 'neq', field, value }); return this; }
+  gt(field, value)    { this.postFilters.push({ op: 'gt',  field, value }); return this; }
+  gte(field, value)   { this.postFilters.push({ op: 'gte', field, value }); return this; }
+  lt(field, value)    { this.postFilters.push({ op: 'lt',  field, value }); return this; }
+  lte(field, value)   { this.postFilters.push({ op: 'lte', field, value }); return this; }
+  is(field, value)    { this.postFilters.push({ op: 'is',  field, value }); return this; }
+  ilike(field, pattern) { this.postFilters.push({ op: 'ilike', field, value: pattern }); return this; }
+  not(field, operator, value) { this.postFilters.push({ op: 'not', field, operator, value }); return this; }
+  filter(field, operator, value) { this.postFilters.push({ op: operator, field, value }); return this; }
+  match(obj = {}) { Object.entries(obj).forEach(([f, v]) => this.eq(f, v)); return this; }
+  or() { return this; }        // complex OR strings: ignored in demo
+  contains() { return this; }
+  range(from, to) { this.rangeFrom = from; this.rangeTo = to; return this; }
+  maybeSingle() { this.maybeSingleResult = true; return this; }
+  upsert(data) { return this.insert(data); }
+
+  _passes(row, f) {
+    const v = row?.[f.field];
+    const cmp = f.value;
+    switch (f.op) {
+      case 'neq': return v !== cmp;
+      case 'gt':  return v > cmp;
+      case 'gte': return v >= cmp;
+      case 'lt':  return v < cmp;
+      case 'lte': return v <= cmp;
+      case 'is':  return cmp === null ? v == null : v === cmp;
+      case 'ilike': {
+        const re = new RegExp('^' + String(cmp).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*') + '$', 'i');
+        return re.test(String(v ?? ''));
+      }
+      case 'not': {
+        if (f.operator === 'is') return cmp === null ? v != null : v !== cmp;
+        if (f.operator === 'eq') return v !== cmp;
+        return true;
+      }
+      default: return true;
+    }
+  }
+
+  _postProcess(result) {
+    if (!result || result.error) return result;
+    let data = result.data;
+    if (Array.isArray(data)) {
+      if (this.postFilters.length) data = data.filter(r => this.postFilters.every(f => this._passes(r, f)));
+      if (this.rangeFrom != null) data = data.slice(this.rangeFrom, (this.rangeTo ?? data.length - 1) + 1);
+      if (this.maybeSingleResult || this.singleResult) data = data[0] ?? null;
+    } else if (data == null && (this.maybeSingleResult || this.singleResult)) {
+      data = null;
+    }
+    return { ...result, data, count: Array.isArray(result.data) ? result.data.length : (result.data ? 1 : 0) };
   }
 
   select(fields = '*') {
@@ -200,7 +277,7 @@ class MockQueryBuilder {
       result = { data: null, error };
     }
 
-    resolve(result);
+    resolve(this._postProcess(result));
   }
 
   handleWorkOrders() {
@@ -581,7 +658,26 @@ class MockQueryBuilder {
 // Create singleton instance
 let mockSupabaseInstance = null;
 
+// The real components call our /api routes (flags, CBRE submission checks,
+// notifications…). Demo work orders do not exist server-side, so on /demo
+// pages answer those calls locally with an empty, successful payload.
+function installDemoFetchShim() {
+  if (typeof window === 'undefined' || window.__pcsDemoFetchShim) return;
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input?.url || '';
+    const path = url.startsWith('http') ? new URL(url).pathname : url;
+    if (window.location.pathname.startsWith('/demo') && path.startsWith('/api/')) {
+      const body = { success: true, demo: true, flags: [], data: [], items: [], results: [] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(input, init);
+  };
+  window.__pcsDemoFetchShim = true;
+}
+
 export function getMockSupabase() {
+  installDemoFetchShim();
   if (!mockSupabaseInstance) {
     mockSupabaseInstance = new MockSupabaseClient();
   }

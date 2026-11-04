@@ -6,6 +6,7 @@ import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 import { apiFetch } from '@/lib/apiClient';
 import { useCurrentUser } from '@/app/components/CurrentUserContext';
+import { selectableUiThemes } from '@/lib/uiThemes';
 
 const supabase = getSupabase();
 
@@ -82,8 +83,27 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const router = useRouter();
-  const { user: currentUser, isSuperuser } = useCurrentUser();
+  const { user: currentUser, isSuperuser, uiTheme, refresh } = useCurrentUser();
   const loading = !currentUser;
+  // Dashboard layout (lib/uiThemes.js). Saved on the users row so it follows
+  // the person to every device; the shell re-renders as soon as refresh()
+  // hands the updated row back through CurrentUserContext.
+  const themeChoices = selectableUiThemes(currentUser);
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [themeError, setThemeError]   = useState('');
+  async function chooseTheme(key) {
+    if (!currentUser || key === uiTheme || themeSaving) return;
+    setThemeSaving(true); setThemeError('');
+    try {
+      const { error } = await supabase.from('users').update({ ui_theme: key }).eq('user_id', currentUser.user_id);
+      if (error) throw error;
+      await refresh();
+    } catch (err) {
+      setThemeError(/ui_theme/i.test(err.message || '')
+        ? 'The users.ui_theme column is missing — run migrations/2026-11-04_users_ui_theme.sql in Supabase first.'
+        : (err.message || 'Could not save the theme'));
+    } finally { setThemeSaving(false); }
+  }
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword]     = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -202,6 +222,46 @@ function SettingsContent() {
               <p className="text-slate-600 text-xs mt-3">Contact an admin to update your phone number or carrier.</p>
             </CardBody>
           </Card>
+
+          {/* ── Appearance: dashboard layout (only shown when there is a choice) ── */}
+          {themeChoices.length > 1 && (
+            <Card>
+              <CardHeader>
+                <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                  Dashboard layout
+                  <span className="text-xs text-slate-500 font-normal ml-1">Your choice only — everyone else keeps theirs</span>
+                </h2>
+              </CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {themeChoices.map((t) => {
+                    const active = t.key === uiTheme;
+                    return (
+                      <button key={t.key} type="button" onClick={() => chooseTheme(t.key)} disabled={themeSaving}
+                        aria-pressed={active}
+                        className={`text-left rounded-xl border p-4 transition disabled:opacity-60
+                          ${active ? 'border-blue-500/60 bg-blue-600/10' : 'border-[#1e1e2e] bg-[#0a0a0f] hover:border-[#3d3d5e]'}`}>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <span className="flex gap-1" aria-hidden="true">
+                            {t.swatch.map((c, i) => <span key={i} className="w-4 h-4 rounded-sm border border-white/10" style={{ background: c }} />)}
+                          </span>
+                          {active
+                            ? <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Active</span>
+                            : t.adminOnly && <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Admins only</span>}
+                        </div>
+                        <p className="text-slate-100 font-semibold text-sm">{t.label}</p>
+                        <p className="text-slate-400 text-xs mt-0.5">{t.tagline}</p>
+                        <p className="text-slate-600 text-xs mt-2 leading-relaxed">{t.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {themeError && <p className="text-red-400 text-xs mt-3">{themeError}</p>}
+                {themeSaving && <p className="text-slate-500 text-xs mt-3">Saving…</p>}
+              </CardBody>
+            </Card>
+          )}
 
           {/* ── Admin Tools (superuser only) ── */}
           {isSuperuser && (

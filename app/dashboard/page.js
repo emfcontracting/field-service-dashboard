@@ -25,6 +25,8 @@ import { useCurrentUser } from '../components/CurrentUserContext';
 import ArchiveView from './components/ArchiveView';
 import { calculateStats } from './utils/calculations';
 import { parseDate } from '@/lib/dates';
+import { homeViewFor } from '@/lib/uiThemes';
+import { TodayView, PipelineView, CockpitView, useTodayData } from './components/today';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -34,11 +36,14 @@ const supabase = getSupabase();
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const activeView = searchParams.get('view') || 'workorders';
+  const { user: currentUser, isSuperuser, isAdmin, uiTheme } = useCurrentUser();   // resolved once by AppShell
+  // No ?view= → the theme's home screen: Work Orders on classic, Today on the
+  // Today theme (lib/uiThemes.js). An explicit ?view= always wins.
+  const activeView = searchParams.get('view') || homeViewFor(uiTheme);
+  const todayTheme = uiTheme === 'today';
 
   const [workOrders, setWorkOrders] = useState([]);
   const [users, setUsers] = useState([]);
-  const { user: currentUser, isSuperuser, isAdmin } = useCurrentUser();   // resolved once by AppShell
   const [selectedWO, setSelectedWO] = useState(null);
   const [showNewWOModal, setShowNewWOModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -164,6 +169,16 @@ function DashboardContent() {
 
   const handleMissingHoursClick = () => router.push('/dashboard?view=missing-hours');
 
+  // Today theme: the three new views share one model (invoices, approvals,
+  // today's clock-ins, aging) on top of the open list already loaded above.
+  // Only fetched while one of them is on screen.
+  const todayViewActive = ['today', 'pipeline', 'cockpit'].includes(activeView);
+  const todayData = useTodayData(supabase, workOrders, users, { enabled: todayViewActive && !loading });
+  const goView = (view, params = {}) => {
+    const q = new URLSearchParams({ view, ...params });
+    router.push(`/dashboard?${q.toString()}`);
+  };
+
   const renderActiveView = () => {
     // The nav hides Archive for non-admins; this stops the URL from working
     // too, by sending them to the work order list instead. Not a security
@@ -171,6 +186,14 @@ function DashboardContent() {
     // of anyone who should not be in it.
     const view = activeView === 'archive' && !isAdmin ? 'workorders' : activeView;
     switch (view) {
+      case 'today':
+        return <TodayView data={todayData} users={users} currentUser={currentUser} loading={loading} supabase={supabase}
+          onSelectWorkOrder={setSelectedWO} onNewWorkOrder={() => setShowNewWOModal(true)} goView={goView} />;
+      case 'pipeline':
+        return <PipelineView data={todayData} loading={loading} supabase={supabase} onSelectWorkOrder={setSelectedWO}
+          initialColumn={searchParams.get('col')} goView={goView} />;
+      case 'cockpit':
+        return <CockpitView data={todayData} users={users} loading={loading} supabase={supabase} onSelectWorkOrder={setSelectedWO} goView={goView} />;
       case 'calendar':
         return <CalendarView workOrders={workOrders} users={users} supabase={supabase} refreshWorkOrders={refreshWorkOrders} onSelectWorkOrder={setSelectedWO} />;
       case 'missing-hours':
@@ -217,7 +240,7 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-200 p-4 md:p-6">
+    <div className={`min-h-screen ${todayTheme ? 'bg-[#0b0d12] text-[#e6e8ef]' : 'bg-[#0a0a0f] text-slate-200'} p-4 md:p-6`}>
       {renderActiveView()}
 
       {/* Mobile Warning */}

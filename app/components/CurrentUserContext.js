@@ -16,6 +16,7 @@
 'use client';
 
 import { createContext, useContext, useMemo } from 'react';
+import { resolveUiTheme } from '@/lib/uiThemes';
 
 export const SUPERUSER_EMAIL = 'jones.emfcontracting@gmail.com';
 export const OFFICE_ROLES = ['admin', 'office_staff'];
@@ -36,5 +37,8 @@ export function useCurrentUser() {
     isAdmin: user?.role === 'admin',
     isOffice: OFFICE_ROLES.includes(user?.role),
     isSuperuser: !!user?.email && user.email.toLowerCase() === SUPERUSER_EMAIL,
+    // Which dashboard layout this person sees (lib/uiThemes.js). Already
+    // role-checked: a non-admin on an admin-only theme gets 'classic' here.
+    uiTheme: resolveUiTheme(user),
   };
 }

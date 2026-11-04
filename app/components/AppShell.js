@@ -21,6 +21,9 @@ import { getSupabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiClient';
 import { COMPLETION_SELECT, completionReadinessCheck, isActiveWo } from '@/lib/completionReadiness';
 import { CurrentUserProvider } from './CurrentUserContext';
+import { resolveUiTheme } from '@/lib/uiThemes';
+import TodaySidebar from './TodaySidebar';
+import GlobalWOSearch from './GlobalWOSearch';
 
 const supabase = getSupabase();
 
@@ -448,6 +451,7 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   const [cbreDataEntryCount, setCbreDataEntryCount] = useState(0);
   const [reviewQueueCount, setReviewQueueCount] = useState(0);
   const [approvalsCount, setApprovalsCount] = useState(0);
+  const [shellSearch, setShellSearch] = useState(false);   // Today sidebar's search → GlobalWOSearch
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -654,29 +658,51 @@ export default function AppShell({ children, activeLink, requireRole = ['admin',
   if (!authenticated) return null;
 
   // ── Render ──
+  // Which shell: the person's dashboard theme (lib/uiThemes.js, Settings →
+  // Dashboard layout). 'today' swaps the sidebar and the ground colour; the
+  // page inside is the same component either way.
+  const uiTheme = resolveUiTheme(userInfo);
+  const todayShell = uiTheme === 'today';
   return (
     <CurrentUserProvider user={userInfo} loading={false} refresh={refreshUser}>
-    <div className={`min-h-screen bg-[#0a0a0f] ${isMobile ? 'flex flex-col' : 'flex'}`}>
+    <div className={`min-h-screen ${todayShell ? 'bg-[#0b0d12]' : 'bg-[#0a0a0f]'} ${isMobile ? 'flex flex-col' : 'flex'}`}>
       <Suspense fallback={
-        isMobile ? null : (
+        isMobile ? null : todayShell ? (
+          <div className="bg-[#0f121a] border-r border-[#232a38] flex-shrink-0 w-[220px]" />
+        ) : (
           <div className={`bg-[#0d0d14] border-r border-[#1e1e2e] flex-shrink-0 ${sidebarCollapsed ? 'w-[52px]' : 'w-[200px]'}`} />
         )
       }>
-        <SidebarNav
-          userInfo={userInfo}
-          missingHoursCount={missingHoursCount}
-          cbreDataEntryCount={cbreDataEntryCount}
-          reviewQueueCount={reviewQueueCount}
-          approvalsCount={approvalsCount}
-          sidebarCollapsed={sidebarCollapsed}
-          onCollapse={() => setSidebarCollapsed(p => !p)}
-          onLogout={handleLogout}
-          onThemeToggle={toggleTheme}
-          theme={theme}
-          isMobile={isMobile}
-          activeLink={activeLink}
-        />
+        {todayShell ? (
+          <TodaySidebar
+            userInfo={userInfo}
+            missingHoursCount={missingHoursCount}
+            cbreDataEntryCount={cbreDataEntryCount}
+            reviewQueueCount={reviewQueueCount}
+            approvalsCount={approvalsCount}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            activeLink={activeLink}
+            onSearch={() => setShellSearch(true)}
+          />
+        ) : (
+          <SidebarNav
+            userInfo={userInfo}
+            missingHoursCount={missingHoursCount}
+            cbreDataEntryCount={cbreDataEntryCount}
+            reviewQueueCount={reviewQueueCount}
+            approvalsCount={approvalsCount}
+            sidebarCollapsed={sidebarCollapsed}
+            onCollapse={() => setSidebarCollapsed(p => !p)}
+            onLogout={handleLogout}
+            onThemeToggle={toggleTheme}
+            theme={theme}
+            isMobile={isMobile}
+            activeLink={activeLink}
+          />
+        )}
       </Suspense>
+      {shellSearch && <GlobalWOSearch onClose={() => setShellSearch(false)} />}
 
       <main className="flex-1 min-w-0 overflow-auto">
         {qbBanner && (

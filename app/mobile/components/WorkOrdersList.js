@@ -363,6 +363,14 @@ export default function WorkOrdersList({
         <div className="flex gap-2 overflow-x-auto pb-1">
           <NotificationBell userId={currentUser?.user_id} />
           <LanguageToggle />
+          {/* Conveyor PMI checklist (public/pmi) — a plain page that works offline once
+              opened; the mechanic's name is handed over in the URL. */}
+          <button
+            onClick={() => window.open(`/pmi/?mech=${encodeURIComponent(`${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim())}`, '_blank')}
+            className="bg-orange-700 hover:bg-orange-600 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0"
+          >
+            📋 PMI
+          </button>
           
           {/* Only show Dashboard button for admin and office roles */}
           {(currentUser.role === 'admin' || currentUser.role === 'office') && (

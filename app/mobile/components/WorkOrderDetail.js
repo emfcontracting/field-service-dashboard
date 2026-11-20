@@ -841,6 +841,21 @@ export default function WorkOrderDetail({
               >
                 🖨️ {t('printWO')}
               </button>
+              {/* PM work orders (P-numbers, not PJ projects): open the conveyor PMI
+                  checklist with site, work order and mechanic already filled in. */}
+              {/^P\d/i.test(String(wo.wo_number || '')) && (
+                <button
+                  onClick={() => {
+                    const site = String(wo.building || '').trim().split(/\s*[-–]\s*|\s+/)[0] || '';
+                    const mech = `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim();
+                    const q = new URLSearchParams({ facility: site, wo: wo.wo_number, mech });
+                    window.open(`/pmi/?${q.toString()}`, '_blank');
+                  }}
+                  className="bg-orange-700 hover:bg-orange-600 py-3 rounded-lg font-semibold"
+                >
+                  📋 {language === 'en' ? 'PMI Checklist' : 'Lista PMI'}
+                </button>
+              )}
               {status !== 'completed' && !wo.customer_signature && (
                 <button
                   onClick={() => setShowSignatureModal(true)}

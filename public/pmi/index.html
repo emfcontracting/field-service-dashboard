@@ -597,7 +597,7 @@ var prefs=load(LS_PREFS)||{sendTo:'',facilities:[],conveyors:[],components:[],ke
    /pmi/?facility=SCCAH&conveyor=PD1-1&wo=P3374665&mech=Brad+Glover&pmi=02/10&to=office@example.com
    Only empty fields are filled, so a half-finished checklist on the phone is never
    overwritten. A different work order number than the draft's starts a fresh one. */
-var DEFAULT_SEND_TO='emfcontractingsc@gmail.com';
+var DEFAULT_SEND_TO='emfcbre@gmail.com';
 (function(){
   var q;try{q=new URLSearchParams(location.search);}catch(e){return;}
   var wo=(q.get('wo')||'').trim().toUpperCase();

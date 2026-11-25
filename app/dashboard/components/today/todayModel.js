@@ -275,6 +275,17 @@ export function buildTodayModel({ workOrders = [], invoices = [], approvals = []
     value: `${doneStuck.length}`, action: { label: 'Show', kind: 'expand' },
     wos: doneStuck.map((r) => ({ wo: r.wo, note: r.b.text })) });
 
+  // cbre_status says an NTE increase is coming, but nobody ever drafted the
+  // quote. Four of the 27 work orders CBRE flagged for closure on 24 Nov 2026
+  // sat exactly like this for months: no request at CBRE, nothing in the
+  // producer's queue, invisible everywhere.
+  const quoteMissing = workOrders.filter((wo) => wo.cbre_status === 'pending_quote' && !(wo.nte_quotes || []).length && !['cancelled', 'rejected'].includes(wo.status));
+  push({ id: 'quote-missing', group: 'you', tone: 'amber', count: quoteMissing.length,
+    title: `${quoteMissing.length} work order${quoteMissing.length === 1 ? '' : 's'} marked "pending quote" with no NTE request drafted`,
+    sub: `write the request or clear the status · ${woNums(quoteMissing)}`,
+    value: `${quoteMissing.length}`, action: { label: 'Show', kind: 'expand' },
+    wos: quoteMissing.map((wo) => ({ wo, note: `${techName(wo) || 'no technician'} · ${fmtAge(ageDays(wo.date_entered, now))} · NTE ${money(wo.nte)}` })) });
+
   // CBRE
   push({ id: 'nte-old', group: 'cbre', tone: 'amber', count: nteWaitingOld.length,
     title: `${nteWaitingOld.length} NTE request${nteWaitingOld.length === 1 ? '' : 's'} unanswered for more than 14 days`,

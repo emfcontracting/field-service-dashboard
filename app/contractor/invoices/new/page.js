@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -42,7 +43,7 @@ export default function CreateInvoice() {
   const [rates, setRates] = useState({ hourly: 35, ot: 52.50, mileage: 0.67 });
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) { router.push('/contractor'); return; }
     
     try {

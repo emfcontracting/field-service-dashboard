@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -32,7 +33,7 @@ function TaxRecordsPrintContent() {
   const [emfIncome, setEmfIncome] = useState(null);
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       window.location.href = '/contractor';
       return;

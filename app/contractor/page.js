@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { saveContractorSession, readContractorSession } from '@/lib/contractorSession';
 import { setAppToken } from '@/lib/apiClient';
 import { useRouter } from 'next/navigation';
 
@@ -13,6 +14,11 @@ export default function ContractorLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+
+  // Still signed in (token + session in localStorage) → straight to the portal.
+  useEffect(() => {
+    if (readContractorSession()) router.replace('/contractor/dashboard');
+  }, [router]);
 
   // Both steps go through /api/contractor/login (server-side checks with the
   // service role). The PIN step returns the app token every /api/contractor/*
@@ -52,7 +58,7 @@ export default function ContractorLoginPage() {
     try {
       const data = await callLogin({ email: user.email, pin });
       setAppToken(data.token);
-      sessionStorage.setItem('contractor_user', JSON.stringify({
+      saveContractorSession(JSON.stringify({
         user_id: data.user.user_id,
         email: data.user.email,
         first_name: data.user.first_name,

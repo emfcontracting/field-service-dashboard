@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateShort } from '@/lib/dates';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import { useRouter } from 'next/navigation';
@@ -24,7 +25,7 @@ export default function TaxReport() {
   }
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;

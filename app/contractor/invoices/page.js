@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
@@ -17,7 +18,7 @@ export default function ContractorInvoices() {
   const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;

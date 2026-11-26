@@ -1,0 +1,17 @@
+{
+  "name": "PCS Contractor Portal",
+  "short_name": "Contractor",
+  "description": "Invoices, expenses and tax records for subcontractors",
+  "start_url": "/contractor/dashboard",
+  "scope": "/contractor",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/emf-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/emf-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["business", "finance"],
+  "prefer_related_applications": false
+}

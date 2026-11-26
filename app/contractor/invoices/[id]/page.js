@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -31,7 +32,7 @@ export default function ViewInvoice() {
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;

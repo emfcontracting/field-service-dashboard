@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { readContractorSession } from '@/lib/contractorSession';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -37,7 +38,7 @@ export default function TaxRecordsPage() {
 
   // Auth
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;

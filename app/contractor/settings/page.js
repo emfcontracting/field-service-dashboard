@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
 import { fmtDate } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -32,7 +33,7 @@ export default function ContractorSettings() {
   });
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;
@@ -71,7 +72,7 @@ export default function ContractorSettings() {
     try {
       const updatedProfile = await contractorApi.updateProfile(businessInfo);
       setBusinessInfo({ ...businessInfo, tax_id: updatedProfile.tax_id_masked || '' });
-      sessionStorage.setItem('contractor_user', JSON.stringify({
+      saveContractorSession(JSON.stringify({
         ...user,
         profile: updatedProfile
       }));
@@ -112,7 +113,7 @@ export default function ContractorSettings() {
         profile: { ...user.profile, has_pin: true },
         needsPinSetup: false
       };
-      sessionStorage.setItem('contractor_user', JSON.stringify(updatedUser));
+      saveContractorSession(JSON.stringify(updatedUser));
       setUser(updatedUser);
 
       setPinChange({ current: '', new: '', confirm: '' });

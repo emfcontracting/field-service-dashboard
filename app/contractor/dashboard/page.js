@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { readContractorSession, clearContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -22,7 +23,7 @@ export default function ContractorDashboard() {
   const [recentInvoices, setRecentInvoices] = useState([]);
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('contractor_user');
+    const userData = readContractorSession();
     if (!userData) {
       router.push('/contractor');
       return;
@@ -103,8 +104,7 @@ export default function ContractorDashboard() {
   }
 
   function handleLogout() {
-    setAppToken(null);
-    sessionStorage.removeItem('contractor_user');
+    clearContractorSession();
     router.push('/contractor');
   }
 

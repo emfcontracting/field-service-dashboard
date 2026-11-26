@@ -54,6 +54,13 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 2b) Old catch-all policies (role public, USING true) — found in prod
+--     2026-11-25. Policies OR together, so with these left in place any
+--     signed-in Supabase user had full access despite staff_all.
+DROP POLICY IF EXISTS "Allow all access to subcontractor_invoice_items" ON public.subcontractor_invoice_items;
+DROP POLICY IF EXISTS "Allow all access to subcontractor_invoices"      ON public.subcontractor_invoices;
+DROP POLICY IF EXISTS "Allow all access to subcontractor_profiles"      ON public.subcontractor_profiles;
+
 -- 3) Invoice number function: server only -------------------------------------
 DO $$
 BEGIN

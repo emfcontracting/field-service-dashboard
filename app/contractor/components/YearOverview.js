@@ -39,7 +39,7 @@ export default function YearOverview({ user, year }) {
     // not run yet) must not blank out the others.
     Promise.allSettled([
       contractorApi.invoices(),
-      apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`).then(async r => {
+      apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}&sync=1`).then(async r => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
         return d;

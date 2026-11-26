@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
 import { expenseExtras, resolveWoNumber, withWoNumber } from '@/lib/expenseFields';
+import { syncTaxRecords } from '@/lib/taxRecordSync';
 
 // Service role: these tables are RLS-locked (staff_all only); the route
 // itself checks who may see which row.
@@ -31,11 +32,19 @@ export async function GET(request) {
     }
     if (!ownsUser(auth, userId)) return denyNotOwner().response;
 
+    // ?sync=1: first fill in what the system knows (material, mileage, hotels)
+    let sync = null;
+    if (searchParams.get('sync') === '1') {
+      try { sync = await syncTaxRecords(supabase, userId, parseInt(year, 10)); }
+      catch (e) { console.error('tax record sync failed:', e); sync = { error: e.message }; }
+    }
+
     const { data, error } = await supabase
       .from('contractor_tax_records')
       .select('*, work_order:work_orders(wo_number)')
       .eq('user_id', userId)
       .eq('tax_year', parseInt(year, 10))
+      .eq('dismissed', false)
       .order('entry_date', { ascending: true })
       .order('created_at', { ascending: true });
 
@@ -44,7 +53,7 @@ export async function GET(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ records: withWoNumber(data) });
+    return NextResponse.json({ records: withWoNumber(data), sync });
   } catch (err) {
     console.error('GET tax-records exception:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

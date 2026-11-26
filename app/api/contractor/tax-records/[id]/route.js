@@ -18,7 +18,7 @@ export async function PATCH(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id, billed_invoice_id, amount, bill_to_emf').eq('record_id', id).maybeSingle();
+    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id, billed_invoice_id, amount, bill_to_emf, source').eq('record_id', id).maybeSingle();
     if (!existing) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     if (!ownsUser(auth, existing.user_id)) return denyNotOwner().response;
 
@@ -41,6 +41,10 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: 'This expense is already on an EMF invoice — change it there (or delete that line from the draft first).' }, { status: 409 });
     }
     if (body.tax_year      !== undefined) update.tax_year      = parseInt(body.tax_year, 10);
+
+    // A generated entry (material / mileage / hotel) the sub changes is his
+    // from now on: the automatic sync never overwrites it again.
+    if (existing.source && existing.source !== 'manual') update.edited = true;
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -70,14 +74,15 @@ export async function DELETE(request, { params }) {
   if (!auth.ok) return auth.response;
   try {
     const { id } = await params;
-    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id').eq('record_id', id).maybeSingle();
+    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id, source').eq('record_id', id).maybeSingle();
     if (!existing) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     if (!ownsUser(auth, existing.user_id)) return denyNotOwner().response;
 
-    const { error } = await supabase
-      .from('contractor_tax_records')
-      .delete()
-      .eq('record_id', id);
+    // Generated entries are only hidden (dismissed) so the sync does not
+    // bring them back; manual entries are deleted.
+    const { error } = existing.source && existing.source !== 'manual'
+      ? await supabase.from('contractor_tax_records').update({ dismissed: true }).eq('record_id', id)
+      : await supabase.from('contractor_tax_records').delete().eq('record_id', id);
 
     if (error) {
       console.error('DELETE tax-records error:', error);

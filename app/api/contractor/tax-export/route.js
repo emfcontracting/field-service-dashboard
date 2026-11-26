@@ -352,6 +352,7 @@ export async function POST(request) {
         .select('*')
         .eq('user_id', user_id)
         .eq('tax_year', parseInt(year, 10))
+        .eq('dismissed', false)
         .order('entry_date', { ascending: true }),
       supabase
         .from('contractor_tax_categories')

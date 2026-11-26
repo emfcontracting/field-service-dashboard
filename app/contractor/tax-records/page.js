@@ -64,7 +64,7 @@ export default function TaxRecordsPage() {
     setLoading(true);
     try {
       const [recordsRes, catsRes] = await Promise.all([
-        apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`),
+        apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}&sync=1`),
         apiFetch(`/api/contractor/tax-categories?user_id=${user.user_id}`),
       ]);
       const recordsData = await recordsRes.json();
@@ -155,7 +155,9 @@ export default function TaxRecordsPage() {
   }
 
   async function handleDelete(recordId) {
-    if (!confirm('Delete this record?')) return;
+    const rec = records.find(r => r.record_id === recordId);
+    const auto = rec && rec.source && rec.source !== 'manual';
+    if (!confirm(auto ? 'Remove this entry? It was filled in from the system and will not come back.' : 'Delete this record?')) return;
     try {
       await apiFetch(`/api/contractor/tax-records/${recordId}`, { method: 'DELETE' });
       loadData();
@@ -342,6 +344,12 @@ export default function TaxRecordsPage() {
                         <td className="px-4 py-2 text-gray-400">
                           <div>{rec.vendor || rec.invoice_ref || '—'}</div>
                           {rec.vendor && rec.invoice_ref && <div className="text-xs text-gray-500">{rec.invoice_ref}</div>}
+                          {rec.source && rec.source !== 'manual' && (
+                            <span className="inline-block mt-1 mr-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300"
+                              title={rec.edited ? 'Filled in from the system, changed by you — no longer updated automatically' : 'Filled in from the system — updated automatically until you change it'}>
+                              {rec.source === 'material' ? 'auto · material' : rec.source === 'mileage' ? 'auto · mileage' : 'auto · invoice'}{rec.edited ? ' · edited' : ''}
+                            </span>
+                          )}
                           {rec.bill_to_emf && (
                             <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${rec.billed_invoice_id ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>
                               {rec.billed_invoice_id ? 'billed to EMF' : '→ next EMF invoice'}

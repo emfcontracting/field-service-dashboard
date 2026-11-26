@@ -35,19 +35,29 @@ export default function YearOverview({ user, year }) {
   useEffect(() => {
     if (!user) return;
     setError('');
-    Promise.all([
+    // Each source on its own: one failing (e.g. a table whose migration has
+    // not run yet) must not blank out the others.
+    Promise.allSettled([
       contractorApi.invoices(),
-      apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`).then(r => r.json()),
+      apiFetch(`/api/contractor/tax-records?user_id=${user.user_id}&year=${year}`).then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+        return d;
+      }),
       contractorApi.trips(year),
     ]).then(([inv, rec, tr]) => {
-      setInvoices(inv.invoices || []);
-      setRecords(rec.records || []);
-      setTrips(tr || { trips: [], emf: [] });
-    }).catch(e => setError(e.message));
+      const errs = [];
+      if (inv.status === 'fulfilled') setInvoices(inv.value.invoices || []); else errs.push(`Invoices: ${inv.reason?.message}`);
+      if (rec.status === 'fulfilled') setRecords(rec.value.records || []); else { setRecords([]); errs.push(`Expenses: ${rec.reason?.message}`); }
+      if (tr.status === 'fulfilled') setTrips(tr.value || { trips: [], emf: [] }); else { setTrips({ trips: [], emf: [] }); errs.push(`Mileage: ${tr.reason?.message}`); }
+      setError(errs.join(' · '));
+    });
   }, [user, year]);
 
   const o = useMemo(() => {
-    const paidDate = (i) => i.paid_at || (i.status === 'paid' ? i.emf_paid_at : null);
+    // Cash basis: the day it was marked paid; older paid invoices without a
+    // date fall back to EMF's payment date, then the end of the billed period.
+    const paidDate = (i) => i.paid_at || i.emf_paid_at || i.period_end;
     const paid = invoices.filter(i => i.status === 'paid' && yearOf(paidDate(i)) === year);
     const byClient = {};
     for (const i of paid) {
@@ -108,7 +118,7 @@ export default function YearOverview({ user, year }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
         <div style={card}>
-          <p style={muted}>Income {year} (marked paid)</p>
+          <p style={muted}>Income {year} (by date paid)</p>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0' }}>{money(o.income)}</p>
           {Object.entries(o.byClient).map(([k, v]) => <p key={k} style={muted}>{k}: {money(v)}</p>)}
         </div>

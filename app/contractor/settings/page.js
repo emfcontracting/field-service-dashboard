@@ -20,6 +20,7 @@ export default function ContractorSettings() {
     mileage_rate: '0.67'
   });
 
+  const [recurring, setRecurring] = useState([]);
   const [businessInfo, setBusinessInfo] = useState({
     business_name: '',
     business_address: '',
@@ -50,6 +51,7 @@ export default function ContractorSettings() {
           ot_rate: parseFloat(parsed.profile.ot_rate || 52.50).toFixed(2),
           mileage_rate: parseFloat(parsed.profile.mileage_rate || 0.67).toFixed(2)
         });
+        setRecurring((parsed.profile.recurring_lines || []).map(l => ({ ...l, quantity: String(l.quantity), rate: String(l.rate) })));
         setBusinessInfo({
           business_name: parsed.profile.business_name || '',
           business_address: parsed.profile.business_address || '',
@@ -63,6 +65,27 @@ export default function ContractorSettings() {
       router.push('/contractor');
     }
   }, [router]);
+
+  async function saveRecurring(e) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const profile = await contractorApi.updateProfile({
+        recurring_lines: recurring.map(l => ({ description: l.description, quantity: parseFloat(l.quantity) || 1, rate: parseFloat(l.rate) || 0 })),
+      });
+      const next = { ...user, profile: { ...user.profile, ...profile } };
+      setUser(next);
+      saveContractorSession(next);
+      setRecurring((profile.recurring_lines || []).map(l => ({ ...l, quantity: String(l.quantity), rate: String(l.rate) })));
+      setMessage({ type: 'success', text: 'Weekly line items saved' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Failed to save' });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function saveBusinessInfo(e) {
     e.preventDefault();
@@ -292,6 +315,41 @@ export default function ContractorSettings() {
               To request a change, contact the office.
             </p>
           </div>
+        </div>
+
+        {/* Weekly line items */}
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+          <h2 className="font-bold mb-1">🔁 Weekly Line Items</h2>
+          <p className="text-sm text-gray-400 mb-4">Added to every new EMF invoice and to the Friday draft (e.g. Admin Hours). You can still change or remove them on each draft.</p>
+          <form onSubmit={saveRecurring} className="space-y-3">
+            {recurring.length === 0 && <p className="text-sm text-gray-500">None yet.</p>}
+            {recurring.map((l, i) => (
+              <div key={i} className="space-y-2 border-b border-gray-700 pb-3">
+                <input type="text" value={l.description} placeholder="Description (e.g. Admin Hours)"
+                  onChange={(e) => setRecurring(recurring.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                  <input inputMode="decimal" value={l.quantity} placeholder="Qty"
+                    onChange={(e) => setRecurring(recurring.map((x, j) => j === i ? { ...x, quantity: e.target.value } : x))}
+                    className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
+                  <input inputMode="decimal" value={l.rate} placeholder="Rate $"
+                    onChange={(e) => setRecurring(recurring.map((x, j) => j === i ? { ...x, rate: e.target.value } : x))}
+                    className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
+                  <button type="button" onClick={() => setRecurring(recurring.filter((_, j) => j !== i))}
+                    className="px-3 py-2 bg-red-900 hover:bg-red-800 rounded-lg" title="Remove">✕</button>
+                </div>
+                <p className="text-xs text-gray-500">= ${((parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0)).toFixed(2)} per invoice</p>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setRecurring([...recurring, { description: '', quantity: '1', rate: '' }])}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">+ Add item</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save Weekly Items'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Business Info */}

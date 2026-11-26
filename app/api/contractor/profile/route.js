@@ -1,9 +1,9 @@
-// PATCH /api/contractor/profile → business name, address, tax id.
+// PATCH /api/contractor/profile → business name, address, tax id, recurring_lines.
 // Rates are NOT accepted here — they are set by EMF (Settings → Subcontractors).
 // A masked tax id (***-**-1234) coming back from the form is ignored.
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, serviceClient } from '@/lib/serverAuth';
-import { publicProfile, isMaskedTaxId } from '@/lib/contractorProfile';
+import { publicProfile, isMaskedTaxId, cleanRecurringLines } from '@/lib/contractorProfile';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,7 @@ export async function PATCH(request) {
   if (body.business_name !== undefined) update.business_name = String(body.business_name || '').slice(0, 200);
   if (body.business_address !== undefined) update.business_address = String(body.business_address || '').slice(0, 500);
   if (body.tax_id !== undefined && !isMaskedTaxId(body.tax_id)) update.tax_id = String(body.tax_id || '').trim().slice(0, 20) || null;
+  if (body.recurring_lines !== undefined) update.recurring_lines = cleanRecurringLines(body.recurring_lines);
 
   const { data, error } = await serviceClient()
     .from('subcontractor_profiles')

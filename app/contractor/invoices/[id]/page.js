@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import StatusPill from '../../components/StatusPill';
 import DraftEditor from '../../components/DraftEditor';
-import { readContractorSession } from '@/lib/contractorSession';
+import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -362,6 +362,12 @@ export default function ViewInvoice() {
             invoice={invoice}
             items={lineItems}
             suggestions={suggestions}
+            profile={user?.profile}
+            onProfileChange={(profile) => {
+              const next = { ...user, profile: { ...user.profile, ...profile } };
+              setUser(next);
+              saveContractorSession(next);
+            }}
             onSaved={async () => { await loadInvoice(invoice.invoice_id); setMessage({ type: 'success', text: 'Draft updated' }); }}
           />
         )}

@@ -1,7 +1,8 @@
 // app/api/cron/sub-invoice-drafts/route.js
 // -----------------------------------------------------------------------------
 // Fridays: for every active subcontractor, a DRAFT invoice to EMF for the week
-// that just closed (Fri–Thu, lib/billingWeek), then a push (tech app) and an
+// that just closed (Fri–Thu, lib/billingWeek) — with his recurring lines, e.g.
+// admin hours — then a push (tech app) and an
 // e-mail: "your invoice for … is ready — check it and press Send".
 //
 // Skipped when the sub has no hours that week, or when any of that week's
@@ -78,7 +79,7 @@ async function run(request) {
 
     if (dry) { created.push({ name, entries: billable.length, dry: true }); continue; }
 
-    const result = await createEmfInvoice(supabase, user, profile, { line_items: [] }, week.start, week.end);
+    const result = await createEmfInvoice(supabase, user, profile, { line_items: [], use_recurring: true }, week.start, week.end);
     if (result.error) { skipped.push({ name, reason: result.error }); continue; }
     const inv = result.invoice;
     const total = (parseFloat(inv.grand_total) || 0).toFixed(2);

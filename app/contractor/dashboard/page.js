@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import StatusPill from '../components/StatusPill';
 import { lastBillingWeek } from '@/lib/billingWeek';
 import { daysBetweenET } from '@/lib/dates';
-import { readContractorSession, clearContractorSession } from '@/lib/contractorSession';
+import { readContractorSession, clearContractorSession, saveContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, fmtDateShort, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -45,7 +45,15 @@ export default function ContractorDashboard() {
         return;
       }
       
-      loadDashboardData(parsed.user_id, parsed.profile);
+      // Fresh profile (rates EMF changed, recurring lines) — fall back to the stored one.
+      contractorApi.me()
+        .then(({ profile }) => {
+          const next = { ...parsed, profile: { ...parsed.profile, ...profile } };
+          saveContractorSession(next);
+          setUser(next);
+          loadDashboardData(parsed.user_id, next.profile);
+        })
+        .catch(() => loadDashboardData(parsed.user_id, parsed.profile));
     } catch (e) {
       console.error('Error parsing user data:', e);
       router.push('/contractor');
@@ -95,7 +103,8 @@ export default function ContractorDashboard() {
         .filter(i => i.status === 'paid' && i.paid_at && dateKeyET(parseDate(i.paid_at)).slice(0, 7) === thisMonth)
         .reduce((sum, i) => sum + parseFloat(i.grand_total || 0), 0);
 
-      setWeek({ ...w, entries: hoursData.length, uninvoiced: open.length, amount: openAmount, partly: alreadyInvoiced.length > 0 });
+      const recurringAmount = (profile?.recurring_lines || []).reduce((s, l) => s + (parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0), 0);
+      setWeek({ ...w, entries: hoursData.length, uninvoiced: open.length, amount: openAmount + recurringAmount, recurring: (profile?.recurring_lines || []).length, partly: alreadyInvoiced.length > 0 });
 
       // To-do list, most urgent first
       const list = [];
@@ -139,7 +148,7 @@ export default function ContractorDashboard() {
     setCreating(true);
     setCreateError('');
     try {
-      const invoice = await contractorApi.createInvoice({ period_start: week.start, period_end: week.end, line_items: [] });
+      const invoice = await contractorApi.createInvoice({ period_start: week.start, period_end: week.end, line_items: [], use_recurring: true });
       router.push(`/contractor/invoices/${invoice.invoice_id}`);
     } catch (e) {
       setCreateError(e.message || 'Could not create the invoice');
@@ -204,7 +213,7 @@ export default function ContractorDashboard() {
                     Week {fmtDateShort(week.start)} – {fmtDateShort(week.end)} is ready to invoice
                   </p>
                   <p className="text-sm text-gray-400">
-                    {week.uninvoiced} entr{week.uninvoiced === 1 ? 'y' : 'ies'} · about ${week.amount.toFixed(2)}
+                    {week.uninvoiced} entr{week.uninvoiced === 1 ? 'y' : 'ies'}{week.recurring ? ` + ${week.recurring} weekly item${week.recurring === 1 ? '' : 's'}` : ''} · about ${week.amount.toFixed(2)}
                     {week.partly && ' · some entries of this week are already on another invoice'}
                   </p>
                   {createError && <p className="text-sm text-red-400 mt-1">{createError}</p>}

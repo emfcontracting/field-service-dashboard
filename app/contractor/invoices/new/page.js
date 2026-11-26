@@ -54,6 +54,15 @@ export default function CreateInvoice() {
       setPeriodStart(week.start);
       setPeriodEnd(week.end);
       
+      // Recurring lines (e.g. admin hours) pre-filled for EMF invoices — editable here.
+      const rec = parsed.profile?.recurring_lines || [];
+      if (rec.length) {
+        setLineItems(rec.map((l, i) => ({
+          id: Date.now() + i, description: l.description,
+          quantity: l.quantity, rate: l.rate,
+          amount: (parseFloat(l.quantity) || 0) * (parseFloat(l.rate) || 0),
+        })));
+      }
       if (parsed.profile) {
         setRates({
           hourly: parseFloat(parsed.profile.hourly_rate || 35),
@@ -215,7 +224,7 @@ export default function CreateInvoice() {
               <div className="font-bold">EMF Contracting LLC</div>
               <div className="text-sm text-gray-400">Pull hours from work orders</div>
             </button>
-            <button onClick={() => { setClientType('other'); setHoursData([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'other' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
+            <button onClick={() => { setClientType('other'); setHoursData([]); setLineItems([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'other' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
               <div className="font-bold">Other Client</div>
               <div className="text-sm text-gray-400">Create custom invoice</div>
             </button>

@@ -3,6 +3,8 @@
 // material, …) can be added, changed and removed; EMF lines (hours, mileage,
 // tech material from the hours log) can be reloaded if the log was corrected.
 // Totals are recomputed on the server (lib/subInvoiceCreate.updateDraftInvoice).
+// "Every week" marks a line as recurring (profile.recurring_lines): it is put
+// on every new EMF invoice and the Friday draft, and stays editable each time.
 import { useState } from 'react';
 import { contractorApi } from '@/lib/contractorClient';
 
@@ -11,11 +13,14 @@ const inp = { backgroundColor: '#374151', border: '1px solid #4b5563', borderRad
 const btn = (bg) => ({ padding: '8px 14px', backgroundColor: bg, borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' });
 
 let seq = 0;
-const row = (l) => ({ key: `r${++seq}`, description: l.description || '', quantity: String(l.quantity ?? 1), rate: String(l.rate ?? '') });
+const row = (l, weekly = false) => ({ key: `r${++seq}`, description: l.description || '', quantity: String(l.quantity ?? 1), rate: String(l.rate ?? ''), weekly });
+const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
-export default function DraftEditor({ invoice, items, suggestions = [], onSaved }) {
+export default function DraftEditor({ invoice, items, suggestions = [], profile, onProfileChange, onSaved }) {
   const isEmf = invoice.client_type !== 'other';
-  const [rows, setRows] = useState(() => (items || []).filter(i => i.item_type === 'custom').map(row));
+  const recurring = profile?.recurring_lines || [];
+  const [rows, setRows] = useState(() => (items || []).filter(i => i.item_type === 'custom')
+    .map(i => row(i, recurring.some(r => same(r.description, i.description)))));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
@@ -29,6 +34,19 @@ export default function DraftEditor({ invoice, items, suggestions = [], onSaved 
     setSaving(true);
     setError('');
     try {
+      // Recurring lines: the lines ticked "every week" now, plus recurring
+      // lines that are not on this draft at all (left untouched).
+      if (isEmf) {
+        const ticked = rows.filter(r => r.weekly && r.description.trim() && amount(r) > 0)
+          .map(r => ({ description: r.description.trim(), quantity: parseFloat(r.quantity) || 1, rate: parseFloat(r.rate) || 0 }));
+        const untouched = recurring.filter(rl => !rows.some(r => same(r.description, rl.description)));
+        const next = [...ticked, ...untouched];
+        const changed = JSON.stringify(next) !== JSON.stringify(recurring);
+        if (changed) {
+          const updated = await contractorApi.updateProfile({ recurring_lines: next });
+          onProfileChange?.(updated);
+        }
+      }
       await contractorApi.editInvoice(invoice.invoice_id, {
         line_items: rows
           .filter(r => r.description.trim() && amount(r) > 0)
@@ -84,6 +102,12 @@ export default function DraftEditor({ invoice, items, suggestions = [], onSaved 
             <span style={{ textAlign: 'right', fontSize: '14px' }}>${amount(r).toFixed(2)}</span>
             <button onClick={() => setRows(rows.filter(x => x.key !== r.key))} style={{ ...btn('#7f1d1d'), padding: '8px' }} title="Remove">✕</button>
           </div>
+          {isEmf && (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' }}>
+              <input type="checkbox" checked={r.weekly} onChange={e => set(r.key, 'weekly', e.target.checked)} />
+              Every week — put this on each new EMF invoice
+            </label>
+          )}
         </div>
       ))}
       <button onClick={() => setRows([...rows, row({ quantity: 1 })])} style={{ ...btn('#374151'), marginTop: '4px' }}>+ Add line</button>

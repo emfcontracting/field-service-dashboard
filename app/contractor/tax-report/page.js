@@ -214,7 +214,13 @@ export default function TaxReport() {
               <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0 0' }}>Income breakdown for tax preparation</p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link href="/contractor/mileage" style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
+              🚗 Mileage
+            </Link>
+            <Link href="/contractor/tax-records" style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
+              💳 Expenses
+            </Link>
             <select
               value={year}
               onChange={(e) => setYear(parseInt(e.target.value))}

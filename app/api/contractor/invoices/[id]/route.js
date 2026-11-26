@@ -2,8 +2,10 @@
 // -----------------------------------------------------------------------------
 // GET    → { invoice, items }            (owner or staff)
 // PATCH  { action: 'sent' | 'paid' }     (owner: own invoice; staff: any)
-// DELETE → removes a draft/rejected invoice and its lines
-//          (contractor: only draft or rejected; staff: any)
+// DELETE → removes an invoice and its lines
+//          (contractor: only draft, or one EMF rejected; staff: any)
+// status (draft/sent/paid) is the subcontractor's own; EMF's review and
+// payment live in emf_* columns (PATCH /api/admin/subcontractor-invoices/[id]).
 // -----------------------------------------------------------------------------
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, serviceClient, ownsUser, denyNotOwner } from '@/lib/serverAuth';
@@ -62,7 +64,7 @@ export async function DELETE(request, { params }) {
   const invoice = await load(id);
   if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
   if (!ownsUser(auth, invoice.user_id)) return denyNotOwner().response;
-  if (auth.principal.contractor && !['draft', 'rejected'].includes(invoice.status)) {
+  if (auth.principal.contractor && invoice.status !== 'draft' && invoice.emf_review_status !== 'rejected') {
     return NextResponse.json({ error: `A ${invoice.status} invoice can't be deleted. Contact EMF.` }, { status: 409 });
   }
 

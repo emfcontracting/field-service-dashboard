@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
+import { EmfBadges, EmfReviewPanel } from '../../components/EmfReview';
 
 // Helper function to format date without timezone shift
 function formatDateLocal(dateString) {
@@ -194,6 +195,7 @@ export default function ViewInvoice() {
               }}>
                 {invoice.status.toUpperCase()}
               </span>
+              <EmfBadges invoice={invoice} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -251,6 +253,16 @@ export default function ViewInvoice() {
               </>
             )}
 
+            {/* EMF rejected a sent/paid invoice: the sub may delete and redo it */}
+            {invoice.status !== 'draft' && invoice.emf_review_status === 'rejected' && (
+              <button
+                onClick={deleteInvoice}
+                style={{ padding: '10px 16px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+              >
+                🗑️ Delete
+              </button>
+            )}
+
             {/* Sent actions - Add Mark as Paid button */}
             {invoice.status === 'sent' && (
               <button 
@@ -296,6 +308,8 @@ export default function ViewInvoice() {
 
       <div style={{ maxWidth: '896px', margin: '0 auto', padding: '16px' }}>
         
+        <EmfReviewPanel invoice={invoice} />
+
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (
           <div className="no-print" style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>

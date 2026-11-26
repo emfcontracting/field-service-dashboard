@@ -12,6 +12,7 @@ import {
 } from '../../../mobile/utils/dateUtils';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
+import { lastBillingWeek } from '@/lib/billingWeek';
 
 export default function CreateInvoice() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function CreateInvoice() {
   const [periodEnd, setPeriodEnd] = useState('');
   const [hoursData, setHoursData] = useState([]);
   const [loadingHours, setLoadingHours] = useState(false);
+  const [alreadyInvoiced, setAlreadyInvoiced] = useState([]);
   const [lineItems, setLineItems] = useState([]);
   const [rates, setRates] = useState({ hourly: 35, ot: 52.50, mileage: 0.67 });
 
@@ -46,11 +48,10 @@ export default function CreateInvoice() {
     try {
       const parsed = JSON.parse(userData);
       setUser(parsed);
-      // Set default date range (last 14 days) using EST timezone
-      const { startDate, endDate } = getDateRangeEST(14);
-      
-      setPeriodEnd(endDate);
-      setPeriodStart(startDate);
+      // Default period: last completed billing week, Friday–Thursday (lib/billingWeek)
+      const week = lastBillingWeek(getTodayEST());
+      setPeriodStart(week.start);
+      setPeriodEnd(week.end);
       
       if (parsed.profile) {
         setRates({
@@ -71,7 +72,8 @@ export default function CreateInvoice() {
     setMessage(null);
     try {
       // Include tech_material_cost in the query
-      const data = await contractorApi.hours(periodStart, periodEnd);
+      const { hours: data, already_invoiced } = await contractorApi.hoursChecked(periodStart, periodEnd);
+      setAlreadyInvoiced(already_invoiced || []);
       setHoursData(data || []);
       if (!data || data.length === 0) {
         setMessage({ type: 'warning', text: 'No hours found for this period' });
@@ -350,6 +352,25 @@ export default function CreateInvoice() {
           </div>
         )}
 
+        {clientType === 'emf' && alreadyInvoiced.length > 0 && (
+          <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-xl p-4">
+            <p className="font-bold text-yellow-400 mb-1">⚠️ Some of these entries are already on another invoice</p>
+            <p className="text-sm text-yellow-200 mb-2">
+              {[...new Set(alreadyInvoiced.map(a => a.invoice_number))].join(', ')} already include{' '}
+              {new Set(alreadyInvoiced.map(a => a.wo_id + '|' + a.work_date)).size} of the entries below.
+              Check the period before you create this invoice.
+            </p>
+            <ul className="text-xs text-yellow-200/80 space-y-0.5">
+              {alreadyInvoiced.slice(0, 8).map((a, i) => (
+                <li key={i}>
+                  {formatDateEST(parseLocalDate(a.work_date))} · {hoursData.find(h => h.wo_id === a.wo_id)?.work_order?.wo_number || 'WO'} → {a.invoice_number}
+                </li>
+              ))}
+              {alreadyInvoiced.length > 8 && <li>… and {alreadyInvoiced.length - 8} more</li>}
+            </ul>
+          </div>
+        )}
+
         {clientType === 'emf' && hoursData.length > 0 && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
             <h2 className="font-bold mb-4">📋 Review Hours, Mileage & Materials</h2>
@@ -358,21 +379,21 @@ export default function CreateInvoice() {
                 <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.hourly} onChange={(e) => setRates({ ...rates, hourly: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.hourly} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">OT Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.ot} onChange={(e) => setRates({ ...rates, ot: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.ot} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Mileage Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.mileage} onChange={(e) => setRates({ ...rates, mileage: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.mileage} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
             </div>

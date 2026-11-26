@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
+import { EmfBadges } from '../components/EmfReview';
 import Link from 'next/link';
 
 
@@ -173,6 +174,8 @@ export default function ContractorInvoices() {
                     }`}>
                       {invoice.status.toUpperCase()}
                     </span>
+                    <EmfBadges invoice={invoice} />
+                    {(invoice.status === 'draft' || invoice.emf_review_status === 'rejected') && (
                     <button
                       onClick={() => deleteInvoice(invoice.invoice_id, invoice.invoice_number)}
                       disabled={deleting === invoice.invoice_id}
@@ -181,6 +184,7 @@ export default function ContractorInvoices() {
                     >
                       {deleting === invoice.invoice_id ? '...' : '🗑️'}
                     </button>
+                    )}
                   </div>
                 </div>
 

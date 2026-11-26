@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRequireRole, GateScreen } from '@/app/components/useRequireRole';
 import { getSupabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiClient';
 
 // Shared browser client: it carries the signed-in staff session, which the
 // row-level security on subcontractor_* tables requires (is_staff()). A fresh
@@ -28,6 +29,10 @@ export default function SubcontractorInvoiceReview() {
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [emfData, setEmfData] = useState([]);
   const [loadingComparison, setLoadingComparison] = useState(false);
+  const [overlaps, setOverlaps] = useState([]);
+  const [rejectNote, setRejectNote] = useState('');
+  const [showReject, setShowReject] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   // Reviewing your own invoice is not a review. The signed-in person's own
@@ -97,8 +102,17 @@ export default function SubcontractorInvoiceReview() {
     setLoadingComparison(true);
     setInvoiceItems([]);
     setEmfData([]);
+    setOverlaps([]);
+    setShowReject(false);
+    setRejectNote('');
+    setActionError('');
 
     try {
+      apiFetch(`/api/admin/subcontractor-invoices/${invoice.invoice_id}`)
+        .then(r => r.ok ? r.json() : { overlaps: [] })
+        .then(d => setOverlaps(d.overlaps || []))
+        .catch(() => setOverlaps([]));
+
       const { data: itemsData } = await supabase
         .from('subcontractor_invoice_items')
         .select('*')
@@ -127,24 +141,25 @@ export default function SubcontractorInvoiceReview() {
     }
   }
 
-  async function updateInvoiceStatus(invoiceId, status) {
+  // EMF's side only (review + EMF payment). The subcontractor's own status
+  // (draft / sent / paid) is his and is never changed from here.
+  async function emfAction(invoiceId, action, note) {
+    setActionError('');
     try {
-      const { error } = await supabase
-        .from('subcontractor_invoices')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('invoice_id', invoiceId);
-
-      if (error) throw error;
-
-      setInvoices(invoices.map(inv => 
-        inv.invoice_id === invoiceId ? { ...inv, status } : inv
-      ));
-
-      if (selectedInvoice?.invoice_id === invoiceId) {
-        setSelectedInvoice({ ...selectedInvoice, status });
-      }
+      const res = await apiFetch(`/api/admin/subcontractor-invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setInvoices(invoices.map(inv => inv.invoice_id === invoiceId ? data.invoice : inv));
+      if (selectedInvoice?.invoice_id === invoiceId) setSelectedInvoice(data.invoice);
+      setShowReject(false);
+      setRejectNote('');
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('EMF action failed:', error);
+      setActionError(error.message);
     }
   }
 
@@ -185,7 +200,13 @@ export default function SubcontractorInvoiceReview() {
       user?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user?.last_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesFilter = filter === 'all' || inv.status === filter;
+    const matchesFilter =
+      filter === 'all' ||
+      (filter === 'review' && inv.status !== 'draft' && !inv.emf_review_status) ||
+      (filter === 'accepted' && inv.emf_review_status === 'accepted') ||
+      (filter === 'rejected' && inv.emf_review_status === 'rejected') ||
+      (filter === 'emf_paid' && !!inv.emf_paid_at) ||
+      (filter === 'emf_unpaid' && inv.status !== 'draft' && inv.emf_review_status !== 'rejected' && !inv.emf_paid_at);
 
     return matchesSearch && matchesFilter;
   });
@@ -233,7 +254,7 @@ export default function SubcontractorInvoiceReview() {
                 className="w-full bg-[#0d0d14] border border-[#2d2d44] rounded-lg px-4 py-2 text-sm"
               />
               <div className="flex gap-2 flex-wrap">
-                {['all', 'sent', 'paid'].map(f => (
+                {[['all', 'All'], ['review', 'To review'], ['accepted', 'Accepted'], ['rejected', 'Rejected'], ['emf_unpaid', 'EMF unpaid'], ['emf_paid', 'EMF paid']].map(([f, label]) => (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
@@ -243,7 +264,7 @@ export default function SubcontractorInvoiceReview() {
                         : 'bg-[#0d0d14] text-slate-400 hover:bg-[#1e1e2e]'
                     }`}
                   >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {label}
                   </button>
                 ))}
                 {myInvoiceCount > 0 && (
@@ -292,6 +313,13 @@ export default function SubcontractorInvoiceReview() {
                           {invoice.status}
                         </span>
                       </div>
+                      {(invoice.emf_review_status || invoice.emf_paid_at) && (
+                        <div className="flex gap-1 mb-1">
+                          {invoice.emf_review_status === 'accepted' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300">EMF accepted</span>}
+                          {invoice.emf_review_status === 'rejected' && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300">EMF rejected</span>}
+                          {invoice.emf_paid_at && <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300">EMF paid</span>}
+                        </div>
+                      )}
                       <p className="text-sm text-slate-400">
                         {user ? `${user.first_name} ${user.last_name}` : 'Unknown'}
                       </p>
@@ -332,23 +360,98 @@ export default function SubcontractorInvoiceReview() {
                         {formatDateLocal(selectedInvoice.period_start)} - {formatDateLocal(selectedInvoice.period_end)}
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      {selectedInvoice.status === 'sent' && (
-                        <button
-                          onClick={() => updateInvoiceStatus(selectedInvoice.invoice_id, 'paid')}
-                          className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium"
-                        >
-                          ✓ Mark Paid
-                        </button>
-                      )}
-                      {selectedInvoice.status === 'paid' && (
-                        <span className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium">
-                          ✓ Paid
-                        </span>
-                      )}
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-xs text-slate-500">
+                        Sub&apos;s status: <span className="text-slate-300">{selectedInvoice.status}</span>
+                      </span>
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        {selectedInvoice.emf_review_status !== 'accepted' && (
+                          <button
+                            onClick={() => emfAction(selectedInvoice.invoice_id, 'accept')}
+                            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium"
+                          >
+                            ✓ Accept
+                          </button>
+                        )}
+                        {selectedInvoice.emf_review_status !== 'rejected' && (
+                          <button
+                            onClick={() => setShowReject(v => !v)}
+                            className="px-3 py-2 bg-red-700 hover:bg-red-800 rounded-lg text-sm font-medium"
+                          >
+                            ✕ Reject
+                          </button>
+                        )}
+                        {selectedInvoice.emf_review_status && (
+                          <button
+                            onClick={() => emfAction(selectedInvoice.invoice_id, 'clear')}
+                            className="px-3 py-2 bg-[#2d2d44] hover:bg-[#3d3d5e] rounded-lg text-sm"
+                            title="Remove the accept/reject"
+                          >
+                            Undo review
+                          </button>
+                        )}
+                        {selectedInvoice.emf_paid_at ? (
+                          <button
+                            onClick={() => emfAction(selectedInvoice.invoice_id, 'emf_unpaid')}
+                            className="px-3 py-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm font-medium"
+                            title="Click to remove EMF's payment record"
+                          >
+                            ✓ EMF paid {new Date(selectedInvoice.emf_paid_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => emfAction(selectedInvoice.invoice_id, 'emf_paid')}
+                            className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium"
+                          >
+                            💵 Mark EMF Paid
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {selectedInvoice.emf_review_status && (
+                    <p className={`mt-3 text-sm ${selectedInvoice.emf_review_status === 'rejected' ? 'text-red-300' : 'text-blue-300'}`}>
+                      EMF {selectedInvoice.emf_review_status}
+                      {selectedInvoice.emf_reviewed_at ? ` on ${new Date(selectedInvoice.emf_reviewed_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}` : ''}
+                      {selectedInvoice.emf_review_note ? ` — ${selectedInvoice.emf_review_note}` : ''}
+                    </p>
+                  )}
+                  {showReject && (
+                    <div className="mt-3 space-y-2">
+                      <textarea
+                        value={rejectNote}
+                        onChange={(e) => setRejectNote(e.target.value)}
+                        placeholder="Reason the subcontractor will see (e.g. 4 h on C3297218 not in EMF records)"
+                        className="w-full bg-[#0a0a0f] border border-[#2d2d44] rounded-lg px-3 py-2 text-sm h-20"
+                      />
+                      <button
+                        onClick={() => emfAction(selectedInvoice.invoice_id, 'reject', rejectNote)}
+                        disabled={!rejectNote.trim()}
+                        className="px-4 py-2 bg-red-700 hover:bg-red-800 rounded-lg text-sm font-medium disabled:opacity-50"
+                      >
+                        Send rejection
+                      </button>
+                    </div>
+                  )}
+                  {actionError && <p className="mt-2 text-sm text-red-400">{actionError}</p>}
                 </div>
+
+                {/* Already on another invoice */}
+                {overlaps.length > 0 && (
+                  <div className="bg-amber-900/30 border border-amber-500/50 rounded-xl p-4">
+                    <h3 className="font-bold text-amber-400 mb-1">⚠️ Entries already on another invoice</h3>
+                    <p className="text-sm text-amber-200 mb-2">
+                      {new Set(overlaps.map(o => o.wo_id + '|' + o.work_date)).size} entries of this invoice also appear on{' '}
+                      {[...new Set(overlaps.map(o => o.invoice_number))].join(', ')}.
+                    </p>
+                    <ul className="text-xs text-amber-200/80 space-y-0.5">
+                      {overlaps.slice(0, 10).map((o, i) => (
+                        <li key={i}>{formatDateLocal(o.work_date)} → {o.invoice_number} ({o.status})</li>
+                      ))}
+                      {overlaps.length > 10 && <li>… and {overlaps.length - 10} more</li>}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Discrepancy Alert */}
                 {hasDiscrepancy && (

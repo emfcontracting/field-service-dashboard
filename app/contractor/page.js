@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang, LangSwitch } from '@/app/contractor/components/LangProvider';
 import { saveContractorSession, readContractorSession } from '@/lib/contractorSession';
 import { setAppToken } from '@/lib/apiClient';
 import { useRouter } from 'next/navigation';
 
 
 export default function ContractorLoginPage() {
+  const { t, setLang } = useLang();
   const router = useRouter();
   const [step, setStep] = useState('email'); // email, pin
   const [email, setEmail] = useState('');
@@ -45,7 +47,7 @@ export default function ContractorLoginPage() {
       setUser({ email: email.toLowerCase().trim(), first_name: data.first_name, last_name: data.last_name, hasPin: data.hasPin });
       setStep('pin');
     } catch (err) {
-      setError(err.message || 'An error occurred. Please try again.');
+      setError(err.message || t('An error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -66,9 +68,15 @@ export default function ContractorLoginPage() {
         profile: data.profile,
         ...(data.needsPinSetup ? { needsPinSetup: true } : {}),
       }));
+      // Language: a choice made on this device wins and goes to the profile
+      // (Friday e-mail/push); otherwise take the one saved on the profile.
+      let chosen = null;
+      try { chosen = localStorage.getItem('contractor_lang'); } catch { /* ignore */ }
+      if (chosen && chosen !== data.profile?.language) setLang(chosen);
+      else if (!chosen && data.profile?.language) setLang(data.profile.language);
       router.push(data.needsPinSetup ? '/contractor/welcome' : '/contractor/dashboard');
     } catch (err) {
-      setError(err.message || 'An error occurred. Please try again.');
+      setError(err.message || t('An error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -80,8 +88,9 @@ export default function ContractorLoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-4">🧾</div>
-          <h1 className="text-3xl font-bold text-white mb-2">Subcontractor Portal</h1>
-          <p className="text-gray-400">Track hours & create invoices</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('Subcontractor Portal')}</h1>
+          <p className="text-gray-400">{t('Track hours & create invoices')}</p>
+          <div className="mt-3 flex justify-center"><LangSwitch /></div>
         </div>
 
         {/* Login Card */}
@@ -89,14 +98,14 @@ export default function ContractorLoginPage() {
           {step === 'email' ? (
             <form onSubmit={handleEmailSubmit}>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
+                {t('Email Address')}
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none mb-4"
-                placeholder="your@email.com"
+                placeholder={t('your@email.com')}
                 required
                 autoFocus
               />
@@ -112,13 +121,13 @@ export default function ContractorLoginPage() {
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50"
               >
-                {loading ? 'Checking...' : 'Continue'}
+                {loading ? t('Checking...') : t('Continue')}
               </button>
             </form>
           ) : (
             <form onSubmit={handlePinSubmit}>
               <div className="text-center mb-4">
-                <p className="text-gray-300">Welcome back,</p>
+                <p className="text-gray-300">{t('Welcome back,')}</p>
                 <p className="text-xl font-bold text-white">{user?.first_name} {user?.last_name}</p>
               </div>
 
@@ -156,7 +165,7 @@ export default function ContractorLoginPage() {
                 onClick={() => { setStep('email'); setPin(''); setError(''); }}
                 className="w-full text-gray-400 hover:text-white text-sm"
               >
-                ← Use different email
+                {t('← Use different email')}
               </button>
             </form>
           )}
@@ -165,7 +174,7 @@ export default function ContractorLoginPage() {
         {/* Footer */}
         <div className="text-center mt-6">
           <a href="/mobile" className="text-gray-500 hover:text-gray-400 text-sm">
-            ← Back to Mobile App
+            {t('← Back to Mobile App')}
           </a>
         </div>
       </div>

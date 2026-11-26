@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { contractorApi } from '@/lib/contractorClient';
 import { downscaleImage } from '@/lib/imageDownscale';
 import { readContractorSession } from '@/lib/contractorSession';
@@ -16,6 +17,7 @@ import { apiFetch } from '@/lib/apiClient';
 
 
 export default function TaxRecordsPage() {
+  const { t } = useLang();
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -148,7 +150,7 @@ export default function TaxRecordsPage() {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      alert('Export failed: ' + err.message);
+      alert(t('Export failed: ') + err.message);
     } finally {
       setExporting(false);
     }
@@ -157,7 +159,7 @@ export default function TaxRecordsPage() {
   async function handleDelete(recordId) {
     const rec = records.find(r => r.record_id === recordId);
     const auto = rec && rec.source && rec.source !== 'manual';
-    if (!confirm(auto ? 'Remove this entry? It was filled in from the system and will not come back.' : 'Delete this record?')) return;
+    if (!confirm(auto ? t('Remove this entry? It was filled in from the system and will not come back.') : t('Delete this record?'))) return;
     try {
       await apiFetch(`/api/contractor/tax-records/${recordId}`, { method: 'DELETE' });
       loadData();
@@ -175,10 +177,10 @@ export default function TaxRecordsPage() {
         <div className="max-w-6xl mx-auto flex justify-between items-center flex-wrap gap-2">
           <div>
             <Link href="/contractor/dashboard" className="text-sm text-blue-400 hover:text-blue-300">
-              ← Dashboard
+              {t('← Dashboard')}
             </Link>
-            <h1 className="text-xl font-bold mt-1">💰 Tax Records</h1>
-            <p className="text-sm text-gray-400">Personal & business expense tracking for tax prep</p>
+            <h1 className="text-xl font-bold mt-1">{t('💰 Tax Records')}</h1>
+            <p className="text-sm text-gray-400">{t('Personal & business expense tracking for tax prep')}</p>
           </div>
           <div className="flex gap-2 items-center">
             <select
@@ -199,13 +201,13 @@ export default function TaxRecordsPage() {
             onClick={() => { setEditingRecord(null); setShowAddModal(true); }}
             className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium"
           >
-            ➕ Add Receipt
+            {t('➕ Add Receipt')}
           </button>
           <button
             onClick={() => setShowCategoriesModal(true)}
             className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-medium"
           >
-            🏷️ Manage Categories
+            {t('🏷️ Manage Categories')}
           </button>
           <div className="flex-grow" />
           <button
@@ -213,22 +215,22 @@ export default function TaxRecordsPage() {
             disabled={exporting || records.length === 0}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium"
           >
-            📊 Excel Export
+            {t('📊 Excel Export')}
           </button>
           <button
             onClick={() => handleExport('pdf')}
             disabled={exporting || records.length === 0}
             className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium"
           >
-            📄 PDF Export
+            {t('📄 PDF Export')}
           </button>
           <button
             onClick={() => handleExport('master-xlsx')}
             disabled={exporting || records.length === 0}
             className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 px-4 py-2 rounded-lg font-medium"
-            title="Combined Personal Expenses + EMF Income"
+            title={t('Combined Personal Expenses + EMF Income')}
           >
-            🏆 Master Report
+            {t('🏆 Master Report')}
           </button>
         </div>
 
@@ -240,7 +242,7 @@ export default function TaxRecordsPage() {
             }`}
             onClick={() => setFilterGroup('all')}
           >
-            <div className="text-xs text-gray-400">📦 All</div>
+            <div className="text-xs text-gray-400">{t('📦 All')}</div>
             <div className="text-lg font-bold">${grandTotal.toFixed(2)}</div>
           </div>
           {TAX_CATEGORY_GROUPS.map(grp => (
@@ -306,12 +308,12 @@ export default function TaxRecordsPage() {
                 onClick={() => setFilterGroup('all')}
                 className="text-sm text-blue-400 hover:text-blue-300"
               >
-                Clear filter ✕
+                {t('Clear filter ✕')}
               </button>
             )}
           </div>
           {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading...</div>
+            <div className="p-8 text-center text-gray-500">{t('Loading...')}</div>
           ) : filteredRecords.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <p className="mb-2">No records yet for {year}</p>
@@ -319,7 +321,7 @@ export default function TaxRecordsPage() {
                 onClick={() => { setEditingRecord(null); setShowAddModal(true); }}
                 className="text-blue-400 hover:text-blue-300 text-sm"
               >
-                Add your first receipt →
+                {t('Add your first receipt →')}
               </button>
             </div>
           ) : (
@@ -327,11 +329,11 @@ export default function TaxRecordsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-900 text-gray-400">
                   <tr>
-                    <th className="px-4 py-2 text-left">Date</th>
-                    <th className="px-4 py-2 text-left">INV #</th>
-                    <th className="px-4 py-2 text-left">Category</th>
-                    <th className="px-4 py-2 text-right">Amount</th>
-                    <th className="px-4 py-2 text-left">Notes</th>
+                    <th className="px-4 py-2 text-left">{t('Date')}</th>
+                    <th className="px-4 py-2 text-left">{t('INV #')}</th>
+                    <th className="px-4 py-2 text-left">{t('Category')}</th>
+                    <th className="px-4 py-2 text-right">{t('Amount')}</th>
+                    <th className="px-4 py-2 text-left">{t('Notes')}</th>
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
@@ -346,13 +348,13 @@ export default function TaxRecordsPage() {
                           {rec.vendor && rec.invoice_ref && <div className="text-xs text-gray-500">{rec.invoice_ref}</div>}
                           {rec.source && rec.source !== 'manual' && (
                             <span className="inline-block mt-1 mr-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300"
-                              title={rec.edited ? 'Filled in from the system, changed by you — no longer updated automatically' : 'Filled in from the system — updated automatically until you change it'}>
-                              {rec.source === 'material' ? 'auto · material' : rec.source === 'mileage' ? 'auto · mileage' : 'auto · invoice'}{rec.edited ? ' · edited' : ''}
+                              title={rec.edited ? t('Filled in from the system, changed by you — no longer updated automatically') : t('Filled in from the system — updated automatically until you change it')}>
+                              {rec.source === 'material' ? t('auto · material') : rec.source === 'mileage' ? t('auto · mileage') : t('auto · invoice')}{rec.edited ? t(' · edited') : ''}
                             </span>
                           )}
                           {rec.bill_to_emf && (
                             <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${rec.billed_invoice_id ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>
-                              {rec.billed_invoice_id ? 'billed to EMF' : '→ next EMF invoice'}
+                              {rec.billed_invoice_id ? t('billed to EMF') : t('→ next EMF invoice')}
                             </span>
                           )}
                         </td>
@@ -374,14 +376,14 @@ export default function TaxRecordsPage() {
                           <button
                             onClick={() => { setEditingRecord(rec); setShowAddModal(true); }}
                             className="text-blue-400 hover:text-blue-300 mr-2"
-                            title="Edit"
+                            title={t('Edit')}
                           >
                             ✏️
                           </button>
                           <button
                             onClick={() => handleDelete(rec.record_id)}
                             className="text-red-400 hover:text-red-300"
-                            title="Delete"
+                            title={t('Delete')}
                           >
                             🗑️
                           </button>
@@ -392,7 +394,7 @@ export default function TaxRecordsPage() {
                 </tbody>
                 <tfoot className="bg-gray-900 font-bold">
                   <tr>
-                    <td colSpan="3" className="px-4 py-2 text-right">Total:</td>
+                    <td colSpan="3" className="px-4 py-2 text-right">{t('Total:')}</td>
                     <td className="px-4 py-2 text-right">
                       ${filteredRecords.reduce((s, r) => s + parseFloat(r.amount), 0).toFixed(2)}
                     </td>
@@ -435,6 +437,7 @@ export default function TaxRecordsPage() {
 // Record Modal — add or edit a single tax record
 // ─────────────────────────────────────────────────────────────────────────────
 function RecordModal({ user, year, categories, groupedCategories, record, onClose, onSaved }) {
+  const { t } = useLang();
   const isEdit = !!record;
   const [entryDate, setEntryDate]     = useState(record?.entry_date || new Date().toISOString().slice(0, 10));
   const [invoiceRef, setInvoiceRef]   = useState(record?.invoice_ref || '');
@@ -455,7 +458,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
   async function handleSave() {
     setError('');
     if (!categoryName || !amount || parseFloat(amount) <= 0) {
-      setError('Category and a positive amount are required');
+      setError(t('Category and a positive amount are required'));
       return;
     }
     setSaving(true);
@@ -516,7 +519,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
         if (result.receipt_number) setInvoiceRef(result.receipt_number);
         if (result.category) setCategoryName(result.category);
         if (result.summary && !notes) setNotes(result.summary);
-        setScanNote('Read from the receipt — please check before saving.');
+        setScanNote(t('Read from the receipt — please check before saving.'));
       } else if (scan && result?.error) {
         setScanNote(result.error);
       }
@@ -543,13 +546,13 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
       <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h2 className="text-lg font-bold">{isEdit ? 'Edit Receipt' : 'Add Receipt'}</h2>
+          <h2 className="text-lg font-bold">{isEdit ? t('Edit Receipt') : t('Add Receipt')}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
         </div>
         <div className="p-4 space-y-4">
           {!isEdit && !receiptUrl && (
             <label className={`block w-full text-center py-3 rounded-lg font-bold cursor-pointer ${uploadingReceipt ? 'bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              {scanning ? '⏳ Reading receipt…' : '📸 Scan receipt'}
+              {scanning ? t('⏳ Reading receipt…') : t('📸 Scan receipt')}
               <input type="file" accept="image/*,.pdf" capture="environment" className="hidden"
                 disabled={uploadingReceipt} onChange={(e) => handleReceiptUpload(e, true)} />
             </label>
@@ -557,13 +560,13 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
           {scanNote && <p className="text-xs text-yellow-300">{scanNote}</p>}
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Vendor</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Vendor')}</label>
             <input type="text" value={vendor} onChange={(e) => setVendor(e.target.value)}
-              placeholder="e.g., Home Depot" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
+              placeholder={t('e.g., Home Depot')} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Date</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Date')}</label>
             <input
               type="date"
               value={entryDate}
@@ -573,18 +576,18 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Receipt / INV #</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Receipt / INV #')}</label>
             <input
               type="text"
               value={invoiceRef}
               onChange={(e) => setInvoiceRef(e.target.value)}
-              placeholder="e.g., HD-12345 (optional)"
+              placeholder={t('e.g., HD-12345 (optional)')}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Category</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Category')}</label>
             <select
               value={categoryName}
               onChange={(e) => setCategoryName(e.target.value)}
@@ -604,7 +607,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Amount ($)</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Amount ($)')}</label>
             <input
               type="number"
               step="0.01"
@@ -620,21 +623,21 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
               <input type="checkbox" className="mt-1" checked={billToEmf} disabled={billed}
                 onChange={(e) => setBillToEmf(e.target.checked)} />
               <span className="text-sm">
-                <span className="font-medium">Bill to EMF</span>
+                <span className="font-medium">{t('Bill to EMF')}</span>
                 <span className="block text-xs text-gray-400">
-                  {billed ? 'Already on an EMF invoice.' : 'EMF reimburses this — it is added to your next EMF invoice automatically.'}
+                  {billed ? t('Already on an EMF invoice.') : t('EMF reimburses this — it is added to your next EMF invoice automatically.')}
                 </span>
               </span>
             </label>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Work order # (optional)</label>
+              <label className="block text-xs text-gray-400 mb-1">{t('Work order # (optional)')}</label>
               <input type="text" value={woNumber} onChange={(e) => setWoNumber(e.target.value.toUpperCase())}
-                placeholder="e.g., C3297218" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" />
+                placeholder={t('e.g., C3297218')} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Notes (optional)</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Notes (optional)')}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -644,18 +647,18 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Receipt Photo (optional)</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('Receipt Photo (optional)')}</label>
             {receiptUrl ? (
               <div className="flex items-center gap-2">
                 <button type="button" onClick={viewReceipt}
                    className="text-blue-400 hover:text-blue-300 text-sm flex-grow text-left truncate">
-                  📷 View receipt
+                  {t('📷 View receipt')}
                 </button>
                 <button
                   onClick={() => setReceiptUrl('')}
                   className="text-red-400 text-xs"
                 >
-                  Remove
+                  {t('Remove')}
                 </button>
               </div>
             ) : (
@@ -667,7 +670,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
                 className="w-full text-sm text-gray-400"
               />
             )}
-            {uploadingReceipt && <div className="text-xs text-gray-500 mt-1">Uploading...</div>}
+            {uploadingReceipt && <div className="text-xs text-gray-500 mt-1">{t('Uploading...')}</div>}
           </div>
 
           {error && (
@@ -681,14 +684,14 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
               onClick={onClose}
               className="flex-grow bg-gray-700 hover:bg-gray-600 py-2 rounded-lg"
             >
-              Cancel
+              {t('Cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="flex-grow bg-green-600 hover:bg-green-700 disabled:opacity-50 py-2 rounded-lg font-bold"
             >
-              {saving ? 'Saving...' : isEdit ? 'Save' : 'Add'}
+              {saving ? t('Saving...') : isEdit ? t('Save') : t('Add')}
             </button>
           </div>
         </div>
@@ -701,6 +704,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
 // Categories Modal — manage custom categories
 // ─────────────────────────────────────────────────────────────────────────────
 function CategoriesModal({ user, customCategories, onClose, onChanged }) {
+  const { t } = useLang();
   const [newName, setNewName]   = useState('');
   const [newColor, setNewColor] = useState('#9CA3AF');
   const [saving, setSaving]     = useState(false);
@@ -745,24 +749,23 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
       <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h2 className="text-lg font-bold">🏷️ Manage Custom Categories</h2>
+          <h2 className="text-lg font-bold">{t('🏷️ Manage Custom Categories')}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
         </div>
         <div className="p-4 space-y-4">
           <p className="text-sm text-gray-400">
-            The 25 default categories from the standard template are always available.
-            Add your own here for anything not covered.
+            {t('The 25 default categories from the standard template are always available. Add your own here for anything not covered.')}
           </p>
 
           {/* Add new */}
           <div className="bg-gray-900 rounded-lg p-3 space-y-2">
-            <div className="text-sm font-semibold">Add New Category</div>
+            <div className="text-sm font-semibold">{t('Add New Category')}</div>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Category name"
+                placeholder={t('Category name')}
                 className="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
               />
               <input
@@ -776,7 +779,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
                 disabled={saving || !newName.trim()}
                 className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-medium"
               >
-                Add
+                {t('Add')}
               </button>
             </div>
             {error && <div className="text-red-400 text-xs">{error}</div>}
@@ -784,9 +787,9 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
 
           {/* Existing customs */}
           <div>
-            <div className="text-sm font-semibold mb-2">Your Custom Categories</div>
+            <div className="text-sm font-semibold mb-2">{t('Your Custom Categories')}</div>
             {customCategories.length === 0 ? (
-              <div className="text-sm text-gray-500 italic">No custom categories yet</div>
+              <div className="text-sm text-gray-500 italic">{t('No custom categories yet')}</div>
             ) : (
               <div className="space-y-1">
                 {customCategories.map(cat => (
@@ -810,7 +813,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
 
           {/* Defaults reference */}
           <div>
-            <div className="text-sm font-semibold mb-2">Default Categories (always available)</div>
+            <div className="text-sm font-semibold mb-2">{t('Default Categories (always available)')}</div>
             <div className="flex flex-wrap gap-1">
               {DEFAULT_TAX_CATEGORIES.map(c => (
                 <span
@@ -828,7 +831,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
             onClick={onClose}
             className="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg"
           >
-            Close
+            {t('Close')}
           </button>
         </div>
       </div>

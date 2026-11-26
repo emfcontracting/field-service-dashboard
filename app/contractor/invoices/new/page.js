@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { readContractorSession } from '@/lib/contractorSession';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -16,6 +17,7 @@ import { contractorApi } from '@/lib/contractorClient';
 import { lastBillingWeek } from '@/lib/billingWeek';
 
 export default function CreateInvoice() {
+  const { t } = useLang();
   const router = useRouter();
   
   const [user, setUser] = useState(null);
@@ -77,7 +79,7 @@ export default function CreateInvoice() {
   }, [router]);
 
   async function pullHours() {
-    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: 'Please select date range' }); return; }
+    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: t('Please select date range') }); return; }
     setLoadingHours(true);
     setMessage(null);
     try {
@@ -86,14 +88,14 @@ export default function CreateInvoice() {
       setAlreadyInvoiced(already_invoiced || []);
       setHoursData(data || []);
       if (!data || data.length === 0) {
-        setMessage({ type: 'warning', text: 'No hours found for this period' });
+        setMessage({ type: 'warning', text: t('No hours found for this period') });
       } else {
-        setMessage({ type: 'success', text: `Found ${data.length} entries` });
+        setMessage({ type: 'success', text: t('Found {n} entries', { n: data.length }) });
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (error) {
       console.error('Pull hours error:', error);
-      setMessage({ type: 'error', text: 'Failed to pull hours data' });
+      setMessage({ type: 'error', text: t('Failed to pull hours data') });
     } finally {
       setLoadingHours(false);
     }
@@ -135,7 +137,7 @@ export default function CreateInvoice() {
 
   async function saveEMFInvoice() {
     if (hoursData.length === 0 && lineItems.length === 0) {
-      setMessage({ type: 'error', text: 'No data to invoice' });
+      setMessage({ type: 'error', text: t('No data to invoice') });
       return;
     }
     setSaving(true);
@@ -153,11 +155,11 @@ export default function CreateInvoice() {
         })),
       });
       const invoiceNumber = invoice.invoice_number;
-      setMessage({ type: 'success', text: 'Invoice ' + invoiceNumber + ' created!' });
+      setMessage({ type: 'success', text: t('Invoice {inv} created!', { inv: invoiceNumber }) });
       setTimeout(() => router.push('/contractor/invoices'), 1500);
     } catch (error) {
       console.error('Save invoice error:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to create invoice' });
+      setMessage({ type: 'error', text: error.message || t('Failed to create invoice') });
     } finally {
       setSaving(false);
     }
@@ -166,9 +168,9 @@ export default function CreateInvoice() {
   // Invoice to another client: stored like an EMF invoice (list, Send, Paid,
   // tax report), with the sub's own lines and prices.
   async function saveOtherClientInvoice() {
-    if (!otherClient.name) { setMessage({ type: 'error', text: 'Please enter client name' }); return; }
-    if (lineItems.length === 0) { setMessage({ type: 'error', text: 'Please add at least one line item' }); return; }
-    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: 'Please select the service dates' }); return; }
+    if (!otherClient.name) { setMessage({ type: 'error', text: t('Please enter client name') }); return; }
+    if (lineItems.length === 0) { setMessage({ type: 'error', text: t('Please add at least one line item') }); return; }
+    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: t('Please select the service dates') }); return; }
 
     setGenerating(true);
     setMessage(null);
@@ -184,17 +186,17 @@ export default function CreateInvoice() {
           rate: parseFloat(item.rate) || 0,
         })),
       });
-      setMessage({ type: 'success', text: 'Invoice ' + invoice.invoice_number + ' created!' });
+      setMessage({ type: 'success', text: t('Invoice {inv} created!', { inv: invoice.invoice_number }) });
       setTimeout(() => router.push('/contractor/invoices/' + invoice.invoice_id), 800);
     } catch (error) {
       console.error('Save other-client invoice error:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to create invoice' });
+      setMessage({ type: 'error', text: error.message || t('Failed to create invoice') });
     } finally {
       setGenerating(false);
     }
   }
 
-  if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-white">Loading...</div></div>;
+  if (loading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-white">{t('Loading...')}</div></div>;
   if (!user) return null;
 
   return (
@@ -203,8 +205,8 @@ export default function CreateInvoice() {
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/contractor/invoices" className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">← Cancel</Link>
-            <h1 className="text-xl font-bold">📝 Create Invoice</h1>
+            <Link href="/contractor/invoices" className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">{t('← Cancel')}</Link>
+            <h1 className="text-xl font-bold">{t('📝 Create Invoice')}</h1>
           </div>
         </div>
       </header>
@@ -218,45 +220,45 @@ export default function CreateInvoice() {
       <div className="max-w-4xl mx-auto p-4 space-y-6">
         
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-4">👤 Select Client</h2>
+          <h2 className="font-bold mb-4">{t('👤 Select Client')}</h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <button onClick={() => { setClientType('emf'); setHoursData([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'emf' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
               <div className="font-bold">EMF Contracting LLC</div>
-              <div className="text-sm text-gray-400">Pull hours from work orders</div>
+              <div className="text-sm text-gray-400">{t('Pull hours from work orders')}</div>
             </button>
             <button onClick={() => { setClientType('other'); setHoursData([]); setLineItems([]); }} className={`p-4 rounded-lg border-2 text-left ${clientType === 'other' ? 'border-blue-500 bg-blue-500/20' : 'border-gray-600 hover:border-gray-500'}`}>
-              <div className="font-bold">Other Client</div>
-              <div className="text-sm text-gray-400">Create custom invoice</div>
+              <div className="font-bold">{t('Other Client')}</div>
+              <div className="text-sm text-gray-400">{t('Create custom invoice')}</div>
             </button>
           </div>
 
           {clientType === 'other' && (
             <div className="space-y-3 pt-4 border-t border-gray-700">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Client/Company Name *</label>
-                <input type="text" value={otherClient.name} onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="ABC Company" />
+                <label className="block text-sm text-gray-400 mb-1">{t('Client/Company Name *')}</label>
+                <input type="text" value={otherClient.name} onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder={t('ABC Company')} />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Street Address</label>
-                <input type="text" value={otherClient.address} onChange={(e) => setOtherClient({ ...otherClient, address: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="123 Main St" />
+                <label className="block text-sm text-gray-400 mb-1">{t('Street Address')}</label>
+                <input type="text" value={otherClient.address} onChange={(e) => setOtherClient({ ...otherClient, address: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder={t('123 Main St')} />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">City</label>
+                  <label className="block text-sm text-gray-400 mb-1">{t('City')}</label>
                   <input type="text" value={otherClient.city} onChange={(e) => setOtherClient({ ...otherClient, city: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">State</label>
+                  <label className="block text-sm text-gray-400 mb-1">{t('State')}</label>
                   <input type="text" value={otherClient.state} onChange={(e) => setOtherClient({ ...otherClient, state: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="SC" />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">ZIP</label>
+                  <label className="block text-sm text-gray-400 mb-1">{t('ZIP')}</label>
                   <input type="text" value={otherClient.zip} onChange={(e) => setOtherClient({ ...otherClient, zip: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Email</label>
-                <input type="email" value={otherClient.email} onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder="client@example.com" />
+                <label className="block text-sm text-gray-400 mb-1">{t('Email')}</label>
+                <input type="email" value={otherClient.email} onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder={t('client@example.com')} />
               </div>
             </div>
           )}
@@ -264,14 +266,14 @@ export default function CreateInvoice() {
 
         {clientType === 'other' && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h2 className="font-bold mb-4">📅 Service Dates</h2>
+            <h2 className="font-bold mb-4">{t('📅 Service Dates')}</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">From</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('From')}</label>
                 <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">To</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('To')}</label>
                 <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
             </div>
@@ -280,30 +282,29 @@ export default function CreateInvoice() {
 
         {clientType === 'emf' && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h2 className="font-bold mb-4">📅 Select Date Range</h2>
+            <h2 className="font-bold mb-4">{t('📅 Select Date Range')}</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Start Date</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('Start Date')}</label>
                 <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">End Date</label>
+                <label className="block text-sm text-gray-400 mb-1">{t('End Date')}</label>
                 <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
               </div>
             </div>
             <button onClick={pullHours} disabled={loadingHours} className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium disabled:opacity-50">
-              {loadingHours ? '⏳ Pulling Data...' : '📥 Pull My Hours, Mileage & Materials'}
+              {loadingHours ? t('⏳ Pulling Data...') : t('📥 Pull My Hours, Mileage & Materials')}
             </button>
           </div>
         )}
 
         {clientType === 'emf' && alreadyInvoiced.length > 0 && (
           <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-xl p-4">
-            <p className="font-bold text-yellow-400 mb-1">⚠️ Some of these entries are already on another invoice</p>
+            <p className="font-bold text-yellow-400 mb-1">{t('⚠️ Some of these entries are already on another invoice')}</p>
             <p className="text-sm text-yellow-200 mb-2">
-              {[...new Set(alreadyInvoiced.map(a => a.invoice_number))].join(', ')} already include{' '}
-              {new Set(alreadyInvoiced.map(a => a.wo_id + '|' + a.work_date)).size} of the entries below.
-              Check the period before you create this invoice.
+              {t('{list} already include {n} of the entries below.', { list: [...new Set(alreadyInvoiced.map(a => a.invoice_number))].join(', '), n: new Set(alreadyInvoiced.map(a => a.wo_id + '|' + a.work_date)).size })}{' '}
+              {t('Check the period before you create this invoice.')}
             </p>
             <ul className="text-xs text-yellow-200/80 space-y-0.5">
               {alreadyInvoiced.slice(0, 8).map((a, i) => (
@@ -311,34 +312,34 @@ export default function CreateInvoice() {
                   {formatDateEST(parseLocalDate(a.work_date))} · {hoursData.find(h => h.wo_id === a.wo_id)?.work_order?.wo_number || 'WO'} → {a.invoice_number}
                 </li>
               ))}
-              {alreadyInvoiced.length > 8 && <li>… and {alreadyInvoiced.length - 8} more</li>}
+              {alreadyInvoiced.length > 8 && <li>… +{alreadyInvoiced.length - 8}</li>}
             </ul>
           </div>
         )}
 
         {clientType === 'emf' && hoursData.length > 0 && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-            <h2 className="font-bold mb-4">📋 Review Hours, Mileage & Materials</h2>
+            <h2 className="font-bold mb-4">{t('📋 Review Hours, Mileage & Materials')}</h2>
             <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-700/50 rounded-lg">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('Hourly Rate')}</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.hourly} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.hourly} readOnly title={t('Your rates — change them under Profile')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">OT Rate</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('OT Rate')}</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.ot} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.ot} readOnly title={t('Your rates — change them under Profile')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Mileage Rate</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('Mileage Rate')}</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.mileage} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.mileage} readOnly title={t('Your rates — change them under Profile')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
             </div>
@@ -346,13 +347,13 @@ export default function CreateInvoice() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-gray-400 text-left border-b border-gray-700">
-                    <th className="pb-2">Date</th>
-                    <th className="pb-2">Work Order</th>
-                    <th className="pb-2 text-right">Reg Hrs</th>
-                    <th className="pb-2 text-right">OT Hrs</th>
-                    <th className="pb-2 text-right">Miles</th>
-                    <th className="pb-2 text-right">Material</th>
-                    <th className="pb-2 text-right">Amount</th>
+                    <th className="pb-2">{t('Date')}</th>
+                    <th className="pb-2">{t('Work Order')}</th>
+                    <th className="pb-2 text-right">{t('Reg Hrs')}</th>
+                    <th className="pb-2 text-right">{t('OT Hrs')}</th>
+                    <th className="pb-2 text-right">{t('Miles')}</th>
+                    <th className="pb-2 text-right">{t('Material')}</th>
+                    <th className="pb-2 text-right">{t('Amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -386,7 +387,7 @@ export default function CreateInvoice() {
                 </tbody>
                 <tfoot className="border-t-2 border-gray-600">
                   <tr className="font-bold">
-                    <td className="pt-3">TOTALS</td>
+                    <td className="pt-3">{t('TOTALS')}</td>
                     <td className="pt-3"></td>
                     <td className="pt-3 text-right">{totalRegularHours.toFixed(1)}</td>
                     <td className="pt-3 text-right">{totalOTHours.toFixed(1)}</td>
@@ -404,7 +405,7 @@ export default function CreateInvoice() {
             {totalTechMaterial > 0 && (
               <div className="mt-3 p-3 bg-orange-900/30 border border-orange-500/30 rounded-lg">
                 <p className="text-sm text-orange-300">
-                  💰 <strong>Material Reimbursement:</strong> ${totalTechMaterial.toFixed(2)} for materials you purchased will be included in this invoice.
+                  💰 <strong>{t('Material Reimbursement:')}</strong> ${totalTechMaterial.toFixed(2)} for materials you purchased will be included in this invoice.
                 </p>
               </div>
             )}
@@ -413,20 +414,20 @@ export default function CreateInvoice() {
 
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold">{clientType === 'emf' ? '➕ Additional Line Items (Optional)' : '📋 Invoice Line Items *'}</h2>
-            <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">+ Add Item</button>
+            <h2 className="font-bold">{clientType === 'emf' ? t('➕ Additional Line Items (Optional)') : t('📋 Invoice Line Items *')}</h2>
+            <button onClick={addLineItem} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">{t('+ Add Item')}</button>
           </div>
           {lineItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">{clientType === 'emf' ? 'No additional items. Click "Add Item" to add extra materials, supplies, etc.' : 'Click "Add Item" to add services, materials, etc.'}</p>
+            <p className="text-gray-500 text-sm">{clientType === 'emf' ? t('No additional items. Click "Add Item" to add extra materials, supplies, etc.') : t('Click "Add Item" to add services, materials, etc.')}</p>
           ) : (
             <div className="space-y-3">
               {lineItems.map(item => (
                 <div key={item.id} className="flex gap-2 items-start">
-                  <input type="text" value={item.description} onChange={(e) => updateLineItem(item.id, 'description', e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" placeholder="Description" />
-                  <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', e.target.value)} className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-center" placeholder="Qty" />
+                  <input type="text" value={item.description} onChange={(e) => updateLineItem(item.id, 'description', e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" placeholder={t('Description')} />
+                  <input type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, 'quantity', e.target.value)} className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-center" placeholder={t('Qty')} />
                   <div className="relative">
                     <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                    <input type="number" step="0.01" value={item.rate} onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)} className="w-24 bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-2 text-sm" placeholder="Rate" />
+                    <input type="number" step="0.01" value={item.rate} onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)} className="w-24 bg-gray-700 border border-gray-600 rounded-lg pl-6 pr-2 py-2 text-sm" placeholder={t('Rate')} />
                   </div>
                   <div className="w-24 py-2 text-right font-medium">${(parseFloat(item.amount) || 0).toFixed(2)}</div>
                   <button onClick={() => removeLineItem(item.id)} className="p-2 text-red-400 hover:text-red-300">✕</button>
@@ -437,25 +438,25 @@ export default function CreateInvoice() {
         </div>
 
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-4">📊 Invoice Summary</h2>
+          <h2 className="font-bold mb-4">{t('📊 Invoice Summary')}</h2>
           <div className="space-y-2">
             {clientType === 'emf' && (
               <>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Regular Hours ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
+                  <span className="text-gray-400">{t('Regular Hours')} ({totalRegularHours.toFixed(1)}h × ${rates.hourly})</span>
                   <span>${(totalRegularHours * rates.hourly).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">OT Hours ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
+                  <span className="text-gray-400">{t('OT Hours')} ({totalOTHours.toFixed(1)}h × ${rates.ot})</span>
                   <span>${(totalOTHours * rates.ot).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Mileage ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
+                  <span className="text-gray-400">{t('Mileage')} ({totalMiles.toFixed(0)} mi × ${rates.mileage})</span>
                   <span>${mileageAmount.toFixed(2)}</span>
                 </div>
                 {totalTechMaterial > 0 && (
                   <div className="flex justify-between text-orange-400">
-                    <span>Material Reimbursement</span>
+                    <span>{t('Material Reimbursement')}</span>
                     <span>${totalTechMaterial.toFixed(2)}</span>
                   </div>
                 )}
@@ -463,13 +464,13 @@ export default function CreateInvoice() {
             )}
             {lineItemsAmount > 0 && (
               <div className="flex justify-between">
-                <span className="text-gray-400">{clientType === 'emf' ? 'Additional Items' : 'Line Items'}</span>
+                <span className="text-gray-400">{clientType === 'emf' ? t('Additional Items') : t('Line Items')}</span>
                 <span>${lineItemsAmount.toFixed(2)}</span>
               </div>
             )}
             <div className="border-t border-gray-600 pt-2 mt-2">
               <div className="flex justify-between text-xl font-bold">
-                <span>TOTAL</span>
+                <span>{t('TOTAL')}</span>
                 <span className="text-green-400">${grandTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -478,14 +479,14 @@ export default function CreateInvoice() {
 
         {clientType === 'emf' ? (
           <>
-          <p className="text-xs text-gray-500 text-center">Expenses you marked “Bill to EMF” are added to this invoice automatically.</p>
+          <p className="text-xs text-gray-500 text-center">{t('Expenses you marked “Bill to EMF” are added to this invoice automatically.')}</p>
           <button onClick={saveEMFInvoice} disabled={saving || (hoursData.length === 0 && lineItems.length === 0)} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
-            {saving ? '⏳ Creating...' : '✓ Create Invoice'}
+            {saving ? t('⏳ Creating...') : t('✓ Create Invoice')}
           </button>
           </>
         ) : (
           <button onClick={saveOtherClientInvoice} disabled={generating || !otherClient.name || lineItems.length === 0} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
-            {generating ? '⏳ Creating...' : '✓ Create Invoice'}
+            {generating ? t('⏳ Creating...') : t('✓ Create Invoice')}
           </button>
         )}
       </div>

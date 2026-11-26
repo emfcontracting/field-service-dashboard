@@ -4,6 +4,7 @@
 // expenses and mileage, and a rough self-employment tax estimate with the
 // 1040-ES due dates. Planning numbers only — not tax advice.
 import { useEffect, useMemo, useState } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
 import { parseDate, fmtDate, fmtDateShort, daysBetweenET } from '@/lib/dates';
@@ -18,6 +19,7 @@ const muted = { color: '#9ca3af', fontSize: '12px' };
 const isVehicleActual = (cat) => scheduleCLine(cat).startsWith('Line 9') && !/standard mileage/.test(scheduleCLine(cat));
 
 export default function YearOverview({ user, year }) {
+  const { t } = useLang();
   const [invoices, setInvoices] = useState([]);
   const [records, setRecords] = useState([]);
   const [trips, setTrips] = useState({ trips: [], emf: [] });
@@ -48,8 +50,8 @@ export default function YearOverview({ user, year }) {
     ]).then(([inv, rec, tr]) => {
       const errs = [];
       if (inv.status === 'fulfilled') setInvoices(inv.value.invoices || []); else errs.push(`Invoices: ${inv.reason?.message}`);
-      if (rec.status === 'fulfilled') setRecords(rec.value.records || []); else { setRecords([]); errs.push(`Expenses: ${rec.reason?.message}`); }
-      if (tr.status === 'fulfilled') setTrips(tr.value || { trips: [], emf: [] }); else { setTrips({ trips: [], emf: [] }); errs.push(`Mileage: ${tr.reason?.message}`); }
+      if (rec.status === 'fulfilled') setRecords(rec.value.records || []); else { setRecords([]); errs.push(`${t('Expenses')}: ${rec.reason?.message}`); }
+      if (tr.status === 'fulfilled') setTrips(tr.value || { trips: [], emf: [] }); else { setTrips({ trips: [], emf: [] }); errs.push(`${t('Mileage')}: ${tr.reason?.message}`); }
       setError(errs.join(' · '));
     });
   }, [user, year]);
@@ -80,7 +82,7 @@ export default function YearOverview({ user, year }) {
       else if (isVehicleActual(r.category_name)) vehicleActual += amt;
       else if (r.category_name !== 'Mileage') business += amt;
     }
-    const miles = [...(trips.emf || []).map(r => ({ d: r.work_date, m: r.miles })), ...(trips.trips || []).map(t => ({ d: t.trip_date, m: parseFloat(t.miles) || 0 }))];
+    const miles = [...(trips.emf || []).map(r => ({ d: r.work_date, m: r.miles })), ...(trips.trips || []).map(trip => ({ d: trip.trip_date, m: parseFloat(trip.miles) || 0 }))];
     const mileageValue = miles.reduce((s, x) => s + x.m * (irsRateOn(x.d) || 0), 0);
     const totalMiles = miles.reduce((s, x) => s + x.m, 0);
     const vehicleDeduction = vehicle === 'standard' ? mileageValue : vehicleActual;
@@ -109,7 +111,7 @@ export default function YearOverview({ user, year }) {
       a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || `TaxPackage_${year}.xlsx`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-    } catch (e) { setError('Download failed: ' + e.message); }
+    } catch (e) { setError(t('Download failed: ') + e.message); }
   }
 
   return (
@@ -118,51 +120,51 @@ export default function YearOverview({ user, year }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
         <div style={card}>
-          <p style={muted}>Income {year} (by date paid)</p>
+          <p style={muted}>{t('Income {year} (by date paid)', { year })}</p>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0' }}>{money(o.income)}</p>
           {Object.entries(o.byClient).map(([k, v]) => <p key={k} style={muted}>{k}: {money(v)}</p>)}
         </div>
         <div style={card}>
-          <p style={muted}>Waiting for payment</p>
+          <p style={muted}>{t('Waiting for payment')}</p>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0', color: '#facc15' }}>{money(o.openTotal)}</p>
-          <p style={muted}>{o.openCount} invoice{o.openCount === 1 ? '' : 's'}{o.avgDays != null ? ` · paid on average ${o.avgDays} days after sending` : ''}</p>
+          <p style={muted}>{t(o.openCount === 1 ? '{n} invoice' : '{n} invoices', { n: o.openCount })}{o.avgDays != null ? ' · ' + t('paid on average {days} days after sending', { days: o.avgDays }) : ''}</p>
         </div>
         <div style={card}>
-          <p style={muted}>EMF payments recorded {year} (1099-NEC)</p>
+          <p style={muted}>{t('EMF payments recorded {year} (1099-NEC)', { year })}</p>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0' }}>{money(o.emf1099)}</p>
           <p style={muted}>
-            What EMF marked as paid. EMF issues a 1099-NEC when it pays you {money(threshold)} or more in {year}. Compare with the 1099 you receive.
+            {t('What EMF marked as paid. EMF issues a 1099-NEC when it pays you {amount} or more in {year}. Compare with the 1099 you receive.', { amount: money(threshold), year })}
           </p>
         </div>
       </div>
 
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <p style={{ fontWeight: 'bold', margin: 0 }}>Estimate {year} — for planning, not tax advice</p>
+          <p style={{ fontWeight: 'bold', margin: 0 }}>{t('Estimate {year} — for planning, not tax advice', { year })}</p>
           <button onClick={downloadPackage} style={{ padding: '8px 14px', backgroundColor: '#059669', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
-            📦 Download tax package (Excel)
+            {t('📦 Download tax package (Excel)')}
           </button>
         </div>
         <table style={{ width: '100%', fontSize: '14px', marginTop: '12px', borderCollapse: 'collapse' }}>
           <tbody>
-            <tr><td style={{ padding: '4px 0' }}>Income (marked paid)</td><td style={{ textAlign: 'right' }}>{money(o.income)}</td></tr>
-            <tr><td style={{ padding: '4px 0' }}>Business expenses (Schedule C, without vehicle)</td><td style={{ textAlign: 'right' }}>− {money(o.business)}</td></tr>
+            <tr><td style={{ padding: '4px 0' }}>{t('Income (marked paid)')}</td><td style={{ textAlign: 'right' }}>{money(o.income)}</td></tr>
+            <tr><td style={{ padding: '4px 0' }}>{t('Business expenses (Schedule C, without vehicle)')}</td><td style={{ textAlign: 'right' }}>− {money(o.business)}</td></tr>
             <tr>
               <td style={{ padding: '4px 0' }}>
-                Vehicle:{' '}
+                {t('Vehicle:')}{' '}
                 <select value={vehicle} onChange={e => setVehicle(e.target.value)} style={{ backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563', borderRadius: '6px', padding: '2px 6px' }}>
-                  <option value="standard">standard mileage ({o.totalMiles.toFixed(0)} mi)</option>
-                  <option value="actual">actual expenses (gas, maintenance, …)</option>
+                  <option value="standard">{t('standard mileage ({n} mi)', { n: o.totalMiles.toFixed(0) })}</option>
+                  <option value="actual">{t('actual expenses (gas, maintenance, …)')}</option>
                 </select>
               </td>
               <td style={{ textAlign: 'right' }}>− {money(o.vehicleDeduction)}</td>
             </tr>
-            <tr style={{ borderTop: '1px solid #374151' }}><td style={{ padding: '6px 0', fontWeight: 'bold' }}>Estimated net profit</td><td style={{ textAlign: 'right', fontWeight: 'bold' }}>{money(o.profit)}</td></tr>
-            <tr><td style={{ padding: '4px 0' }}>Self-employment tax (15.3% on 92.35%, SS up to {money(o.se.base)})</td><td style={{ textAlign: 'right' }}>{money(o.se.total)}</td></tr>
+            <tr style={{ borderTop: '1px solid #374151' }}><td style={{ padding: '6px 0', fontWeight: 'bold' }}>{t('Estimated net profit')}</td><td style={{ textAlign: 'right', fontWeight: 'bold' }}>{money(o.profit)}</td></tr>
+            <tr><td style={{ padding: '4px 0' }}>{t('Self-employment tax (15.3% on 92.35%, SS up to {amount})', { amount: money(o.se.base) })}</td><td style={{ textAlign: 'right' }}>{money(o.se.total)}</td></tr>
             <tr>
               <td style={{ padding: '4px 0' }}>
-                Income tax set-aside — your own %:{' '}
-                <input inputMode="decimal" value={setAside} onChange={e => setSetAside(e.target.value.replace(/[^\d.]/g, ''))} placeholder="e.g. 12"
+                {t('Income tax set-aside — your own %:')}{' '}
+                <input inputMode="decimal" value={setAside} onChange={e => setSetAside(e.target.value.replace(/[^\d.]/g, ''))} placeholder={t('e.g. 12')}
                   style={{ width: '60px', backgroundColor: '#374151', color: 'white', border: '1px solid #4b5563', borderRadius: '6px', padding: '2px 6px' }} /> %
               </td>
               <td style={{ textAlign: 'right' }}>{money(o.incomeSetAside)}</td>
@@ -170,12 +172,12 @@ export default function YearOverview({ user, year }) {
           </tbody>
         </table>
         <p style={{ ...muted, marginTop: '8px' }}>
-          Personal items ({money(o.personal)}: medical, home, charity) are not business expenses and are left out.
-          Income tax depends on your filing status and other income — the % is your own assumption; ask your tax preparer.
+          {t('Personal items ({amount}: medical, home, charity) are not business expenses and are left out.', { amount: money(o.personal) })}{' '}
+          {t('Income tax depends on your filing status and other income — the % is your own assumption; ask your tax preparer.')}
         </p>
         {due ? (
           <div style={{ marginTop: '12px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0 0 6px' }}>Estimated tax payments (Form 1040-ES) — about {money(quarterly)} each</p>
+            <p style={{ fontWeight: 'bold', margin: '0 0 6px' }}>{t('Estimated tax payments (Form 1040-ES) — about {amount} each', { amount: money(quarterly) })}</p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {due.map((d, i) => {
                 const left = daysBetweenET(new Date(), d);
@@ -183,14 +185,14 @@ export default function YearOverview({ user, year }) {
                   <span key={d} style={{ padding: '4px 10px', borderRadius: '9999px', fontSize: '13px',
                     backgroundColor: left < 0 ? '#374151' : left <= 30 ? 'rgba(234,179,8,0.2)' : 'rgba(59,130,246,0.15)',
                     color: left < 0 ? '#9ca3af' : left <= 30 ? '#facc15' : '#93c5fd' }}>
-                    Q{i + 1}: {fmtDateShort(d)}{left >= 0 && left <= 30 ? ` · in ${left} days` : ''}{left < 0 ? ' · past' : ''}
+                    Q{i + 1}: {fmtDateShort(d)}{left >= 0 && left <= 30 ? ' · ' + t('in {n} days', { n: left }) : ''}{left < 0 ? ' · ' + t('past') : ''}
                   </span>
                 );
               })}
             </div>
           </div>
         ) : (
-          <p style={{ ...muted, marginTop: '12px' }}>1040-ES due dates for {year} are not on file — see irs.gov/Form1040ES.</p>
+          <p style={{ ...muted, marginTop: '12px' }}>{t('1040-ES due dates for {year} are not on file — see irs.gov/Form1040ES.', { year })}</p>
         )}
       </div>
     </div>

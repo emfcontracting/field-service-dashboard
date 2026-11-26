@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import YearOverview from '../components/YearOverview';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateShort } from '@/lib/dates';
@@ -11,6 +12,7 @@ import Link from 'next/link';
 
 
 export default function TaxReport() {
+  const { t } = useLang();
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -208,19 +210,19 @@ export default function TaxReport() {
         <div style={{ maxWidth: '1024px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link href="/contractor/dashboard" style={{ padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
-              ← Back
+              {t('← Back')}
             </Link>
             <div>
-              <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>📊 Year-End Tax Report</h1>
-              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0 0' }}>Income breakdown for tax preparation</p>
+              <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{t('📊 Year-End Tax Report')}</h1>
+              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0 0' }}>{t('Income breakdown for tax preparation')}</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <Link href="/contractor/mileage" style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
-              🚗 Mileage
+              {t('🚗 Mileage')}
             </Link>
             <Link href="/contractor/tax-records" style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
-              💳 Expenses
+              {t('💳 Expenses')}
             </Link>
             <select
               value={year}
@@ -253,7 +255,7 @@ export default function TaxReport() {
                 cursor: summary && invoices.length > 0 ? 'pointer' : 'not-allowed'
               }}
             >
-              📥 Download CSV
+              {t('📥 Download CSV')}
             </button>
             <button
               onClick={printReport}
@@ -268,7 +270,7 @@ export default function TaxReport() {
                 cursor: 'pointer'
               }}
             >
-              🖨️ Print
+              {t('🖨️ Print')}
             </button>
           </div>
         </div>
@@ -285,7 +287,7 @@ export default function TaxReport() {
           <div style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '48px', textAlign: 'center' }}>
             <p style={{ fontSize: '48px', marginBottom: '16px' }}>📭</p>
             <p style={{ color: '#9ca3af', marginBottom: '8px' }}>No paid invoices found for {year}</p>
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>Only invoices marked as &quot;Paid&quot; are included in this report</p>
+            <p style={{ color: '#6b7280', fontSize: '14px' }}>{t('Only invoices marked as "Paid" are included in this report')}</p>
           </div>
         ) : (
           <div className="print-content" style={{ backgroundColor: '#ffffff', color: '#111827', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -297,7 +299,7 @@ export default function TaxReport() {
                   <p style={{ color: '#9ca3af', marginTop: '4px' }}>{user.profile?.business_name || `${user.first_name} ${user.last_name}`}</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>Generated</p>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>{t('Generated')}</p>
                   <p style={{ fontWeight: '500', margin: '4px 0 0 0' }}>{new Date().toLocaleDateString()}</p>
                 </div>
               </div>
@@ -307,32 +309,32 @@ export default function TaxReport() {
               {/* Summary Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
                 <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Total Income</p>
+                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>{t('Total Income')}</p>
                   <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#059669', margin: 0 }}>${summary?.grandTotal.toFixed(2)}</p>
                   <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{summary?.invoiceCount} invoices</p>
                 </div>
                 <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Labor Income</p>
+                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>{t('Labor Income')}</p>
                   <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#2563eb', margin: 0 }}>${summary?.totalLaborAmount.toFixed(2)}</p>
                   <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{summary?.totalRegularHours.toFixed(1)}h reg + {summary?.totalOTHours.toFixed(1)}h OT</p>
                 </div>
                 <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '16px' }}>
-                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Mileage Reimbursement</p>
+                  <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>{t('Mileage Reimbursement')}</p>
                   <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#7c3aed', margin: 0 }}>${summary?.totalMileageAmount.toFixed(2)}</p>
                   <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{summary?.totalMiles.toFixed(0)} miles</p>
                 </div>
               </div>
 
               {/* Detailed Breakdown */}
-              <h3 style={{ fontWeight: 'bold', color: '#374151', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px' }}>Income Breakdown by Category</h3>
+              <h3 style={{ fontWeight: 'bold', color: '#374151', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px' }}>{t('Income Breakdown by Category')}</h3>
               
               <table style={{ width: '100%', fontSize: '14px', borderCollapse: 'collapse', marginBottom: '32px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f9fafb' }}>
-                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Category</th>
-                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Quantity</th>
-                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Amount</th>
-                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>% of Total</th>
+                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>{t('Category')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{t('Quantity')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{t('Amount')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{t('% of Total')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -343,20 +345,20 @@ export default function TaxReport() {
                     <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalLaborAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: '#f9fafb' }}>
-                    <td style={{ padding: '12px', paddingLeft: '32px', color: '#6b7280' }}>↳ Overtime Hours</td>
+                    <td style={{ padding: '12px', paddingLeft: '32px', color: '#6b7280' }}>{t('↳ Overtime Hours')}</td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{summary?.totalOTHours.toFixed(1)} hrs</td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>(included above)</td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>-</td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '12px' }}>🚗 <strong>Mileage Reimbursement</strong></td>
+                    <td style={{ padding: '12px' }}>🚗 <strong>{t('Mileage Reimbursement')}</strong></td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>{summary?.totalMiles.toFixed(0)} miles</td>
                     <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500' }}>${summary?.totalMileageAmount.toFixed(2)}</td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalMileageAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
                   </tr>
                   {summary?.totalMaterialAmount > 0 && (
                     <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '12px' }}>🔧 <strong>Material Reimbursement</strong></td>
+                      <td style={{ padding: '12px' }}>🔧 <strong>{t('Material Reimbursement')}</strong></td>
                       <td style={{ padding: '12px', textAlign: 'right' }}>-</td>
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500', color: '#ea580c' }}>${summary?.totalMaterialAmount.toFixed(2)}</td>
                       <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalMaterialAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
@@ -364,7 +366,7 @@ export default function TaxReport() {
                   )}
                   {summary?.totalHotelAmount > 0 && (
                     <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '12px' }}>🏨 <strong>Hotel / Lodging</strong></td>
+                      <td style={{ padding: '12px' }}>🏨 <strong>{t('Hotel / Lodging')}</strong></td>
                       <td style={{ padding: '12px', textAlign: 'right' }}>-</td>
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500' }}>${summary?.totalHotelAmount.toFixed(2)}</td>
                       <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalHotelAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
@@ -372,7 +374,7 @@ export default function TaxReport() {
                   )}
                   {summary?.totalFoodAmount > 0 && (
                     <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '12px' }}>🍽️ <strong>Food / Meals / Per Diem</strong></td>
+                      <td style={{ padding: '12px' }}>🍽️ <strong>{t('Food / Meals / Per Diem')}</strong></td>
                       <td style={{ padding: '12px', textAlign: 'right' }}>-</td>
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500' }}>${summary?.totalFoodAmount.toFixed(2)}</td>
                       <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalFoodAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
@@ -380,7 +382,7 @@ export default function TaxReport() {
                   )}
                   {summary?.totalOtherAmount > 0 && (
                     <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '12px' }}>📦 <strong>Other Items</strong></td>
+                      <td style={{ padding: '12px' }}>📦 <strong>{t('Other Items')}</strong></td>
                       <td style={{ padding: '12px', textAlign: 'right' }}>-</td>
                       <td style={{ padding: '12px', textAlign: 'right', fontWeight: '500' }}>${summary?.totalOtherAmount.toFixed(2)}</td>
                       <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>{((summary?.totalOtherAmount / summary?.grandTotal) * 100).toFixed(1)}%</td>
@@ -389,7 +391,7 @@ export default function TaxReport() {
                 </tbody>
                 <tfoot>
                   <tr style={{ backgroundColor: '#f9fafb' }}>
-                    <td style={{ padding: '16px', fontWeight: 'bold', fontSize: '16px' }}>TOTAL INCOME</td>
+                    <td style={{ padding: '16px', fontWeight: 'bold', fontSize: '16px' }}>{t('TOTAL INCOME')}</td>
                     <td style={{ padding: '16px' }}></td>
                     <td style={{ padding: '16px', textAlign: 'right', fontWeight: 'bold', fontSize: '18px', color: '#059669' }}>${summary?.grandTotal.toFixed(2)}</td>
                     <td style={{ padding: '16px', textAlign: 'right', fontWeight: 'bold' }}>100%</td>
@@ -403,12 +405,12 @@ export default function TaxReport() {
               <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f9fafb' }}>
-                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Invoice #</th>
-                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Period</th>
-                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Hours</th>
-                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Miles</th>
-                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Total</th>
-                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Paid Date</th>
+                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{t('Invoice #')}</th>
+                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{t('Period')}</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{t('Hours')}</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{t('Miles')}</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{t('Total')}</th>
+                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>{t('Paid Date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -433,13 +435,13 @@ export default function TaxReport() {
 
               {/* Tax Notes */}
               <div style={{ backgroundColor: '#fef3c7', borderRadius: '8px', padding: '16px', marginTop: '24px', border: '1px solid #fcd34d' }}>
-                <h4 style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '8px' }}>⚠️ Important Tax Notes</h4>
+                <h4 style={{ fontWeight: 'bold', color: '#92400e', marginBottom: '8px' }}>{t('⚠️ Important Tax Notes')}</h4>
                 <ul style={{ color: '#78350f', fontSize: '13px', margin: 0, paddingLeft: '20px' }}>
-                  <li>This report is for informational purposes only and is not tax advice.</li>
-                  <li>Mileage reimbursement may or may not be taxable depending on how it was reported - consult your tax professional.</li>
-                  <li>Keep all receipts and documentation for material reimbursements.</li>
-                  <li>As a subcontractor, you may be responsible for self-employment taxes.</li>
-                  <li>Consult a qualified tax professional for advice specific to your situation.</li>
+                  <li>{t('This report is for informational purposes only and is not tax advice.')}</li>
+                  <li>{t('Mileage reimbursement may or may not be taxable depending on how it was reported - consult your tax professional.')}</li>
+                  <li>{t('Keep all receipts and documentation for material reimbursements.')}</li>
+                  <li>{t('As a subcontractor, you may be responsible for self-employment taxes.')}</li>
+                  <li>{t('Consult a qualified tax professional for advice specific to your situation.')}</li>
                 </ul>
               </div>
             </div>

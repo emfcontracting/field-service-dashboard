@@ -29,6 +29,10 @@ export async function PATCH(request) {
     }
     update[k] = Math.round(v * 10000) / 10000;
   }
+  if (body.language !== undefined) {
+    if (!['en', 'es'].includes(body.language)) return NextResponse.json({ error: 'language must be en or es' }, { status: 400 });
+    update.language = body.language;
+  }
   if (body.recurring_lines !== undefined) update.recurring_lines = cleanRecurringLines(body.recurring_lines);
 
   const { data, error } = await serviceClient()

@@ -6,6 +6,7 @@
 // "Every week" marks a line as recurring (profile.recurring_lines): it is put
 // on every new EMF invoice and the Friday draft, and stays editable each time.
 import { useState } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { contractorApi } from '@/lib/contractorClient';
 
 const box = { backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '12px', padding: '16px', marginBottom: '24px' };
@@ -17,6 +18,7 @@ const row = (l, weekly = false) => ({ key: `r${++seq}`, description: l.descripti
 const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
 export default function DraftEditor({ invoice, items, suggestions = [], profile, onProfileChange, onSaved }) {
+  const { t } = useLang();
   const isEmf = invoice.client_type !== 'other';
   const recurring = profile?.recurring_lines || [];
   const [rows, setRows] = useState(() => (items || []).filter(i => i.item_type === 'custom')
@@ -56,7 +58,7 @@ export default function DraftEditor({ invoice, items, suggestions = [], profile,
       await onSaved?.();
       setOpen(false);
     } catch (e) {
-      setError(e.message || 'Could not save');
+      setError(e.message || t('Could not save'));
     } finally {
       setSaving(false);
     }
@@ -66,69 +68,69 @@ export default function DraftEditor({ invoice, items, suggestions = [], profile,
     return (
       <div className="no-print" style={{ ...box, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <div>
-          <p style={{ fontWeight: 'bold', margin: 0 }}>✏️ Edit draft</p>
+          <p style={{ fontWeight: 'bold', margin: 0 }}>{t('✏️ Edit draft')}</p>
           <p style={{ color: '#9ca3af', fontSize: '13px', margin: '4px 0 0' }}>
-            Add admin hours, hotel, extra material{isEmf ? ', or reload hours from the log' : ''}.
+            {t(isEmf ? 'Add admin hours, hotel, extra material, or reload hours from the log.' : 'Add admin hours, hotel, extra material.')}
           </p>
         </div>
-        <button onClick={() => setOpen(true)} style={btn('#2563eb')}>Edit</button>
+        <button onClick={() => setOpen(true)} style={btn('#2563eb')}>{t('Edit')}</button>
       </div>
     );
   }
 
   return (
     <div className="no-print" style={box}>
-      <p style={{ fontWeight: 'bold', margin: '0 0 12px' }}>✏️ Your own line items</p>
+      <p style={{ fontWeight: 'bold', margin: '0 0 12px' }}>{t('✏️ Your own line items')}</p>
 
       {unused.length > 0 && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
           {unused.map(sg => (
             <button key={sg.description} onClick={() => setRows([...rows, row(sg)])}
               style={{ ...btn('#374151'), fontWeight: 'normal', fontSize: '13px' }}
-              title={`From your recent invoices: ${sg.quantity} × $${sg.rate.toFixed(2)}`}>
+              title={t('From your recent invoices: {qty} × {rate}', { qty: sg.quantity, rate: '$' + sg.rate.toFixed(2) })}>
               + {sg.description} (${sg.rate.toFixed(2)})
             </button>
           ))}
         </div>
       )}
 
-      {rows.length === 0 && <p style={{ color: '#9ca3af', fontSize: '13px' }}>No own line items yet.</p>}
+      {rows.length === 0 && <p style={{ color: '#9ca3af', fontSize: '13px' }}>{t('No own line items yet.')}</p>}
       {rows.map(r => (
         <div key={r.key} style={{ borderBottom: '1px solid #374151', paddingBottom: '10px', marginBottom: '10px' }}>
-          <input style={{ ...inp, marginBottom: '6px' }} placeholder="Description (e.g. Admin Hours)" value={r.description} onChange={e => set(r.key, 'description', e.target.value)} />
+          <input style={{ ...inp, marginBottom: '6px' }} placeholder={t('Description (e.g. Admin Hours)')} value={r.description} onChange={e => set(r.key, 'description', e.target.value)} />
           <div style={{ display: 'grid', gridTemplateColumns: '80px 100px minmax(0,1fr) 40px', gap: '8px', alignItems: 'center' }}>
-            <input style={inp} inputMode="decimal" placeholder="Qty" aria-label="Quantity" value={r.quantity} onChange={e => set(r.key, 'quantity', e.target.value)} />
-            <input style={inp} inputMode="decimal" placeholder="Rate $" aria-label="Rate" value={r.rate} onChange={e => set(r.key, 'rate', e.target.value)} />
+            <input style={inp} inputMode="decimal" placeholder={t('Qty')} aria-label={t('Quantity')} value={r.quantity} onChange={e => set(r.key, 'quantity', e.target.value)} />
+            <input style={inp} inputMode="decimal" placeholder={t('Rate $')} aria-label={t('Rate')} value={r.rate} onChange={e => set(r.key, 'rate', e.target.value)} />
             <span style={{ textAlign: 'right', fontSize: '14px' }}>${amount(r).toFixed(2)}</span>
-            <button onClick={() => setRows(rows.filter(x => x.key !== r.key))} style={{ ...btn('#7f1d1d'), padding: '8px' }} title="Remove">✕</button>
+            <button onClick={() => setRows(rows.filter(x => x.key !== r.key))} style={{ ...btn('#7f1d1d'), padding: '8px' }} title={t('Remove')}>✕</button>
           </div>
           {isEmf && !/\[R-[0-9a-f]{8}\]/i.test(r.description) && (
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' }}>
               <input type="checkbox" checked={r.weekly} onChange={e => set(r.key, 'weekly', e.target.checked)} />
-              Every week — put this on each new EMF invoice
+              {t('Every week — put this on each new EMF invoice')}
             </label>
           )}
           {/\[R-[0-9a-f]{8}\]/i.test(r.description) && (
             <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '6px' }}>
-              From your expenses (bill to EMF). Remove the line to keep it for a later invoice.
+              {t('From your expenses (bill to EMF). Remove the line to keep it for a later invoice.')}
             </p>
           )}
         </div>
       ))}
-      <button onClick={() => setRows([...rows, row({ quantity: 1 })])} style={{ ...btn('#374151'), marginTop: '4px' }}>+ Add line</button>
+      <button onClick={() => setRows([...rows, row({ quantity: 1 })])} style={{ ...btn('#374151'), marginTop: '4px' }}>{t('+ Add line')}</button>
 
-      <p style={{ marginTop: '12px', fontSize: '14px', color: '#d1d5db' }}>Own items: <strong>${linesTotal.toFixed(2)}</strong></p>
+      <p style={{ marginTop: '12px', fontSize: '14px', color: '#d1d5db' }}>{t('Own items:')} <strong>${linesTotal.toFixed(2)}</strong></p>
       {error && <p style={{ color: '#f87171', fontSize: '14px' }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-        <button disabled={saving} onClick={() => save(false)} style={btn('#16a34a')}>{saving ? 'Saving…' : 'Save'}</button>
+        <button disabled={saving} onClick={() => save(false)} style={btn('#16a34a')}>{saving ? t('Saving…') : t('Save')}</button>
         {isEmf && (
           <button disabled={saving} onClick={() => save(true)} style={btn('#2563eb')}
-            title="Rebuild hours, mileage and material from the hours log and your current rates">
-            Save + reload hours
+            title={t('Rebuild hours, mileage and material from the hours log and your current rates')}>
+            {t('Save + reload hours')}
           </button>
         )}
-        <button disabled={saving} onClick={() => setOpen(false)} style={btn('#374151')}>Cancel</button>
+        <button disabled={saving} onClick={() => setOpen(false)} style={btn('#374151')}>{t('Cancel')}</button>
       </div>
     </div>
   );

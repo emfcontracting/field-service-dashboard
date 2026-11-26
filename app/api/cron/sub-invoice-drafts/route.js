@@ -23,6 +23,7 @@ import { dateKeyET, fmtDateShort } from '@/lib/dates';
 import { findAlreadyInvoiced } from '@/lib/subInvoiceOverlap';
 import { createEmfInvoice } from '@/lib/subInvoiceCreate';
 import { notifyTech } from '@/lib/expoPush';
+import { translate } from '@/lib/contractorI18n';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -85,10 +86,13 @@ async function run(request) {
     const total = (parseFloat(inv.grand_total) || 0).toFixed(2);
     const span = `${fmtDateShort(week.start)}–${fmtDateShort(week.end)}`;
     const link = `${base}/contractor/invoices/${inv.invoice_id}`;
+    const lang = profile.language === 'es' ? 'es' : 'en';
+    const tr = (k, v) => translate(lang, k, v);
+    const vars = { inv: inv.invoice_number, span, total: '$' + total, name: user.first_name || '', link };
 
     let pushed = false, mailed = false;
     try {
-      await notifyTech(user.user_id, 'Your invoice is ready', `${inv.invoice_number} for ${span}: $${total}. Check it and press Send.`, { url: `/contractor/invoices/${inv.invoice_id}` });
+      await notifyTech(user.user_id, tr('Your invoice is ready'), tr('{inv} for {span}: {total}. Check it and press Send.', vars), { url: `/contractor/invoices/${inv.invoice_id}` });
       pushed = true;
     } catch (e) { console.error('draft push failed:', e.message); }
     if (mailer && user.email) {
@@ -96,11 +100,11 @@ async function run(request) {
         await mailer.sendMail({
           from: `"EMF Contractor Portal" <${process.env.EMAIL_USER}>`,
           to: user.email,
-          subject: `Your invoice for ${span} is ready — $${total}`,
-          html: `<p>Hi ${user.first_name || ''},</p>
-<p>your invoice <strong>${inv.invoice_number}</strong> for <strong>${span}</strong> is ready as a draft: <strong>$${total}</strong>.</p>
-<p>Please check it and press <em>Send</em>: <a href="${link}">${link}</a></p>
-<p>Nothing has been sent to EMF yet.</p>`,
+          subject: tr('Your invoice for {span} is ready — {total}', vars),
+          html: `<p>${tr('Hi {name},', vars)}</p>
+<p>${tr('your invoice <strong>{inv}</strong> for <strong>{span}</strong> is ready as a draft: <strong>{total}</strong>.', vars)}</p>
+<p>${tr('Please check it and press <em>Send</em>:', vars)} <a href="${link}">${link}</a></p>
+<p>${tr('Nothing has been sent to EMF yet.')}</p>`,
         });
         mailed = true;
       } catch (e) { console.error('draft mail failed:', e.message); }

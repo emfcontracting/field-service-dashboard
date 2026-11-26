@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import StatusPill from '../../components/StatusPill';
 import DraftEditor from '../../components/DraftEditor';
 import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
@@ -21,6 +22,7 @@ function formatDateLocal(dateString) {
 }
 
 export default function ViewInvoice() {
+  const { t } = useLang();
   const router = useRouter();
   const params = useParams();
   const invoiceId = params.id;
@@ -60,7 +62,7 @@ export default function ViewInvoice() {
 
     } catch (error) {
       console.error('Error loading invoice:', error);
-      setMessage({ type: 'error', text: 'Failed to load invoice' });
+      setMessage({ type: 'error', text: t('Failed to load invoice') });
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,7 @@ export default function ViewInvoice() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
-      setMessage({ type: 'success', text: 'PDF downloaded!' });
+      setMessage({ type: 'success', text: t('PDF downloaded!') });
     } catch (error) {
       console.error('PDF download error:', error);
       setMessage({ type: 'error', text: `PDF download failed: ${error.message}. Try the Print option instead.` });
@@ -106,64 +108,64 @@ export default function ViewInvoice() {
   // Mails the PDF to the addressee from the server, then sets "sent".
   async function sendInvoice() {
     const to = invoiceRecipient(invoice);
-    if (!to.email) { setMessage({ type: 'error', text: 'No recipient e-mail on this invoice' }); return; }
-    if (!confirm(`Send ${invoice.invoice_number} as PDF to ${to.name} (${to.email})? You get a copy.`)) return;
+    if (!to.email) { setMessage({ type: 'error', text: t('No recipient e-mail on this invoice') }); return; }
+    if (!confirm(t('Send {inv} as PDF to {name} ({email})? You get a copy.', { inv: invoice.invoice_number, name: to.name, email: to.email }))) return;
     setSending(true);
     try {
       const updated = await contractorApi.markInvoice(invoice.invoice_id, 'submit');
       setInvoice(updated);
-      setMessage({ type: 'success', text: `📧 Sent to ${to.email}` });
+      setMessage({ type: 'success', text: t('📧 Sent to {email}', { email: to.email }) });
     } catch (error) {
       console.error('Send invoice error:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to send invoice' });
+      setMessage({ type: 'error', text: error.message || t('Failed to send invoice') });
     } finally {
       setSending(false);
     }
   }
 
   async function markAsSent() {
-    if (!confirm(`Mark as sent without e-mailing it (you sent it to ${invoiceRecipient(invoice).name} yourself)?`)) {
+    if (!confirm(t('Mark as sent without e-mailing it (you sent it to {name} yourself)?', { name: invoiceRecipient(invoice).name }))) {
       return;
     }
     
     try {
       const updated = await contractorApi.markInvoice(invoice.invoice_id, 'sent');
       setInvoice(updated);
-      setMessage({ type: 'success', text: 'Invoice marked as sent!' });
+      setMessage({ type: 'success', text: t('Invoice marked as sent!') });
     } catch (error) {
       console.error('Error updating invoice status:', error);
-      setMessage({ type: 'error', text: 'Failed to update invoice status' });
+      setMessage({ type: 'error', text: t('Failed to update invoice status') });
     }
   }
 
   async function markAsPaid() {
-    if (!confirm(`Mark this invoice as PAID? This records that you received payment from ${invoiceRecipient(invoice).name}.`)) {
+    if (!confirm(t('Mark this invoice as PAID? This records that you received payment from {name}.', { name: invoiceRecipient(invoice).name }))) {
       return;
     }
     
     try {
       const updated = await contractorApi.markInvoice(invoice.invoice_id, 'paid');
       setInvoice(updated);
-      setMessage({ type: 'success', text: '✅ Invoice marked as PAID!' });
+      setMessage({ type: 'success', text: t('✅ Invoice marked as PAID!') });
     } catch (error) {
       console.error('Error updating invoice status:', error);
-      setMessage({ type: 'error', text: 'Failed to mark invoice as paid' });
+      setMessage({ type: 'error', text: t('Failed to mark invoice as paid') });
     }
   }
 
   async function undoPaid() {
-    if (!confirm('Remove the PAID mark from this invoice?')) return;
+    if (!confirm(t('Remove the PAID mark from this invoice?'))) return;
     try {
       const updated = await contractorApi.markInvoice(invoice.invoice_id, 'unpaid');
       setInvoice(updated);
-      setMessage({ type: 'success', text: 'Paid mark removed' });
+      setMessage({ type: 'success', text: t('Paid mark removed') });
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Failed to update invoice' });
+      setMessage({ type: 'error', text: error.message || t('Failed to update invoice') });
     }
   }
 
   async function deleteInvoice() {
-    if (!confirm('Are you sure you want to delete this invoice? This cannot be undone.')) {
+    if (!confirm(t('Are you sure you want to delete this invoice? This cannot be undone.'))) {
       return;
     }
 
@@ -173,14 +175,14 @@ export default function ViewInvoice() {
       router.push('/contractor/invoices');
     } catch (error) {
       console.error('Error deleting invoice:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to delete invoice' });
+      setMessage({ type: 'error', text: error.message || t('Failed to delete invoice') });
     }
   }
 
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'white' }}>Loading...</div>
+        <div style={{ color: 'white' }}>{t('Loading...')}</div>
       </div>
     );
   }
@@ -188,7 +190,7 @@ export default function ViewInvoice() {
   if (!user || !invoice) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'white' }}>Invoice not found</div>
+        <div style={{ color: 'white' }}>{t('Invoice not found')}</div>
       </div>
     );
   }
@@ -219,7 +221,7 @@ export default function ViewInvoice() {
         <div style={{ maxWidth: '896px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link href="/contractor/invoices" style={{ padding: '8px 12px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', color: 'white', textDecoration: 'none' }}>
-              ← Back
+              {t('← Back')}
             </Link>
             <div>
               <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{invoice.invoice_number}</h1>
@@ -244,7 +246,7 @@ export default function ViewInvoice() {
                 opacity: pdfLoading ? 0.7 : 1
               }}
             >
-              {pdfLoading ? '⏳ Generating...' : '📄 Download PDF'}
+              {pdfLoading ? t('⏳ Generating...') : t('📄 Download PDF')}
             </button>
             
             {/* Print fallback */}
@@ -261,7 +263,7 @@ export default function ViewInvoice() {
                 cursor: 'pointer'
               }}
             >
-              🖨️ Print
+              {t('🖨️ Print')}
             </button>
             
             {/* Draft actions */}
@@ -272,20 +274,20 @@ export default function ViewInvoice() {
                   disabled={sending}
                   style={{ padding: '10px 16px', backgroundColor: sending ? '#4b5563' : '#16a34a', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: sending ? 'wait' : 'pointer' }}
                 >
-                  {sending ? '⏳ Sending...' : `📧 Send to ${invoiceRecipient(invoice).isEmf ? 'EMF' : 'client'}`}
+                  {sending ? t('⏳ Sending...') : (invoiceRecipient(invoice).isEmf ? t('📧 Send to EMF') : t('📧 Send to client'))}
                 </button>
                 <button 
                   onClick={markAsSent}
                   style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
-                  title="Already sent it yourself"
+                  title={t('Already sent it yourself')}
                 >
-                  📤 Mark as Sent
+                  {t('📤 Mark as Sent')}
                 </button>
                 <button 
                   onClick={deleteInvoice} 
                   style={{ padding: '10px 16px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
                 >
-                  🗑️ Delete
+                  {t('🗑️ Delete')}
                 </button>
               </>
             )}
@@ -296,7 +298,7 @@ export default function ViewInvoice() {
                 onClick={deleteInvoice}
                 style={{ padding: '10px 16px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
               >
-                🗑️ Delete
+                {t('🗑️ Delete')}
               </button>
             )}
 
@@ -316,7 +318,7 @@ export default function ViewInvoice() {
                   animation: 'pulse 2s infinite'
                 }}
               >
-                💵 Mark as Paid
+                {t('💵 Mark as Paid')}
               </button>
             )}
 
@@ -325,7 +327,7 @@ export default function ViewInvoice() {
                 onClick={undoPaid}
                 style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
               >
-                ↩ Undo Paid
+                {t('↩ Undo Paid')}
               </button>
             )}
           </div>
@@ -368,18 +370,18 @@ export default function ViewInvoice() {
               setUser(next);
               saveContractorSession(next);
             }}
-            onSaved={async () => { await loadInvoice(invoice.invoice_id); setMessage({ type: 'success', text: 'Draft updated' }); }}
+            onSaved={async () => { await loadInvoice(invoice.invoice_id); setMessage({ type: 'success', text: t('Draft updated') }); }}
           />
         )}
 
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (
           <div className="no-print" style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-            <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>📋 How to Send Your Invoice</h3>
+            <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>{t('📋 How to Send Your Invoice')}</h3>
             <ol style={{ color: '#d1d5db', fontSize: '14px', margin: 0, paddingLeft: '20px' }}>
-              <li>Check the invoice below</li>
-              <li>Click <strong>&quot;Send&quot;</strong> — the PDF goes to <strong>{invoiceRecipient(invoice).email || invoiceRecipient(invoice).name}</strong> and you get a copy</li>
-              <li>Sent it yourself already? Use <strong>&quot;Mark as Sent&quot;</strong></li>
+              <li>{t('Check the invoice below')}</li>
+              <li>{t('Click')} <strong>{t('"Send"')}</strong> {t('— the PDF goes to')} <strong>{invoiceRecipient(invoice).email || invoiceRecipient(invoice).name}</strong> {t('and you get a copy')}</li>
+              <li>{t('Sent it yourself already? Use')} <strong>{t('"Mark as Sent"')}</strong></li>
             </ol>
           </div>
         )}
@@ -387,9 +389,9 @@ export default function ViewInvoice() {
         {/* Instructions for sent invoices */}
         {invoice.status === 'sent' && (
           <div className="no-print" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-            <h3 style={{ fontWeight: 'bold', color: '#facc15', marginBottom: '8px' }}>💰 Waiting for Payment</h3>
+            <h3 style={{ fontWeight: 'bold', color: '#facc15', marginBottom: '8px' }}>{t('💰 Waiting for Payment')}</h3>
             <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
-              Once you receive payment from {invoiceRecipient(invoice).name}, click <strong>&quot;Mark as Paid&quot;</strong> to update the status.
+              {t('Once you receive payment from {name}, click', { name: invoiceRecipient(invoice).name })} <strong>{t('"Mark as Paid"')}</strong> {t('to update the status.')}
             </p>
           </div>
         )}
@@ -397,9 +399,9 @@ export default function ViewInvoice() {
         {/* Paid confirmation */}
         {invoice.status === 'paid' && (
           <div className="no-print" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-            <h3 style={{ fontWeight: 'bold', color: '#4ade80', marginBottom: '8px' }}>✅ Invoice Paid</h3>
+            <h3 style={{ fontWeight: 'bold', color: '#4ade80', marginBottom: '8px' }}>{t('✅ Invoice Paid')}</h3>
             <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
-              This invoice was marked as paid on {fmtDate(invoice.paid_at, 'N/A')}.
+              {t('This invoice was marked as paid on {date}.', { date: fmtDate(invoice.paid_at, 'N/A') })}
             </p>
           </div>
         )}

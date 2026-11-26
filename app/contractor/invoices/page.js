@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import StatusPill from '../components/StatusPill';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
@@ -10,6 +11,7 @@ import Link from 'next/link';
 
 
 export default function ContractorInvoices() {
+  const { t } = useLang();
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function ContractorInvoices() {
   }
 
   async function deleteInvoice(invoiceId, invoiceNumber) {
-    if (!confirm(`Are you sure you want to delete invoice ${invoiceNumber}? This cannot be undone.`)) {
+    if (!confirm(t('Are you sure you want to delete invoice {inv}? This cannot be undone.', { inv: invoiceNumber }))) {
       return;
     }
 
@@ -59,7 +61,7 @@ export default function ContractorInvoices() {
       setInvoices(invoices.filter(inv => inv.invoice_id !== invoiceId));
     } catch (error) {
       console.error('Error deleting invoice:', error);
-      alert(error.message || 'Failed to delete invoice');
+      alert(error.message || t('Failed to delete invoice'));
     } finally {
       setDeleting(null);
     }
@@ -79,7 +81,7 @@ export default function ContractorInvoices() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">{t('Loading...')}</div>
       </div>
     );
   }
@@ -98,10 +100,10 @@ export default function ContractorInvoices() {
               href="/contractor/dashboard"
               className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
             >
-              ← Back
+              {t('← Back')}
             </Link>
             <div>
-              <h1 className="text-xl font-bold">📋 Invoices</h1>
+              <h1 className="text-xl font-bold">{t('📋 Invoices')}</h1>
               <p className="text-sm text-gray-400">{invoices.length} total</p>
             </div>
           </div>
@@ -109,7 +111,7 @@ export default function ContractorInvoices() {
             href="/contractor/invoices/new"
             className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium"
           >
-            + New Invoice
+            {t('+ New Invoice')}
           </Link>
         </div>
       </header>
@@ -118,10 +120,10 @@ export default function ContractorInvoices() {
         {/* Filter Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {[
-            { key: 'all', label: 'All', color: 'gray' },
-            { key: 'draft', label: 'Draft', color: 'gray' },
-            { key: 'sent', label: 'Sent', color: 'yellow' },
-            { key: 'paid', label: 'Paid', color: 'green' }
+            { key: 'all', label: t('All'), color: 'gray' },
+            { key: 'draft', label: t('Draft'), color: 'gray' },
+            { key: 'sent', label: t('Sent'), color: 'yellow' },
+            { key: 'paid', label: t('Paid'), color: 'green' }
           ].map(tab => (
             <button
               key={tab.key}
@@ -144,12 +146,12 @@ export default function ContractorInvoices() {
         {/* Invoice List */}
         {filteredInvoices.length === 0 ? (
           <div className="bg-gray-800 rounded-xl p-8 text-center">
-            <p className="text-gray-500 mb-4">No invoices found</p>
+            <p className="text-gray-500 mb-4">{t('No invoices found')}</p>
             <Link
               href="/contractor/invoices/new"
               className="text-blue-400 hover:text-blue-300"
             >
-              Create your first invoice →
+              {t('Create your first invoice →')}
             </Link>
           </div>
         ) : (
@@ -162,7 +164,7 @@ export default function ContractorInvoices() {
                 <div className="flex justify-between items-start mb-2">
                   <Link href={`/contractor/invoices/${invoice.invoice_id}`}>
                     <h3 className="font-bold text-lg hover:text-blue-400 transition">{invoice.invoice_number}</h3>
-                    <p className="text-xs text-gray-500">{invoice.client_type === 'other' ? `To: ${invoice.client_name}` : 'To: EMF Contracting'}</p>
+                    <p className="text-xs text-gray-500">{invoice.client_type === 'other' ? t('To: {name}', { name: invoice.client_name }) : t('To: EMF Contracting')}</p>
                     <p className="text-sm text-gray-400">
                       {fmtDate(invoice.period_start)} - {fmtDate(invoice.period_end)}
                     </p>
@@ -175,7 +177,7 @@ export default function ContractorInvoices() {
                       onClick={() => deleteInvoice(invoice.invoice_id, invoice.invoice_number)}
                       disabled={deleting === invoice.invoice_id}
                       className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-lg transition disabled:opacity-50"
-                      title="Delete invoice"
+                      title={t('Delete invoice')}
                     >
                       {deleting === invoice.invoice_id ? '...' : '🗑️'}
                     </button>
@@ -185,17 +187,17 @@ export default function ContractorInvoices() {
 
                 <div className="grid grid-cols-3 gap-4 text-sm mt-3">
                   <div>
-                    <p className="text-gray-500">Hours</p>
+                    <p className="text-gray-500">{t('Hours')}</p>
                     <p className="font-medium">
                       {(parseFloat(invoice.total_regular_hours || 0) + parseFloat(invoice.total_ot_hours || 0)).toFixed(1)}h
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Miles</p>
+                    <p className="text-gray-500">{t('Miles')}</p>
                     <p className="font-medium">{parseFloat(invoice.total_miles || 0).toFixed(0)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-gray-500">Total</p>
+                    <p className="text-gray-500">{t('Total')}</p>
                     <p className="font-bold text-green-400 text-lg">
                       ${parseFloat(invoice.grand_total || 0).toFixed(2)}
                     </p>

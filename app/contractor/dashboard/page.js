@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { docReminders } from '@/lib/contractorDocs';
 import StatusPill from '../components/StatusPill';
 import { lastBillingWeek } from '@/lib/billingWeek';
@@ -14,6 +15,7 @@ import { setAppToken } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
 
 export default function ContractorDashboard() {
+  const { t } = useLang();
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -111,25 +113,25 @@ export default function ContractorDashboard() {
       const list = [];
       for (const inv of invoices || []) {
         if (inv.emf_review_status === 'rejected' && inv.status !== 'paid') {
-          list.push({ key: 'rej' + inv.invoice_id, tone: 'red', text: `${inv.invoice_number} was rejected by EMF${inv.emf_review_note ? ': ' + inv.emf_review_note : ''}`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Fix' });
+          list.push({ key: 'rej' + inv.invoice_id, tone: 'red', text: inv.emf_review_note ? t('{inv} was rejected by EMF: {note}', { inv: inv.invoice_number, note: inv.emf_review_note }) : t('{inv} was rejected by EMF', { inv: inv.invoice_number }), href: `/contractor/invoices/${inv.invoice_id}`, action: 'Fix' });
         }
       }
       for (const inv of invoices || []) {
         if (inv.status === 'draft') {
-          list.push({ key: 'draft' + inv.invoice_id, tone: 'yellow', text: `${inv.invoice_number} is a draft — check it and send it`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Open' });
+          list.push({ key: 'draft' + inv.invoice_id, tone: 'yellow', text: t('{inv} is a draft — check it and send it', { inv: inv.invoice_number }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Open') });
         }
       }
       for (const inv of invoices || []) {
         const days = inv.sent_at ? daysBetweenET(parseDate(inv.sent_at)) : 0;
         if (inv.status === 'sent' && days >= 30) {
-          list.push({ key: 'old' + inv.invoice_id, tone: 'gray', text: `${inv.invoice_number} was sent ${days} days ago — paid yet?`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Open' });
+          list.push({ key: 'old' + inv.invoice_id, tone: 'gray', text: t('{inv} was sent {days} days ago — paid yet?', { inv: inv.invoice_number, days }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Open') });
         }
       }
       // Documents: W-9 / insurance missing, expired or expiring within 30 days
       try {
         const docs = await contractorApi.documents();
         for (const r of docReminders(docs, dateKeyET())) {
-          list.push({ key: r.key, tone: r.tone, text: r.text, href: '/contractor/settings', action: 'Upload' });
+          list.push({ key: r.key, tone: r.tone, text: t(r.msg, { ...r.vars, label: t(r.vars.label) }), href: '/contractor/settings', action: t('Upload') });
         }
       } catch { /* documents are optional here */ }
       setTodos(list);
@@ -159,7 +161,7 @@ export default function ContractorDashboard() {
       const invoice = await contractorApi.createInvoice({ period_start: week.start, period_end: week.end, line_items: [], use_recurring: true });
       router.push(`/contractor/invoices/${invoice.invoice_id}`);
     } catch (e) {
-      setCreateError(e.message || 'Could not create the invoice');
+      setCreateError(e.message || t('Could not create the invoice'));
       setCreating(false);
     }
   }
@@ -172,7 +174,7 @@ export default function ContractorDashboard() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">{t('Loading...')}</div>
       </div>
     );
   }
@@ -187,7 +189,7 @@ export default function ContractorDashboard() {
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold">🧾 Contractor Portal</h1>
+            <h1 className="text-xl font-bold">{t('🧾 Contractor Portal')}</h1>
             <p className="text-sm text-gray-400">{user.first_name} {user.last_name}</p>
           </div>
           <div className="flex gap-2">
@@ -195,13 +197,13 @@ export default function ContractorDashboard() {
               href="/contractor/settings"
               className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
             >
-              ⚙️ Settings
+              {t('⚙️ Settings')}
             </Link>
             <button
               onClick={handleLogout}
               className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"
             >
-              Logout
+              {t('Logout')}
             </button>
           </div>
         </div>
@@ -211,41 +213,43 @@ export default function ContractorDashboard() {
         {/* To do */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-700">
-            <h2 className="font-bold">✅ To do</h2>
+            <h2 className="font-bold">{t('✅ To do')}</h2>
           </div>
           <div className="divide-y divide-gray-700">
             {week && week.uninvoiced > 0 && (
               <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                 <div>
                   <p className="font-medium">
-                    Week {fmtDateShort(week.start)} – {fmtDateShort(week.end)} is ready to invoice
+                    {t('Week {start} – {end} is ready to invoice', { start: fmtDateShort(week.start), end: fmtDateShort(week.end) })}
                   </p>
                   <p className="text-sm text-gray-400">
-                    {week.uninvoiced} entr{week.uninvoiced === 1 ? 'y' : 'ies'}{week.recurring ? ` + ${week.recurring} weekly item${week.recurring === 1 ? '' : 's'}` : ''} · about ${week.amount.toFixed(2)}
-                    {week.partly && ' · some entries of this week are already on another invoice'}
+                    {t(week.uninvoiced === 1 ? '{n} entry' : '{n} entries', { n: week.uninvoiced })}
+                    {week.recurring ? t(week.recurring === 1 ? ' + {n} weekly item' : ' + {n} weekly items', { n: week.recurring }) : ''}
+                    {' · '}{t('about {amount}', { amount: '$' + week.amount.toFixed(2) })}
+                    {week.partly && t(' · some entries of this week are already on another invoice')}
                   </p>
                   {createError && <p className="text-sm text-red-400 mt-1">{createError}</p>}
                 </div>
                 {week.partly ? (
                   <Link href="/contractor/invoices/new" className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-bold text-center">
-                    Review & create
+                    {t('Review & create')}
                   </Link>
                 ) : (
                   <button onClick={createWeekInvoice} disabled={creating}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-bold disabled:opacity-50">
-                    {creating ? 'Creating…' : 'Create invoice'}
+                    {creating ? t('Creating…') : t('Create invoice')}
                   </button>
                 )}
               </div>
             )}
-            {todos.map(t => (
-              <Link key={t.key} href={t.href} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-700/50">
-                <span className={`text-sm ${t.tone === 'red' ? 'text-red-300' : t.tone === 'yellow' ? 'text-yellow-200' : 'text-gray-300'}`}>{t.text}</span>
-                <span className="text-sm text-blue-400 whitespace-nowrap">{t.action} →</span>
+            {todos.map(todo => (
+              <Link key={todo.key} href={todo.href} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-700/50">
+                <span className={`text-sm ${todo.tone === 'red' ? 'text-red-300' : todo.tone === 'yellow' ? 'text-yellow-200' : 'text-gray-300'}`}>{todo.text}</span>
+                <span className="text-sm text-blue-400 whitespace-nowrap">{todo.action} →</span>
               </Link>
             ))}
             {!(week && week.uninvoiced > 0) && todos.length === 0 && (
-              <p className="p-4 text-sm text-gray-400">All caught up — nothing to do right now.</p>
+              <p className="p-4 text-sm text-gray-400">{t('All caught up — nothing to do right now.')}</p>
             )}
           </div>
         </div>
@@ -253,51 +257,51 @@ export default function ContractorDashboard() {
         {/* Quick receipt */}
         <Link href="/contractor/tax-records?add=1"
           className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 rounded-xl py-3 font-bold">
-          📸 Add receipt
+          {t('📸 Add receipt')}
         </Link>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Last Week{week ? ` (${fmtDateShort(week.start)}–${fmtDateShort(week.end)})` : ''}</p>
+            <p className="text-gray-400 text-sm">{t('Last Week')}{week ? ` (${fmtDateShort(week.start)}–${fmtDateShort(week.end)})` : ''}</p>
             <p className="text-2xl font-bold">{stats.currentPeriodHours.toFixed(1)}h</p>
             <p className="text-xs text-gray-500">{stats.currentPeriodMiles.toFixed(0)} miles</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Uninvoiced</p>
+            <p className="text-gray-400 text-sm">{t('Uninvoiced')}</p>
             <p className="text-2xl font-bold text-green-400">${stats.currentPeriodAmount.toFixed(2)}</p>
-            <p className="text-xs text-gray-500">Last week, not invoiced yet</p>
+            <p className="text-xs text-gray-500">{t('Last week, not invoiced yet')}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Waiting</p>
+            <p className="text-gray-400 text-sm">{t('Waiting')}</p>
             <p className="text-2xl font-bold text-yellow-400">{stats.pendingInvoices}</p>
-            <p className="text-xs text-gray-500">Awaiting payment</p>
+            <p className="text-xs text-gray-500">{t('Awaiting payment')}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Paid This Month</p>
+            <p className="text-gray-400 text-sm">{t('Paid This Month')}</p>
             <p className="text-2xl font-bold text-blue-400">${stats.paidThisMonth.toFixed(2)}</p>
           </div>
         </div>
 
         {/* Current Rates */}
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-          <h2 className="font-bold mb-3">📊 Your Rates</h2>
+          <h2 className="font-bold mb-3">{t('📊 Your Rates')}</h2>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold">${parseFloat(user.profile?.hourly_rate || 35).toFixed(2)}</p>
-              <p className="text-xs text-gray-400">Hourly Rate</p>
+              <p className="text-xs text-gray-400">{t('Hourly Rate')}</p>
             </div>
             <div>
               <p className="text-2xl font-bold">${parseFloat(user.profile?.ot_rate || 52.50).toFixed(2)}</p>
-              <p className="text-xs text-gray-400">OT Rate</p>
+              <p className="text-xs text-gray-400">{t('OT Rate')}</p>
             </div>
             <div>
               <p className="text-2xl font-bold">${parseFloat(user.profile?.mileage_rate || 0.67).toFixed(2)}</p>
-              <p className="text-xs text-gray-400">Per Mile</p>
+              <p className="text-xs text-gray-400">{t('Per Mile')}</p>
             </div>
           </div>
           <Link href="/contractor/settings" className="block text-center text-sm text-blue-400 hover:text-blue-300 mt-3">
-            Change Rates →
+            {t('Change Rates →')}
           </Link>
         </div>
 
@@ -308,45 +312,45 @@ export default function ContractorDashboard() {
             className="bg-green-600 hover:bg-green-700 rounded-xl p-6 text-center transition"
           >
             <span className="text-4xl block mb-2">📝</span>
-            <span className="text-xl font-bold">Create Invoice</span>
-            <p className="text-green-200 text-sm mt-1">Pull hours & generate invoice</p>
+            <span className="text-xl font-bold">{t('Create Invoice')}</span>
+            <p className="text-green-200 text-sm mt-1">{t('Pull hours & generate invoice')}</p>
           </Link>
           <Link
             href="/contractor/invoices"
             className="bg-blue-600 hover:bg-blue-700 rounded-xl p-6 text-center transition"
           >
             <span className="text-4xl block mb-2">📋</span>
-            <span className="text-xl font-bold">View Invoices</span>
-            <p className="text-blue-200 text-sm mt-1">History & status</p>
+            <span className="text-xl font-bold">{t('View Invoices')}</span>
+            <p className="text-blue-200 text-sm mt-1">{t('History & status')}</p>
           </Link>
           <Link
             href="/contractor/tax-report"
             className="bg-purple-600 hover:bg-purple-700 rounded-xl p-6 text-center transition"
           >
             <span className="text-4xl block mb-2">📊</span>
-            <span className="text-xl font-bold">Tax Report</span>
-            <p className="text-purple-200 text-sm mt-1">Year-end income summary</p>
+            <span className="text-xl font-bold">{t('Tax Report')}</span>
+            <p className="text-purple-200 text-sm mt-1">{t('Year-end income summary')}</p>
           </Link>
           <Link
             href="/contractor/tax-records"
             className="bg-yellow-600 hover:bg-yellow-700 rounded-xl p-6 text-center transition"
           >
             <span className="text-4xl block mb-2">💰</span>
-            <span className="text-xl font-bold">Tax Records</span>
-            <p className="text-yellow-200 text-sm mt-1">Track expenses & receipts</p>
+            <span className="text-xl font-bold">{t('Tax Records')}</span>
+            <p className="text-yellow-200 text-sm mt-1">{t('Track expenses & receipts')}</p>
           </Link>
         </div>
 
         {/* Recent Invoices */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-700">
-            <h2 className="font-bold">📄 Recent Invoices</h2>
+            <h2 className="font-bold">{t('📄 Recent Invoices')}</h2>
           </div>
           {recentInvoices.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
-              <p>No invoices yet</p>
+              <p>{t('No invoices yet')}</p>
               <Link href="/contractor/invoices/new" className="text-blue-400 hover:text-blue-300 text-sm">
-                Create your first invoice →
+                {t('Create your first invoice →')}
               </Link>
             </div>
           ) : (

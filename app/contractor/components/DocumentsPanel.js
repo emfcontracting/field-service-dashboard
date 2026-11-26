@@ -2,6 +2,7 @@
 // Profile → Documents: W-9, insurance certificate (COI) with expiry, license,
 // contract. Files are private; "View" opens a 5-minute signed link.
 import { useEffect, useState } from 'react';
+import { useLang } from '@/app/contractor/components/LangProvider';
 import { contractorApi } from '@/lib/contractorClient';
 import { DOC_TYPES, docLabel, docReminders } from '@/lib/contractorDocs';
 import { fmtDate, dateKeyET } from '@/lib/dates';
@@ -10,6 +11,7 @@ import { downscaleImage } from '@/lib/imageDownscale';
 const input = 'w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2';
 
 export default function DocumentsPanel() {
+  const { t } = useLang();
   const [docs, setDocs] = useState([]);
   const [form, setForm] = useState({ doc_type: 'coi', title: '', expires_on: '' });
   const [file, setFile] = useState(null);
@@ -21,12 +23,12 @@ export default function DocumentsPanel() {
   }
   useEffect(() => { load(); }, []);
 
-  const def = DOC_TYPES.find(t => t.key === form.doc_type);
+  const def = DOC_TYPES.find(dt => dt.key === form.doc_type);
   const reminders = docReminders(docs, dateKeyET());
 
   async function upload(e) {
     e.preventDefault();
-    if (!file) { setError('Choose a file'); return; }
+    if (!file) { setError(t('Choose a file')); return; }
     setBusy(true); setError('');
     try {
       await contractorApi.uploadDocument(await downscaleImage(file), form);
@@ -43,17 +45,17 @@ export default function DocumentsPanel() {
   }
 
   async function remove(id) {
-    if (!confirm('Delete this document?')) return;
+    if (!confirm(t('Delete this document?'))) return;
     try { await contractorApi.deleteDocument(id); await load(); } catch (err) { setError(err.message); }
   }
 
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-      <h2 className="font-bold mb-1">📁 Documents</h2>
-      <p className="text-sm text-gray-400 mb-3">W-9 and insurance certificate for EMF. Private — only you and the EMF office can open them.</p>
+      <h2 className="font-bold mb-1">{t('📁 Documents')}</h2>
+      <p className="text-sm text-gray-400 mb-3">{t('W-9 and insurance certificate for EMF. Private — only you and the EMF office can open them.')}</p>
 
       {reminders.map(r => (
-        <p key={r.key} className={`text-sm mb-2 ${r.tone === 'red' ? 'text-red-300' : 'text-yellow-200'}`}>⚠️ {r.text}</p>
+        <p key={r.key} className={`text-sm mb-2 ${r.tone === 'red' ? 'text-red-300' : 'text-yellow-200'}`}>⚠️ {t(r.msg, { ...r.vars, label: t(r.vars.label) })}</p>
       ))}
 
       {docs.length > 0 && (
@@ -63,14 +65,14 @@ export default function DocumentsPanel() {
             return (
               <li key={d.doc_id} className="py-2 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{docLabel(d.doc_type)}{d.title ? ` — ${d.title}` : ''}</p>
+                  <p className="font-medium truncate">{t(docLabel(d.doc_type))}{d.title ? ` — ${d.title}` : ''}</p>
                   <p className={`text-xs ${expired ? 'text-red-300' : 'text-gray-500'}`}>
-                    Uploaded {fmtDate(d.uploaded_at)}{d.expires_on ? ` · ${expired ? 'expired' : 'expires'} ${fmtDate(d.expires_on)}` : ''}
+                    {t('Uploaded {date}', { date: fmtDate(d.uploaded_at) })}{d.expires_on ? ' · ' + t(expired ? 'expired {date}' : 'expires {date}', { date: fmtDate(d.expires_on) }) : ''}
                   </p>
                 </div>
                 <div className="flex gap-3 text-sm flex-shrink-0">
-                  <button onClick={() => view(d.doc_id)} className="text-blue-400 hover:text-blue-300">View</button>
-                  <button onClick={() => remove(d.doc_id)} className="text-red-400 hover:text-red-300">Delete</button>
+                  <button onClick={() => view(d.doc_id)} className="text-blue-400 hover:text-blue-300">{t('View')}</button>
+                  <button onClick={() => remove(d.doc_id)} className="text-red-400 hover:text-red-300">{t('Delete')}</button>
                 </div>
               </li>
             );
@@ -80,16 +82,16 @@ export default function DocumentsPanel() {
 
       <form onSubmit={upload} className="space-y-3">
         <select className={input} value={form.doc_type} onChange={e => setForm({ ...form, doc_type: e.target.value })}>
-          {DOC_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+          {DOC_TYPES.map(dt => <option key={dt.key} value={dt.key}>{t(dt.label)}</option>)}
         </select>
-        <input className={input} placeholder="Title (optional, e.g. insurer name)" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+        <input className={input} placeholder={t('Title (optional, e.g. insurer name)')} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Expires on{def?.needsExpiry ? ' (required)' : ' (optional)'}</label>
+          <label className="block text-xs text-gray-400 mb-1">{t('Expires on')}{def?.needsExpiry ? t(' (required)') : t(' (optional)')}</label>
           <input type="date" className={input} value={form.expires_on} onChange={e => setForm({ ...form, expires_on: e.target.value })} />
         </div>
         <input type="file" accept="application/pdf,image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-400" />
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <button disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium disabled:opacity-50">{busy ? 'Uploading…' : 'Upload document'}</button>
+        <button disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium disabled:opacity-50">{busy ? t('Uploading…') : t('Upload document')}</button>
       </form>
     </div>
   );

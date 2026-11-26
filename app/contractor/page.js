@@ -66,7 +66,7 @@ export default function ContractorLoginPage() {
         profile: data.profile,
         ...(data.needsPinSetup ? { needsPinSetup: true } : {}),
       }));
-      router.push(data.needsPinSetup ? '/contractor/settings' : '/contractor/dashboard');
+      router.push(data.needsPinSetup ? '/contractor/welcome' : '/contractor/dashboard');
     } catch (err) {
       setError(err.message || 'An error occurred. Please try again.');
     } finally {

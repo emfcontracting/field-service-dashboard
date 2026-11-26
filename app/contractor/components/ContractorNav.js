@@ -14,7 +14,7 @@ const TABS = [
 
 export default function ContractorNav() {
   const path = usePathname() || '';
-  if (path === '/contractor' || path.endsWith('/print')) return null;
+  if (path === '/contractor' || path === '/contractor/welcome' || path.endsWith('/print')) return null;
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-gray-800 border-t border-gray-700 no-print"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>

@@ -40,8 +40,8 @@ export default function ContractorDashboard() {
       const parsed = JSON.parse(userData);
       setUser(parsed);
       
-      if (parsed.needsPinSetup) {
-        router.push('/contractor/settings');
+      if (parsed.needsPinSetup || parsed.profile?.has_pin === false) {
+        router.push('/contractor/welcome');
         return;
       }
       

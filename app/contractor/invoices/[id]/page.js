@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
@@ -385,7 +386,7 @@ export default function ViewInvoice() {
           <div className="no-print" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
             <h3 style={{ fontWeight: 'bold', color: '#4ade80', marginBottom: '8px' }}>✅ Invoice Paid</h3>
             <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
-              This invoice was marked as paid on {invoice.paid_at ? new Date(invoice.paid_at).toLocaleDateString() : 'N/A'}.
+              This invoice was marked as paid on {fmtDate(invoice.paid_at, 'N/A')}.
             </p>
           </div>
         )}
@@ -593,9 +594,9 @@ export default function ViewInvoice() {
             {/* Sent/Paid info */}
             {invoice.sent_at && (
               <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>
-                Sent to {invoice.sent_to_email} on {new Date(invoice.sent_at).toLocaleString()}
+                Sent to {invoice.sent_to_email} on {fmtDateTime(invoice.sent_at)}
                 {invoice.paid_at && (
-                  <span style={{ color: '#059669', fontWeight: 'bold' }}> • Paid on {new Date(invoice.paid_at).toLocaleString()}</span>
+                  <span style={{ color: '#059669', fontWeight: 'bold' }}> • Paid on {fmtDateTime(invoice.paid_at)}</span>
                 )}
               </div>
             )}

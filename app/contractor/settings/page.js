@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fmtDate } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { contractorApi } from '@/lib/contractorClient';
@@ -353,7 +354,7 @@ export default function ContractorSettings() {
             </div>
             {user.profile?.subscription_expires_at && (
               <p className="text-sm text-gray-400">
-                Expires: {new Date(user.profile.subscription_expires_at).toLocaleDateString()}
+                Expires: {fmtDate(user.profile.subscription_expires_at)}
               </p>
             )}
           </div>

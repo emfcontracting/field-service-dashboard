@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fmtDate, fmtDateShort } from '@/lib/dates';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
@@ -405,7 +406,7 @@ export default function TaxReport() {
                     <tr key={inv.invoice_id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
                       <td style={{ padding: '10px', fontWeight: '500' }}>{inv.invoice_number}</td>
                       <td style={{ padding: '10px', color: '#6b7280' }}>
-                        {new Date(inv.period_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(inv.period_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {fmtDateShort(inv.period_start)} - {fmtDateShort(inv.period_end)}
                       </td>
                       <td style={{ padding: '10px', textAlign: 'right' }}>
                         {(parseFloat(inv.total_regular_hours || 0) + parseFloat(inv.total_ot_hours || 0)).toFixed(1)}
@@ -413,7 +414,7 @@ export default function TaxReport() {
                       <td style={{ padding: '10px', textAlign: 'right' }}>{parseFloat(inv.total_miles || 0).toFixed(0)}</td>
                       <td style={{ padding: '10px', textAlign: 'right', fontWeight: '500' }}>${parseFloat(inv.grand_total || 0).toFixed(2)}</td>
                       <td style={{ padding: '10px', color: '#059669' }}>
-                        {inv.paid_at ? new Date(inv.paid_at).toLocaleDateString() : '-'}
+                        {fmtDate(inv.paid_at, '-')}
                       </td>
                     </tr>
                   ))}

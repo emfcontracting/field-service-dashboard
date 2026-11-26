@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
@@ -72,17 +73,17 @@ export default function ContractorDashboard() {
 
       // Get recent invoices
       let invoices = [];
-      try { ({ invoices } = await contractorApi.invoices({ limit: 5 })); }
+      try { ({ invoices } = await contractorApi.invoices()); }
       catch (invoicesError) { console.error('Error fetching invoices:', invoicesError); }
 
       // Count pending/sent invoices
       const pending = (invoices || []).filter(i => i.status === 'sent').length;
 
       // Sum paid this month
-      const monthStart = new Date();
-      monthStart.setDate(1);
+      // Paid this month (Eastern), by the date the sub marked it paid.
+      const thisMonth = dateKeyET().slice(0, 7);
       const paidThisMonth = (invoices || [])
-        .filter(i => i.status === 'paid' && new Date(i.sent_at) >= monthStart)
+        .filter(i => i.status === 'paid' && i.paid_at && dateKeyET(parseDate(i.paid_at)).slice(0, 7) === thisMonth)
         .reduce((sum, i) => sum + parseFloat(i.grand_total || 0), 0);
 
       setStats({
@@ -93,7 +94,7 @@ export default function ContractorDashboard() {
         paidThisMonth
       });
 
-      setRecentInvoices(invoices || []);
+      setRecentInvoices((invoices || []).slice(0, 5));
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
@@ -253,7 +254,7 @@ export default function ContractorDashboard() {
                   <div>
                     <p className="font-medium">{invoice.invoice_number}</p>
                     <p className="text-sm text-gray-400">
-                      {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
+                      {fmtDate(invoice.period_start)} - {fmtDate(invoice.period_end)}
                     </p>
                   </div>
                   <div className="text-right">

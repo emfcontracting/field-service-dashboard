@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
 import { EmfBadges } from '../components/EmfReview';
@@ -162,7 +163,7 @@ export default function ContractorInvoices() {
                     <h3 className="font-bold text-lg hover:text-blue-400 transition">{invoice.invoice_number}</h3>
                     <p className="text-xs text-gray-500">{invoice.client_type === 'other' ? `To: ${invoice.client_name}` : 'To: EMF Contracting'}</p>
                     <p className="text-sm text-gray-400">
-                      {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
+                      {fmtDate(invoice.period_start)} - {fmtDate(invoice.period_end)}
                     </p>
                   </Link>
                   <div className="flex items-center gap-2">
@@ -210,7 +211,7 @@ export default function ContractorInvoices() {
 
                 {invoice.sent_at && (
                   <p className="text-xs text-gray-500 mt-3">
-                    Sent to {invoice.sent_to_email}: {new Date(invoice.sent_at).toLocaleString()}
+                    Sent to {invoice.sent_to_email}: {fmtDateTime(invoice.sent_at)}
                   </p>
                 )}
               </div>

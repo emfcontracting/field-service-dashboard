@@ -1,7 +1,7 @@
 'use client';
 // First sign-in: three short steps instead of dropping the sub on Settings.
 //   1. Set a PIN (required)  2. Business info for the invoice header (optional)
-//   3. Rates EMF set for him (read-only) → dashboard
+//   3. His own rates (he sets his prices) → dashboard
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
@@ -15,6 +15,7 @@ export default function ContractorWelcome() {
   const [step, setStep] = useState(1);
   const [pin, setPin] = useState({ a: '', b: '' });
   const [biz, setBiz] = useState({ business_name: '', business_address: '', tax_id: '' });
+  const [rates, setRates] = useState({ hourly_rate: '', ot_rate: '', mileage_rate: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -25,6 +26,11 @@ export default function ContractorWelcome() {
       const u = JSON.parse(raw);
       setUser(u);
       setStep(u.profile?.has_pin ? 2 : 1);
+      setRates({
+        hourly_rate: String(u.profile?.hourly_rate ?? ''),
+        ot_rate: String(u.profile?.ot_rate ?? ''),
+        mileage_rate: String(u.profile?.mileage_rate ?? ''),
+      });
       setBiz({
         business_name: u.profile?.business_name || '',
         business_address: u.profile?.business_address || '',
@@ -67,6 +73,19 @@ export default function ContractorWelcome() {
     } catch (err) {
       setError(err.message || 'Could not save');
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitRates() {
+    setError('');
+    setBusy(true);
+    try {
+      const profile = await contractorApi.updateProfile(rates);
+      save({ ...user, profile: { ...user.profile, ...profile } });
+      router.replace('/contractor/dashboard');
+    } catch (err) {
+      setError(err.message || 'Could not save rates');
       setBusy(false);
     }
   }
@@ -124,15 +143,19 @@ export default function ContractorWelcome() {
         {step === 3 && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 space-y-4">
             <h2 className="font-bold">3 · Your rates</h2>
-            <p className="text-sm text-gray-400">Set by EMF Contracting and used on every EMF invoice. If something looks wrong, contact the office.</p>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="bg-gray-900 rounded-lg p-3"><p className="text-xl font-bold">${parseFloat(p.hourly_rate || 0).toFixed(2)}</p><p className="text-xs text-gray-400">per hour</p></div>
-              <div className="bg-gray-900 rounded-lg p-3"><p className="text-xl font-bold">${parseFloat(p.ot_rate || 0).toFixed(2)}</p><p className="text-xs text-gray-400">overtime</p></div>
-              <div className="bg-gray-900 rounded-lg p-3"><p className="text-xl font-bold">${parseFloat(p.mileage_rate || 0).toFixed(2)}</p><p className="text-xs text-gray-400">per mile</p></div>
+            <p className="text-sm text-gray-400">Your prices for EMF invoices. You can change them any time under Profile.</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[['hourly_rate', 'per hour'], ['ot_rate', 'overtime'], ['mileage_rate', 'per mile']].map(([k, label]) => (
+                <label key={k} className="block">
+                  <span className="text-xs text-gray-400">{label} $</span>
+                  <input inputMode="decimal" className={input} value={rates[k]}
+                    onChange={e => setRates({ ...rates, [k]: e.target.value.replace(/[^\d.]/g, '') })} />
+                </label>
+              ))}
             </div>
             <p className="text-sm text-gray-400">Every Friday the week before (Fri–Thu) is ready to invoice — you&apos;ll find it at the top of your Home screen.</p>
-            <button onClick={() => router.replace('/contractor/dashboard')} className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold">
-              Go to my portal
+            <button onClick={submitRates} disabled={busy} className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold disabled:opacity-50">
+              {busy ? 'Saving…' : 'Save & go to my portal'}
             </button>
           </div>
         )}

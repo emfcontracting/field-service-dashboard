@@ -67,6 +67,26 @@ export default function ContractorSettings() {
     }
   }, [router]);
 
+  async function saveRates(e) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const profile = await contractorApi.updateProfile({
+        hourly_rate: rates.hourly_rate, ot_rate: rates.ot_rate, mileage_rate: rates.mileage_rate,
+      });
+      const next = { ...user, profile: { ...user.profile, ...profile } };
+      setUser(next);
+      saveContractorSession(next);
+      setMessage({ type: 'success', text: 'Rates updated!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Failed to update rates' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveRecurring(e) {
     e.preventDefault();
     setSaving(true);
@@ -266,7 +286,7 @@ export default function ContractorSettings() {
         {/* Rates */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <h2 className="font-bold mb-4">💰 Your Rates</h2>
-          <div className="space-y-4">
+          <form onSubmit={saveRates} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Hourly Rate</label>
@@ -277,8 +297,8 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.hourly_rate}
-                    readOnly
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
+                    onChange={(e) => setRates({ ...rates, hourly_rate: e.target.value })}
+                                        className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
                   />
                 </div>
               </div>
@@ -291,8 +311,8 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.ot_rate}
-                    readOnly
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
+                    onChange={(e) => setRates({ ...rates, ot_rate: e.target.value })}
+                                        className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
                   />
                 </div>
               </div>
@@ -305,17 +325,23 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.mileage_rate}
-                    readOnly
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
+                    onChange={(e) => setRates({ ...rates, mileage_rate: e.target.value })}
+                                        className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
                   />
                 </div>
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              Your rates are set by EMF Contracting and used automatically on every invoice.
-              To request a change, contact the office.
+              Used on your EMF invoices from now on. Invoices already created keep the rates they were made with.
             </p>
-          </div>
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full bg-green-600 hover:bg-green-700 py-2 rounded-lg font-medium disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Rates'}
+            </button>
+          </form>
         </div>
 
         {/* Weekly line items */}

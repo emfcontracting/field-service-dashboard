@@ -324,21 +324,21 @@ export default function CreateInvoice() {
                 <label className="block text-xs text-gray-400 mb-1">Hourly Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.hourly} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.hourly} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">OT Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.ot} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.ot} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Mileage Rate</label>
                 <div className="relative">
                   <span className="absolute left-2 top-2 text-gray-400 text-sm">$</span>
-                  <input type="number" step="0.01" value={rates.mileage} readOnly title="Set by EMF" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
+                  <input type="number" step="0.01" value={rates.mileage} readOnly title="Your rates — change them under Profile" className="w-full bg-gray-900 border border-gray-700 text-gray-300 cursor-not-allowed rounded-lg pl-6 pr-2 py-1.5 text-sm" />
                 </div>
               </div>
             </div>

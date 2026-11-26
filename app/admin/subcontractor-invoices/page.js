@@ -454,6 +454,25 @@ export default function SubcontractorInvoiceReview() {
                   {actionError && <p className="mt-2 text-sm text-red-400">{actionError}</p>}
                 </div>
 
+                {/* Rates differ from this sub's previous EMF invoice (subs set their own rates) */}
+                {(() => {
+                  const prev = invoices
+                    .filter(i => i.user_id === selectedInvoice.user_id && i.invoice_id !== selectedInvoice.invoice_id
+                      && i.hourly_rate_used != null && new Date(i.created_at) < new Date(selectedInvoice.created_at))
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+                  if (!prev) return null;
+                  const changes = [['hourly_rate_used', 'Hourly', 2], ['ot_rate_used', 'OT', 2], ['mileage_rate_used', 'Mileage', 3]]
+                    .filter(([k]) => Math.abs((parseFloat(prev[k]) || 0) - (parseFloat(selectedInvoice[k]) || 0)) > 0.0005)
+                    .map(([k, label, d]) => `${label} $${(parseFloat(prev[k]) || 0).toFixed(d)} → $${(parseFloat(selectedInvoice[k]) || 0).toFixed(d)}`);
+                  if (!changes.length) return null;
+                  return (
+                    <div className="bg-sky-900/30 border border-sky-500/50 rounded-xl p-4">
+                      <h3 className="font-bold text-sky-300 mb-1">ℹ️ Rates changed since {prev.invoice_number}</h3>
+                      <p className="text-sm text-sky-200">{changes.join(' · ')}</p>
+                    </div>
+                  );
+                })()}
+
                 {/* Lines on work orders that are not finished */}
                 {openWOs.length > 0 && (
                   <div className="bg-orange-900/30 border border-orange-500/50 rounded-xl p-4">

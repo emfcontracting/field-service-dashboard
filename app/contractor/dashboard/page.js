@@ -296,7 +296,9 @@ export default function ContractorDashboard() {
               <p className="text-xs text-gray-400">Per Mile</p>
             </div>
           </div>
-          <p className="text-center text-xs text-gray-500 mt-3">Set by EMF Contracting — contact the office to change them.</p>
+          <Link href="/contractor/settings" className="block text-center text-sm text-blue-400 hover:text-blue-300 mt-3">
+            Change Rates →
+          </Link>
         </div>
 
         {/* Main Actions */}

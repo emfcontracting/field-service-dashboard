@@ -62,7 +62,6 @@ export default function SubcontractorsPage() {
   const [saving, setSaving]     = useState(null);
   const [toast, setToast]       = useState(null);
   const [docs, setDocs]         = useState({});     // user_id -> documents
-  const [rateEdit, setRateEdit] = useState({});     // user_id -> { hourly_rate, ot_rate, mileage_rate }
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -135,24 +134,7 @@ export default function SubcontractorsPage() {
     finally { setSaving(null); }
   }
 
-  // Rates are set here by EMF; the sub only sees them (portal is read-only).
-  async function saveRates(userId) {
-    const r = rateEdit[userId];
-    if (!r) return;
-    const vals = { hourly_rate: parseFloat(r.hourly_rate), ot_rate: parseFloat(r.ot_rate), mileage_rate: parseFloat(r.mileage_rate) };
-    if (Object.values(vals).some(v => !Number.isFinite(v) || v < 0)) { showToast('Rates must be numbers ≥ 0', 'error'); return; }
-    setSaving(userId);
-    try {
-      const { error } = await supabase.from('subcontractor_profiles')
-        .update({ ...vals, updated_at: new Date().toISOString() }).eq('user_id', userId);
-      if (error) throw error;
-      setProfiles(p => ({ ...p, [userId]: { ...p[userId], ...vals } }));
-      setRateEdit(e => { const n = { ...e }; delete n[userId]; return n; });
-      showToast('Rates saved');
-    } catch { showToast('Failed to save rates', 'error'); }
-    finally { setSaving(null); }
-  }
-
+  // Rates are the subcontractor's own (he sets them in the portal); EMF only sees them here.
   function docStatus(userId) {
     const list = docs[userId] || [];
     const today = new Date().toISOString().slice(0, 10);
@@ -325,25 +307,13 @@ export default function SubcontractorsPage() {
                     </div>
                   </div>
                   {isEnabled && (() => {
-                    const r = rateEdit[user.user_id] || {
-                      hourly_rate: String(profile?.hourly_rate ?? ''), ot_rate: String(profile?.ot_rate ?? ''), mileage_rate: String(profile?.mileage_rate ?? ''),
-                    };
-                    const dirty = !!rateEdit[user.user_id];
                     const ds = docStatus(user.user_id);
-                    const set = (k, v) => setRateEdit(e => ({ ...e, [user.user_id]: { ...r, [k]: v } }));
+                    const money = (v, d = 2) => (v == null ? '—' : '$' + Number(v).toFixed(d));
                     return (
                       <div className="px-5 pb-4 -mt-1 flex flex-wrap items-center gap-3 text-xs">
-                        {[['hourly_rate', '$/hr'], ['ot_rate', 'OT $/hr'], ['mileage_rate', '$/mile']].map(([k, label]) => (
-                          <label key={k} className="flex items-center gap-1 text-slate-500">
-                            {label}
-                            <input inputMode="decimal" value={r[k]} onChange={e => set(k, e.target.value)}
-                              className="w-20 bg-[#0a0a0f] border border-[#2d2d44] rounded-md px-2 py-1 text-slate-200" />
-                          </label>
-                        ))}
-                        {dirty && (
-                          <button onClick={() => saveRates(user.user_id)} disabled={isSaving}
-                            className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50">Save rates</button>
-                        )}
+                        <span className="text-slate-500" title="Set by the subcontractor in his portal">
+                          Rates: <span className="text-slate-300">{money(profile?.hourly_rate)}/hr · {money(profile?.ot_rate)} OT · {money(profile?.mileage_rate, 3)}/mi</span>
+                        </span>
                         <span className={`px-2 py-0.5 rounded-full border ${ds.w9 ? 'border-emerald-500/30 text-emerald-400' : 'border-amber-500/30 text-amber-400'}`}>
                           W-9 {ds.w9 ? '✓' : 'missing'}
                         </span>

@@ -1,5 +1,6 @@
-// PATCH /api/contractor/profile → business name, address, tax id, recurring_lines.
-// Rates are NOT accepted here — they are set by EMF (Settings → Subcontractors).
+// PATCH /api/contractor/profile → business name, address, tax id, rates, recurring_lines.
+// Rates are the subcontractor's own (he is self-employed and sets his prices);
+// EMF sees them on every invoice and in its review (rate-change notice).
 // A masked tax id (***-**-1234) coming back from the form is ignored.
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, serviceClient } from '@/lib/serverAuth';
@@ -20,6 +21,14 @@ export async function PATCH(request) {
   if (body.business_name !== undefined) update.business_name = String(body.business_name || '').slice(0, 200);
   if (body.business_address !== undefined) update.business_address = String(body.business_address || '').slice(0, 500);
   if (body.tax_id !== undefined && !isMaskedTaxId(body.tax_id)) update.tax_id = String(body.tax_id || '').trim().slice(0, 20) || null;
+  for (const [k, max] of [['hourly_rate', 1000], ['ot_rate', 1500], ['mileage_rate', 5]]) {
+    if (body[k] === undefined) continue;
+    const v = parseFloat(body[k]);
+    if (!Number.isFinite(v) || v < 0 || v > max) {
+      return NextResponse.json({ error: `${k.replace('_', ' ')} must be between 0 and ${max}` }, { status: 400 });
+    }
+    update[k] = Math.round(v * 10000) / 10000;
+  }
   if (body.recurring_lines !== undefined) update.recurring_lines = cleanRecurringLines(body.recurring_lines);
 
   const { data, error } = await serviceClient()

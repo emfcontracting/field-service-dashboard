@@ -50,7 +50,7 @@ export function EmfReviewPanel({ invoice }) {
       )}
       {rejected && (
         <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
-          {t('Delete this invoice and create a corrected one for the same period.')}
+          {t('Press “Correct”: you get a copy as a new draft to fix and send again. This one stays as a record.')}
         </p>
       )}
     </div>

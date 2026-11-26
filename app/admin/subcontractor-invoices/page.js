@@ -321,6 +321,9 @@ export default function SubcontractorInvoiceReview() {
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-bold">{invoice.invoice_number}</span>
+                        {invoice.replaces_invoice_id && (
+                          <span className="text-xs text-sky-300 ml-2">corrects {invoices.find(x => x.invoice_id === invoice.replaces_invoice_id)?.invoice_number || 'a rejected invoice'}</span>
+                        )}
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           invoice.status === 'paid'
                             ? 'bg-green-500/20 text-green-400'

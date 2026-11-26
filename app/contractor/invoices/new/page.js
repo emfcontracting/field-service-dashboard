@@ -15,6 +15,7 @@ import {
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
 import { lastBillingWeek } from '@/lib/billingWeek';
+import { fmtDate } from '@/lib/dates';
 
 export default function CreateInvoice() {
   const { t } = useLang();
@@ -35,6 +36,12 @@ export default function CreateInvoice() {
     zip: '',
     email: ''
   });
+
+  // Saved customers + unbilled timer entries (other clients)
+  const [customers, setCustomers] = useState([]);
+  const [customerId, setCustomerId] = useState('');
+  const [saveCustomer, setSaveCustomer] = useState(true);
+  const [unbilledTime, setUnbilledTime] = useState([]);
 
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
@@ -77,6 +84,48 @@ export default function CreateInvoice() {
       router.push('/contractor');
     }
   }, [router]);
+
+  // ?customer=<id>[&time=1]: from the customer list or the timer page
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      let list = [];
+      try { list = await contractorApi.customers(); setCustomers(list); } catch { /* no customers table yet */ }
+      const q = new URLSearchParams(window.location.search);
+      const id = q.get('customer');
+      if (id && list.some(c => c.customer_id === id)) {
+        setClientType('other'); setHoursData([]); setLineItems([]);
+        await pickCustomer(id, list, q.get('time') === '1');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  async function pickCustomer(id, list = customers, addTime = false) {
+    setCustomerId(id);
+    setUnbilledTime([]);
+    const c = list.find(x => x.customer_id === id);
+    if (!c) { setOtherClient({ name: '', address: '', city: '', state: '', zip: '', email: '' }); return; }
+    setOtherClient({ name: c.name || '', address: c.address || '', city: c.city || '', state: c.state || '', zip: c.zip || '', email: c.email || '' });
+    try {
+      const { entries } = await contractorApi.time({ customer_id: id, unbilled: 1 });
+      setUnbilledTime(entries || []);
+      if (addTime && entries?.length) addTimeLines(entries, []);
+    } catch { /* timer table not there yet */ }
+  }
+
+  // One line per timer entry (hours × rate), editable like any line.
+  function addTimeLines(entries, current = lineItems) {
+    const have = new Set(current.map(l => l.entry_id).filter(Boolean));
+    const add = entries.filter(e => !have.has(e.entry_id)).map((e, i) => {
+      const qty = Math.round(((e.minutes || 0) / 60) * 100) / 100;
+      const rate = parseFloat(e.rate ?? rates.hourly) || 0;
+      return { id: Date.now() + i, entry_id: e.entry_id, description: `${fmtDate(e.started_at)} — ${e.description || t('Labor')}`, quantity: qty, rate, amount: qty * rate };
+    });
+    setLineItems([...current, ...add]);
+    const dates = entries.map(e => e.started_at.slice(0, 10)).sort();
+    if (dates.length) { setPeriodStart(dates[0]); setPeriodEnd(dates[dates.length - 1]); }
+  }
 
   async function pullHours() {
     if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: t('Please select date range') }); return; }
@@ -178,6 +227,9 @@ export default function CreateInvoice() {
       const invoice = await contractorApi.createInvoice({
         client_type: 'other',
         client: otherClient,
+        customer_id: customerId || undefined,
+        save_customer: !customerId && saveCustomer,
+        time_entry_ids: lineItems.map(l => l.entry_id).filter(Boolean),
         period_start: periodStart,
         period_end: periodEnd,
         line_items: lineItems.map(item => ({
@@ -235,6 +287,16 @@ export default function CreateInvoice() {
           {clientType === 'other' && (
             <div className="space-y-3 pt-4 border-t border-gray-700">
               <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm text-gray-400">{t('Saved customer')}</label>
+                  <Link href="/contractor/customers" className="text-xs text-blue-400">{t('Manage')}</Link>
+                </div>
+                <select value={customerId} onChange={(e) => pickCustomer(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2">
+                  <option value="">{t('— New customer —')}</option>
+                  {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm text-gray-400 mb-1">{t('Client/Company Name *')}</label>
                 <input type="text" value={otherClient.name} onChange={(e) => setOtherClient({ ...otherClient, name: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder={t('ABC Company')} />
               </div>
@@ -260,6 +322,22 @@ export default function CreateInvoice() {
                 <label className="block text-sm text-gray-400 mb-1">{t('Email')}</label>
                 <input type="email" value={otherClient.email} onChange={(e) => setOtherClient({ ...otherClient, email: e.target.value })} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" placeholder={t('client@example.com')} />
               </div>
+              {!customerId && (
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="checkbox" checked={saveCustomer} onChange={(e) => setSaveCustomer(e.target.checked)} />
+                  {t('Save as customer for next time')}
+                </label>
+              )}
+              {unbilledTime.length > 0 && (() => {
+                const left = unbilledTime.filter(e => !lineItems.some(l => l.entry_id === e.entry_id));
+                const h = left.reduce((s, e) => s + (e.minutes || 0), 0) / 60;
+                return left.length > 0 ? (
+                  <div className="flex items-center justify-between gap-3 bg-green-900/30 border border-green-700 rounded-lg p-3">
+                    <span className="text-sm">{t('⏱️ Not invoiced yet: {n} time entries · {h} h', { n: left.length, h: h.toFixed(2) })}</span>
+                    <button type="button" onClick={() => addTimeLines(left)} className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-bold">{t('Add to invoice')}</button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </div>

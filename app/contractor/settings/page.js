@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useLang, LangSwitch } from '@/app/contractor/components/LangProvider';
+import ReminderDaysCard from '@/app/contractor/components/ReminderDaysCard';
 import DocumentsPanel from '../components/DocumentsPanel';
 import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
 import { fmtDate } from '@/lib/dates';
@@ -229,6 +230,13 @@ export default function ContractorSettings() {
             <p className="text-gray-300">{t('Please set a PIN to secure your account before continuing.')}</p>
           </div>
         )}
+
+        {/* Customers + reminders */}
+        <Link href="/contractor/customers" className="flex items-center justify-between bg-gray-800 rounded-xl border border-gray-700 p-4 hover:bg-gray-700/50">
+          <span className="font-bold">{t('👥 Customers')}</span>
+          <span className="text-sm text-blue-400">{t('Manage')} →</span>
+        </Link>
+        <ReminderDaysCard profile={user.profile} />
 
         {/* Language */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex items-center justify-between gap-3">

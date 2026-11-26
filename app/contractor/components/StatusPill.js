@@ -33,6 +33,14 @@ export function invoiceStatusInfo(invoice, tr = (s, v) => translate('en', s, v))
   if (invoice.status === 'sent' && invoice.emf_review_status === 'accepted') {
     return { label: tr('Accepted by EMF'), tone: 'blue', hint: tr('EMF approved it — payment is planned.') };
   }
+  const partPaid = Number(invoice.amount_paid) || 0;
+  if (invoice.status === 'sent' && partPaid > 0) {
+    const money = (v) => '$' + (Number(v) || 0).toFixed(2);
+    return {
+      label: tr('Part paid {paid} of {total}', { paid: money(partPaid), total: money(invoice.grand_total) }),
+      tone: 'yellow', hint: tr('{open} still open from {name}.', { open: money((Number(invoice.grand_total) || 0) - partPaid), name: to.name }),
+    };
+  }
   if (invoice.status === 'sent') {
     return {
       label: invoice.sent_at ? tr('Sent to {to} {date}', { to: toShort, date: fmtDateShort(invoice.sent_at, '') }) : tr('Sent to {to}', { to: toShort }),

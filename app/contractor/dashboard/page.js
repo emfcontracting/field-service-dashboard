@@ -7,7 +7,7 @@ import StatusPill from '../components/StatusPill';
 import { lastBillingWeek } from '@/lib/billingWeek';
 import { daysBetweenET } from '@/lib/dates';
 import { readContractorSession, clearContractorSession, saveContractorSession } from '@/lib/contractorSession';
-import { fmtDate, fmtDateTime, fmtDateShort, parseDate, dateKeyET } from '@/lib/dates';
+import { fmtDate, fmtDateTime, fmtDateShort, fmtTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
@@ -112,8 +112,8 @@ export default function ContractorDashboard() {
       // To-do list, most urgent first
       const list = [];
       for (const inv of invoices || []) {
-        if (inv.emf_review_status === 'rejected' && inv.status !== 'paid') {
-          list.push({ key: 'rej' + inv.invoice_id, tone: 'red', text: inv.emf_review_note ? t('{inv} was rejected by EMF: {note}', { inv: inv.invoice_number, note: inv.emf_review_note }) : t('{inv} was rejected by EMF', { inv: inv.invoice_number }), href: `/contractor/invoices/${inv.invoice_id}`, action: 'Fix' });
+        if (inv.emf_review_status === 'rejected' && inv.status !== 'paid' && !invoices.some(x => x.replaces_invoice_id === inv.invoice_id)) {
+          list.push({ key: 'rej' + inv.invoice_id, tone: 'red', text: inv.emf_review_note ? t('{inv} was rejected by EMF: {note}', { inv: inv.invoice_number, note: inv.emf_review_note }) : t('{inv} was rejected by EMF', { inv: inv.invoice_number }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Fix') });
         }
       }
       for (const inv of invoices || []) {
@@ -121,12 +121,38 @@ export default function ContractorDashboard() {
           list.push({ key: 'draft' + inv.invoice_id, tone: 'yellow', text: t('{inv} is a draft — check it and send it', { inv: inv.invoice_number }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Open') });
         }
       }
+      const remindAfter = profile?.reminder_days || 14;
       for (const inv of invoices || []) {
         const days = inv.sent_at ? daysBetweenET(parseDate(inv.sent_at)) : 0;
+        // Own customers with an e-mail: suggest a payment reminder
+        // (every `reminder_days` since sending or the last reminder).
+        if (inv.status === 'sent' && inv.client_type === 'other' && inv.client_email) {
+          const since = daysBetweenET(parseDate(inv.last_reminder_at || inv.sent_at));
+          if (since != null && since >= remindAfter) {
+            const open = (parseFloat(inv.grand_total) || 0) - (parseFloat(inv.amount_paid) || 0);
+            list.push({ key: 'rem' + inv.invoice_id, tone: 'yellow', text: t('{inv} to {name}: {amount} open for {days} days — send a reminder?', { inv: inv.invoice_number, name: inv.client_name, amount: '$' + open.toFixed(2), days }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Remind') });
+          }
+          continue;
+        }
         if (inv.status === 'sent' && days >= 30) {
           list.push({ key: 'old' + inv.invoice_id, tone: 'gray', text: t('{inv} was sent {days} days ago — paid yet?', { inv: inv.invoice_number, days }), href: `/contractor/invoices/${inv.invoice_id}`, action: t('Open') });
         }
       }
+      // Timer: running, or time for own customers not invoiced yet
+      try {
+        const [now, ub] = await Promise.all([contractorApi.time({ days: 1 }), contractorApi.time({ unbilled: 1 })]);
+        if (now.running) {
+          list.unshift({ key: 'timer', tone: 'yellow', text: t('⏱️ Timer running for {name} since {time}', { name: now.running.customer?.name || '', time: fmtTime(now.running.started_at) }), href: '/contractor/time', action: t('Stop') });
+        }
+        const by = {};
+        for (const e of ub.entries || []) {
+          by[e.customer_id] ||= { name: e.customer?.name || '', min: 0 };
+          by[e.customer_id].min += e.minutes || 0;
+        }
+        for (const [cid, v] of Object.entries(by)) {
+          list.push({ key: 'time' + cid, tone: 'gray', text: t('{h} h for {name} not invoiced yet', { h: (v.min / 60).toFixed(2), name: v.name }), href: `/contractor/invoices/new?customer=${cid}&time=1`, action: t('Invoice') });
+        }
+      } catch { /* timer is optional here */ }
       // Documents: W-9 / insurance missing, expired or expiring within 30 days
       try {
         const docs = await contractorApi.documents();
@@ -253,6 +279,12 @@ export default function ContractorDashboard() {
             )}
           </div>
         </div>
+
+        {/* Timer for own customers */}
+        <Link href="/contractor/time"
+          className="flex items-center justify-center gap-2 bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-xl py-3 font-bold">
+          {t('⏱️ Timer for your customers')}
+        </Link>
 
         {/* Quick receipt */}
         <Link href="/contractor/tax-records?add=1"

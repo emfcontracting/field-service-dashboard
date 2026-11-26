@@ -736,7 +736,7 @@ function CategoriesModal({ user, customCategories, onClose, onChanged }) {
   }
 
   async function handleDelete(catId) {
-    if (!confirm('Delete this custom category? Existing records will keep the category name but it will no longer be selectable for new entries.')) return;
+    if (!confirm(t('Delete this custom category? Existing records will keep the category name but it will no longer be selectable for new entries.'))) return;
     try {
       await apiFetch(`/api/contractor/tax-categories/${catId}`, { method: 'DELETE' });
       onChanged();

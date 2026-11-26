@@ -33,6 +33,19 @@ export async function PATCH(request) {
     if (!['en', 'es'].includes(body.language)) return NextResponse.json({ error: 'language must be en or es' }, { status: 400 });
     update.language = body.language;
   }
+  if (body.tax_set_aside_pct !== undefined) {
+    if (body.tax_set_aside_pct === null || body.tax_set_aside_pct === '') update.tax_set_aside_pct = null;
+    else {
+      const v = parseFloat(body.tax_set_aside_pct);
+      if (!Number.isFinite(v) || v < 0 || v > 60) return NextResponse.json({ error: 'set-aside % must be between 0 and 60' }, { status: 400 });
+      update.tax_set_aside_pct = Math.round(v * 100) / 100;
+    }
+  }
+  if (body.reminder_days !== undefined) {
+    const d = parseInt(body.reminder_days, 10);
+    if (!(d >= 3 && d <= 90)) return NextResponse.json({ error: 'Reminder days must be between 3 and 90' }, { status: 400 });
+    update.reminder_days = d;
+  }
   if (body.recurring_lines !== undefined) update.recurring_lines = cleanRecurringLines(body.recurring_lines);
 
   const { data, error } = await serviceClient()

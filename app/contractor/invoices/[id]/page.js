@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
 import { EmfReviewPanel } from '../../components/EmfReview';
+import PaymentsPanel from '../../components/PaymentsPanel';
 import { invoiceRecipient } from '@/lib/invoiceRecipient';
 
 // Helper function to format date without timezone shift
@@ -164,6 +165,26 @@ export default function ViewInvoice() {
     }
   }
 
+  async function sendReminder() {
+    if (!confirm(t('Send a payment reminder with the invoice to {email}?', { email: invoice.client_email }))) return;
+    setSending(true);
+    try {
+      setInvoice(await contractorApi.remindInvoice(invoice.invoice_id));
+      setMessage({ type: 'success', text: t('Reminder sent to {email}', { email: invoice.client_email }) });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    } finally { setSending(false); }
+  }
+
+  async function correctInvoice() {
+    try {
+      const copy = await contractorApi.correctInvoice(invoice.invoice_id);
+      router.push(`/contractor/invoices/${copy.invoice_id}`);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || t('Failed to update invoice') });
+    }
+  }
+
   async function deleteInvoice() {
     if (!confirm(t('Are you sure you want to delete this invoice? This cannot be undone.'))) {
       return;
@@ -292,6 +313,17 @@ export default function ViewInvoice() {
               </>
             )}
 
+            {/* EMF rejected it: copy as a new draft to correct and send again */}
+            {invoice.emf_review_status === 'rejected' && (
+              <button
+                onClick={correctInvoice}
+                style={{ padding: '10px 16px', backgroundColor: '#2563eb', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+                title={t('Copies this invoice as a new draft — fix it and send it again')}
+              >
+                {t('✏️ Correct')}
+              </button>
+            )}
+
             {/* EMF rejected a sent/paid invoice: the sub may delete and redo it */}
             {invoice.status !== 'draft' && invoice.emf_review_status === 'rejected' && (
               <button
@@ -299,6 +331,17 @@ export default function ViewInvoice() {
                 style={{ padding: '10px 16px', backgroundColor: '#dc2626', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
               >
                 {t('🗑️ Delete')}
+              </button>
+            )}
+
+            {invoice.status === 'sent' && invoice.client_type === 'other' && invoice.client_email && (
+              <button
+                onClick={sendReminder}
+                disabled={sending}
+                style={{ padding: '10px 16px', backgroundColor: '#b45309', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+                title={invoice.last_reminder_at ? t('Last reminder {date} ({n} sent)', { date: new Date(invoice.last_reminder_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' }), n: invoice.reminder_count || 1 }) : ''}
+              >
+                {t('🔔 Payment reminder')}{invoice.reminder_count ? ` (${invoice.reminder_count})` : ''}
               </button>
             )}
 
@@ -357,6 +400,7 @@ export default function ViewInvoice() {
       <div style={{ maxWidth: '896px', margin: '0 auto', padding: '16px' }}>
         
         <EmfReviewPanel invoice={invoice} />
+        <PaymentsPanel invoice={invoice} onChange={setInvoice} />
 
         {invoice.status === 'draft' && (
           <DraftEditor

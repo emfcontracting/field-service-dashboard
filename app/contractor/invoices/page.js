@@ -104,7 +104,7 @@ export default function ContractorInvoices() {
             </Link>
             <div>
               <h1 className="text-xl font-bold">{t('📋 Invoices')}</h1>
-              <p className="text-sm text-gray-400">{invoices.length} total</p>
+              <p className="text-sm text-gray-400">{t('{n} total', { n: invoices.length })}</p>
             </div>
           </div>
           <Link
@@ -117,6 +117,13 @@ export default function ContractorInvoices() {
       </header>
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
+        {/* Own business: estimates, customers, timer */}
+        <div className="grid grid-cols-3 gap-2">
+          <Link href="/contractor/estimates" className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-lg py-2 text-center text-sm">{t('📄 Estimates')}</Link>
+          <Link href="/contractor/customers" className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-lg py-2 text-center text-sm">{t('👥 Customers')}</Link>
+          <Link href="/contractor/time" className="bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-lg py-2 text-center text-sm">{t('⏱️ Timer')}</Link>
+        </div>
+
         {/* Filter Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {[

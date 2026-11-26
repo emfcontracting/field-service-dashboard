@@ -99,7 +99,7 @@ export default function MileagePage() {
           </div>
         </div>
         <p className="text-xs text-gray-500">
-          A summary for your tax preparer, not tax advice. Commuting (home to your regular workplace) is not deductible; standard mileage and actual vehicle expenses can't both be claimed.
+          {t("A summary for your tax preparer, not tax advice. Commuting (home to your regular workplace) is not deductible; standard mileage and actual vehicle expenses can't both be claimed.")}
           {sum.missingRate && t(' Some dates have no IRS rate on file yet — those count as $0.')}
         </p>
 

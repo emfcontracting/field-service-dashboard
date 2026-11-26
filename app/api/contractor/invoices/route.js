@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, serviceClient } from '@/lib/serverAuth';
 import { targetUserId } from '@/lib/contractorProfile';
 import { createEmfInvoice, createOtherClientInvoice } from '@/lib/subInvoiceCreate';
+import { paymentsFor } from '@/lib/contractorPayments';
 
 export const dynamic = 'force-dynamic';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -43,6 +44,10 @@ export async function GET(request) {
 
   const { data: invoices, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Payments received (part payments) on each invoice
+  const payBy = await paymentsFor(supabase, (invoices || []).map((i) => i.invoice_id));
+  for (const i of invoices || []) i.payments = payBy[i.invoice_id] || [];
 
   if (searchParams.get('items') !== '1') return NextResponse.json({ invoices: invoices || [] });
 

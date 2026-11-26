@@ -55,6 +55,10 @@
     {
       "path": "/api/cron/sub-invoice-drafts",
       "schedule": "0 13 * * 5"
+    },
+    {
+      "path": "/api/cron/sub-tax-reminders",
+      "schedule": "0 14 * * *"
     }
   ]
 }

@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import StatusPill from '../components/StatusPill';
+import { lastBillingWeek } from '@/lib/billingWeek';
+import { daysBetweenET } from '@/lib/dates';
 import { readContractorSession, clearContractorSession } from '@/lib/contractorSession';
-import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
+import { fmtDate, fmtDateTime, fmtDateShort, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
@@ -22,6 +24,10 @@ export default function ContractorDashboard() {
     paidThisMonth: 0
   });
   const [recentInvoices, setRecentInvoices] = useState([]);
+  const [week, setWeek] = useState(null);          // { start, end, entries, uninvoiced, amount, partly }
+  const [todos, setTodos] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
 
   useEffect(() => {
     const userData = readContractorSession();
@@ -48,51 +54,74 @@ export default function ContractorDashboard() {
 
   async function loadDashboardData(userId, profile) {
     try {
-      // Get current period (last 14 days) using EST timezone
-      const { startDate } = getDateRangeEST(14);
-
-      // Get hours and mileage for current period
+      // The week that is due: last completed Friday–Thursday (lib/billingWeek)
+      const w = lastBillingWeek(getTodayEST());
       let hoursData = [];
-      try { hoursData = await contractorApi.hours(startDate); }
-      catch (hoursError) { console.error('Error fetching hours:', hoursError); }
-
-      let totalRegular = 0;
-      let totalOT = 0;
-      let totalMiles = 0;
-
-      (hoursData || []).forEach(entry => {
-        totalRegular += parseFloat(entry.hours_regular || 0);
-        totalOT += parseFloat(entry.hours_overtime || 0);
-        totalMiles += parseFloat(entry.miles || 0);
-      });
+      let alreadyInvoiced = [];
+      try {
+        const r = await contractorApi.hoursChecked(w.start, w.end);
+        hoursData = r.hours || [];
+        alreadyInvoiced = r.already_invoiced || [];
+      } catch (hoursError) { console.error('Error fetching hours:', hoursError); }
 
       const hourlyRate = parseFloat(profile?.hourly_rate || 35);
       const otRate = parseFloat(profile?.ot_rate || 52.50);
       const mileageRate = parseFloat(profile?.mileage_rate || 0.67);
+      const billed = new Set(alreadyInvoiced.map(a => a.wo_id + '|' + a.work_date));
+      const open = hoursData.filter(h => !billed.has(h.wo_id + '|' + h.work_date));
 
-      const hoursAmount = (totalRegular * hourlyRate) + (totalOT * otRate);
-      const mileageAmount = totalMiles * mileageRate;
+      let totalRegular = 0, totalOT = 0, totalMiles = 0, openAmount = 0;
+      hoursData.forEach(e => {
+        totalRegular += parseFloat(e.hours_regular || 0);
+        totalOT += parseFloat(e.hours_overtime || 0);
+        totalMiles += parseFloat(e.miles || 0);
+      });
+      open.forEach(e => {
+        openAmount += parseFloat(e.hours_regular || 0) * hourlyRate
+          + parseFloat(e.hours_overtime || 0) * otRate
+          + parseFloat(e.miles || 0) * mileageRate
+          + parseFloat(e.tech_material_cost || 0);
+      });
 
-      // Get recent invoices
       let invoices = [];
       try { ({ invoices } = await contractorApi.invoices()); }
       catch (invoicesError) { console.error('Error fetching invoices:', invoicesError); }
 
-      // Count pending/sent invoices
-      const pending = (invoices || []).filter(i => i.status === 'sent').length;
+      const waiting = (invoices || []).filter(i => i.status === 'sent').length;
 
-      // Sum paid this month
       // Paid this month (Eastern), by the date the sub marked it paid.
       const thisMonth = dateKeyET().slice(0, 7);
       const paidThisMonth = (invoices || [])
         .filter(i => i.status === 'paid' && i.paid_at && dateKeyET(parseDate(i.paid_at)).slice(0, 7) === thisMonth)
         .reduce((sum, i) => sum + parseFloat(i.grand_total || 0), 0);
 
+      setWeek({ ...w, entries: hoursData.length, uninvoiced: open.length, amount: openAmount, partly: alreadyInvoiced.length > 0 });
+
+      // To-do list, most urgent first
+      const list = [];
+      for (const inv of invoices || []) {
+        if (inv.emf_review_status === 'rejected' && inv.status !== 'paid') {
+          list.push({ key: 'rej' + inv.invoice_id, tone: 'red', text: `${inv.invoice_number} was rejected by EMF${inv.emf_review_note ? ': ' + inv.emf_review_note : ''}`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Fix' });
+        }
+      }
+      for (const inv of invoices || []) {
+        if (inv.status === 'draft') {
+          list.push({ key: 'draft' + inv.invoice_id, tone: 'yellow', text: `${inv.invoice_number} is a draft — check it and send it`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Open' });
+        }
+      }
+      for (const inv of invoices || []) {
+        const days = inv.sent_at ? daysBetweenET(parseDate(inv.sent_at)) : 0;
+        if (inv.status === 'sent' && days >= 30) {
+          list.push({ key: 'old' + inv.invoice_id, tone: 'gray', text: `${inv.invoice_number} was sent ${days} days ago — paid yet?`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Open' });
+        }
+      }
+      setTodos(list);
+
       setStats({
         currentPeriodHours: totalRegular + totalOT,
         currentPeriodMiles: totalMiles,
-        currentPeriodAmount: hoursAmount + mileageAmount,
-        pendingInvoices: pending,
+        currentPeriodAmount: openAmount,
+        pendingInvoices: waiting,
         paidThisMonth
       });
 
@@ -101,6 +130,20 @@ export default function ContractorDashboard() {
       console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // One click: invoice the due week with everything EMF logged for it.
+  async function createWeekInvoice() {
+    if (!week) return;
+    setCreating(true);
+    setCreateError('');
+    try {
+      const invoice = await contractorApi.createInvoice({ period_start: week.start, period_end: week.end, line_items: [] });
+      router.push(`/contractor/invoices/${invoice.invoice_id}`);
+    } catch (e) {
+      setCreateError(e.message || 'Could not create the invoice');
+      setCreating(false);
     }
   }
 
@@ -148,20 +191,62 @@ export default function ContractorDashboard() {
       </header>
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
+        {/* To do */}
+        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+          <div className="p-4 border-b border-gray-700">
+            <h2 className="font-bold">✅ To do</h2>
+          </div>
+          <div className="divide-y divide-gray-700">
+            {week && week.uninvoiced > 0 && (
+              <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div>
+                  <p className="font-medium">
+                    Week {fmtDateShort(week.start)} – {fmtDateShort(week.end)} is ready to invoice
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    {week.uninvoiced} entr{week.uninvoiced === 1 ? 'y' : 'ies'} · about ${week.amount.toFixed(2)}
+                    {week.partly && ' · some entries of this week are already on another invoice'}
+                  </p>
+                  {createError && <p className="text-sm text-red-400 mt-1">{createError}</p>}
+                </div>
+                {week.partly ? (
+                  <Link href="/contractor/invoices/new" className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-bold text-center">
+                    Review & create
+                  </Link>
+                ) : (
+                  <button onClick={createWeekInvoice} disabled={creating}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-bold disabled:opacity-50">
+                    {creating ? 'Creating…' : 'Create invoice'}
+                  </button>
+                )}
+              </div>
+            )}
+            {todos.map(t => (
+              <Link key={t.key} href={t.href} className="p-4 flex items-center justify-between gap-3 hover:bg-gray-700/50">
+                <span className={`text-sm ${t.tone === 'red' ? 'text-red-300' : t.tone === 'yellow' ? 'text-yellow-200' : 'text-gray-300'}`}>{t.text}</span>
+                <span className="text-sm text-blue-400 whitespace-nowrap">{t.action} →</span>
+              </Link>
+            ))}
+            {!(week && week.uninvoiced > 0) && todos.length === 0 && (
+              <p className="p-4 text-sm text-gray-400">All caught up — nothing to do right now.</p>
+            )}
+          </div>
+        </div>
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Current Period</p>
+            <p className="text-gray-400 text-sm">Last Week{week ? ` (${fmtDateShort(week.start)}–${fmtDateShort(week.end)})` : ''}</p>
             <p className="text-2xl font-bold">{stats.currentPeriodHours.toFixed(1)}h</p>
             <p className="text-xs text-gray-500">{stats.currentPeriodMiles.toFixed(0)} miles</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
             <p className="text-gray-400 text-sm">Uninvoiced</p>
             <p className="text-2xl font-bold text-green-400">${stats.currentPeriodAmount.toFixed(2)}</p>
-            <p className="text-xs text-gray-500">Ready to invoice</p>
+            <p className="text-xs text-gray-500">Last week, not invoiced yet</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-sm">Pending</p>
+            <p className="text-gray-400 text-sm">Waiting</p>
             <p className="text-2xl font-bold text-yellow-400">{stats.pendingInvoices}</p>
             <p className="text-xs text-gray-500">Awaiting payment</p>
           </div>
@@ -188,12 +273,7 @@ export default function ContractorDashboard() {
               <p className="text-xs text-gray-400">Per Mile</p>
             </div>
           </div>
-          <Link
-            href="/contractor/settings"
-            className="block text-center text-sm text-blue-400 hover:text-blue-300 mt-3"
-          >
-            Update Rates →
-          </Link>
+          <p className="text-center text-xs text-gray-500 mt-3">Set by EMF Contracting — contact the office to change them.</p>
         </div>
 
         {/* Main Actions */}

@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
+import { contractorApi } from '@/lib/contractorClient';
 import Link from 'next/link';
 
-const supabase = getSupabase();
 
 export default function TaxReport() {
   const router = useRouter();
@@ -51,28 +50,12 @@ export default function TaxReport() {
       const endDate = `${selectedYear}-12-31`;
 
       // Get all paid invoices for the year
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from('subcontractor_invoices')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'paid')
-        .gte('period_start', startDate)
-        .lte('period_end', endDate)
-        .order('period_start', { ascending: true });
-
-      if (invoicesError) throw invoicesError;
+      const { invoices: invoicesData, items: allItems } = await contractorApi.invoices({ status: 'paid', year: selectedYear, items: 1 });
       setInvoices(invoicesData || []);
 
       // Get all line items for these invoices
       if (invoicesData && invoicesData.length > 0) {
-        const invoiceIds = invoicesData.map(inv => inv.invoice_id);
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('subcontractor_invoice_items')
-          .select('*')
-          .in('invoice_id', invoiceIds)
-          .order('work_date', { ascending: true });
-
-        if (itemsError) throw itemsError;
+        const itemsData = allItems || [];
         setLineItems(itemsData || []);
 
         // Calculate summary

@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { useRequireRole, GateScreen } from '@/app/components/useRequireRole';
+import { getSupabase } from '@/lib/supabase';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Shared browser client: it carries the signed-in staff session, which the
+// row-level security on subcontractor_* tables requires (is_staff()). A fresh
+// anon client here would be refused once those policies are on.
+const supabase = getSupabase();
 
 // Helper function to format date without timezone shift
 function formatDateLocal(dateString) {

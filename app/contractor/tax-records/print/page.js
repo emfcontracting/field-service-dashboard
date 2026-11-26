@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import {
   DEFAULT_TAX_CATEGORIES,
   TAX_CATEGORY_GROUPS,
@@ -10,8 +9,7 @@ import {
   groupCategories,
 } from '@/lib/taxRecordCategories';
 import { apiFetch } from '@/lib/apiClient';
-
-const supabase = getSupabase();
+import { contractorApi } from '@/lib/contractorClient';
 
 // Wrapper required by Next.js 15: useSearchParams() needs a Suspense boundary
 export default function TaxRecordsPrintPage() {
@@ -75,24 +73,18 @@ function TaxRecordsPrintContent() {
     const startDate = `${year}-01-01`;
     const endDate   = `${year}-12-31`;
 
-    const { data: invoices } = await supabase
-      .from('subcontractor_invoices')
-      .select('*')
-      .eq('user_id', user.user_id)
-      .eq('status', 'paid')
-      .gte('period_start', startDate)
-      .lte('period_end', endDate);
+    let invoices = [], items = [];
+    try {
+      ({ invoices, items } = await contractorApi.invoices({ status: 'paid', year, items: 1 }));
+    } catch (e) {
+      console.error('EMF income load failed:', e);
+    }
 
     if (!invoices || invoices.length === 0) {
       setEmfIncome({ count: 0, items: [] });
       return;
     }
 
-    const invoiceIds = invoices.map(i => i.invoice_id);
-    const { data: items } = await supabase
-      .from('subcontractor_invoice_items')
-      .select('*')
-      .in('invoice_id', invoiceIds);
 
     const summary = {
       regularHours: 0, regularAmount: 0,

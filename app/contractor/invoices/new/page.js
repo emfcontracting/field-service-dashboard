@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
   getTodayEST, 
@@ -12,8 +11,7 @@ import {
   getNowEST 
 } from '../../../mobile/utils/dateUtils';
 import { apiFetch } from '@/lib/apiClient';
-
-const supabase = getSupabase();
+import { contractorApi } from '@/lib/contractorClient';
 
 export default function CreateInvoice() {
   const router = useRouter();
@@ -73,14 +71,7 @@ export default function CreateInvoice() {
     setMessage(null);
     try {
       // Include tech_material_cost in the query
-      const { data, error } = await supabase
-        .from('daily_hours_log')
-        .select('*, work_order:work_orders(wo_number, building, work_order_description)')
-        .eq('user_id', user.user_id)
-        .gte('work_date', periodStart)
-        .lte('work_date', periodEnd)
-        .order('work_date', { ascending: true });
-      if (error) throw error;
+      const data = await contractorApi.hours(periodStart, periodEnd);
       setHoursData(data || []);
       if (!data || data.length === 0) {
         setMessage({ type: 'warning', text: 'No hours found for this period' });
@@ -148,135 +139,23 @@ export default function CreateInvoice() {
     setSaving(true);
     setMessage(null);
     try {
-      const initials = (user.first_name?.[0] || '') + (user.last_name?.[0] || '');
-
-      // ─── Generate next invoice number atomically via DB function ───
-      // Uses MAX() not COUNT(), so deleted invoices don't cause collisions.
-      // UNIQUE constraint on (user_id, invoice_number) guarantees no duplicates
-      // even under concurrent inserts. We retry up to 3 times if the race
-      // does occur (extremely unlikely but defensive).
-      let invoiceNumber = null;
-      let invoice = null;
-      let invoiceError = null;
-      const MAX_RETRIES = 3;
-
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const { data: numData, error: numError } = await supabase.rpc(
-          'next_subcontractor_invoice_number',
-          { p_user_id: user.user_id, p_initials: initials }
-        );
-        if (numError) throw numError;
-        invoiceNumber = numData;
-
-        const insertResult = await supabase.from('subcontractor_invoices').insert({
-          user_id: user.user_id,
-          invoice_number: invoiceNumber,
-          period_start: periodStart,
-          period_end: periodEnd,
-          total_regular_hours: totalRegularHours,
-          total_ot_hours: totalOTHours,
-          total_hours_amount: hoursAmount,
-          total_miles: totalMiles,
-          total_mileage_amount: mileageAmount,
-          total_tech_material: totalTechMaterial,
-          total_line_items_amount: lineItemsAmount,
-          grand_total: grandTotal,
-          hourly_rate_used: rates.hourly,
-          ot_rate_used: rates.ot,
-          mileage_rate_used: rates.mileage,
-          status: 'draft',
-          sent_to_email: 'emfcontractingsc2@gmail.com'
-        }).select().single();
-
-        invoice = insertResult.data;
-        invoiceError = insertResult.error;
-
-        if (!invoiceError) break;
-
-        // 23505 = unique_violation. Race condition: retry with next number.
-        // Any other error is fatal, throw immediately.
-        if (invoiceError.code !== '23505') throw invoiceError;
-        // small backoff to let the other writer's row land
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      if (invoiceError) throw invoiceError;
-
-      const itemsToInsert = [];
-      for (const entry of hoursData) {
-        const woNum = entry.work_order?.wo_number || 'N/A';
-        const building = entry.work_order?.building || '';
-        
-        if (parseFloat(entry.hours_regular || 0) > 0) {
-          itemsToInsert.push({ 
-            invoice_id: invoice.invoice_id, 
-            wo_id: entry.wo_id, 
-            item_type: 'hours', 
-            description: 'Regular Hours - ' + woNum + ' - ' + building, 
-            quantity: parseFloat(entry.hours_regular), 
-            rate: rates.hourly, 
-            amount: parseFloat(entry.hours_regular) * rates.hourly, 
-            work_date: entry.work_date 
-          });
-        }
-        if (parseFloat(entry.hours_overtime || 0) > 0) {
-          itemsToInsert.push({ 
-            invoice_id: invoice.invoice_id, 
-            wo_id: entry.wo_id, 
-            item_type: 'hours', 
-            description: 'OT Hours - ' + woNum + ' - ' + building, 
-            quantity: parseFloat(entry.hours_overtime), 
-            rate: rates.ot, 
-            amount: parseFloat(entry.hours_overtime) * rates.ot, 
-            work_date: entry.work_date 
-          });
-        }
-        if (parseFloat(entry.miles || 0) > 0) {
-          itemsToInsert.push({ 
-            invoice_id: invoice.invoice_id, 
-            wo_id: entry.wo_id, 
-            item_type: 'mileage', 
-            description: 'Mileage - ' + woNum, 
-            quantity: parseFloat(entry.miles), 
-            rate: rates.mileage, 
-            amount: parseFloat(entry.miles) * rates.mileage, 
-            work_date: entry.work_date 
-          });
-        }
-        // Add tech material as separate line item (reimbursable)
-        if (parseFloat(entry.tech_material_cost || 0) > 0) {
-          itemsToInsert.push({ 
-            invoice_id: invoice.invoice_id, 
-            wo_id: entry.wo_id, 
-            item_type: 'material', 
-            description: 'Material Reimbursement - ' + woNum + ' - ' + building, 
-            quantity: 1, 
-            rate: parseFloat(entry.tech_material_cost), 
-            amount: parseFloat(entry.tech_material_cost), 
-            work_date: entry.work_date 
-          });
-        }
-      }
-      for (const item of lineItems) {
-        if (item.description && item.amount > 0) {
-          itemsToInsert.push({ 
-            invoice_id: invoice.invoice_id, 
-            item_type: 'custom', 
-            description: item.description, 
-            quantity: parseFloat(item.quantity) || 1, 
-            rate: parseFloat(item.rate) || 0, 
-            amount: parseFloat(item.amount) || 0 
-          });
-        }
-      }
-      if (itemsToInsert.length > 0) {
-        await supabase.from('subcontractor_invoice_items').insert(itemsToInsert);
-      }
+      // The server pulls the hours for the period, applies the rates stored
+      // in the profile and computes every total (app/api/contractor/invoices).
+      const invoice = await contractorApi.createInvoice({
+        period_start: periodStart,
+        period_end: periodEnd,
+        line_items: lineItems.map(item => ({
+          description: item.description,
+          quantity: parseFloat(item.quantity) || 1,
+          rate: parseFloat(item.rate) || 0,
+        })),
+      });
+      const invoiceNumber = invoice.invoice_number;
       setMessage({ type: 'success', text: 'Invoice ' + invoiceNumber + ' created!' });
       setTimeout(() => router.push('/contractor/invoices'), 1500);
     } catch (error) {
       console.error('Save invoice error:', error);
-      setMessage({ type: 'error', text: 'Failed to create invoice' });
+      setMessage({ type: 'error', text: error.message || 'Failed to create invoice' });
     } finally {
       setSaving(false);
     }

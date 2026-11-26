@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { getTodayEST, getDateRangeEST, formatDateEST } from '../../mobile/utils/dateUtils';
 import { setAppToken } from '@/lib/apiClient';
-
-const supabase = getSupabase();
+import { contractorApi } from '@/lib/contractorClient';
 
 export default function ContractorDashboard() {
   const router = useRouter();
@@ -51,15 +49,9 @@ export default function ContractorDashboard() {
       const { startDate } = getDateRangeEST(14);
 
       // Get hours and mileage for current period
-      const { data: hoursData, error: hoursError } = await supabase
-        .from('daily_hours_log')
-        .select('hours_regular, hours_overtime, miles')
-        .eq('user_id', userId)
-        .gte('work_date', startDate);
-
-      if (hoursError) {
-        console.error('Error fetching hours:', hoursError);
-      }
+      let hoursData = [];
+      try { hoursData = await contractorApi.hours(startDate); }
+      catch (hoursError) { console.error('Error fetching hours:', hoursError); }
 
       let totalRegular = 0;
       let totalOT = 0;
@@ -79,16 +71,9 @@ export default function ContractorDashboard() {
       const mileageAmount = totalMiles * mileageRate;
 
       // Get recent invoices
-      const { data: invoices, error: invoicesError } = await supabase
-        .from('subcontractor_invoices')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (invoicesError) {
-        console.error('Error fetching invoices:', invoicesError);
-      }
+      let invoices = [];
+      try { ({ invoices } = await contractorApi.invoices({ limit: 5 })); }
+      catch (invoicesError) { console.error('Error fetching invoices:', invoicesError); }
 
       // Count pending/sent invoices
       const pending = (invoices || []).filter(i => i.status === 'sent').length;

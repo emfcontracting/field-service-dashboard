@@ -10,13 +10,17 @@
 // token lib/serverAuth understands; the routes accept it through
 // requireContractorOrStaff.
 //
-// PIN storage is unchanged (subcontractor_profiles.pin_hash = btoa(pin), set in
-// /contractor/settings) so existing PINs keep working. First sign-in without a
-// PIN is allowed and flagged needsPinSetup — the settings page forces one.
+// PINs are stored hashed (lib/contractorPin: scrypt). Rows still holding the
+// old btoa(pin) value are accepted once and re-hashed on that sign-in. First
+// sign-in without a PIN is allowed and flagged needsPinSetup — the settings
+// page forces one. The profile sent back never contains pin_hash or the full
+// tax_id (lib/contractorProfile.publicProfile).
 // Rate-limited per IP like /api/auth/login.
 // -----------------------------------------------------------------------------
 import { NextResponse } from 'next/server';
 import { serviceClient, signAppToken, publicUser } from '@/lib/serverAuth';
+import { verifyPin, hashPin } from '@/lib/contractorPin';
+import { publicProfile } from '@/lib/contractorProfile';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,20 +74,23 @@ export async function POST(request) {
 
   if (profile.pin_hash) {
     if (!pin) return NextResponse.json({ error: 'PIN required' }, { status: 400 });
-    if (Buffer.from(pin, 'utf8').toString('base64') !== profile.pin_hash) {
+    const check = verifyPin(pin, profile.pin_hash);
+    if (!check.ok) {
       bump(ip);
       return NextResponse.json({ error: 'Incorrect PIN' }, { status: 401 });
     }
+    if (check.needsRehash) {
+      await supabase
+        .from('subcontractor_profiles')
+        .update({ pin_hash: hashPin(pin) })
+        .eq('user_id', user.user_id);
+    }
   }
 
-  // Only what the portal pages need; pin_hash is included so the settings
-  // page's "change PIN" flow keeps its current-PIN check (it compares locally).
-  const safeProfile = {};
-  for (const k of Object.keys(profile)) if (!/secret|token|api_key/i.test(k)) safeProfile[k] = profile[k];
 
   return NextResponse.json({
     user: publicUser(user),
-    profile: safeProfile,
+    profile: publicProfile(profile),
     needsPinSetup: !profile.pin_hash,
     token: signAppToken(user),
   });

@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
+import { contractorApi } from '@/lib/contractorClient';
 import Link from 'next/link';
 
-const supabase = getSupabase();
 
 export default function ContractorInvoices() {
   const router = useRouter();
@@ -34,15 +33,7 @@ export default function ContractorInvoices() {
 
   async function loadInvoices(userId) {
     try {
-      const { data, error } = await supabase
-        .from('subcontractor_invoices')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading invoices:', error);
-      }
+      const { invoices: data } = await contractorApi.invoices();
       setInvoices(data || []);
     } catch (error) {
       console.error('Error loading invoices:', error);
@@ -59,25 +50,13 @@ export default function ContractorInvoices() {
     setDeleting(invoiceId);
 
     try {
-      // Delete line items first (foreign key constraint)
-      await supabase
-        .from('subcontractor_invoice_items')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      // Delete the invoice
-      const { error } = await supabase
-        .from('subcontractor_invoices')
-        .delete()
-        .eq('invoice_id', invoiceId);
-
-      if (error) throw error;
+      await contractorApi.deleteInvoice(invoiceId);
 
       // Remove from state
       setInvoices(invoices.filter(inv => inv.invoice_id !== invoiceId));
     } catch (error) {
       console.error('Error deleting invoice:', error);
-      alert('Failed to delete invoice');
+      alert(error.message || 'Failed to delete invoice');
     } finally {
       setDeleting(null);
     }

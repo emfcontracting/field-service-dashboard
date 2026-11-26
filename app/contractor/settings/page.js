@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
-
-const supabase = getSupabase();
+import { contractorApi } from '@/lib/contractorClient';
 
 export default function ContractorSettings() {
   const router = useRouter();
@@ -53,7 +51,7 @@ export default function ContractorSettings() {
         setBusinessInfo({
           business_name: parsed.profile.business_name || '',
           business_address: parsed.profile.business_address || '',
-          tax_id: parsed.profile.tax_id || ''
+          tax_id: parsed.profile.tax_id_masked || ''
         });
       }
       
@@ -64,70 +62,14 @@ export default function ContractorSettings() {
     }
   }, [router]);
 
-  async function saveRates(e) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage(null);
-
-    try {
-      const { error } = await supabase
-        .from('subcontractor_profiles')
-        .update({
-          hourly_rate: parseFloat(rates.hourly_rate),
-          ot_rate: parseFloat(rates.ot_rate),
-          mileage_rate: parseFloat(rates.mileage_rate),
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.user_id);
-
-      if (error) throw error;
-
-      // Update session
-      const updatedProfile = {
-        ...user.profile,
-        hourly_rate: parseFloat(rates.hourly_rate),
-        ot_rate: parseFloat(rates.ot_rate),
-        mileage_rate: parseFloat(rates.mileage_rate)
-      };
-      sessionStorage.setItem('contractor_user', JSON.stringify({
-        ...user,
-        profile: updatedProfile
-      }));
-      setUser({ ...user, profile: updatedProfile });
-
-      setMessage({ type: 'success', text: 'Rates updated successfully!' });
-      setTimeout(() => setMessage(null), 3000);
-    } catch (error) {
-      console.error('Save rates error:', error);
-      setMessage({ type: 'error', text: 'Failed to update rates' });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function saveBusinessInfo(e) {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
 
     try {
-      const { error } = await supabase
-        .from('subcontractor_profiles')
-        .update({
-          business_name: businessInfo.business_name,
-          business_address: businessInfo.business_address,
-          tax_id: businessInfo.tax_id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.user_id);
-
-      if (error) throw error;
-
-      // Update session
-      const updatedProfile = {
-        ...user.profile,
-        ...businessInfo
-      };
+      const updatedProfile = await contractorApi.updateProfile(businessInfo);
+      setBusinessInfo({ ...businessInfo, tax_id: updatedProfile.tax_id_masked || '' });
       sessionStorage.setItem('contractor_user', JSON.stringify({
         ...user,
         profile: updatedProfile
@@ -157,31 +99,16 @@ export default function ContractorSettings() {
       return;
     }
 
-    // Verify current PIN (if one exists)
-    if (user.profile?.pin_hash && btoa(pinChange.current) !== user.profile.pin_hash) {
-      setMessage({ type: 'error', text: 'Current PIN is incorrect' });
-      return;
-    }
-
     setSaving(true);
 
     try {
-      const newPinHash = btoa(pinChange.new);
-
-      const { error } = await supabase
-        .from('subcontractor_profiles')
-        .update({
-          pin_hash: newPinHash,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.user_id);
-
-      if (error) throw error;
+      // Checked and hashed on the server (current PIN required if one exists).
+      await contractorApi.changePin(pinChange.current, pinChange.new);
 
       // Update session
       const updatedUser = {
         ...user,
-        profile: { ...user.profile, pin_hash: newPinHash },
+        profile: { ...user.profile, has_pin: true },
         needsPinSetup: false
       };
       sessionStorage.setItem('contractor_user', JSON.stringify(updatedUser));
@@ -198,7 +125,7 @@ export default function ContractorSettings() {
       }
     } catch (error) {
       console.error('Change PIN error:', error);
-      setMessage({ type: 'error', text: 'Failed to update PIN' });
+      setMessage({ type: 'error', text: error.message || 'Failed to update PIN' });
     } finally {
       setSaving(false);
     }
@@ -257,9 +184,9 @@ export default function ContractorSettings() {
 
         {/* PIN Change */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
-          <h2 className="font-bold mb-4">🔒 {user.profile?.pin_hash ? 'Change PIN' : 'Set PIN'}</h2>
+          <h2 className="font-bold mb-4">🔒 {user.profile?.has_pin ? 'Change PIN' : 'Set PIN'}</h2>
           <form onSubmit={changePin} className="space-y-4">
-            {user.profile?.pin_hash && (
+            {user.profile?.has_pin && (
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Current PIN</label>
                 <input
@@ -305,7 +232,7 @@ export default function ContractorSettings() {
               disabled={saving}
               className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium disabled:opacity-50"
             >
-              {saving ? 'Saving...' : user.profile?.pin_hash ? 'Change PIN' : 'Set PIN'}
+              {saving ? 'Saving...' : user.profile?.has_pin ? 'Change PIN' : 'Set PIN'}
             </button>
           </form>
         </div>
@@ -313,7 +240,7 @@ export default function ContractorSettings() {
         {/* Rates */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
           <h2 className="font-bold mb-4">💰 Your Rates</h2>
-          <form onSubmit={saveRates} className="space-y-4">
+          <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Hourly Rate</label>
@@ -324,8 +251,8 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.hourly_rate}
-                    onChange={(e) => setRates({ ...rates, hourly_rate: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
+                    readOnly
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -338,8 +265,8 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.ot_rate}
-                    onChange={(e) => setRates({ ...rates, ot_rate: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
+                    readOnly
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -352,23 +279,17 @@ export default function ContractorSettings() {
                     step="0.01"
                     min="0"
                     value={rates.mileage_rate}
-                    onChange={(e) => setRates({ ...rates, mileage_rate: e.target.value })}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-7 pr-4 py-2"
+                    readOnly
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-7 pr-4 py-2 text-gray-300 cursor-not-allowed"
                   />
                 </div>
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              IRS standard mileage rate for 2024: $0.67/mile
+              Your rates are set by EMF Contracting and used automatically on every invoice.
+              To request a change, contact the office.
             </p>
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-green-600 hover:bg-green-700 py-2 rounded-lg font-medium disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Rates'}
-            </button>
-          </form>
+          </div>
         </div>
 
         {/* Business Info */}

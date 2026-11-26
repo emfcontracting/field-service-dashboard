@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
-
-const supabase = getSupabase();
+import { contractorApi } from '@/lib/contractorClient';
 
 // Helper function to format date without timezone shift
 function formatDateLocal(dateString) {
@@ -47,27 +45,8 @@ export default function ViewInvoice() {
 
   async function loadInvoice(id) {
     try {
-      const { data: invoiceData, error: invoiceError } = await supabase
-        .from('subcontractor_invoices')
-        .select('*')
-        .eq('invoice_id', id)
-        .single();
-
-      if (invoiceError) throw invoiceError;
+      const { invoice: invoiceData, items: itemsData } = await contractorApi.invoice(id);
       setInvoice(invoiceData);
-
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('subcontractor_invoice_items')
-        .select(`
-          *,
-          work_order:work_orders(wo_number, building)
-        `)
-        .eq('invoice_id', id)
-        .order('work_date', { ascending: true });
-
-      if (itemsError) {
-        console.error('Error loading line items:', itemsError);
-      }
       setLineItems(itemsData || []);
 
     } catch (error) {
@@ -121,18 +100,8 @@ export default function ViewInvoice() {
     }
     
     try {
-      const { error: updateError } = await supabase
-        .from('subcontractor_invoices')
-        .update({
-          status: 'sent',
-          sent_to_email: 'emfcontractingsc2@gmail.com',
-          sent_at: new Date().toISOString()
-        })
-        .eq('invoice_id', invoice.invoice_id);
-
-      if (updateError) throw updateError;
-
-      setInvoice({ ...invoice, status: 'sent', sent_at: new Date().toISOString() });
+      const updated = await contractorApi.markInvoice(invoice.invoice_id, 'sent');
+      setInvoice(updated);
       setMessage({ type: 'success', text: 'Invoice marked as sent!' });
     } catch (error) {
       console.error('Error updating invoice status:', error);
@@ -146,17 +115,8 @@ export default function ViewInvoice() {
     }
     
     try {
-      const { error: updateError } = await supabase
-        .from('subcontractor_invoices')
-        .update({
-          status: 'paid',
-          paid_at: new Date().toISOString()
-        })
-        .eq('invoice_id', invoice.invoice_id);
-
-      if (updateError) throw updateError;
-
-      setInvoice({ ...invoice, status: 'paid', paid_at: new Date().toISOString() });
+      const updated = await contractorApi.markInvoice(invoice.invoice_id, 'paid');
+      setInvoice(updated);
       setMessage({ type: 'success', text: '✅ Invoice marked as PAID!' });
     } catch (error) {
       console.error('Error updating invoice status:', error);
@@ -170,24 +130,12 @@ export default function ViewInvoice() {
     }
 
     try {
-      // Delete line items first
-      await supabase
-        .from('subcontractor_invoice_items')
-        .delete()
-        .eq('invoice_id', invoice.invoice_id);
-
-      // Delete the invoice
-      const { error } = await supabase
-        .from('subcontractor_invoices')
-        .delete()
-        .eq('invoice_id', invoice.invoice_id);
-
-      if (error) throw error;
+      await contractorApi.deleteInvoice(invoice.invoice_id);
 
       router.push('/contractor/invoices');
     } catch (error) {
       console.error('Error deleting invoice:', error);
-      setMessage({ type: 'error', text: 'Failed to delete invoice' });
+      setMessage({ type: 'error', text: error.message || 'Failed to delete invoice' });
     }
   }
 

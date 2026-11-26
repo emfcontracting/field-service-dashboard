@@ -102,11 +102,16 @@ export default function DraftEditor({ invoice, items, suggestions = [], profile,
             <span style={{ textAlign: 'right', fontSize: '14px' }}>${amount(r).toFixed(2)}</span>
             <button onClick={() => setRows(rows.filter(x => x.key !== r.key))} style={{ ...btn('#7f1d1d'), padding: '8px' }} title="Remove">✕</button>
           </div>
-          {isEmf && (
+          {isEmf && !/\[R-[0-9a-f]{8}\]/i.test(r.description) && (
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' }}>
               <input type="checkbox" checked={r.weekly} onChange={e => set(r.key, 'weekly', e.target.checked)} />
               Every week — put this on each new EMF invoice
             </label>
+          )}
+          {/\[R-[0-9a-f]{8}\]/i.test(r.description) && (
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '6px' }}>
+              From your expenses (bill to EMF). Remove the line to keep it for a later invoice.
+            </p>
           )}
         </div>
       ))}

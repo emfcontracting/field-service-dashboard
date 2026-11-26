@@ -242,6 +242,12 @@ export default function ContractorDashboard() {
           </div>
         </div>
 
+        {/* Quick receipt */}
+        <Link href="/contractor/tax-records?add=1"
+          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 rounded-xl py-3 font-bold">
+          📸 Add receipt
+        </Link>
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">

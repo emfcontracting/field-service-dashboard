@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
+import { expenseExtras, resolveWoNumber } from '@/lib/expenseFields';
 
 // Service role: these tables are RLS-locked (staff_all only); the route
 // itself checks who may see which row.
@@ -17,7 +18,7 @@ export async function PATCH(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id').eq('record_id', id).maybeSingle();
+    const { data: existing } = await supabase.from('contractor_tax_records').select('user_id, billed_invoice_id, amount, bill_to_emf').eq('record_id', id).maybeSingle();
     if (!existing) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     if (!ownsUser(auth, existing.user_id)) return denyNotOwner().response;
 
@@ -27,7 +28,18 @@ export async function PATCH(request, { params }) {
     if (body.category_name !== undefined) update.category_name = body.category_name;
     if (body.amount        !== undefined) update.amount        = parseFloat(body.amount);
     if (body.notes         !== undefined) update.notes         = body.notes || null;
-    if (body.receipt_url   !== undefined) update.receipt_url   = body.receipt_url || null;
+    const extras = expenseExtras(body, existing.user_id);
+    if (extras.__badReceipt) return NextResponse.json({ error: 'Invalid receipt reference' }, { status: 400 });
+    Object.assign(update, extras);
+    const wo = await resolveWoNumber(supabase, body);
+    if (wo.error) return NextResponse.json({ error: wo.error }, { status: 400 });
+    Object.assign(update, wo);
+    // Already on an EMF invoice: amount and billing flag are fixed there.
+    const amountChanged = update.amount !== undefined && Math.abs(update.amount - parseFloat(existing.amount || 0)) > 0.004;
+    const flagChanged = update.bill_to_emf !== undefined && update.bill_to_emf !== !!existing.bill_to_emf;
+    if (existing.billed_invoice_id && (amountChanged || flagChanged)) {
+      return NextResponse.json({ error: 'This expense is already on an EMF invoice — change it there (or delete that line from the draft first).' }, { status: 409 });
+    }
     if (body.tax_year      !== undefined) update.tax_year      = parseInt(body.tax_year, 10);
 
     if (Object.keys(update).length === 0) {

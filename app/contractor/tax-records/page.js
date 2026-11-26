@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { contractorApi } from '@/lib/contractorClient';
+import { downscaleImage } from '@/lib/imageDownscale';
 import { readContractorSession } from '@/lib/contractorSession';
 import { useRouter } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 import {
   DEFAULT_TAX_CATEGORIES,
@@ -13,7 +14,6 @@ import {
 } from '@/lib/taxRecordCategories';
 import { apiFetch } from '@/lib/apiClient';
 
-const supabase = getSupabase();
 
 export default function TaxRecordsPage() {
   const router = useRouter();
@@ -45,6 +45,10 @@ export default function TaxRecordsPage() {
     }
     try {
       setUser(JSON.parse(userData));
+      // /contractor/tax-records?add=1 (Home → "Add receipt") opens the scan dialog
+      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('add') === '1') {
+        setShowAddModal(true);
+      }
     } catch {
       router.push('/contractor');
     }
@@ -335,7 +339,15 @@ export default function TaxRecordsPage() {
                     return (
                       <tr key={rec.record_id} className="hover:bg-gray-700/50">
                         <td className="px-4 py-2">{rec.entry_date}</td>
-                        <td className="px-4 py-2 text-gray-400">{rec.invoice_ref || '—'}</td>
+                        <td className="px-4 py-2 text-gray-400">
+                          <div>{rec.vendor || rec.invoice_ref || '—'}</div>
+                          {rec.vendor && rec.invoice_ref && <div className="text-xs text-gray-500">{rec.invoice_ref}</div>}
+                          {rec.bill_to_emf && (
+                            <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded ${rec.billed_invoice_id ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>
+                              {rec.billed_invoice_id ? 'billed to EMF' : '→ next EMF invoice'}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-2">
                           <span
                             className="px-2 py-1 rounded text-xs"
@@ -421,7 +433,13 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
   const [categoryName, setCategoryName] = useState(record?.category_name || categories[0]?.name || '');
   const [amount, setAmount]           = useState(record?.amount?.toString() || '');
   const [notes, setNotes]             = useState(record?.notes || '');
-  const [receiptUrl, setReceiptUrl]   = useState(record?.receipt_url || '');
+  const [receiptUrl, setReceiptUrl]   = useState(record?.receipt_url || '');   // storage path (older: full URL)
+  const [vendor, setVendor]           = useState(record?.vendor || '');
+  const [woNumber, setWoNumber]       = useState(record?.wo_number || '');
+  const [billToEmf, setBillToEmf]     = useState(!!record?.bill_to_emf);
+  const [scanning, setScanning]       = useState(false);
+  const [scanNote, setScanNote]       = useState('');
+  const billed = !!record?.billed_invoice_id;
   const [saving, setSaving]           = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [error, setError]             = useState('');
@@ -436,13 +454,17 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
     try {
       const body = {
         user_id: user.user_id,
-        tax_year: year,
+        // Tax year follows the receipt date (a scanned date may be in another year)
+        tax_year: parseInt(String(entryDate).slice(0, 4), 10) || year,
         entry_date: entryDate,
         invoice_ref: invoiceRef || null,
         category_name: categoryName,
         amount: parseFloat(amount),
         notes: notes || null,
         receipt_url: receiptUrl || null,
+        vendor: vendor || null,
+        wo_number: woNumber.trim() || null,
+        bill_to_emf: billToEmf,
       };
 
       const url = isEdit
@@ -465,32 +487,47 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
     }
   }
 
-  async function handleReceiptUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Photo / PDF → private bucket. With scan, Claude reads vendor, date,
+  // amount and suggests a category; the sub checks and saves.
+  async function handleReceiptUpload(e, scan = false) {
+    const picked = e.target.files?.[0];
+    e.target.value = '';
+    if (!picked) return;
     setUploadingReceipt(true);
+    setScanning(scan);
     setError('');
+    setScanNote('');
     try {
-      const supabase = (await import('@/lib/supabase')).getSupabase();
-      const ext = file.name.split('.').pop();
-      const fileName = `${user.user_id}/${Date.now()}.${ext}`;
-
-      const { data, error: uploadError } = await supabase.storage
-        .from('tax-receipts')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('tax-receipts')
-        .getPublicUrl(fileName);
-
-      setReceiptUrl(urlData.publicUrl);
+      const file = await downscaleImage(picked);
+      const { path, scan: result } = await contractorApi.uploadReceipt(file, { scan, categories: categories.map(c => c.name) });
+      setReceiptUrl(path);
+      if (scan && result && !result.error) {
+        if (result.vendor) setVendor(result.vendor);
+        if (result.date) setEntryDate(result.date);
+        if (result.total) setAmount(String(result.total));
+        if (result.receipt_number) setInvoiceRef(result.receipt_number);
+        if (result.category) setCategoryName(result.category);
+        if (result.summary && !notes) setNotes(result.summary);
+        setScanNote('Read from the receipt — please check before saving.');
+      } else if (scan && result?.error) {
+        setScanNote(result.error);
+      }
     } catch (err) {
       setError('Upload failed: ' + err.message);
     } finally {
       setUploadingReceipt(false);
+      setScanning(false);
+    }
+  }
+
+  async function viewReceipt() {
+    const w = window.open('', '_blank');
+    try {
+      const url = await contractorApi.receiptLink(receiptUrl);
+      if (w) w.location.href = url; else window.location.href = url;
+    } catch (err) {
+      if (w) w.close();
+      setError('Could not open receipt: ' + err.message);
     }
   }
 
@@ -502,6 +539,21 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
         </div>
         <div className="p-4 space-y-4">
+          {!isEdit && !receiptUrl && (
+            <label className={`block w-full text-center py-3 rounded-lg font-bold cursor-pointer ${uploadingReceipt ? 'bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+              {scanning ? '⏳ Reading receipt…' : '📸 Scan receipt'}
+              <input type="file" accept="image/*,.pdf" capture="environment" className="hidden"
+                disabled={uploadingReceipt} onChange={(e) => handleReceiptUpload(e, true)} />
+            </label>
+          )}
+          {scanNote && <p className="text-xs text-yellow-300">{scanNote}</p>}
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Vendor</label>
+            <input type="text" value={vendor} onChange={(e) => setVendor(e.target.value)}
+              placeholder="e.g., Home Depot" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2" />
+          </div>
+
           <div>
             <label className="block text-sm text-gray-400 mb-1">Date</label>
             <input
@@ -555,6 +607,24 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
             />
           </div>
 
+          <div className="bg-gray-900/60 rounded-lg p-3 space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" className="mt-1" checked={billToEmf} disabled={billed}
+                onChange={(e) => setBillToEmf(e.target.checked)} />
+              <span className="text-sm">
+                <span className="font-medium">Bill to EMF</span>
+                <span className="block text-xs text-gray-400">
+                  {billed ? 'Already on an EMF invoice.' : 'EMF reimburses this — it is added to your next EMF invoice automatically.'}
+                </span>
+              </span>
+            </label>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Work order # (optional)</label>
+              <input type="text" value={woNumber} onChange={(e) => setWoNumber(e.target.value.toUpperCase())}
+                placeholder="e.g., C3297218" className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm text-gray-400 mb-1">Notes (optional)</label>
             <textarea
@@ -569,10 +639,10 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
             <label className="block text-sm text-gray-400 mb-1">Receipt Photo (optional)</label>
             {receiptUrl ? (
               <div className="flex items-center gap-2">
-                <a href={receiptUrl} target="_blank" rel="noopener noreferrer"
-                   className="text-blue-400 hover:text-blue-300 text-sm flex-grow truncate">
+                <button type="button" onClick={viewReceipt}
+                   className="text-blue-400 hover:text-blue-300 text-sm flex-grow text-left truncate">
                   📷 View receipt
-                </a>
+                </button>
                 <button
                   onClick={() => setReceiptUrl('')}
                   className="text-red-400 text-xs"
@@ -584,7 +654,7 @@ function RecordModal({ user, year, categories, groupedCategories, record, onClos
               <input
                 type="file"
                 accept="image/*,.pdf"
-                onChange={handleReceiptUpload}
+                onChange={(e) => handleReceiptUpload(e, false)}
                 disabled={uploadingReceipt}
                 className="w-full text-sm text-gray-400"
               />

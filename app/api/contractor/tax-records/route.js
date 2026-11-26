@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
+import { expenseExtras, resolveWoNumber, withWoNumber } from '@/lib/expenseFields';
 
 // Service role: these tables are RLS-locked (staff_all only); the route
 // itself checks who may see which row.
@@ -32,7 +33,7 @@ export async function GET(request) {
 
     const { data, error } = await supabase
       .from('contractor_tax_records')
-      .select('*')
+      .select('*, work_order:work_orders(wo_number)')
       .eq('user_id', userId)
       .eq('tax_year', parseInt(year, 10))
       .order('entry_date', { ascending: true })
@@ -43,7 +44,7 @@ export async function GET(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ records: data || [] });
+    return NextResponse.json({ records: withWoNumber(data) });
   } catch (err) {
     console.error('GET tax-records exception:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -65,6 +66,12 @@ export async function POST(request) {
       );
     }
 
+    const extras = expenseExtras(body, user_id);
+    if (extras.__badReceipt) return NextResponse.json({ error: 'Invalid receipt reference' }, { status: 400 });
+    const wo = await resolveWoNumber(supabase, body);
+    if (wo.error) return NextResponse.json({ error: wo.error }, { status: 400 });
+    Object.assign(extras, wo);
+
     // Batch insert (multi-category receipt) — payload has `amounts` map
     if (body.amounts && typeof body.amounts === 'object') {
       const rows = Object.entries(body.amounts)
@@ -77,7 +84,8 @@ export async function POST(request) {
           category_name,
           amount: parseFloat(amount),
           notes: body.notes || null,
-          receipt_url: body.receipt_url || null,
+          receipt_url: null,
+          ...extras,
         }));
 
       if (rows.length === 0) {
@@ -116,7 +124,8 @@ export async function POST(request) {
         category_name,
         amount: parseFloat(amount),
         notes: body.notes || null,
-        receipt_url: body.receipt_url || null,
+        receipt_url: null,
+        ...extras,
       })
       .select()
       .single();

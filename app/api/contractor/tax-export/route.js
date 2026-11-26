@@ -16,7 +16,7 @@
 import { NextResponse } from 'next/server';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import * as XLSX from 'xlsx';
-import { DEFAULT_TAX_CATEGORIES, TAX_CATEGORY_GROUPS } from '@/lib/taxRecordCategories';
+import { DEFAULT_TAX_CATEGORIES, TAX_CATEGORY_GROUPS, scheduleCLine, NOT_SCHEDULE_C } from '@/lib/taxRecordCategories';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
 
 // Service role: these tables are RLS-locked (staff_all only); the route
@@ -133,6 +133,36 @@ function buildPersonalSheet(records, customCategories, year) {
   // Freeze top row + first column
   ws['!freeze'] = { xSplit: 1, ySplit: 1 };
 
+  return ws;
+}
+
+// Totals per suggested Schedule C line (lib/taxRecordCategories). Clearly a
+// suggestion for the tax preparer; personal categories listed separately.
+function buildScheduleCSheet(records, year) {
+  const byLine = {};
+  for (const r of records || []) {
+    const line = scheduleCLine(r.category_name);
+    byLine[line] ||= { total: 0, cats: {} };
+    const amt = parseFloat(r.amount) || 0;
+    byLine[line].total += amt;
+    byLine[line].cats[r.category_name] = (byLine[line].cats[r.category_name] || 0) + amt;
+  }
+  const lines = Object.keys(byLine).sort((a, b) => (a === NOT_SCHEDULE_C) - (b === NOT_SCHEDULE_C) || a.localeCompare(b, 'en', { numeric: true }));
+  const aoa = [
+    [`Schedule C Summary (suggested) — Tax Year ${year}`],
+    ['Suggestion only, not tax advice — confirm every line with your tax preparer. Vehicle: standard mileage OR actual expenses, not both.'],
+    [],
+    ['Schedule C line', 'Categories', 'Amount'],
+  ];
+  let business = 0;
+  for (const line of lines) {
+    const cats = Object.entries(byLine[line].cats).map(([c, v]) => `${c} $${v.toFixed(2)}`).join(', ');
+    aoa.push([line, cats, byLine[line].total.toFixed(2)]);
+    if (line !== NOT_SCHEDULE_C) business += byLine[line].total;
+  }
+  aoa.push([], ['Business expenses (all lines except personal)', '', business.toFixed(2)]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 52 }, { wch: 60 }, { wch: 14 }];
   return ws;
 }
 
@@ -312,6 +342,7 @@ export async function POST(request) {
 
     const personalSheet = buildPersonalSheet(records, customCategories, year);
     XLSX.utils.book_append_sheet(wb, personalSheet, 'Personal Expenses');
+    XLSX.utils.book_append_sheet(wb, buildScheduleCSheet(records, year), 'Schedule C Summary');
 
     if (format === 'master-xlsx') {
       const incomeSheet = await buildEMFIncomeSheet(user_id, year);

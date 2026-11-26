@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import StatusPill from '../../components/StatusPill';
+import DraftEditor from '../../components/DraftEditor';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter, useParams } from 'next/navigation';
@@ -31,6 +32,7 @@ export default function ViewInvoice() {
   const [message, setMessage] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
 
   useEffect(() => {
     const userData = readContractorSession();
@@ -51,8 +53,9 @@ export default function ViewInvoice() {
 
   async function loadInvoice(id) {
     try {
-      const { invoice: invoiceData, items: itemsData } = await contractorApi.invoice(id);
+      const { invoice: invoiceData, items: itemsData, suggestions: sg } = await contractorApi.invoice(id);
       setInvoice(invoiceData);
+      setSuggestions(sg || []);
       setLineItems(itemsData || []);
 
     } catch (error) {
@@ -352,6 +355,16 @@ export default function ViewInvoice() {
       <div style={{ maxWidth: '896px', margin: '0 auto', padding: '16px' }}>
         
         <EmfReviewPanel invoice={invoice} />
+
+        {invoice.status === 'draft' && (
+          <DraftEditor
+            key={invoice.updated_at || invoice.invoice_id}
+            invoice={invoice}
+            items={lineItems}
+            suggestions={suggestions}
+            onSaved={async () => { await loadInvoice(invoice.invoice_id); setMessage({ type: 'success', text: 'Draft updated' }); }}
+          />
+        )}
 
         {/* Instructions for draft invoices */}
         {invoice.status === 'draft' && (

@@ -2,6 +2,8 @@
 // -----------------------------------------------------------------------------
 // GET    → { invoice, items }            (owner or staff)
 // PATCH  { action: 'submit' | 'sent' | 'paid' | 'unpaid' }   (owner; staff: any)
+//        { action: 'edit', line_items, refresh_hours?, client? }  draft only, owner only
+// GET    also returns suggestions: the sub's own lines from recent invoices
 //          submit = mail the PDF to the addressee (EMF or other client), then sent
 //          sent   = mark sent without mailing (sent some other way)
 // DELETE → removes an invoice and its lines
@@ -14,6 +16,7 @@ import { requireContractorOrStaff, serviceClient, ownsUser, denyNotOwner } from 
 import { loadSubInvoiceForPdf } from '@/lib/subInvoicePdf';
 import { mailSubInvoice } from '@/lib/subInvoiceMail';
 import { invoiceRecipient } from '@/lib/invoiceRecipient';
+import { updateDraftInvoice, recentCustomLines } from '@/lib/subInvoiceCreate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,7 +40,8 @@ export async function GET(request, { params }) {
     .eq('invoice_id', id)
     .order('work_date', { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ invoice, items: items || [] });
+  const suggestions = invoice.status === 'draft' ? await recentCustomLines(serviceClient(), invoice.user_id).catch(() => []) : [];
+  return NextResponse.json({ invoice, items: items || [], suggestions });
 }
 
 export async function PATCH(request, { params }) {
@@ -50,6 +54,13 @@ export async function PATCH(request, { params }) {
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid request' }, { status: 400 }); }
+  if (body.action === 'edit') {
+    if (!auth.principal.contractor) return NextResponse.json({ error: 'Only the subcontractor edits his draft' }, { status: 403 });
+    const result = await updateDraftInvoice(serviceClient(), invoice, auth.principal.contractor, body);
+    if (result.error) return NextResponse.json({ error: result.error }, { status: result.status || 500 });
+    return NextResponse.json({ invoice: result.invoice });
+  }
+
   const now = new Date().toISOString();
   let update;
   let mailed = null;

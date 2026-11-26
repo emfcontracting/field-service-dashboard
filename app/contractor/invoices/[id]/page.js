@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
 import { EmfBadges, EmfReviewPanel } from '../../components/EmfReview';
+import { invoiceRecipient } from '@/lib/invoiceRecipient';
 
 // Helper function to format date without timezone shift
 function formatDateLocal(dateString) {
@@ -26,6 +27,7 @@ export default function ViewInvoice() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     const userData = sessionStorage.getItem('contractor_user');
@@ -95,8 +97,26 @@ export default function ViewInvoice() {
     window.print();
   }
 
+  // Mails the PDF to the addressee from the server, then sets "sent".
+  async function sendInvoice() {
+    const to = invoiceRecipient(invoice);
+    if (!to.email) { setMessage({ type: 'error', text: 'No recipient e-mail on this invoice' }); return; }
+    if (!confirm(`Send ${invoice.invoice_number} as PDF to ${to.name} (${to.email})? You get a copy.`)) return;
+    setSending(true);
+    try {
+      const updated = await contractorApi.markInvoice(invoice.invoice_id, 'submit');
+      setInvoice(updated);
+      setMessage({ type: 'success', text: `📧 Sent to ${to.email}` });
+    } catch (error) {
+      console.error('Send invoice error:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to send invoice' });
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function markAsSent() {
-    if (!confirm('Mark this invoice as sent to EMF Contracting?')) {
+    if (!confirm(`Mark as sent without e-mailing it (you sent it to ${invoiceRecipient(invoice).name} yourself)?`)) {
       return;
     }
     
@@ -111,7 +131,7 @@ export default function ViewInvoice() {
   }
 
   async function markAsPaid() {
-    if (!confirm('Mark this invoice as PAID? This confirms you received payment from EMF Contracting.')) {
+    if (!confirm(`Mark this invoice as PAID? This records that you received payment from ${invoiceRecipient(invoice).name}.`)) {
       return;
     }
     
@@ -122,6 +142,17 @@ export default function ViewInvoice() {
     } catch (error) {
       console.error('Error updating invoice status:', error);
       setMessage({ type: 'error', text: 'Failed to mark invoice as paid' });
+    }
+  }
+
+  async function undoPaid() {
+    if (!confirm('Remove the PAID mark from this invoice?')) return;
+    try {
+      const updated = await contractorApi.markInvoice(invoice.invoice_id, 'unpaid');
+      setInvoice(updated);
+      setMessage({ type: 'success', text: 'Paid mark removed' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Failed to update invoice' });
     }
   }
 
@@ -239,8 +270,16 @@ export default function ViewInvoice() {
             {invoice.status === 'draft' && (
               <>
                 <button 
+                  onClick={sendInvoice}
+                  disabled={sending}
+                  style={{ padding: '10px 16px', backgroundColor: sending ? '#4b5563' : '#16a34a', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: sending ? 'wait' : 'pointer' }}
+                >
+                  {sending ? '⏳ Sending...' : `📧 Send to ${invoiceRecipient(invoice).isEmf ? 'EMF' : 'client'}`}
+                </button>
+                <button 
                   onClick={markAsSent}
-                  style={{ padding: '10px 16px', backgroundColor: '#16a34a', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+                  title="Already sent it yourself"
                 >
                   📤 Mark as Sent
                 </button>
@@ -282,6 +321,15 @@ export default function ViewInvoice() {
                 💵 Mark as Paid
               </button>
             )}
+
+            {invoice.status === 'paid' && (
+              <button
+                onClick={undoPaid}
+                style={{ padding: '10px 16px', backgroundColor: '#374151', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', color: 'white', border: 'none', cursor: 'pointer' }}
+              >
+                ↩ Undo Paid
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -315,9 +363,9 @@ export default function ViewInvoice() {
           <div className="no-print" style={{ backgroundColor: 'rgba(30, 58, 138, 0.3)', border: '1px solid rgba(59, 130, 246, 0.5)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
             <h3 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '8px' }}>📋 How to Send Your Invoice</h3>
             <ol style={{ color: '#d1d5db', fontSize: '14px', margin: 0, paddingLeft: '20px' }}>
-              <li>Click <strong>&quot;Download PDF&quot;</strong> to save the invoice</li>
-              <li>Email the PDF to <strong>emfcontractingsc2@gmail.com</strong></li>
-              <li>Click <strong>&quot;Mark as Sent&quot;</strong> when done</li>
+              <li>Check the invoice below</li>
+              <li>Click <strong>&quot;Send&quot;</strong> — the PDF goes to <strong>{invoiceRecipient(invoice).email || invoiceRecipient(invoice).name}</strong> and you get a copy</li>
+              <li>Sent it yourself already? Use <strong>&quot;Mark as Sent&quot;</strong></li>
             </ol>
           </div>
         )}
@@ -327,7 +375,7 @@ export default function ViewInvoice() {
           <div className="no-print" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
             <h3 style={{ fontWeight: 'bold', color: '#facc15', marginBottom: '8px' }}>💰 Waiting for Payment</h3>
             <p style={{ color: '#d1d5db', fontSize: '14px', margin: 0 }}>
-              Once you receive payment from EMF Contracting, click <strong>&quot;Mark as Paid&quot;</strong> to update the status.
+              Once you receive payment from {invoiceRecipient(invoice).name}, click <strong>&quot;Mark as Paid&quot;</strong> to update the status.
             </p>
           </div>
         )}
@@ -383,10 +431,13 @@ export default function ViewInvoice() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '8px' }}>To</p>
-                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>EMF Contracting LLC</p>
-                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>565 Pine Plain Rd</p>
-                <p style={{ color: '#4b5563', fontSize: '13px', margin: '2px 0 0 0' }}>Gaston, SC 29075</p>
-                <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>emfcontractingsc2@gmail.com</p>
+                <p style={{ fontWeight: 'bold', fontSize: '16px', margin: 0 }}>{invoiceRecipient(invoice).name}</p>
+                {invoiceRecipient(invoice).lines.map((line, i) => (
+                  <p key={i} style={{ color: '#4b5563', fontSize: '13px', margin: '2px 0 0 0' }}>{line}</p>
+                ))}
+                {invoiceRecipient(invoice).email && (
+                  <p style={{ color: '#4b5563', fontSize: '13px', margin: '4px 0 0 0' }}>{invoiceRecipient(invoice).email}</p>
+                )}
               </div>
             </div>
 

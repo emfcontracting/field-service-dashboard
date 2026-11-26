@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import YearOverview from '../components/YearOverview';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateShort } from '@/lib/dates';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
@@ -274,6 +275,8 @@ export default function TaxReport() {
       </header>
 
       <div style={{ maxWidth: '1024px', margin: '0 auto', padding: '16px' }}>
+        <YearOverview user={user} year={year} />
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af' }}>
             Loading {year} data...

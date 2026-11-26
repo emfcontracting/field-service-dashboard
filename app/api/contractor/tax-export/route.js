@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { isOvertimeItem } from '@/lib/invoiceItemKind';
+import { irsRateOn, irsRatesForYear } from '@/lib/irsMileage';
 import * as XLSX from 'xlsx';
 import { DEFAULT_TAX_CATEGORIES, TAX_CATEGORY_GROUPS, scheduleCLine, NOT_SCHEDULE_C } from '@/lib/taxRecordCategories';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
@@ -163,6 +164,40 @@ function buildScheduleCSheet(records, year) {
   aoa.push([], ['Business expenses (all lines except personal)', '', business.toFixed(2)]);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{ wch: 52 }, { wch: 60 }, { wch: 14 }];
+  return ws;
+}
+
+// Mileage: EMF work-order miles (daily_hours_log) + the sub's own trips,
+// each at the IRS business rate of its date (lib/irsMileage).
+async function buildMileageSheet(userId, year) {
+  const [logs, trips] = await Promise.all([
+    supabase.from('daily_hours_log').select('work_date, miles, work_order:work_orders(wo_number, building)')
+      .eq('user_id', userId).gte('work_date', `${year}-01-01`).lte('work_date', `${year}-12-31`).gt('miles', 0).order('work_date'),
+    supabase.from('contractor_trips').select('*')
+      .eq('user_id', userId).gte('trip_date', `${year}-01-01`).lte('trip_date', `${year}-12-31`).order('trip_date'),
+  ]);
+  const rows = [
+    ...(logs.data || []).map((l) => [l.work_date, 'EMF work order', `${l.work_order?.wo_number || ''} ${l.work_order?.building || ''}`.trim(), parseFloat(l.miles) || 0]),
+    ...(trips.data || []).map((t) => [t.trip_date, 'Own trip', [t.purpose, t.from_place || t.to_place ? `${t.from_place || '?'} → ${t.to_place || '?'}` : ''].filter(Boolean).join(' — '), parseFloat(t.miles) || 0]),
+  ].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  let miles = 0, value = 0;
+  const body = rows.map(([d, kind, what, m]) => {
+    const rate = irsRateOn(d);
+    miles += m; value += m * (rate || 0);
+    return [d, kind, what, m.toFixed(1), rate != null ? rate.toFixed(3) : 'n/a', (m * (rate || 0)).toFixed(2)];
+  });
+  const rates = irsRatesForYear(year).map((r) => `${(r.rate * 100).toFixed(1)}c from ${r.from}`).join(', ') || 'not on file';
+  const aoa = [
+    [`Mileage Log — Tax Year ${year}`],
+    [`IRS business rate: ${rates}. EMF work-order miles were reimbursed on EMF invoices. Commuting is not deductible.`],
+    [],
+    ['Date', 'Type', 'Work order / purpose', 'Miles', 'IRS rate', 'Value at IRS rate'],
+    ...body,
+    [],
+    ['TOTAL', '', '', miles.toFixed(1), '', value.toFixed(2)],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 50 }, { wch: 10 }, { wch: 10 }, { wch: 16 }];
   return ws;
 }
 
@@ -347,6 +382,7 @@ export async function POST(request) {
     if (format === 'master-xlsx') {
       const incomeSheet = await buildEMFIncomeSheet(user_id, year);
       XLSX.utils.book_append_sheet(wb, incomeSheet, 'Invoice Income');
+      XLSX.utils.book_append_sheet(wb, await buildMileageSheet(user_id, year), 'Mileage');
     }
 
     // Generate buffer

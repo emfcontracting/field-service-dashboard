@@ -477,9 +477,12 @@ export default function CreateInvoice() {
         </div>
 
         {clientType === 'emf' ? (
+          <>
+          <p className="text-xs text-gray-500 text-center">Expenses you marked “Bill to EMF” are added to this invoice automatically.</p>
           <button onClick={saveEMFInvoice} disabled={saving || (hoursData.length === 0 && lineItems.length === 0)} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
             {saving ? '⏳ Creating...' : '✓ Create Invoice'}
           </button>
+          </>
         ) : (
           <button onClick={saveOtherClientInvoice} disabled={generating || !otherClient.name || lineItems.length === 0} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
             {generating ? '⏳ Creating...' : '✓ Create Invoice'}

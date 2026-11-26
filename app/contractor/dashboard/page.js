@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { docReminders } from '@/lib/contractorDocs';
 import StatusPill from '../components/StatusPill';
 import { lastBillingWeek } from '@/lib/billingWeek';
 import { daysBetweenET } from '@/lib/dates';
@@ -124,6 +125,13 @@ export default function ContractorDashboard() {
           list.push({ key: 'old' + inv.invoice_id, tone: 'gray', text: `${inv.invoice_number} was sent ${days} days ago — paid yet?`, href: `/contractor/invoices/${inv.invoice_id}`, action: 'Open' });
         }
       }
+      // Documents: W-9 / insurance missing, expired or expiring within 30 days
+      try {
+        const docs = await contractorApi.documents();
+        for (const r of docReminders(docs, dateKeyET())) {
+          list.push({ key: r.key, tone: r.tone, text: r.text, href: '/contractor/settings', action: 'Upload' });
+        }
+      } catch { /* documents are optional here */ }
       setTodos(list);
 
       setStats({

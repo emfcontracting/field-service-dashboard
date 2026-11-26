@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import AppShell from '@/app/components/AppShell';
 
@@ -61,6 +61,8 @@ export default function SubcontractorsPage() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(null);
   const [toast, setToast]       = useState(null);
+  const [docs, setDocs]         = useState({});     // user_id -> documents
+  const [rateEdit, setRateEdit] = useState({});     // user_id -> { hourly_rate, ot_rate, mileage_rate }
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -80,6 +82,13 @@ export default function SubcontractorsPage() {
       const map = {};
       (profilesData || []).forEach(p => { map[p.user_id] = p; });
 
+      // Documents (W-9, insurance) — table may not exist before its migration
+      const { data: docsData } = await supabase
+        .from('contractor_documents').select('user_id, doc_type, expires_on, uploaded_at');
+      const dmap = {};
+      (docsData || []).forEach(d => { (dmap[d.user_id] ||= []).push(d); });
+      setDocs(dmap);
+
       setUsers(usersData || []);
       setProfiles(map);
     } catch (err) { console.error(err); }
@@ -90,11 +99,16 @@ export default function SubcontractorsPage() {
     setSaving(userId);
     try {
       if (enable) {
-        const { error } = await supabase.from('subcontractor_profiles').upsert({
-          user_id: userId, is_enabled: true, subscription_status: 'trial',
-          hourly_rate: 35.00, ot_rate: 52.50, mileage_rate: 0.67,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        // Existing profile: only switch it on — never reset rates the sub already has.
+        const existing = profiles[userId];
+        const { error } = existing
+          ? await supabase.from('subcontractor_profiles')
+              .update({ is_enabled: true, updated_at: new Date().toISOString() }).eq('user_id', userId)
+          : await supabase.from('subcontractor_profiles').insert({
+              user_id: userId, is_enabled: true, subscription_status: 'trial',
+              hourly_rate: 35.00, ot_rate: 52.50, mileage_rate: 0.67,
+              updated_at: new Date().toISOString(),
+            });
         if (error) throw error;
         setProfiles(p => ({ ...p, [userId]: { ...p[userId], user_id: userId, is_enabled: true, subscription_status: p[userId]?.subscription_status || 'trial' } }));
       } else {
@@ -119,6 +133,33 @@ export default function SubcontractorsPage() {
       showToast('Subscription updated');
     } catch { showToast('Failed to update subscription', 'error'); }
     finally { setSaving(null); }
+  }
+
+  // Rates are set here by EMF; the sub only sees them (portal is read-only).
+  async function saveRates(userId) {
+    const r = rateEdit[userId];
+    if (!r) return;
+    const vals = { hourly_rate: parseFloat(r.hourly_rate), ot_rate: parseFloat(r.ot_rate), mileage_rate: parseFloat(r.mileage_rate) };
+    if (Object.values(vals).some(v => !Number.isFinite(v) || v < 0)) { showToast('Rates must be numbers ≥ 0', 'error'); return; }
+    setSaving(userId);
+    try {
+      const { error } = await supabase.from('subcontractor_profiles')
+        .update({ ...vals, updated_at: new Date().toISOString() }).eq('user_id', userId);
+      if (error) throw error;
+      setProfiles(p => ({ ...p, [userId]: { ...p[userId], ...vals } }));
+      setRateEdit(e => { const n = { ...e }; delete n[userId]; return n; });
+      showToast('Rates saved');
+    } catch { showToast('Failed to save rates', 'error'); }
+    finally { setSaving(null); }
+  }
+
+  function docStatus(userId) {
+    const list = docs[userId] || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const w9 = list.some(d => d.doc_type === 'w9');
+    const coi = list.filter(d => d.doc_type === 'coi' && d.expires_on).sort((a, b) => (a.expires_on < b.expires_on ? 1 : -1))[0];
+    const days = coi ? Math.round((Date.parse(coi.expires_on) - Date.parse(today)) / 86400000) : null;
+    return { w9, coi, days };
   }
 
   // Stats
@@ -215,7 +256,8 @@ export default function SubcontractorsPage() {
                 const statusCfg = SUB_STATUS[status] || SUB_STATUS.none;
 
                 return (
-                  <div key={user.user_id}
+                  <Fragment key={user.user_id}>
+                  <div
                     className={`px-5 py-4 flex items-center justify-between gap-4 transition
                       ${isEnabled ? 'bg-emerald-500/3' : ''}`}>
 
@@ -282,6 +324,36 @@ export default function SubcontractorsPage() {
                       )}
                     </div>
                   </div>
+                  {isEnabled && (() => {
+                    const r = rateEdit[user.user_id] || {
+                      hourly_rate: String(profile?.hourly_rate ?? ''), ot_rate: String(profile?.ot_rate ?? ''), mileage_rate: String(profile?.mileage_rate ?? ''),
+                    };
+                    const dirty = !!rateEdit[user.user_id];
+                    const ds = docStatus(user.user_id);
+                    const set = (k, v) => setRateEdit(e => ({ ...e, [user.user_id]: { ...r, [k]: v } }));
+                    return (
+                      <div className="px-5 pb-4 -mt-1 flex flex-wrap items-center gap-3 text-xs">
+                        {[['hourly_rate', '$/hr'], ['ot_rate', 'OT $/hr'], ['mileage_rate', '$/mile']].map(([k, label]) => (
+                          <label key={k} className="flex items-center gap-1 text-slate-500">
+                            {label}
+                            <input inputMode="decimal" value={r[k]} onChange={e => set(k, e.target.value)}
+                              className="w-20 bg-[#0a0a0f] border border-[#2d2d44] rounded-md px-2 py-1 text-slate-200" />
+                          </label>
+                        ))}
+                        {dirty && (
+                          <button onClick={() => saveRates(user.user_id)} disabled={isSaving}
+                            className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50">Save rates</button>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full border ${ds.w9 ? 'border-emerald-500/30 text-emerald-400' : 'border-amber-500/30 text-amber-400'}`}>
+                          W-9 {ds.w9 ? '✓' : 'missing'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full border ${!ds.coi ? 'border-amber-500/30 text-amber-400' : ds.days < 0 ? 'border-red-500/30 text-red-400' : ds.days <= 30 ? 'border-amber-500/30 text-amber-400' : 'border-emerald-500/30 text-emerald-400'}`}>
+                          {!ds.coi ? 'Insurance missing' : ds.days < 0 ? `Insurance expired ${ds.coi.expires_on}` : `Insurance until ${ds.coi.expires_on}`}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  </Fragment>
                 );
               })}
 

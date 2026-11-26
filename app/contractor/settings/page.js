@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import DocumentsPanel from '../components/DocumentsPanel';
 import { readContractorSession, saveContractorSession } from '@/lib/contractorSession';
 import { fmtDate } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
@@ -351,6 +352,8 @@ export default function ContractorSettings() {
             </div>
           </form>
         </div>
+
+        <DocumentsPanel />
 
         {/* Business Info */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">

@@ -3,7 +3,9 @@
 // GET  /api/contractor/invoices[?status=paid&year=2026&limit=5&items=1&user_id=]
 //      → { invoices, items? }   (contractor: own rows only; staff: user_id)
 // POST /api/contractor/invoices
-//      { period_start, period_end, line_items: [{ description, quantity, rate }] }
+//      EMF:   { period_start, period_end, line_items: [{ description, quantity, rate }] }
+//      Other: { client_type: 'other', client: { name, address, city, state, zip, email },
+//               period_start, period_end, line_items }   (only the sub's own lines/prices)
 //      → { invoice }
 //
 // POST builds the invoice on the server: hours, OT, mileage and tech material
@@ -21,6 +23,74 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const EMF_EMAIL = 'emfcontractingsc2@gmail.com';
 const num = (v) => parseFloat(v || 0) || 0;
 const round2 = (v) => Math.round(v * 100) / 100;
+const clip = (v, n) => { const t = String(v ?? '').trim(); return t ? t.slice(0, n) : null; };
+
+function customLines(body) {
+  return (Array.isArray(body.line_items) ? body.line_items : [])
+    .map((li) => {
+      const quantity = num(li.quantity) || 1;
+      const rate = num(li.rate);
+      return { description: String(li.description || '').trim().slice(0, 300), quantity, rate, amount: round2(quantity * rate) };
+    })
+    .filter((li) => li.description && li.amount > 0);
+}
+
+async function nextNumberInsert(supabase, user, row) {
+  const initials = ((user.first_name?.[0] || '') + (user.last_name?.[0] || '')).toUpperCase();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: invoiceNumber, error: numError } = await supabase.rpc('next_subcontractor_invoice_number', { p_user_id: user.user_id, p_initials: initials });
+    if (numError) return { error: numError };
+    const { data, error } = await supabase.from('subcontractor_invoices').insert({ ...row, invoice_number: invoiceNumber }).select().single();
+    if (!error) return { invoice: data };
+    if (error.code !== '23505') return { error };
+  }
+  return { error: { message: 'Could not assign an invoice number, try again' } };
+}
+
+// An invoice to someone other than EMF: the sub's own lines and prices, no
+// hours pulled from EMF's log, addressee stored on the invoice.
+async function createOtherClientInvoice(supabase, user, body, periodStart, periodEnd) {
+  const c = body.client || {};
+  const client = {
+    client_name: clip(c.name, 200),
+    client_address: clip(c.address, 300),
+    client_city: clip(c.city, 100),
+    client_state: clip(c.state, 20),
+    client_zip: clip(c.zip, 20),
+    client_email: clip(c.email, 200),
+  };
+  if (!client.client_name) return NextResponse.json({ error: 'Client name required' }, { status: 400 });
+  if (client.client_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.client_email)) {
+    return NextResponse.json({ error: 'Client e-mail looks invalid' }, { status: 400 });
+  }
+  const lines = customLines(body);
+  if (!lines.length) return NextResponse.json({ error: 'Add at least one line item' }, { status: 400 });
+  const total = round2(lines.reduce((s, li) => s + li.amount, 0));
+
+  const { invoice, error } = await nextNumberInsert(supabase, user, {
+    user_id: user.user_id,
+    client_type: 'other',
+    ...client,
+    period_start: periodStart,
+    period_end: periodEnd,
+    total_regular_hours: 0, total_ot_hours: 0, total_hours_amount: 0,
+    total_miles: 0, total_mileage_amount: 0, total_tech_material: 0,
+    total_line_items_amount: total,
+    grand_total: total,
+    status: 'draft',
+    sent_to_email: client.client_email,
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const { error: itemsError } = await supabase
+    .from('subcontractor_invoice_items')
+    .insert(lines.map((li) => ({ ...li, item_type: 'custom', invoice_id: invoice.invoice_id })));
+  if (itemsError) {
+    await supabase.from('subcontractor_invoices').delete().eq('invoice_id', invoice.invoice_id);
+    return NextResponse.json({ error: `Line items failed, invoice not created: ${itemsError.message}` }, { status: 500 });
+  }
+  return NextResponse.json({ invoice });
+}
 
 export async function GET(request) {
   const auth = await requireContractorOrStaff(request);
@@ -75,8 +145,9 @@ export async function POST(request) {
   }
 
   const user = p.user;
-  const rates = profileRates(p.contractor);
   const supabase = serviceClient();
+  if (body.client_type === 'other') return createOtherClientInvoice(supabase, user, body, periodStart, periodEnd);
+  const rates = profileRates(p.contractor);
 
   const { data: hours, error: hoursError } = await supabase
     .from('daily_hours_log')
@@ -87,13 +158,7 @@ export async function POST(request) {
     .order('work_date', { ascending: true });
   if (hoursError) return NextResponse.json({ error: hoursError.message }, { status: 500 });
 
-  const custom = (Array.isArray(body.line_items) ? body.line_items : [])
-    .map((li) => {
-      const quantity = num(li.quantity) || 1;
-      const rate = num(li.rate);
-      return { description: String(li.description || '').trim().slice(0, 300), quantity, rate, amount: round2(quantity * rate) };
-    })
-    .filter((li) => li.description && li.amount > 0);
+  const custom = customLines(body);
 
   if (!(hours || []).length && !custom.length) {
     return NextResponse.json({ error: 'No hours or line items for this period' }, { status: 400 });
@@ -118,36 +183,27 @@ export async function POST(request) {
   const mileageAmount = round2(miles * rates.mileage);
   const lineItemsAmount = round2(custom.reduce((s, li) => s + li.amount, 0));
   const grandTotal = round2(hoursAmount + mileageAmount + material + lineItemsAmount);
-  const initials = ((user.first_name?.[0] || '') + (user.last_name?.[0] || '')).toUpperCase();
-
   // ── invoice row (number from DB function; retry on unique race) ──
-  let invoice = null;
-  for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
-    const { data: invoiceNumber, error: numError } = await supabase.rpc('next_subcontractor_invoice_number', { p_user_id: user.user_id, p_initials: initials });
-    if (numError) return NextResponse.json({ error: numError.message }, { status: 500 });
-    const { data, error } = await supabase.from('subcontractor_invoices').insert({
-      user_id: user.user_id,
-      invoice_number: invoiceNumber,
-      period_start: periodStart,
-      period_end: periodEnd,
-      total_regular_hours: regH,
-      total_ot_hours: otH,
-      total_hours_amount: hoursAmount,
-      total_miles: miles,
-      total_mileage_amount: mileageAmount,
-      total_tech_material: round2(material),
-      total_line_items_amount: lineItemsAmount,
-      grand_total: grandTotal,
-      hourly_rate_used: rates.hourly,
-      ot_rate_used: rates.ot,
-      mileage_rate_used: rates.mileage,
-      status: 'draft',
-      sent_to_email: EMF_EMAIL,
-    }).select().single();
-    if (!error) { invoice = data; break; }
-    if (error.code !== '23505') return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  if (!invoice) return NextResponse.json({ error: 'Could not assign an invoice number, try again' }, { status: 409 });
+  const { invoice, error: insertError } = await nextNumberInsert(supabase, user, {
+    user_id: user.user_id,
+    client_type: 'emf',
+    period_start: periodStart,
+    period_end: periodEnd,
+    total_regular_hours: regH,
+    total_ot_hours: otH,
+    total_hours_amount: hoursAmount,
+    total_miles: miles,
+    total_mileage_amount: mileageAmount,
+    total_tech_material: round2(material),
+    total_line_items_amount: lineItemsAmount,
+    grand_total: grandTotal,
+    hourly_rate_used: rates.hourly,
+    ot_rate_used: rates.ot,
+    mileage_rate_used: rates.mileage,
+    status: 'draft',
+    sent_to_email: EMF_EMAIL,
+  });
+  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
   if (items.length) {
     const { error: itemsError } = await supabase

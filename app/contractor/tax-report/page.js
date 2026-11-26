@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
 import Link from 'next/link';
@@ -99,11 +100,11 @@ export default function TaxReport() {
 
     // Calculate totals
     const totalRegularHours = hoursItems
-      .filter(i => i.description?.toLowerCase().includes('regular') || !i.description?.toLowerCase().includes('overtime'))
+      .filter(i => !isOvertimeItem(i))
       .reduce((sum, i) => sum + parseFloat(i.quantity || 0), 0);
     
     const totalOTHours = hoursItems
-      .filter(i => i.description?.toLowerCase().includes('overtime') || i.description?.toLowerCase().includes('ot'))
+      .filter(i => isOvertimeItem(i))
       .reduce((sum, i) => sum + parseFloat(i.quantity || 0), 0);
 
     const totalLaborAmount = hoursItems.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0);

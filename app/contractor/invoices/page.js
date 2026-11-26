@@ -160,6 +160,7 @@ export default function ContractorInvoices() {
                 <div className="flex justify-between items-start mb-2">
                   <Link href={`/contractor/invoices/${invoice.invoice_id}`}>
                     <h3 className="font-bold text-lg hover:text-blue-400 transition">{invoice.invoice_number}</h3>
+                    <p className="text-xs text-gray-500">{invoice.client_type === 'other' ? `To: ${invoice.client_name}` : 'To: EMF Contracting'}</p>
                     <p className="text-sm text-gray-400">
                       {new Date(invoice.period_start).toLocaleDateString()} - {new Date(invoice.period_end).toLocaleDateString()}
                     </p>

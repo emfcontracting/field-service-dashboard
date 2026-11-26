@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from 'next/server';
+import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import * as XLSX from 'xlsx';
 import { DEFAULT_TAX_CATEGORIES, TAX_CATEGORY_GROUPS } from '@/lib/taxRecordCategories';
 import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
@@ -151,7 +152,7 @@ async function buildEMFIncomeSheet(userId, year) {
 
   if (!invoices || invoices.length === 0) {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['EMF Income — No paid invoices for ' + year],
+      ['Invoice Income — No paid invoices for ' + year],
     ]);
     return ws;
   }
@@ -178,7 +179,7 @@ async function buildEMFIncomeSheet(userId, year) {
     const qty = parseFloat(item.quantity || 0);
     if (item.item_type === 'hours') {
       const desc = (item.description || '').toLowerCase();
-      if (desc.includes('overtime') || desc.includes(' ot')) {
+      if (isOvertimeItem(item)) {
         summary.otHours += qty;
         summary.otAmount += amt;
       } else {
@@ -203,7 +204,7 @@ async function buildEMFIncomeSheet(userId, year) {
     summary.materials + summary.hotels + summary.food + summary.otherCustom;
 
   const aoa = [
-    [`EMF Contracting Income — Tax Year ${year}`],
+    [`Invoice Income (EMF + other clients) — Tax Year ${year}`],
     [],
     ['Category', 'Quantity', 'Amount'],
     ['Regular Hours (RT)',  summary.regularHours.toFixed(2), summary.regularAmount.toFixed(2)],
@@ -218,9 +219,10 @@ async function buildEMFIncomeSheet(userId, year) {
     [],
     [`Total Invoices Paid: ${invoices.length}`],
     [],
-    ['Invoice #', 'Period Start', 'Period End', 'Grand Total', 'Paid At'],
+    ['Invoice #', 'Client', 'Period Start', 'Period End', 'Grand Total', 'Paid At'],
     ...invoices.map(inv => [
       inv.invoice_number,
+      inv.client_type === 'other' ? (inv.client_name || 'Other client') : 'EMF Contracting LLC',
       inv.period_start,
       inv.period_end,
       parseFloat(inv.grand_total || 0).toFixed(2),
@@ -229,7 +231,7 @@ async function buildEMFIncomeSheet(userId, year) {
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+  ws['!cols'] = [{ wch: 28 }, { wch: 24 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
 
   // Style the title and headers
   const titleRef = XLSX.utils.encode_cell({ r: 0, c: 0 });
@@ -313,7 +315,7 @@ export async function POST(request) {
 
     if (format === 'master-xlsx') {
       const incomeSheet = await buildEMFIncomeSheet(user_id, year);
-      XLSX.utils.book_append_sheet(wb, incomeSheet, 'EMF Income');
+      XLSX.utils.book_append_sheet(wb, incomeSheet, 'Invoice Income');
     }
 
     // Generate buffer

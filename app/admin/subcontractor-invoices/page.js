@@ -61,6 +61,8 @@ export default function SubcontractorInvoiceReview() {
       const { data: invoicesData, error: invoicesError } = await supabase
         .from('subcontractor_invoices')
         .select('*')
+        // Invoices a sub wrote to his other clients are his business, not EMF's.
+        .eq('client_type', 'emf')
         .order('created_at', { ascending: false });
 
       if (invoicesError) throw invoicesError;

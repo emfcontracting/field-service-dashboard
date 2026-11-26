@@ -123,16 +123,6 @@ export default function CreateInvoice() {
     ? (hoursAmount + mileageAmount + totalTechMaterial + lineItemsAmount) 
     : lineItemsAmount;
 
-  function generateInvoiceNumber() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
-    return 'INV-' + year + month + day + '-' + initials.toUpperCase() + random;
-  }
-
   async function saveEMFInvoice() {
     if (hoursData.length === 0 && lineItems.length === 0) {
       setMessage({ type: 'error', text: 'No data to invoice' });
@@ -163,103 +153,32 @@ export default function CreateInvoice() {
     }
   }
 
-  async function generateOtherClientPDF() {
+  // Invoice to another client: stored like an EMF invoice (list, Send, Paid,
+  // tax report), with the sub's own lines and prices.
+  async function saveOtherClientInvoice() {
     if (!otherClient.name) { setMessage({ type: 'error', text: 'Please enter client name' }); return; }
     if (lineItems.length === 0) { setMessage({ type: 'error', text: 'Please add at least one line item' }); return; }
+    if (!periodStart || !periodEnd) { setMessage({ type: 'error', text: 'Please select the service dates' }); return; }
 
     setGenerating(true);
     setMessage(null);
-
     try {
-      const invNum = generateInvoiceNumber();
-      const bName = user.profile?.business_name || (user.first_name + ' ' + user.last_name);
-      
-      const response = await apiFetch('/api/contractor/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoiceNumber: invNum,
-          fromName: bName,
-          fromAddress: user.profile?.business_address || '',
-          fromEmail: user.email,
-          toName: otherClient.name,
-          toAddress: otherClient.address || '',
-          toCity: otherClient.city || '',
-          toState: otherClient.state || '',
-          toZip: otherClient.zip || '',
-          toEmail: otherClient.email || '',
-          lineItems: lineItems.map(item => ({
-            description: item.description,
-            quantity: parseFloat(item.quantity || 0),
-            rate: parseFloat(item.rate || 0),
-            amount: parseFloat(item.amount || 0)
-          })),
-          total: lineItemsAmount
-        })
+      const invoice = await contractorApi.createInvoice({
+        client_type: 'other',
+        client: otherClient,
+        period_start: periodStart,
+        period_end: periodEnd,
+        line_items: lineItems.map(item => ({
+          description: item.description,
+          quantity: parseFloat(item.quantity) || 1,
+          rate: parseFloat(item.rate) || 0,
+        })),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate PDF');
-      }
-
-      const blob = await response.blob();
-      
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
-        || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
-      
-      if (isMobile) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64data = reader.result;
-          const newTab = window.open();
-          if (newTab) {
-            newTab.document.write(`
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>${invNum}</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <style>
-                  body { margin: 0; padding: 0; background: #333; display: flex; flex-direction: column; min-height: 100vh; }
-                  .toolbar { background: #1f2937; padding: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-                  .toolbar a, .toolbar button { background: #3b82f6; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; border: none; font-size: 16px; cursor: pointer; }
-                  .toolbar a:hover, .toolbar button:hover { background: #2563eb; }
-                  iframe { flex: 1; width: 100%; border: none; }
-                </style>
-              </head>
-              <body>
-                <div class="toolbar">
-                  <a href="${base64data}" download="${invNum}.pdf">📥 Download PDF</a>
-                  <button onclick="window.print()">🖨️ Print</button>
-                </div>
-                <iframe src="${base64data}"></iframe>
-              </body>
-              </html>
-            `);
-            newTab.document.close();
-          } else {
-            const link = document.createElement('a');
-            link.href = base64data;
-            link.download = invNum + '.pdf';
-            link.click();
-          }
-        };
-        reader.readAsDataURL(blob);
-        setMessage({ type: 'success', text: 'PDF opened! Tap Download to save.' });
-      } else {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = invNum + '.pdf';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        setMessage({ type: 'success', text: 'PDF downloaded!' });
-      }
+      setMessage({ type: 'success', text: 'Invoice ' + invoice.invoice_number + ' created!' });
+      setTimeout(() => router.push('/contractor/invoices/' + invoice.invoice_id), 800);
     } catch (error) {
-      console.error('PDF error:', error);
-      setMessage({ type: 'error', text: 'Failed to generate PDF' });
+      console.error('Save other-client invoice error:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to create invoice' });
     } finally {
       setGenerating(false);
     }
@@ -332,6 +251,22 @@ export default function CreateInvoice() {
             </div>
           )}
         </div>
+
+        {clientType === 'other' && (
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+            <h2 className="font-bold mb-4">📅 Service Dates</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">From</label>
+                <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">To</label>
+                <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {clientType === 'emf' && (
           <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
@@ -536,8 +471,8 @@ export default function CreateInvoice() {
             {saving ? '⏳ Creating...' : '✓ Create Invoice'}
           </button>
         ) : (
-          <button onClick={generateOtherClientPDF} disabled={generating || !otherClient.name || lineItems.length === 0} className="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-lg font-medium disabled:opacity-50">
-            {generating ? '⏳ Generating...' : '📄 Download Invoice PDF'}
+          <button onClick={saveOtherClientInvoice} disabled={generating || !otherClient.name || lineItems.length === 0} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded-lg font-medium disabled:opacity-50">
+            {generating ? '⏳ Creating...' : '✓ Create Invoice'}
           </button>
         )}
       </div>

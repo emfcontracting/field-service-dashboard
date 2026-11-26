@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import { isOvertimeItem } from '@/lib/invoiceItemKind';
 import { useSearchParams } from 'next/navigation';
 import {
   DEFAULT_TAX_CATEGORIES,
@@ -98,7 +99,7 @@ function TaxRecordsPrintContent() {
       const qty = parseFloat(item.quantity || 0);
       if (item.item_type === 'hours') {
         const desc = (item.description || '').toLowerCase();
-        if (desc.includes('overtime') || desc.includes(' ot')) {
+        if (isOvertimeItem(item)) {
           summary.otHours += qty;
           summary.otAmount += amt;
         } else {

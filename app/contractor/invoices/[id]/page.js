@@ -441,12 +441,14 @@ export default function ViewInvoice() {
               </div>
             </div>
 
-            {/* Rates Used */}
+            {/* Rates Used (EMF invoices only) */}
+            {invoiceRecipient(invoice).isEmf && (
             <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
               <p style={{ fontSize: '13px', color: '#4b5563', margin: 0 }}>
                 <strong>Rates:</strong> ${parseFloat(invoice.hourly_rate_used || 0).toFixed(2)}/hr regular | ${parseFloat(invoice.ot_rate_used || 0).toFixed(2)}/hr OT | ${parseFloat(invoice.mileage_rate_used || 0).toFixed(4)}/mile
               </p>
             </div>
+            )}
 
             {/* Labor Section */}
             {hoursItems.length > 0 && (

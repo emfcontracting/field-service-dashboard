@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import StatusPill from '../components/StatusPill';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
 import { contractorApi } from '@/lib/contractorClient';
-import { EmfBadges } from '../components/EmfReview';
 import Link from 'next/link';
 
 
@@ -168,16 +168,8 @@ export default function ContractorInvoices() {
                     </p>
                   </Link>
                   <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      invoice.status === 'paid'
-                        ? 'bg-green-500/20 text-green-400'
-                        : invoice.status === 'sent'
-                          ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {invoice.status.toUpperCase()}
-                    </span>
-                    <EmfBadges invoice={invoice} />
+                    <StatusPill invoice={invoice} />
+                    
                     {(invoice.status === 'draft' || invoice.emf_review_status === 'rejected') && (
                     <button
                       onClick={() => deleteInvoice(invoice.invoice_id, invoice.invoice_number)}

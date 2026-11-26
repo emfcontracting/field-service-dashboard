@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import StatusPill from '../components/StatusPill';
 import { readContractorSession, clearContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter } from 'next/navigation';
@@ -259,15 +260,7 @@ export default function ContractorDashboard() {
                   </div>
                   <div className="text-right">
                     <p className="font-bold">${parseFloat(invoice.grand_total || 0).toFixed(2)}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      invoice.status === 'paid' 
-                        ? 'bg-green-500/20 text-green-400'
-                        : invoice.status === 'sent'
-                          ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {invoice.status.toUpperCase()}
-                    </span>
+                    <StatusPill invoice={invoice} />
                   </div>
                 </Link>
               ))}

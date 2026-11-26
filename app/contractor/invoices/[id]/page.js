@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import StatusPill from '../../components/StatusPill';
 import { readContractorSession } from '@/lib/contractorSession';
 import { fmtDate, fmtDateTime, parseDate, dateKeyET } from '@/lib/dates';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { contractorApi } from '@/lib/contractorClient';
-import { EmfBadges, EmfReviewPanel } from '../../components/EmfReview';
+import { EmfReviewPanel } from '../../components/EmfReview';
 import { invoiceRecipient } from '@/lib/invoiceRecipient';
 
 // Helper function to format date without timezone shift
@@ -219,16 +220,8 @@ export default function ViewInvoice() {
             </Link>
             <div>
               <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>{invoice.invoice_number}</h1>
-              <span style={{
-                fontSize: '12px',
-                padding: '4px 8px',
-                borderRadius: '9999px',
-                backgroundColor: invoice.status === 'paid' ? 'rgba(34, 197, 94, 0.2)' : invoice.status === 'sent' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(107, 114, 128, 0.2)',
-                color: invoice.status === 'paid' ? '#4ade80' : invoice.status === 'sent' ? '#facc15' : '#9ca3af'
-              }}>
-                {invoice.status.toUpperCase()}
-              </span>
-              <EmfBadges invoice={invoice} />
+              <StatusPill invoice={invoice} />
+              
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

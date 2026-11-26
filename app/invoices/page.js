@@ -22,6 +22,7 @@ import { fetchAll } from '@/lib/fetchAll';
 import { calcBillable, calcTotal, buildActualLineItems } from '@/lib/billing';
 import { fmtDate } from '@/lib/dates';
 import { invoiceBlocker, INVOICE_WO_SELECT } from '@/lib/invoiceReadiness';
+import { subInvoiceCoverage } from '@/lib/subInvoiceCoverage';
 
 // One shared browser client (lib/supabase) — a client per file meant ~20
 // GoTrue instances fighting over the same session storage.
@@ -154,6 +155,7 @@ export default function InvoicingPage() {
   const [filteredAcknowledgedWOs, setFilteredAcknowledgedWOs] = useState([]);
   const [woTotals, setWoTotals]                         = useState({});
   const [fixedQuoteMap, setFixedQuoteMap]               = useState({});
+  const [subCoverage, setSubCoverage]                   = useState({});
   const [invoices, setInvoices]                         = useState([]);
   const [filteredInvoices, setFilteredInvoices]         = useState([]);
   const [selectedItem, setSelectedItem]                 = useState(null);
@@ -284,7 +286,7 @@ export default function InvoicingPage() {
       .order('acknowledged_at', { ascending: true });
     if (!error) {
       setAcknowledgedWOs(data || []);
-      if (data?.length) { calculateAllTotals(data); loadFixedQuoteMap(data); }
+      if (data?.length) { calculateAllTotals(data); loadFixedQuoteMap(data); loadSubCoverage(data); }
     }
   };
 
@@ -315,6 +317,18 @@ export default function InvoicingPage() {
       } catch { totals[wo.wo_id] = 0; }
     }
     setWoTotals(totals);
+  };
+
+  // Map wo_id -> { subs, invoiced, missing[] }: subcontractors with hours on
+  // the WO and whether they invoiced EMF for it yet (lib/subInvoiceCoverage).
+  // Warning only — nothing here blocks invoicing.
+  const loadSubCoverage = async (workOrders) => {
+    try {
+      setSubCoverage(await subInvoiceCoverage(supabase, (workOrders || []).map(w => w.wo_id)));
+    } catch (e) {
+      console.error('sub invoice coverage failed:', e);
+      setSubCoverage({});
+    }
   };
 
   // Map wo_id -> { amount } for WOs whose newest non-rejected quote is billing_mode 'fixed'.
@@ -837,6 +851,17 @@ export default function InvoicingPage() {
                               <span>{wo.wo_number}</span>
                               {fixedQuoteMap[wo.wo_id] && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-emerald-500/15 text-emerald-400 border-emerald-500/30" title="Fixed-price quote">💵 FIXED</span>
+                              )}
+                              {subCoverage[wo.wo_id] && (
+                                subCoverage[wo.wo_id].missing.length === 0 ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-sky-500/15 text-sky-300 border-sky-500/30"
+                                    title="Every subcontractor with hours on this WO has invoiced EMF for it">🧾 SUB ✓</span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                    title={`No sub invoice yet from: ${subCoverage[wo.wo_id].missing.join(', ')}`}>
+                                    🧾 SUB {subCoverage[wo.wo_id].invoiced}/{subCoverage[wo.wo_id].subs}
+                                  </span>
+                                )
                               )}
                             </div>
                           </td>

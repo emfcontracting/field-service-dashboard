@@ -30,6 +30,7 @@ export default function SubcontractorInvoiceReview() {
   const [emfData, setEmfData] = useState([]);
   const [loadingComparison, setLoadingComparison] = useState(false);
   const [overlaps, setOverlaps] = useState([]);
+  const [openWOs, setOpenWOs] = useState([]);
   const [rejectNote, setRejectNote] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -103,6 +104,7 @@ export default function SubcontractorInvoiceReview() {
     setInvoiceItems([]);
     setEmfData([]);
     setOverlaps([]);
+    setOpenWOs([]);
     setShowReject(false);
     setRejectNote('');
     setActionError('');
@@ -120,6 +122,20 @@ export default function SubcontractorInvoiceReview() {
         .order('work_date', { ascending: true });
 
       setInvoiceItems(itemsData || []);
+
+      // Lines on work orders that are not completed yet (warning only).
+      const woIds = [...new Set((itemsData || []).filter(i => i.item_type !== 'custom' && i.wo_id).map(i => i.wo_id))];
+      if (woIds.length) {
+        const { data: wos } = await supabase
+          .from('work_orders')
+          .select('wo_id, wo_number, status, is_locked')
+          .in('wo_id', woIds);
+        const open = (wos || []).filter(w => w.status !== 'completed' && !w.is_locked);
+        setOpenWOs(open.map(w => ({
+          ...w,
+          amount: (itemsData || []).filter(i => i.wo_id === w.wo_id).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
+        })));
+      }
 
       // Get actual EMF data for this user and period (including tech_material_cost)
       const { data: emfHours } = await supabase
@@ -435,6 +451,23 @@ export default function SubcontractorInvoiceReview() {
                   )}
                   {actionError && <p className="mt-2 text-sm text-red-400">{actionError}</p>}
                 </div>
+
+                {/* Lines on work orders that are not finished */}
+                {openWOs.length > 0 && (
+                  <div className="bg-orange-900/30 border border-orange-500/50 rounded-xl p-4">
+                    <h3 className="font-bold text-orange-400 mb-1">⚠️ Work orders not completed</h3>
+                    <p className="text-sm text-orange-200 mb-2">
+                      {openWOs.length} work order{openWOs.length === 1 ? '' : 's'} on this invoice {openWOs.length === 1 ? 'is' : 'are'} not completed —
+                      ${openWOs.reduce((s, w) => s + w.amount, 0).toFixed(2)} of the invoice. Paperwork may be missing.
+                    </p>
+                    <ul className="text-xs text-orange-200/80 space-y-0.5">
+                      {openWOs.slice(0, 10).map(w => (
+                        <li key={w.wo_id}>{w.wo_number} · {w.status || 'unknown'} · ${w.amount.toFixed(2)}</li>
+                      ))}
+                      {openWOs.length > 10 && <li>… and {openWOs.length - 10} more</li>}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Already on another invoice */}
                 {overlaps.length > 0 && (

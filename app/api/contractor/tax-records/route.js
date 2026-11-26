@@ -11,13 +11,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Service role: these tables are RLS-locked (staff_all only); the route
+// itself checks who may see which row.
+const supabase = serviceClient();
 
 export async function GET(request) {
   const auth = await requireContractorOrStaff(request);

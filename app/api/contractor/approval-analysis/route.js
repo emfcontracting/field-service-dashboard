@@ -2,13 +2,11 @@
 // Dry run analysis: Cross-reference subcontractor invoices with work order completion status
 // Shows what would be approved vs held if we required completed tickets for payment
 
-import { createClient } from '@supabase/supabase-js';
-import { requireStaff } from '@/lib/serverAuth';
+import { requireStaff, serviceClient } from '@/lib/serverAuth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Service role: these tables are RLS-locked (staff_all only); the route
+// itself checks who may see which row.
+const supabase = serviceClient();
 
 export async function GET(request) {
   const auth = await requireStaff(request);

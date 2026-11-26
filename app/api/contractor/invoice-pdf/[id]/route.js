@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { requireContractorOrStaff, ownsUser, denyNotOwner } from '@/lib/serverAuth';
+import { requireContractorOrStaff, ownsUser, denyNotOwner, serviceClient } from '@/lib/serverAuth';
 
 // Force Node.js runtime
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Service role: these tables are RLS-locked (staff_all only); the route
+// itself checks who may see which row.
+const supabase = serviceClient();
 
 // Helper function to format date without timezone shift
 function formatDateLocal(dateString) {
